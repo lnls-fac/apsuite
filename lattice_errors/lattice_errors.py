@@ -3,7 +3,7 @@ import numpy as _np
 import matplotlib.pyplot as plt
 import scipy.stats as _scystat
 
-import pyaccel
+import pyaccel as _pyaccel
 import mathphys as _mp
 
 def generate_errors(name,accel,config,fam_data,nr_mach=20,cutoff=1,rndtype='gauss'):
@@ -110,33 +110,55 @@ def apply_erros(name, machine, errors, increment=1.0):
     _mp.save_pickle([name,'_apply_errors_input'],
                     errors=errors, increment=increment)
 
-    if not isinstance(machine,list): machine = nr_mach*[machine]
+    machs = []
+    if not isinstance(machine,list):
+        for i in range(nr_mach):
+            machs.append(_pyaccel.accelerator.Accelerator(machine))
+    machine = machs
 
     if len(machine) != nr_mach:
         print('DifferentSizes: Incompatibility between errors and'+
                 ' machine lengths.\n Using minimum of both.')
         nr_mach = min([len(machine),nr_mach])
 
-    return NotImplemented
-    
+    return None
     dim = get_dim(machine{1});
 
-    ids_idx = _pyaccel.findcells(machine{1}, 'PassMethod', 'LNLSThickEPUPass');
-    sext_idx = [i for i in range(len(machine[1]))
-                            if machine[1][i].polynom_b[2] != 0.0]
+    ids_idx  = [i for in range(len(machine[0]))
+                  if machine[0][i].pass_method.startswith('kicktable_pass')]
+    sext_idx = [i for i in range(len(machine[0]))
+                  if machine[0][i].polynom_b[2] != 0.0]
 
-    print('    ------------------------------- \n')
-    print('   |   codx [mm]   |   cody [mm]   |\n')
-    print('   | (max)   (rms) | (max)   (rms) |\n')
-    print('---|-------------------------------|\n')
-    %fprintf('001| 13.41   14.32 | 13.41   14.32 | 13.41   14.32 | 13.41   14.32 |\n');
-    for i=1:nr_machines
-        machine{i}    = apply_errors_one_machine(machine{i}, errors, i, increment);
-        the_ring = setcellstruct(machine{i}, 'PolynomB', sext_idx, 0, 1, 3);
-        the_ring = turn_ids_off(the_ring, ids_idx);
-        [codx, cody] = calc_cod(the_ring, dim);
-        [x_max_all,x_rms_all] = get_max_rms(codx,1e3);
-        [y_max_all,y_rms_all] = get_max_rms(cody,1e3);
-        fprintf('%03i| %5.2f   %5.2f | %5.2f   %5.2f | %5.2f   %5.2f | %5.2f   %5.2f |\n',i,x_max_all,x_rms_all,x_max_bpm,x_rms_bpm,y_max_all,y_rms_all,y_max_bpm,y_rms_bpm);
-    end
-    fprintf('------------------------------------------------------------------- \n');
+    print('    ------------------------------- ')
+    print('   |   codx [mm]   |   cody [mm]   |')
+    print('   | (max)   (rms) | (max)   (rms) |')
+    print('---|-------------------------------|')
+   #print('001| 13.41   14.32 | 13.41   14.32 |');
+    return None
+    for i in range(nr_mach):
+        apply_errors_one_machine(machine[i], errors, i, increment)
+        ring = machine[i][:]
+        _pyccel.lattice.set_attribute(ring, 'polynom_b',sext_idx, 0.0, 1, 3)
+        ring = turn_ids_off(ring, ids_idx)
+        codx, cody = calc_cod(ring, dim)
+        x_max_all, x_rms_all = get_max_rms(codx,1e3)
+        y_max_all, y_rms_all = get_max_rms(cody,1e3)
+        print('{0:03d}| {1:5.2f}   {2:5.2f} | {3:5.2f}   {4:5.2f} |'.format(
+                                    i,x_max_all,x_rms_all,y_max_all,y_rms_all))
+    print(36*'-')
+
+
+    def apply_errors_one_machine(the_ring, errors, ii, fraction):
+        funs={'x':_pyaccel.lattice.add_error_misalignment_x,
+              'y':_pyaccel.lattice.add_error_misalignment_y,
+              'roll':_pyaccel.lattice.add_error_rotation_roll,
+              'yaw':_pyaccel.lattice.add_error_rotation_yaw,
+              'pitch':_pyaccel.lattice.add_error_rotation_pitch,
+              'excit':_pyaccel.lattice.add_error_excitation_main,
+              'k_dip':_pyaccel.lattice.add_error_excitation_kdip}
+
+        for errtype in ['x','y','roll','yaw','pitch','excit','k_dip']:
+            errors[errtype] = _np.zeros((nr_mach, len(acc)))
+            err = fraction * errors[errtype][ii,:]
+            idx = err.nonzero()
+            funs[errtype](the_ring, idx, err[idx])
