@@ -127,46 +127,6 @@ def apply_erros(name, machine, errors, increment=1.0):
  OUTPUT:
    machine  : lis of ring models with errors.
 """
-    nr_mach = errors['x'].shape[0]
-
-    _mp.save_pickle([name,'_apply_errors_input'],
-                    errors=errors, increment=increment)
-
-    machs = []
-    if not isinstance(machine,list):
-        for i in range(nr_mach):
-            machs.append(_pyaccel.accelerator.Accelerator(machine))
-    machine = machs
-
-    if len(machine) != nr_mach:
-        print('DifferentSizes: Incompatibility between errors and'+
-                ' machine lengths.\n Using minimum of both.')
-        nr_mach = min([len(machine),nr_mach])
-
-    ids_idx  = [i for i in range(len(machine[0]))
-                  if machine[0][i].pass_method.startswith('kicktable_pass')]
-    sext_idx = [i for i in range(len(machine[0]))
-                  if machine[0][i].polynom_b[2] != 0.0]
-
-    print('    ------------------------------- ')
-    print('   |   codx [mm]   |   cody [mm]   |')
-    print('   | (max)   (rms) | (max)   (rms) |')
-    print('---|-------------------------------|')
-   #print('001| 13.41   14.32 | 13.41   14.32 |');
-    return None
-    for i in range(nr_mach):
-        apply_errors_one_machine(machine[i], errors, i, increment)
-        ring = machine[i][:]
-        _pyccel.lattice.set_attribute(ring, 'polynom_b',sext_idx, 0.0, 1, 3)
-        ring = turn_ids_off(ring, ids_idx)
-        codx, cody = _calc_cod(ring, dim)
-        x_max_all, x_rms_all = get_max_rms(codx,1e3)
-        y_max_all, y_rms_all = get_max_rms(cody,1e3)
-        print('{0:03d}| {1:5.2f}   {2:5.2f} | {3:5.2f}   {4:5.2f} |'.format(
-                                    i,x_max_all,x_rms_all,y_max_all,y_rms_all))
-    print(36*'-')
-
-
     def apply_errors_one_machine(ring, errors, ii, fraction):
         funs={'x':_pyaccel.lattice.add_error_misalignment_x,
               'y':_pyaccel.lattice.add_error_misalignment_y,
@@ -178,5 +138,52 @@ def apply_erros(name, machine, errors, increment=1.0):
 
         for errtype in errors:
             err = fraction * errors[errtype][ii,:]
-            idx = err.nonzero()
+            idx, *_ = err.nonzero()
             funs[errtype](ring, idx, err[idx])
+
+    nr_mach = errors['x'].shape[0]
+
+    # _mp.save_pickle([name,'_apply_errors_input'],
+    #                 errors=errors, increment=increment)
+
+    machs = []
+    if not isinstance(machine,list):
+        for i in range(nr_mach):
+            machs.append(_pyaccel.accelerator.Accelerator(accelerator=machine))
+    machine = machs
+
+    if len(machine) != nr_mach:
+        print('DifferentSizes: Incompatibility between errors and'+
+                ' machine lengths.\n Using minimum of both.')
+        nr_mach = min([len(machine),nr_mach])
+
+    ids_idx  = {i for i in range(len(machine[0]))
+                  if machine[0][i].pass_method.startswith('kicktable_pass')}
+    sext_idx = {i for i in range(len(machine[0]))
+                  if machine[0][i].polynom_b[2] != 0.0}
+
+    print('    ------------------------------- ')
+    print('   |   codx [mm]   |   cody [mm]   |')
+    print('   | (max)   (rms) | (max)   (rms) |')
+    print('---|-------------------------------|')
+   #print('001| 13.41   14.32 | 13.41   14.32 |');
+    for i in range(nr_mach):
+        apply_errors_one_machine(machine[i], errors, i, increment)
+        ring = machine[i][:]
+        for ii in range(len(ring)):
+            if ii in sext_idx: ring[ii].polynom_b[2] = 0.0
+            if ii in ids_idx : ring[ii].pass_method = 'drift_pass'
+        codx, cody = _calc_cod(ring)
+        x_max_all, x_rms_all = 1e3*_np.abs(codx).max(), 1e3*codx.std(ddof=1)
+        y_max_all, y_rms_all =  1e3*_np.abs(cody).max(), 1e3*cody.std(ddof=1)
+        print('{0:03d}| {1:5.2f}   {2:5.2f} | {3:5.2f}   {4:5.2f} |'.format(
+                                    i,x_max_all,x_rms_all,y_max_all,y_rms_all))
+    print(36*'-')
+    return machine
+
+def _calc_cod(ring):
+    if ring.cavity_on:
+        orb = _pyaccel.tracking.findorbit6(ring,indices='open')
+    else:
+        orb = _pyaccel.tracking.findorbit4(ring,indices='open')
+    return orb[0], orb[2]
