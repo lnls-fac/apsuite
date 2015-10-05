@@ -6,7 +6,7 @@ import scipy.stats as _scystat
 import pyaccel as _pyaccel
 import mathphys as _mp
 
-_ERRORTYPES = ('x','y','roll','yaw','pitch','excit','k_dip')
+_ERRORTYPES = ('x','y','roll','excit','k_dip')
 
 def generate_errors(acc,config,fam_data=None,nr_mach=20,cutoff=1,rndtype='gauss',seed=42424242):
     """Generates random errors to be applied in the model by the function apply_errors.
@@ -17,25 +17,28 @@ def generate_errors(acc,config,fam_data=None,nr_mach=20,cutoff=1,rndtype='gauss'
                    'mags' and/or 'girders'. All of them are optional:
         'mags'   : dictionary with arbitrary named keys whose values are
                    dictionaries with keys:
-          'labels': list of family names
-          'sigma' : dictionary. possible keys:'x','y','roll','excit','k_dip','yaw','pitch'.
+          'labels' : list of family names.
+          'nrsegs' : Optional. If existent and not None, must be a list of
+             of the same length as 'labels', defining the number of segments
+             the magnets of that family. It overwrites the fam_data option for
+             the magtypes where it is defined.
+          'sigma' : dictionary. possible keys:'x','y','roll','excit','k_dip'.
                     Values are errors definition (1-sigma for gauss, max for uniform)
 
         'girder' : dictionary with definition of girder errors. Possible keys:
-                   'x','y','roll','excit','k_dip','yaw','pitch'.
-                   Values are errors definition (1-sigma for gauss, max for uniform)
-      fam_data : dictionary whose keys are family names of, at least, all magnets
-                 defined in config['mags']['labels'] and the key 'girder' and
-                 values are dictionaries with at least one key: 'index',
-                 whose value is a list of indices the magnets in the lattice.
-                 If this list is a nested list, then each sub-list is understood
-                 as segments of the same physical magnet and the same error will be
-                 applied to them.
-                 Its default is None, which means each instance of the magnets in
-                 the lattice will be considered as independent, with its own error
-                 and girder errors will be ignored.
-                 For sirius, this dictionary can be created with the function
-                 sirius.<'version'>.get_family_data(acc).
+          'x','y','roll','excit','k_dip'. Values are errors definition
+          (1-sigma for gauss, max for uniform)
+      fam_data : dictionary whose keys are family names of all magnets
+        defined in config['mags']['labels'] and the key 'girder' and values are
+        dictionaries with at least one key: 'index', whose value is a list of
+        indices the magnets in the lattice. If this list is a nested list, then
+        each sub-list is understood as segments of the same physical magnet and
+        the same error will be applied to them.
+        Its default is None, which means each instance of the magnets in the
+        lattice will be considered as independent with its own error, if 'nrsegs'
+        is not defined for that magtype, and girder errors will be ignored.
+        For sirius, this dictionary can be created with the function
+        sirius.<'version'>.get_family_data(acc).
       nr_mach : generate errors for this number of machines.
       cutoff  : number of sigmas to truncate the distribution (default is 1)
       rndtype : type of distribution. Possible values: 'uniform' and 'gauss'.
@@ -43,7 +46,7 @@ def generate_errors(acc,config,fam_data=None,nr_mach=20,cutoff=1,rndtype='gauss'
       seed    : seed to generate random numbers. Default is 42424242
 
     OUTPUT:
-        errors : dictionary with keys: 'x','y','roll','yaw','pitch','excit','k_dip'.
+        errors : dictionary with keys: 'x','y','roll','excit','k_dip'.
           Each key is a list with dimension nr_mach x len(acc)
           with errors generated for the elements defined by the inputs. If an
           element errors has contributions from 'mags' and 'girder', the value
@@ -67,8 +70,6 @@ def generate_errors(acc,config,fam_data=None,nr_mach=20,cutoff=1,rndtype='gauss'
      >>> config['girder']['x']     = 100 * um * 1
      >>> config['girder']['y']     = 100 * um * 1
      >>> config['girder']['roll']  =0.20 * mrad * 1
-     >>> config['girder']['yaw']   =  20 * mrad * 0
-     >>> config['girder']['pitch'] =  20 * mrad * 0
      >>> errors = generate_errors('test',acc,config,fam_data,nr_mach=20,cutoff=2)
     """
 
@@ -93,8 +94,12 @@ def generate_errors(acc,config,fam_data=None,nr_mach=20,cutoff=1,rndtype='gauss'
     if 'mags' in config:
         for mtype in config['mags']:
             for errtype in config['mags'][mtype]['sigma']:
-                for fam_name in config['mags'][mtype]['labels']:
-                    if fam_data is not None:
+                for ind,fam_name in enumerate(config['mags'][mtype]['labels']):
+                    nrsegs = config['mags'][mtype].get('nrsegs',None)
+                    if nrsegs is not None:
+                        idx = _np.array(_pyaccel.lattice.find_indices(acc,'fam_name',fam_name))
+                        idx = idx.reshape((-1,nrsegs[ind]))
+                    elif fam_data is not None:
                         idx = fam_data[fam_name]['index']
                     else:
                         idx = _pyaccel.lattice.find_indices(acc,'fam_name',fam_name)
@@ -131,10 +136,10 @@ def apply_erros(machine, errors, increment=1.0):
         funs={'x':_pyaccel.lattice.add_error_misalignment_x,
               'y':_pyaccel.lattice.add_error_misalignment_y,
               'roll':_pyaccel.lattice.add_error_rotation_roll,
-              'yaw':_pyaccel.lattice.add_error_rotation_yaw,
-              'pitch':_pyaccel.lattice.add_error_rotation_pitch,
               'excit':_pyaccel.lattice.add_error_excitation_main,
               'k_dip':_pyaccel.lattice.add_error_excitation_kdip}
+            #   'yaw':_pyaccel.lattice.add_error_rotation_yaw,
+            #   'pitch':_pyaccel.lattice.add_error_rotation_pitch,
 
         for errtype in errors:
             err = fraction * errors[errtype][ii,:]
@@ -147,20 +152,20 @@ def apply_erros(machine, errors, increment=1.0):
     #                 errors=errors, increment=increment)
 
     machs = []
-    if not isinstance(machine,list):
+    if not isinstance(machine,(list,tuple)):
         for i in range(nr_mach):
             machs.append(_pyaccel.accelerator.Accelerator(accelerator=machine))
-    machine = machs
+        machine = machs
 
     if len(machine) != nr_mach:
         print('DifferentSizes: Incompatibility between errors and'+
                 ' machine lengths.\n Using minimum of both.')
         nr_mach = min([len(machine),nr_mach])
 
-    ids_idx  = {i for i in range(len(machine[0]))
-                  if machine[0][i].pass_method.startswith('kicktable_pass')}
-    sext_idx = {i for i in range(len(machine[0]))
-                  if machine[0][i].polynom_b[2] != 0.0}
+    ids_idx  = [i for i in range(len(machine[0]))
+                  if machine[0][i].pass_method.startswith('kicktable_pass')]
+    sext_idx = [i for i in range(len(machine[0]))
+                  if machine[0][i].polynom_b[2] != 0.0]
 
     print('    ------------------------------- ')
     print('   |   codx [mm]   |   cody [mm]   |')
@@ -170,9 +175,8 @@ def apply_erros(machine, errors, increment=1.0):
     for i in range(nr_mach):
         apply_errors_one_machine(machine[i], errors, i, increment)
         ring = machine[i][:]
-        for ii in range(len(ring)):
-            if ii in sext_idx: ring[ii].polynom_b[2] = 0.0
-            if ii in ids_idx : ring[ii].pass_method = 'drift_pass'
+        for ii in ids_idx:  ring[ii].pass_method = 'drift_pass'
+        for ii in sext_idx: ring[ii].polynom_b[2] = 0.0
         codx, cody = _calc_cod(ring)
         x_max_all, x_rms_all = 1e3*_np.abs(codx).max(), 1e3*codx.std(ddof=1)
         y_max_all, y_rms_all =  1e3*_np.abs(cody).max(), 1e3*cody.std(ddof=1)
@@ -193,39 +197,54 @@ def correct_cod(machine, cor_conf, gcodx=None, gcody=None):
           If not passed a default of zero will be used.
        gcody    : same as goal_codx but for the vertical plane.
        cor_conf    : dictionary with keys:
-          'bpms' - bpm indexes in the model
-          'hcms' - horizontal correctors indexes in the model. If the correctors
+          'bpms' - Indices of the bpms in the model.
+          'hcms' - Indices of horizontal correctors in the model. If the correctors
                  are segmented in the model, it must be a nested list or a 2D array
                  where each sub-list or first dimension of the array have the
                  indices of one corrector.
-          'vcms' - vertical correctors indexes in the model. The same as 'hcms'
+          'vcms' - Indices of vertical correctors in the model. The same as 'hcms'
                  for segmented correctors.
+           ### All keys below are optional ###
           'sext_ramp' - If existent, must be a vector with components less than or
              equal to one, denoting a fraction of sextupoles strengths used in each step
              of the correction. For example, if sext_ramp = [0,1] the correction
              algorithm will be called two times for each machine. In the first
              time the sextupoles strengths will be zeroed and in the second
              time they will be set to their correct value. If the last value is
-             not 1, this value will be appended.
+             not 1, this value will be appended. Default: [1.0].
           'svs'    - may be a number denoting how many singular values will be
              used in the correction or the string 'all' to use all singular
              values. Default: 'all';
-          'max_nr_iter' - maximum number of iterations the correction
-             algortithm will perform at each call for each machine;
-          'conver' - if in two subsequent iteractions the relative difference
-             between the error function values is less than this value the
-             correction is considered to have converged and will terminate.
-          'bba' - if true, the goal orbit will be set in relation
-             to the magnetic center of the quadrupole nearest to each bpm.
-          'bpm_err' - if true, the Offset field defined in the bpms in the
-             lattice will be used to simulate an error in the determination of
-             the goal orbit. Notice that there must exist an Offset field defined
-             in the lattice models of the machine array for each bpm, in order to
-             this simulation work. Otherwise an error will occur.
+          'max_nr_iter' - Optional. Maximum number of iterations the correction
+             algortithm will perform at each call for each machine. Default: 20
+          'tol' - Optional. If existent must be a float defining the threshold
+             for convergence of the algorithm. By convergence we mean the
+             relative variation of the error function between two successive
+             iterations. Default: 1e-5.
+          'bba' - Optional. If existent and not None, must be a list or 1D numpy
+             array with the indices of elements of the accelerator with the same
+             length as the bpms. The algorithm will take the misalignment error
+             of those elements and add them to the gcod and correct the orbit
+             to this reference. For example, the function get_bba_ind returns
+             the indices of the nearest quadrupoles to each bpm. If those indices
+             were passed to this function, the orbit would be corrected to their
+             magnetic center, simulating a BBA prcedure.
+          'bpm_err' - Optional. If existent and not None, must be a dictionary
+             with a mandatory key: 'simga' which is a tuple of length 2 with the
+             rms of the noise in the horizontal and vertical plane, respectively
+             and an optional key: 'cutoff' which must be a float defining in how
+             many sigma the distribution must be truncated (default: 1). This
+             noise will be added to the reference orbit (gcod + bba) simulating
+             errors in the bpms readings (offset errors, bba precision,...).
           'respm' - dictionary with keys 'M', 's', 'V', 'U' which are the response
-             matrix and its SVD decomposition. If NOT present, the function
-             WILL CALCULATE the response matrix for each machine in each step
-             defined by sext_ramp.
+             matrix and its SVD decomposition (M = U * diag(s) * V). If NOT present,
+             the function WILL CALCULATE the response matrix for each machine in
+             each step defined by sext_ramp.
+
+    OUTPUT:
+      gcodx : 2D numpy array with the reference orbit, excluding the bpm noise
+         (gcodx + bba), used in the correction.
+      gcody : the same as gcodx, but for the vertical plane.
     """
     # _mp.utils.save_pickle(name+'_correct_cod_input.mat', cor_conf=cor_conf,
     #                         goal_codx=goal_codx, goal_cody=goal_cody)
@@ -243,7 +262,7 @@ def correct_cod(machine, cor_conf, gcodx=None, gcody=None):
     sext_ramp = cor_conf.get('sext_ramp',[1])
     if not _np.allclose(sext_ramp[-1],1,atol=1e-8,rtol=1e-8): sext_ramp.append(1)
     ind_bba   = cor_conf.get('bba',None)  #get_bba_ind(machine{1})
-    tol       = cor_conf.get('conver',1e-5)
+    tol       = cor_conf.get('tol',1e-5)
     if cor_conf.get('bpm_err',None) is not None:
         cutoff = cor_conf['bpm_err'].get('cutoff',1)
         sigs    = cor_conf['bpm_err'].pop('sigma')
@@ -507,6 +526,182 @@ def get_bba_ind(acc,bpms):
     In = _np.abs(bpm_spos[:,None] - quad_spos[None,:]).argmin(axis=1)
     ind_bba = quad_idx[In]
     return ind_bba
+
+def correct_coupling(machine, coup): #Not Implemented
+    """ Correct coupling of several machines.
+
+     INPUTS:
+       name     : name of the file to which the inputs will be saved;
+       machine  : cell array of lattice models to symmetrize the optics.
+       coup     : structure with fields:
+          bpm_idx   - bpm indexes in the model;
+          hcm_idx   - horizontal correctors indexes in the model;
+          vcm_idx   - vertical correctors indexes in the model;
+          scm_idx   - indexes of the skew quads which will be used to symmetrize;
+          svs       - may be a number denoting how many singular values will be
+             used in the correction or the string 'all' to use all singular
+             values. Default: 'all';
+          max_nr_iter - maximum number of iteractions the correction
+             algortithm will perform at each call for each machine;
+          tolerance - if in two subsequent iteractions the relative difference
+             between the error function values is less than this value the
+             correction is considered to have converged and will terminate.
+          simul_bpm_corr_err - if true, the Gains field defined in the bpms  and
+             the Gain field defined in the correctors in thelattice will be used
+             to simulate gain errors in these elements, changing the response
+             matrix calculated. Notice that the supra cited fields must exist
+             in the lattice models of the machine array for each bpm and corrector
+             in order for this this simulation to work. Otherwise an error will occur.
+          respm - structure with fields M, S, V, U which are the coupling response
+             matrix and its SVD decomposition. If NOT present, the function
+             WILL CALCULATE the coupling response matrix for each machine.
+
+     OUTPUT:
+       machine : cell array of lattice models with the orbit corrected.
+    """
+    return None
+    # bpms = sorted(coup['bpms'])
+    # hcms = sorted(coup['hcms'])
+    # vcms = sorted(coup['vcms'])
+    #
+    # nr_mach = len(machine)
+    #
+    # calc_respm = false;
+    # if ~isfield(coup,'respm'), calc_respm = true; end
+    #
+    # #if isnumeric(coup.svs), svs = num2str(coup.svs);else svs = coup.svs;end
+    # print('   maximum number of correction iterations: %i', coup.max_nr_iter);
+    # print('   tolerance: %8.2e', coup.tolerance);
+    # print('     -------------------------------------------------------------------------- ');
+    # print('    | Max Kl |  chi2  | Tilt  |           Coup[%]           | NIters | NRedStr |');
+    # print('    | [1/km] |        | [deg] |  Ey/Ex  | Tracking | Dy[mm] |        |         |');
+    # print('-------------------------------------------------------------------------------|');
+    # for i in range(nr_mach):
+    #         # R=0; T=0; D=0;
+    #         # try
+    #         #     [T, Eta, ~, ~, R, ~, ~, ~, ~] = calccoupling(machine{i});
+    #         #     D = 1000*sqrt(sum(Eta(3,:).^2)/size(Eta,2));
+    #         # end
+    #
+    #         if calc_respm
+    #             [respm, ~] = calc_respm_coupling(machine{i}, coup);
+    #             coup.respm = respm;
+    #         RTr = mean(lnls_calc_emittance_coupling(machine{i}));
+    #         [machine{i}, skewstr, iniFM, bestFM, iter, n_times] = coup_sg(machine{i}, coup);
+    #         RTr2 = mean(lnls_calc_emittance_coupling(machine{i}));
+    #         # R2=0; T2=0; D2=0;
+    #         # try
+    #         #     [T2, Eta2, ~, ~, R2, ~, ~, ~, ~] = calccoupling(machine{i});
+    #         #     D2 = 1000*sqrt(sum(Eta2(3,:).^2)/size(Eta2,2));
+    #         print('%03d | %6s | %6.3f | %5.2f | %7.3f | %7.3f  | %6.3f |  %4s  |  %4s   |',...
+    #             i, ' ', iniFM, std(T)*180/pi,  100*[R, RTr], D, ' ',' ');
+    #         print('%3s | %6.2f | %6.3f | %5.2f | %7.4f | %7.4f  | %6.3f |  %4d  |  %4d   |',...
+    #             ' ', 1000*max(abs(skewstr)), bestFM, std(T2)*180/pi,  100*[R2, RTr2], D2, iter, n_times);
+    #         print('-------------------------------------------------------------------------------|');
+
+def calc_respm_coupling(acc, coup, symmetry=1, info=None): return None
+    # bpms = sorted(bpms)
+    # hcms = sorted(hcms)
+    # vcms = sorted(vcms)
+    #
+    # if info is None: info = collect_info_coup(acc, coup, symmetry)
+    #
+    # [~, Mxy, Myx, ~, ~, Dispy] = prepare_data_for_symm(the_ring, coup, info{1}.M, info{1}.Disp);
+    # v = calc_residue_coupling(Mxy, Myx, Dispy, coup.bpm_idx, coup.hcm_idx, coup.vcm_idx);
+    # M = zeros((len(v),len(info)))
+    # M[:,1] = v
+    # for i = range(1,len(info)):
+    #     _, Mxy, Myx, _, _, Dispy = prepare_data_for_symm(the_ring, coup, info{i}.M, info{i}.Disp)
+    #     M[:,i] = calc_residue_coupling(Mxy, Myx, Dispy, coup.bpm_idx, coup.hcm_idx, coup.vcm_idx)
+    #
+    # r['M'] = M
+    # U, s, V = _np.linalg.svd(M,full_matrices=False) #M = U*np.diag(s)*V
+    # r['U'] = U
+    # r['V'] = V
+    # r['S'] = s
+    #
+    # print('   number of singular values: %03i\n', len(s))
+    # print('   singular values: %f,%f,%f ... %f,%f,%f\n', s[0],s[1],s[2],s[-3],s[-2],s[-1])
+    # return respm, info
+
+def _collect_info_coup(the_ring, coup, lattice_symmetry): return None
+    # stepK0 = 0.001;
+    #
+    # print('-  collecting info for coupling respm calculation ...')
+    # print('   (this routine is yet to be generalized for arbitrary segmented skew quadrupole models!)')
+    # print('   qs:%03i', size(coup.scm_idx,1))
+    #
+    # # Test hysteresis
+    # hyster = 0.0;
+    # stepK = stepK0*(1-hyster)# Test hysteresis
+    #
+    # len_scms= size(coup.scm_idx,1)/symmetry
+    # len_bpm = size(coup.bpm_idx,1)/symmetry
+    # len_hcm = size(coup.hcm_idx,1)/symmetry
+    # len_vcm = size(coup.vcm_idx,1)/symmetry
+    # if logical(mod(len_scms,1))
+    #     len_scms = len_scms*symmetry
+    #     len_bpm  = len_bpm*symmetry
+    #     len_hcm  = len_hcm*symmetry
+    #     len_vcm  = len_vcm*symmetry
+    #     symmetry = 1
+    #
+    # info = cell(1,len_scms*symmetry)
+    #
+    # # this routine has to be generalized for arbitrary skew quad segmented models !!!
+    #
+    # K = getcellstruct(the_ring, 'PolynomA', coup.scm_idx(1:len_scms,1), 1, 2);
+    # the_ring_calc = the_ring;
+    # for i1=1:len_scms
+    #     the_ring_calc = setcellstruct(the_ring_calc, 'PolynomA', coup.scm_idx(i1,:), K(i1) + stepK/2, 1, 2)
+    #     [Mp, Dispp, tunep] = get_matrix_disp(the_ring_calc, coup.bpm_idx, coup.hcm_idx, coup.vcm_idx)
+    #     the_ring_calc = setcellstruct(the_ring_calc, 'PolynomA', coup.scm_idx(i1,:), K(i1) - stepK, 1, 2)
+    #     [Mn, Dispn, tunen] = get_matrix_disp(the_ring_calc, coup.bpm_idx, coup.hcm_idx, coup.vcm_idx)
+    #     the_ring_calc = setcellstruct(the_ring_calc, 'PolynomA', coup.scm_idx(i1,:), K(i1) + stepK/2, 1, 2)
+    #
+    #     info{i1} = struct('M',(Mp-Mn)/stepK0,'Disp',(Dispp-Dispn)/stepK0, 'Tune',(tunep-tunen)/stepK0)
+    #
+    # if symmetry ~= 1
+    #     for i1=1:len_scms
+    #         M = mat2cell(info{i1}.M, lattice_symmetry*len_bpm*[1 1], lattice_symmetry*[len_hcm len_vcm])
+    #         Mxx = M{1,1}
+    #         Mxy = M{1,2}
+    #         Myx = M{2,1}
+    #         Myy = M{2,2}
+    #         Disp = info{i1}.Disp
+    #         for i2=1:(lattice_symmetry-1)
+    #             Mxx = circshift(Mxx,[len_bpm, len_hcm])
+    #             Myx = circshift(Myx,[len_bpm, len_hcm])
+    #             Mxy = circshift(Mxy,[len_bpm, len_vcm])
+    #             Myy = circshift(Myy,[len_bpm, len_vcm])
+    #             Disp = circshift(Disp,[0,len_bpm])
+    #             info{i1+len_scms*i2}.M = [Mxx,Mxy;Myx,Myy]
+    #             info{i1+len_scms*i2}.Disp = Disp
+    #             info{i1+len_scms*i2}.Tune = info{i1}.Tune
+    # return info
+
+def _prepare_data_for_symm(the_ring, optics, M, Disp): return None
+    # # assumes uniform dipolar field for orbit correctors
+    #
+    # len_bpms = size(optics.bpm_idx,1);
+    # if optics.simul_bpm_corr_err
+    #     bpm_gains = getcellstruct(the_ring,'Gains',optics.bpm_idx(:,1));
+    #     hcm_gains = getcellstruct(the_ring,'Gain',optics.hcm_idx(:,1))';
+    #     vcm_gains = getcellstruct(the_ring,'Gain',optics.vcm_idx(:,1))';
+    #     M = repmat([hcm_gains,vcm_gains],size(M,1),1).*M;
+    #     for i=1:len(bpm_gains)
+    #         M(i+[0,len_bpms],:) = bpm_gains{i}*M(i+[0,len_bpms],:);
+    #         Disp([1,3],i) = bpm_gains{i}*Disp([1,3],i);
+    #
+    # M = mat2cell(M,len_bpms*[1,1],[size(optics.hcm_idx,1), size(optics.vcm_idx,1)]);
+    # Mxx = M{1,1};
+    # Mxy = M{1,2};
+    # Myx = M{2,1};
+    # Myy = M{2,2};
+    #
+    # Dispx = Disp(1,:);
+    # Dispy = Disp(3,:);
+    # return Mxx,Mxy,Myx,Myy, Dispx, Dispy
 
 def _calc_cod(acc, indices = 'open'):
     if acc.cavity_on:
