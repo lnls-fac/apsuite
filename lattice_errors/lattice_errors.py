@@ -6,30 +6,25 @@ import scipy.stats as _scystat
 import pyaccel as _pyaccel
 import mathphys as _mp
 
-_ERRORTYPES = ('x','y','roll','excit','k_dip')
+ERRORTYPES = ('x','y','roll','excit','k_dip')
 
-def generate_errors(acc,config,fam_data=None,nr_mach=20,cutoff=1,rndtype='gauss',seed=42424242):
+def generate_errors(acc, mags=None, girder=None, fam_data=None,
+        nr_mach=20, cutoff=1, rndtype='gauss', seed=42424242):
     """Generates random errors to be applied in the model by the function apply_errors.
 
     INPUTS:
-      acc        : is the accelerator model.
-      config     : dictionary with configuration of the errors with keys
-                   'mags' and/or 'girders'. All of them are optional:
-        'mags'   : dictionary with arbitrary named keys whose values are
-                   dictionaries with keys:
-          'labels' : list of family names.
-          'nrsegs' : Optional. If existent and not None, must be a list of
-             of the same length as 'labels', defining the number of segments
-             the magnets of that family. It overwrites the fam_data option for
-             the magtypes where it is defined.
-          'sigma' : dictionary. possible keys:'x','y','roll','excit','k_dip'.
-                    Values are errors definition (1-sigma for gauss, max for uniform)
-
-        'girder' : dictionary with definition of girder errors. Possible keys:
-          'x','y','roll','excit','k_dip'. Values are errors definition
-          (1-sigma for gauss, max for uniform)
+      acc  : is the accelerator model.
+      mags : list of dictionaries with keys:
+        'labels' : list of family names.
+        'nrsegs' : Optional. If existent and not None, must be a list of
+          of the same length as 'labels', defining the number of segments
+          the magnets of that family. It overwrites the fam_data option for
+          the magtypes where it is defined.
+        'x','y','roll','excit','k_dip' : errors definition (1-sigma for gauss,
+          max for uniform)
+      girder : dict with definition of girder errors. Possible keys: 'x','y','roll'.
       fam_data : dictionary whose keys are family names of all magnets
-        defined in config['mags']['labels'] and the key 'girder' and values are
+        defined in mags[i]['labels'] and the key 'girder' and values are
         dictionaries with at least one key: 'index', whose value is a list of
         indices the magnets in the lattice. If this list is a nested list, then
         each sub-list is understood as segments of the same physical magnet and
@@ -46,31 +41,34 @@ def generate_errors(acc,config,fam_data=None,nr_mach=20,cutoff=1,rndtype='gauss'
       seed    : seed to generate random numbers. Default is 42424242
 
     OUTPUT:
-        errors : dictionary with keys: 'x','y','roll','excit','k_dip'.
-          Each key is a list with dimension nr_mach x len(acc)
-          with errors generated for the elements defined by the inputs. If an
-          element errors has contributions from 'mags' and 'girder', the value
-          present in this output will be the sum of them.
+      errors : dictionary with keys: 'x','y','roll','excit','k_dip'.
+        Each key is a list with dimension nr_mach x len(acc)
+        with errors generated for the elements defined by the inputs. If an
+        element errors has contributions from 'mags' and 'girder', the value
+        present in this output will be the sum of them.
 
     EXAMPLES:
-     >>> acc = sirius.si.SI_V10.create_accelerator()
-     >>> fam_data = sirius.SI_V10.get_family_data(acc)
+     >>> acc = sirius.si.SI_V12.create_accelerator()
+     >>> fam_data = sirius.SI_V12.get_family_data(acc)
      >>> um, mrad, percent = 1e-6, 1e-3, 1e-2
-     >>> config = dict({'mags':dict(),'girder':dict()})
-     >>> config['mags']['quads'] = dict({'labels':list(),'sigma':dict()})
-     >>> config['mags']['quads']['labels'] += ['qfa','qdb2','qfb']
-     >>> config['mags']['quads']['sigma']['x']     = 40 * um * 1
-     >>> config['mags']['quads']['sigma']['y']     = 40 * um * 1
-     >>> config['mags']['quads']['sigma']['roll']  = 0.20 * mrad * 1
-     >>> config['mags']['quads']['sigma']['excit'] = 0.05 * percent * 1
-     >>> config['mags']['dips'] = dict({'labels':list(),'sigma':dict()})
-     >>> config['mags']['dips']['labels'] += ['b1','b2']
-     >>> config['mags']['dips']['sigma']['x']     = 40 * um * 1
-     >>> config['mags']['dips']['sigma']['y']     = 40 * um * 1
-     >>> config['girder']['x']     = 100 * um * 1
-     >>> config['girder']['y']     = 100 * um * 1
-     >>> config['girder']['roll']  =0.20 * mrad * 1
-     >>> errors = generate_errors('test',acc,config,fam_data,nr_mach=20,cutoff=2)
+     >>> mags = []
+     >>> dics = dict()
+     >>> dics['labels'] = ['qfa','qdb2','qfb']
+     >>> dics['x']     = 40 * um * 1
+     >>> dics['y']     = 40 * um * 1
+     >>> dics['roll']  = 0.20 * mrad * 1
+     >>> dics['excit'] = 0.05 * percent * 1
+     >>> mags.append(dics)
+     >>> dics = dict()
+     >>> dics['labels'] = ['b1','b2']
+     >>> dics['x']     = 40 * um * 1
+     >>> dics['y']     = 40 * um * 1
+     >>> mags.append(dics)
+     >>> girder = dict()
+     >>> girder['x']     = 100 * um * 1
+     >>> girder['y']     = 100 * um * 1
+     >>> girder['roll']  =0.20 * mrad * 1
+     >>> errors = generate_errors(acc,mags,girder,fam_data,nr_mach=20,cutoff=2)
     """
 
     _np.random.seed(seed=seed)
@@ -84,18 +82,19 @@ def generate_errors(acc,config,fam_data=None,nr_mach=20,cutoff=1,rndtype='gauss'
 
     #generate empty arrays to store errors
     errors = dict()
-    for errtype in _ERRORTYPES:
-        errors[errtype] = _np.zeros((nr_mach, len(acc)))
+    for err in ERRORTYPES:
+        errors[err] = _np.zeros((nr_mach, len(acc)))
 
 
     # _mp.utils.save_pickle(name+'_generate_errors_input',
     #           config=config,nr_mach=nr_mach,cutoff=cutoff,rndtype=rndtype)
 
-    if 'mags' in config:
-        for mtype in config['mags']:
-            for errtype in config['mags'][mtype]['sigma']:
-                for ind,fam_name in enumerate(config['mags'][mtype]['labels']):
-                    nrsegs = config['mags'][mtype].get('nrsegs',None)
+    if 'mags' is not None:
+        for mtype in mags:
+            ERRORS = [err for err in ERRORTYPES if err in mtype]
+            for err in ERRORS:
+                for ind,fam_name in enumerate(sorted(mtype['labels'])):
+                    nrsegs = mtype.get('nrsegs',None)
                     if nrsegs is not None:
                         idx = _np.array(_pyaccel.lattice.find_indices(acc,'fam_name',fam_name))
                         idx = idx.reshape((-1,nrsegs[ind]))
@@ -107,14 +106,15 @@ def generate_errors(acc,config,fam_data=None,nr_mach=20,cutoff=1,rndtype='gauss'
                     rnd = random_numbers((nr_mach,len(idx)))
                     if isinstance(idx[0],(list,tuple,_np.ndarray)):
                         rnd = rnd.repeat(len(idx[0]),axis=1)
-                    errors[errtype][:,idx.ravel()] += rnd * config['mags'][mtype]['sigma'][errtype]
+                    errors[err][:,idx.ravel()] += rnd * mtype[err]
 
-    if ('girder' in config) and (fam_data is not None):
-        for errtype in config['girder']:
-            for gir_name in fam_data['girder']:
-                idx = _np.array(fam_data['girder'][gir_name]['index'])
+    if (girder is not None) and (fam_data is not None):
+        ERRORS = [err for err in ERRORTYPES if err in girder]
+        for err in ERRORS:
+            for gir in fam_data['girder']:
+                idx = _np.array(gir['index'])
                 rnd = random_numbers((nr_mach,1)).repeat(len(idx),axis=1)
-                errors[errtype][:,idx.ravel()] += rnd * config['girder'][errtype]
+                errors[err][:,idx.ravel()] += rnd * girder[err]
 
     return errors
 
@@ -185,7 +185,8 @@ def apply_erros(machine, errors, increment=1.0):
     print(36*'-')
     return machine
 
-def correct_cod(machine, cor_conf, gcodx=None, gcody=None):
+def correct_cod(machine, bpms, hcms, vcms, sext_ramp=[1.0], svs='all',tol=1e-5,
+    nr_iter=20, ind_bba=None, bpm_err=None, respm=None, gcodx=None, gcody=None):
     """  Correct orbit of several machines.
 
      INPUTS:
@@ -196,48 +197,47 @@ def correct_cod(machine, cor_conf, gcodx=None, gcody=None):
           nr_machines X nr_bpms, to define different orbits among the machines.
           If not passed a default of zero will be used.
        gcody    : same as goal_codx but for the vertical plane.
-       cor_conf    : dictionary with keys:
-          'bpms' - Indices of the bpms in the model.
-          'hcms' - Indices of horizontal correctors in the model. If the correctors
-                 are segmented in the model, it must be a nested list or a 2D array
-                 where each sub-list or first dimension of the array have the
-                 indices of one corrector.
-          'vcms' - Indices of vertical correctors in the model. The same as 'hcms'
-                 for segmented correctors.
-           ### All keys below are optional ###
-          'sext_ramp' - If existent, must be a vector with components less than or
+       bpms - Indices of the bpms in the model.
+       hcms - Indices of horizontal correctors in the model. If the correctors
+             are segmented in the model, it must be a nested list or a 2D array
+             where each sub-list or first dimension of the array have the
+             indices of one corrector.
+       vcms - Indices of vertical correctors in the model. The same as 'hcms'
+             for segmented correctors.
+       ### All keys below are optional ###
+       sext_ramp - If existent, must be a vector with components less than or
              equal to one, denoting a fraction of sextupoles strengths used in each step
              of the correction. For example, if sext_ramp = [0,1] the correction
              algorithm will be called two times for each machine. In the first
              time the sextupoles strengths will be zeroed and in the second
              time they will be set to their correct value. If the last value is
              not 1, this value will be appended. Default: [1.0].
-          'svs'    - may be a number denoting how many singular values will be
+       svs - may be a number denoting how many singular values will be
              used in the correction or the string 'all' to use all singular
              values. Default: 'all';
-          'max_nr_iter' - Optional. Maximum number of iterations the correction
+       nr_iter - Optional. Maximum number of iterations the correction
              algortithm will perform at each call for each machine. Default: 20
-          'tol' - Optional. If existent must be a float defining the threshold
+       tol - Optional. If existent must be a float defining the threshold
              for convergence of the algorithm. By convergence we mean the
              relative variation of the error function between two successive
              iterations. Default: 1e-5.
-          'bba' - Optional. If existent and not None, must be a list or 1D numpy
+       ind_bba - Optional. If not None, must be a list or 1D numpy
              array with the indices of elements of the accelerator with the same
              length as the bpms. The algorithm will take the misalignment error
-             of those elements and add them to the gcod and correct the orbit
+             of those elements, add them to the gcod and correct the orbit
              to this reference. For example, the function get_bba_ind returns
              the indices of the nearest quadrupoles to each bpm. If those indices
              were passed to this function, the orbit would be corrected to their
              magnetic center, simulating a BBA prcedure.
-          'bpm_err' - Optional. If existent and not None, must be a dictionary
-             with a mandatory key: 'simga' which is a tuple of length 2 with the
+       bpm_err - Optional. If not None, must be a dictionary with a mandatory
+             key: 'sigma' which is a tuple of length 2 with the
              rms of the noise in the horizontal and vertical plane, respectively
              and an optional key: 'cutoff' which must be a float defining in how
              many sigma the distribution must be truncated (default: 1). This
              noise will be added to the reference orbit (gcod + bba) simulating
              errors in the bpms readings (offset errors, bba precision,...).
-          'respm' - dictionary with keys 'M', 's', 'V', 'U' which are the response
-             matrix and its SVD decomposition (M = U * diag(s) * V). If NOT present,
+       respm - dictionary with keys 'M', 's', 'V', 'U' which are the response
+             matrix and its SVD decomposition (M = U * diag(s) * V). If None,
              the function WILL CALCULATE the response matrix for each machine in
              each step defined by sext_ramp.
 
@@ -252,27 +252,21 @@ def correct_cod(machine, cor_conf, gcodx=None, gcody=None):
     nr_mach = len(machine)
 
     # making sure they are in order
-    bpms = sorted(cor_conf['bpms'])
-    hcms = sorted(cor_conf['hcms'])
-    vcms = sorted(cor_conf['vcms'])
+    bpms = sorted(bpms)
+    hcms = sorted(hcms)
+    vcms = sorted(vcms)
 
     #### Dealing with optional input parameters:
-    respm     = cor_conf.get('respm',None)
-    nr_iter   = cor_conf.get('max_nr_iter', 20)
-    sext_ramp = cor_conf.get('sext_ramp',[1])
+    if svs == 'all': svs = len(hcms)+len(vcms)
     if not _np.allclose(sext_ramp[-1],1,atol=1e-8,rtol=1e-8): sext_ramp.append(1)
-    ind_bba   = cor_conf.get('bba',None)  #get_bba_ind(machine{1})
-    tol       = cor_conf.get('tol',1e-5)
-    if cor_conf.get('bpm_err',None) is not None:
-        cutoff = cor_conf['bpm_err'].get('cutoff',1)
-        sigs    = cor_conf['bpm_err'].pop('sigma')
+    if bpm_err is not None:
+        cutoff = bpm_err.get('cutoff',1)
+        sigs   = bpm_err.pop('sigma')
         noisex = sigs[0]*_scystat.truncnorm(-cutoff,cutoff).rvs((nr_mach,len(bpms)))
         noisey = sigs[1]*_scystat.truncnorm(-cutoff,cutoff).rvs((nr_mach,len(bpms)))
     else:
         noisex = _np.zeros((nr_mach,len(bpms)))
         noisey = _np.zeros((nr_mach,len(bpms)))
-    svs = cor_conf.get('svs','all')
-    if svs == 'all': svs = len(hcms)+len(vcms)
 
     # hcms must behave as if the magnet was segmented:
     types = (list,tuple,_np.ndarray)
@@ -479,7 +473,9 @@ def cod_sg(acc,bpms,hcms,vcms,respm=None, nr_iters=20,svs='all',tolerance=1e-5,
     cod  = _np.zeros(2*len(bpms))
     cod[:len(bpms)], cod[len(bpms):] = _calc_cod(acc, indices=bpms)
 
-    corrs = _np.array([_mp.utils.flatten(hcms),_mp.utils.flatten(vcms)]).ravel()
+    corrs = _mp.utils.flatten(hcms)
+    corrs.extend(_mp.utils.flatten(vcms))
+    corrs = _np.unique(_np.array(corrs))
     best_fm = (cod - gcod).std(ddof=1)
     best_acc = acc[corrs]
     factor, ntimes = 1, 0
