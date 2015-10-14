@@ -523,7 +523,8 @@ def get_bba_ind(acc,bpms):
     ind_bba = quad_idx[In]
     return ind_bba
 
-def correct_coupling(machine, coup): #Not Implemented
+def correct_coupling(machine, bpms, hcms, vcms, scms, svs='all',nr_iter=20,
+    tol=1e-5, bpm_err=None, respm=None):
     """ Correct coupling of several machines.
 
      INPUTS:
@@ -555,45 +556,57 @@ def correct_coupling(machine, coup): #Not Implemented
      OUTPUT:
        machine : cell array of lattice models with the orbit corrected.
     """
-    return None
-    # bpms = sorted(coup['bpms'])
-    # hcms = sorted(coup['hcms'])
-    # vcms = sorted(coup['vcms'])
-    #
-    # nr_mach = len(machine)
-    #
-    # calc_respm = false;
-    # if ~isfield(coup,'respm'), calc_respm = true; end
-    #
-    # #if isnumeric(coup.svs), svs = num2str(coup.svs);else svs = coup.svs;end
-    # print('   maximum number of correction iterations: %i', coup.max_nr_iter);
-    # print('   tolerance: %8.2e', coup.tolerance);
-    # print('     -------------------------------------------------------------------------- ');
-    # print('    | Max Kl |  chi2  | Tilt  |           Coup[%]           | NIters | NRedStr |');
-    # print('    | [1/km] |        | [deg] |  Ey/Ex  | Tracking | Dy[mm] |        |         |');
-    # print('-------------------------------------------------------------------------------|');
-    # for i in range(nr_mach):
-    #         # R=0; T=0; D=0;
-    #         # try
-    #         #     [T, Eta, ~, ~, R, ~, ~, ~, ~] = calccoupling(machine{i});
-    #         #     D = 1000*sqrt(sum(Eta(3,:).^2)/size(Eta,2));
-    #         # end
-    #
-    #         if calc_respm
-    #             [respm, ~] = calc_respm_coupling(machine{i}, coup);
-    #             coup.respm = respm;
-    #         RTr = mean(lnls_calc_emittance_coupling(machine{i}));
-    #         [machine{i}, skewstr, iniFM, bestFM, iter, n_times] = coup_sg(machine{i}, coup);
-    #         RTr2 = mean(lnls_calc_emittance_coupling(machine{i}));
-    #         # R2=0; T2=0; D2=0;
-    #         # try
-    #         #     [T2, Eta2, ~, ~, R2, ~, ~, ~, ~] = calccoupling(machine{i});
-    #         #     D2 = 1000*sqrt(sum(Eta2(3,:).^2)/size(Eta2,2));
-    #         print('%03d | %6s | %6.3f | %5.2f | %7.3f | %7.3f  | %6.3f |  %4s  |  %4s   |',...
-    #             i, ' ', iniFM, std(T)*180/pi,  100*[R, RTr], D, ' ',' ');
-    #         print('%3s | %6.2f | %6.3f | %5.2f | %7.4f | %7.4f  | %6.3f |  %4d  |  %4d   |',...
-    #             ' ', 1000*max(abs(skewstr)), bestFM, std(T2)*180/pi,  100*[R2, RTr2], D2, iter, n_times);
-    #         print('-------------------------------------------------------------------------------|');
+
+    bpms = sorted(bpms)
+    hcms = sorted(hcms)
+    vcms = sorted(vcms)
+    nr_mach = len(machine)
+
+    if svs == 'all': svs = len(hcms)+len(vcms)
+    if bpm_err is not None:
+        cutoff = bpm_err.get('cutoff',1)
+        sigs   = bpm_err.pop('sigma')
+        noisex = sigs[0]*_scystat.truncnorm(-cutoff,cutoff).rvs((nr_mach,len(bpms)))
+        noisey = sigs[1]*_scystat.truncnorm(-cutoff,cutoff).rvs((nr_mach,len(bpms)))
+    else:
+        noisex = _np.zeros((nr_mach,len(bpms)))
+        noisey = _np.zeros((nr_mach,len(bpms)))
+
+    # all correctors must behave as if the magnet was segmented:
+    types = (list,tuple,_np.ndarray)
+    if not isinstance(hcms[0],types): hcms = [[ind] for ind in hcms]
+    if not isinstance(vcms[0],types): vcms = [[ind] for ind in vcms]
+    if not isinstance(scms[0],types): scms = [[ind] for ind in scms]
+
+    print('correcting coupling (minimization of non-diagonal response matrix)')
+    print('selection of singular values: {0:3d}'.format(svs))
+    print('maximum number correction iterations: {0:3d}'.format(nr_iter))
+    print('tolerance: {0:8.2e}\n'.format(tol))
+    print('     ------------------------------------------------------- ')
+    print('    | Max Kl |  chi2  |      Coup[%]     | NIters | NRedStr |')
+    print('    | [1/km] |        |  Ey/Ex  | Dy[mm] |        |         |')
+    print('------------------------------------------------------------|')
+
+    #Definition of Stats functions:
+    s = _pyaccel.lattice.find_spos(machine[0])
+    mom2s = lambda v: 1e6*_np.sqrt(_np.trapz(v**2,x=s)/s[-1])
+    for i in range(nr_mach):
+        RTr = _pyaccel.tracking.calc_emittance_coupling(machine[i])
+        twiss, *_ = calc_twiss(accelerator=machine[i], indices = 'closed')
+        D = twiss.etax
+
+        skewstr, iniFM, bestFM, niter, n_times = coup_sg(machine[i],bpms,hcms,vcms,
+            scms, respm=respm,nr_iters=nr_iter,svs=svs,tolerance=tol)
+
+        RTr2 = _pyaccel.tracking.calc_emittance_coupling(machine[i])
+        twiss, *_ = calc_twiss(accelerator=machine[i], indices = 'closed')
+        D2 = twiss.etax
+
+        print('%03d | %6s | %6.3f | %7.3f  | %6.3f |  %4s  |  %4s   |'.format(
+            i, ' ', iniFM, 100*RTr, mom2s(D), ' ',' '))
+        print('%3s | %6.2f | %6.3f | %7.4f  | %6.3f |  %4d  |  %4d   |'.format(
+            ' ', 1000*_np.abs(skewstr).max(), bestFM, 100*RTr2, mom2s(D2), niter, n_times))
+        print('------------------------------------------------------------|')
 
 def calc_respm_coupling(acc, coup, symmetry=1, info=None): return None
     # bpms = sorted(bpms)
