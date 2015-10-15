@@ -343,59 +343,6 @@ def calc_respm_cod(acc,bpm_idx,hcm_idx,vcm_idx,symmetry=1,printing=False):
     """
 
     """
-
-    def get_response_matrix(acc, bpms, hcms, vcms):
-        # M(y,x) --> y : orbit    x: corrector
-
-        if not isinstance(hcms[0],(list,tuple,_np.ndarray)):
-            hcms = [[ind] for ind in hcms]
-        if not isinstance(vcms[0],(list,tuple,_np.ndarray)):
-            vcms = [[ind] for ind in vcms]
-
-        closed_orbit = _np.zeros((6,len(acc)))
-        if acc.cavity_on:
-            closed_orbit = _pyaccel.tracking.findorbit6(acc,indices='open')
-            M, T = _pyaccel.tracking.findm66(acc,closed_orbit=closed_orbit)
-        else:
-            closed_orbit[:4,:] = _pyaccel.tracking.findorbit4(acc,indices='open')
-            M, T = _pyaccel.tracking.findm44(acc,closed_orbit=closed_orbit)
-
-        A_InvB = lambda A,B: _np.linalg.solve(B.T, A.T).T
-        InvA_B = lambda A,B: _np.linalg.solve(A, B)
-        def get_C(DM_i, R0i, bpm, corr, length):
-            # cxy --> orbit at bpm x due to kick in corrector y
-            if bpm>corr:
-                R_ij = A_InvB(R0i,T[corr]) # R0i/R0j
-            else :
-                R_ij = _np.dot(R0i, A_InvB(M, T[corr])) # Rij = R0i*M*inv(R0j)
-
-            C = InvA_B(DM_i, R_ij)
-            cxx = -(length/2)*C[0,0]   +   C[0,1]
-            cyx = -(length/2)*C[2,0]   +   C[2,1]
-            cxy = -(length/2)*C[0,2]   +   C[0,3]
-            cyy = -(length/2)*C[2,2]   +   C[2,3]
-            return cxx, cyx, cxy, cyy
-
-        nr_hcms = len(hcms)
-        nr_vcms = len(vcms)
-        nr_bpms = len(bpms)
-        mxx = _np.zeros((nr_bpms, nr_hcms))
-        myx = _np.zeros((nr_bpms, nr_hcms))
-        mxy = _np.zeros((nr_bpms, nr_vcms))
-        myy = _np.zeros((nr_bpms, nr_vcms))
-        len_hcms = [sum([acc[j].length for j in hcms[i]]) for i in range(len(hcms))]
-        len_vcms = [sum([acc[j].length for j in vcms[i]]) for i in range(len(vcms))]
-        D = _np.eye(M.shape[0])
-        for i in range(nr_bpms):
-            R_i = T[bpms[i]]
-            DM_i = D - A_InvB(_np.dot(R_i,M), R_i) # I - R*M*inv(R)
-            for j in range(nr_hcms):
-                mxx[i,j], myx[i,j], *_ = get_C(DM_i, R_i, bpms[i],hcms[j][-1],len_hcms[j])
-            for j in range(nr_vcms):
-                *_, mxy[i,j], myy[i,j] = get_C(DM_i, R_i, bpms[i],vcms[j][-1],len_vcms[j])
-        return mxx,mxy,myx,myy
-
-
     # making sure they are in order
     bpm_idx = sorted(bpm_idx)
     hcm_idx = sorted(hcm_idx)
@@ -423,7 +370,7 @@ def calc_respm_cod(acc,bpm_idx,hcm_idx,vcm_idx,symmetry=1,printing=False):
         print('bpms:{0:03d}, hcms:{0:03d}, vcms:{0:03d}'.format(
                    nr_bpms, nr_hcms, nr_vcms))
 
-    mxx,mxy,myx,myy = get_response_matrix(acc, bpm_idx, hcm_idx, vcm_idx)
+    mxx,mxy,myx,myy = _get_response_matrix(acc, bpm_idx, hcm_idx, vcm_idx)
 
     for i in range(symmetry):
         indcs = list(range(i*len_hcm,(i+1)*len_hcm))
@@ -560,6 +507,7 @@ def correct_coupling(machine, bpms, hcms, vcms, scms, svs='all',nr_iter=20,
     bpms = sorted(bpms)
     hcms = sorted(hcms)
     vcms = sorted(vcms)
+    scms = sorted(scms)
     nr_mach = len(machine)
 
     if svs == 'all': svs = len(hcms)+len(vcms)
@@ -602,92 +550,156 @@ def correct_coupling(machine, bpms, hcms, vcms, scms, svs='all',nr_iter=20,
         twiss, *_ = calc_twiss(accelerator=machine[i], indices = 'closed')
         D2 = twiss.etax
 
-        print('%03d | %6s | %6.3f | %7.3f  | %6.3f |  %4s  |  %4s   |'.format(
+        print('{0:03d} | {1:6s} | {2:6.3f} | {3:7.3f}  | {4:6.3f} |  {5:4s}  |  {6:4s}   |'.format(
             i, ' ', iniFM, 100*RTr, mom2s(D), ' ',' '))
-        print('%3s | %6.2f | %6.3f | %7.4f  | %6.3f |  %4d  |  %4d   |'.format(
+        print('{0:3s} | {1:6.2f} | {2:6.3f} | {3:7.3f}  | {4:6.3f} |  {5:4s}  |  {6:4s}   |'.format(
             ' ', 1000*_np.abs(skewstr).max(), bestFM, 100*RTr2, mom2s(D2), niter, n_times))
         print('------------------------------------------------------------|')
 
-def calc_respm_coupling(acc, coup, symmetry=1, info=None): return None
-    # bpms = sorted(bpms)
-    # hcms = sorted(hcms)
-    # vcms = sorted(vcms)
-    #
-    # if info is None: info = collect_info_coup(acc, coup, symmetry)
-    #
-    # [~, Mxy, Myx, ~, ~, Dispy] = prepare_data_for_symm(the_ring, coup, info{1}.M, info{1}.Disp);
-    # v = calc_residue_coupling(Mxy, Myx, Dispy, coup.bpm_idx, coup.hcm_idx, coup.vcm_idx);
-    # M = zeros((len(v),len(info)))
-    # M[:,1] = v
-    # for i = range(1,len(info)):
-    #     _, Mxy, Myx, _, _, Dispy = prepare_data_for_symm(the_ring, coup, info{i}.M, info{i}.Disp)
-    #     M[:,i] = calc_residue_coupling(Mxy, Myx, Dispy, coup.bpm_idx, coup.hcm_idx, coup.vcm_idx)
-    #
-    # r['M'] = M
-    # U, s, V = _np.linalg.svd(M,full_matrices=False) #M = U*np.diag(s)*V
-    # r['U'] = U
-    # r['V'] = V
-    # r['S'] = s
-    #
-    # print('   number of singular values: %03i\n', len(s))
-    # print('   singular values: %f,%f,%f ... %f,%f,%f\n', s[0],s[1],s[2],s[-3],s[-2],s[-1])
-    # return respm, info
+def calc_respm_coupling(acc, bpms, hcms, vcms, scms, symmetry=1, info=None):
+    bpms = sorted(bpms)
+    hcms = sorted(hcms)
+    vcms = sorted(vcms)
+    scms = sorted(scms)
 
-def _collect_info_coup(the_ring, coup, lattice_symmetry): return None
-    # stepK0 = 0.001;
-    #
-    # print('-  collecting info for coupling respm calculation ...')
-    # print('   (this routine is yet to be generalized for arbitrary segmented skew quadrupole models!)')
-    # print('   qs:%03i', size(coup.scm_idx,1))
-    #
-    # # Test hysteresis
-    # hyster = 0.0;
-    # stepK = stepK0*(1-hyster)# Test hysteresis
-    #
-    # len_scms= size(coup.scm_idx,1)/symmetry
-    # len_bpm = size(coup.bpm_idx,1)/symmetry
-    # len_hcm = size(coup.hcm_idx,1)/symmetry
-    # len_vcm = size(coup.vcm_idx,1)/symmetry
-    # if logical(mod(len_scms,1))
-    #     len_scms = len_scms*symmetry
-    #     len_bpm  = len_bpm*symmetry
-    #     len_hcm  = len_hcm*symmetry
-    #     len_vcm  = len_vcm*symmetry
-    #     symmetry = 1
-    #
-    # info = cell(1,len_scms*symmetry)
-    #
-    # # this routine has to be generalized for arbitrary skew quad segmented models !!!
-    #
-    # K = getcellstruct(the_ring, 'PolynomA', coup.scm_idx(1:len_scms,1), 1, 2);
-    # the_ring_calc = the_ring;
-    # for i1=1:len_scms
-    #     the_ring_calc = setcellstruct(the_ring_calc, 'PolynomA', coup.scm_idx(i1,:), K(i1) + stepK/2, 1, 2)
-    #     [Mp, Dispp, tunep] = get_matrix_disp(the_ring_calc, coup.bpm_idx, coup.hcm_idx, coup.vcm_idx)
-    #     the_ring_calc = setcellstruct(the_ring_calc, 'PolynomA', coup.scm_idx(i1,:), K(i1) - stepK, 1, 2)
-    #     [Mn, Dispn, tunen] = get_matrix_disp(the_ring_calc, coup.bpm_idx, coup.hcm_idx, coup.vcm_idx)
-    #     the_ring_calc = setcellstruct(the_ring_calc, 'PolynomA', coup.scm_idx(i1,:), K(i1) + stepK/2, 1, 2)
-    #
-    #     info{i1} = struct('M',(Mp-Mn)/stepK0,'Disp',(Dispp-Dispn)/stepK0, 'Tune',(tunep-tunen)/stepK0)
-    #
-    # if symmetry ~= 1
-    #     for i1=1:len_scms
-    #         M = mat2cell(info{i1}.M, lattice_symmetry*len_bpm*[1 1], lattice_symmetry*[len_hcm len_vcm])
-    #         Mxx = M{1,1}
-    #         Mxy = M{1,2}
-    #         Myx = M{2,1}
-    #         Myy = M{2,2}
-    #         Disp = info{i1}.Disp
-    #         for i2=1:(lattice_symmetry-1)
-    #             Mxx = circshift(Mxx,[len_bpm, len_hcm])
-    #             Myx = circshift(Myx,[len_bpm, len_hcm])
-    #             Mxy = circshift(Mxy,[len_bpm, len_vcm])
-    #             Myy = circshift(Myy,[len_bpm, len_vcm])
-    #             Disp = circshift(Disp,[0,len_bpm])
-    #             info{i1+len_scms*i2}.M = [Mxx,Mxy;Myx,Myy]
-    #             info{i1+len_scms*i2}.Disp = Disp
-    #             info{i1+len_scms*i2}.Tune = info{i1}.Tune
-    # return info
+    if info is None:
+        stepK0 = 0.001;
+
+        print('-  collecting info for coupling respm calculation ...')
+        print('   (this routine is yet to be generalized for arbitrary segmented skew quadrupole models!)')
+        print('   qs:{0:03d}'.format(len(scms)))
+
+        # Test hysteresis
+        hyster = 0.0;
+        stepK = stepK0*(1-hyster)# Test hysteresis
+
+        len_scm = len(scms) // symmetry
+        len_bpm = len(bpms) // symmetry
+        len_hcm = len(hcms) // symmetry
+        len_vcm = len(vcms) // symmetry
+        if len_scms % 1:
+            len_scm = len_scm*symmetry
+            len_bpm = len_bpm*symmetry
+            len_hcm = len_hcm*symmetry
+            len_vcm = len_vcm*symmetry
+            symmetry = 1
+
+        # this routine has to be generalized for arbitrary skew quad segmented models !!!
+        info = []
+        for i=range(len_scm):
+            for ii in scms[i]: acc[ii].Ks += stepK/2
+            Mp, Dispp, tunep = _get_matrix_disp(acc, bpms, hcms, vcms)
+            for ii in scms[i]: acc[ii].Ks += -stepK
+            Mn, Dispn, tunen = _get_matrix_disp(acc, bpms, hcms, vcms)
+            for ii in scms[i]: acc[ii].Ks += +stepK/2
+            info.append({'M':(Mp-Mn)/stepK0,
+                         'D':(Dispp-Dispn)/stepK0,
+                         'Tune':(tunep-tunen)/stepK0})
+
+        if symmetry != 1:
+            for i=range(len_scm):
+                Mx, My   = _np.vsplit(info[i]['M'],2)
+                Mxx, Mxy = _np.hsplit(Mx,[symmetry*len_hcm])
+                Myx, Myy = _np.hsplit(My,[symmetry*len_hcm])
+                Disp = info[i].['D']
+                for ii=range(1,symmetry-1):
+                    Mxx = _np.roll(_np.roll(Mxx,len_bpm,axis=0),len_hcm,axis=1)
+                    Myx = _np.roll(_np.roll(Myx,len_bpm,axis=0),len_hcm,axis=1)
+                    Mxy = _np.roll(_np.roll(Mxy,len_bpm,axis=0),len_vcm,axis=1)
+                    Myy = _np.roll(_np.roll(Myy,len_bpm,axis=0),len_vcm,axis=1)
+                    Disp= _np.roll(Disp,len_bpm,axis=0)
+                    Mx = _np.hstack((Mxx,Mxy))
+                    My = _np.hstack((Myx,Myy))
+                    info[i+len_scm*ii]['M']    = _np.vstack((Mx,My))
+                    info[i+len_scm*ii]['D']    = Disp
+                    info[i+len_scm*ii]['Tune'] = info[i]['Tune']
+
+    _, Mxy, Myx, _, _, Dispy = _prepare_data_for_symm(acc, coup, info[0]['M'], info[0]['D'])
+    v = _calc_residue_coupling(Mxy, Myx, Dispy, bpms, hcms, vcms)
+    M = _np.zeros((len(v),len(info)))
+    M[:,0] = v
+    for i = range(1,len(info)):
+        _, Mxy, Myx, _, _, Dispy = _prepare_data_for_symm(acc, coup, info[i]['M'], info[i]['D'])
+        M[:,i] = _calc_residue_coupling(Mxy, Myx, Dispy, bpms, hcms, vcms)
+
+    r['M'] = M
+    U, s, V = _np.linalg.svd(M,full_matrices=False) #M = U*np.diag(s)*V
+    r['U'] = U
+    r['V'] = V
+    r['S'] = s
+
+    print('   number of singular values: %03i\n', len(s))
+    print('   singular values: %f,%f,%f ... %f,%f,%f\n', s[0],s[1],s[2],s[-3],s[-2],s[-1])
+    return respm, info
+
+def coup_sg(acc, bpms, hcms, vcms, scms, respm=None, svs='all', nr_iter=20,
+    tol=1e-5, bpm_err=None):
+
+    def calc_residue_for_optimization(accel):
+        M, Disp, _ = _get_matrix_disp(accel, bpms, hcms, vcms)
+        [~, Mxy, Myx, ~, ~, Dispy] = _prepare_data_for_symm(accel, coup, M, Disp)
+        return _calc_residue_coupling(Mxy, Myx, Dispy, bpms, hcms, vcms)
+
+    bpms = sorted(bpms)
+    hcms = sorted(hcms)
+    vcms = sorted(vcms)
+    scms = sorted(scms)
+
+    if respm is None:
+        respm = calc_respm_coup(acc, bpms, hcms, vcms, scms, symmetry=1, info=None)
+    s = respm['s']
+    U = respm['U']
+    V = respm['V']
+    #selection of singular values
+    if svs == 'all': svs = len(scms)
+    invs  = 1/s
+    invs[svs:] = 0
+    iS = _np.diag(invs)
+    CM = - _np.dot(V.T,_np.dot(iS,U.T))
+
+    skews = _mp.utils.flatten(scms)
+    skews = _np.unique(_np.array(skews))
+
+    best_coupvec = calc_residue_for_optimization(acc)
+    best_skew    = acc[skews]
+    best_fm = best_coupvec.std(ddof=1)
+    init_fm = best_fm
+    factor, n_times = 1, 0
+    for niter = range(nr_iter):
+        # calcs kicks:
+        kicks = factor * _np.dot(CM, best_coupvec)
+        # set the kicks:
+        for i in range(len(kicks)):
+            for ii in range(len(scms[i])):
+                acc[scms[i][ii]].Ks += kicks[i]
+
+        coup_vec = calc_residue_for_optimization(acc)
+        fm = coup_vec.std(ddof=1)
+        residue = abs(best_fm-fm)/best_fm
+        if fm < best_fm:
+            best_fm      = fm
+            best_skew    = acc[skews]
+            factor = 1 # reset the correction strength to 1
+            best_coupvec  = coup_vec
+        else:
+            acc[skews] = best_skew
+            factor  *= 0.75 # reduces the strength of the correction
+            n_times += 1    # to check how many times it passed here;
+        # breaks the loop in case convergence is reached
+        if residue < abs(tol): break
+
+    # get the kick strength:
+    skewstr = _np.array(len(scms),dtype=float)
+    for i in range(len(scms)):
+        for ii in range(len(scms[i])):
+            skewtr[i] += acc[scms[i][ii]].Ks * acc[scms[i][ii]].length
+
+    return skewstr, init_fm, best_fm, niter, n_times
+
+def _calc_residue_coupling(Mxy, Myx, Dispy, bpms, hcms, vcms):
+    disp_weight = (len(hcms) + len(vcms))*10
+    v = _np.hstack((Myx, Mxy, disp_weight * Dispy.T)) # para ficar ordenado por bpm
+    return v.flatten()
 
 def _prepare_data_for_symm(the_ring, optics, M, Disp): return None
     # # assumes uniform dipolar field for orbit correctors
@@ -712,12 +724,71 @@ def _prepare_data_for_symm(the_ring, optics, M, Disp): return None
     # Dispy = Disp(3,:);
     # return Mxx,Mxy,Myx,Myy, Dispx, Dispy
 
+def _get_matrix_disp(acc, bpms, hcms, vcms):
+    mxx,mxy,myx,myy = _get_response_matrix(acc, bpms, hcms, vcms)
+    M  = _np.vstack((_np.hstack((mxx,mxy)), _np.hstack((myx,myy))))
+    twiss = _pyaccel.optics.calc_twiss(acc)
+    Disp = [twiss.etax, twiss.etay]
+    tune = _np.array([twiss.mux[-1],twiss.muy[-1]])/2/_np.pi
+    return M, Disp, tune
+
 def _calc_cod(acc, indices = 'open'):
     if acc.cavity_on:
         orb = _pyaccel.tracking.findorbit6(acc,indices=indices)
     else:
         orb = _pyaccel.tracking.findorbit4(acc,indices=indices)
     return orb[0],orb[2]
+
+def _get_response_matrix(acc, bpms, hcms, vcms):
+    # M(y,x) --> y : orbit    x: corrector
+
+    if not isinstance(hcms[0],(list,tuple,_np.ndarray)):
+        hcms = [[ind] for ind in hcms]
+    if not isinstance(vcms[0],(list,tuple,_np.ndarray)):
+        vcms = [[ind] for ind in vcms]
+
+    closed_orbit = _np.zeros((6,len(acc)))
+    if acc.cavity_on:
+        closed_orbit = _pyaccel.tracking.findorbit6(acc,indices='open')
+        M, T = _pyaccel.tracking.findm66(acc,closed_orbit=closed_orbit)
+    else:
+        closed_orbit[:4,:] = _pyaccel.tracking.findorbit4(acc,indices='open')
+        M, T = _pyaccel.tracking.findm44(acc,closed_orbit=closed_orbit)
+
+    A_InvB = lambda A,B: _np.linalg.solve(B.T, A.T).T
+    InvA_B = lambda A,B: _np.linalg.solve(A, B)
+    def get_C(DM_i, R0i, bpm, corr, length):
+        # cxy --> orbit at bpm x due to kick in corrector y
+        if bpm>corr:
+            R_ij = A_InvB(R0i,T[corr]) # R0i/R0j
+        else :
+            R_ij = _np.dot(R0i, A_InvB(M, T[corr])) # Rij = R0i*M*inv(R0j)
+
+        C = InvA_B(DM_i, R_ij)
+        cxx = -(length/2)*C[0,0]   +   C[0,1]
+        cyx = -(length/2)*C[2,0]   +   C[2,1]
+        cxy = -(length/2)*C[0,2]   +   C[0,3]
+        cyy = -(length/2)*C[2,2]   +   C[2,3]
+        return cxx, cyx, cxy, cyy
+
+    nr_hcms = len(hcms)
+    nr_vcms = len(vcms)
+    nr_bpms = len(bpms)
+    mxx = _np.zeros((nr_bpms, nr_hcms))
+    myx = _np.zeros((nr_bpms, nr_hcms))
+    mxy = _np.zeros((nr_bpms, nr_vcms))
+    myy = _np.zeros((nr_bpms, nr_vcms))
+    len_hcms = [sum([acc[j].length for j in hcms[i]]) for i in range(len(hcms))]
+    len_vcms = [sum([acc[j].length for j in vcms[i]]) for i in range(len(vcms))]
+    D = _np.eye(M.shape[0])
+    for i in range(nr_bpms):
+        R_i = T[bpms[i]]
+        DM_i = D - A_InvB(_np.dot(R_i,M), R_i) # I - R*M*inv(R)
+        for j in range(nr_hcms):
+            mxx[i,j], myx[i,j], *_ = get_C(DM_i, R_i, bpms[i],hcms[j][-1],len_hcms[j])
+        for j in range(nr_vcms):
+            *_, mxy[i,j], myy[i,j] = get_C(DM_i, R_i, bpms[i],vcms[j][-1],len_vcms[j])
+    return mxx,mxy,myx,myy
 
 def _get_kickangle(acc, indcs, plane):
 
