@@ -36,8 +36,9 @@ def matching(acc, objectives=None, constraints=None,variables=None, covariables=
         'value': Value to which the comparison will be made. Must have the same
             dimension an size as the return of 'fun'.
         'weight': defines the weight of the penalty. Default is 1.
-        'scale':
-
+        'scale': defines at which scale of the comparison must be satisfied.
+            Default is 1.
+            np.log(np.exp(-(x-val)/scale) + 1)
 
 
     """
