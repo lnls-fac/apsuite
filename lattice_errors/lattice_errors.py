@@ -586,7 +586,7 @@ def calc_respm_coupling(acc, bpms, hcms, vcms, scms, symmetry=1, info=None):
 
         # this routine has to be generalized for arbitrary skew quad segmented models !!!
         info = []
-        for i=range(len_scm):
+        for i in range(len_scm):
             for ii in scms[i]: acc[ii].Ks += stepK/2
             Mp, Dispp, tunep = _get_matrix_disp(acc, bpms, hcms, vcms)
             for ii in scms[i]: acc[ii].Ks += -stepK
@@ -597,12 +597,12 @@ def calc_respm_coupling(acc, bpms, hcms, vcms, scms, symmetry=1, info=None):
                          'Tune':(tunep-tunen)/stepK0})
 
         if symmetry != 1:
-            for i=range(len_scm):
+            for i in range(len_scm):
                 Mx, My   = _np.vsplit(info[i]['M'],2)
                 Mxx, Mxy = _np.hsplit(Mx,[symmetry*len_hcm])
                 Myx, Myy = _np.hsplit(My,[symmetry*len_hcm])
                 Disp = info[i].['D']
-                for ii=range(1,symmetry-1):
+                for ii in range(1,symmetry-1):
                     Mxx = _np.roll(_np.roll(Mxx,len_bpm,axis=0),len_hcm,axis=1)
                     Myx = _np.roll(_np.roll(Myx,len_bpm,axis=0),len_hcm,axis=1)
                     Mxy = _np.roll(_np.roll(Mxy,len_bpm,axis=0),len_vcm,axis=1)
