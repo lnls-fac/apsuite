@@ -8,13 +8,13 @@ _commom_keys = ['flat_filename','energy','harmonic_number',
                 'cavity_state','radiation_state','vchamber_state']
 
 
-def _prepare_args(dynap_type, mand_keys, **kwards):
+def _prepare_args(dynap_type, mand_keys, **kwargs):
 
-    args = [kwards.pop('track_version',default_track_version),dynap_type]
+    args = [kwargs.pop('track_version',default_track_version),dynap_type]
     for key in mand_keys:
-        args.append(str(kwards.pop(key)))
-    if kwards:
-        print('Keys : '+', '.join(sorted(kwards.keys()))+ ' were not used.')
+        args.append(str(kwargs.pop(key)))
+    if kwargs:
+        print('Keys : '+', '.join(sorted(kwargs.keys()))+ ' were not used.')
     return args
 
 # -- dynap_xy --
@@ -82,13 +82,13 @@ def load_dynap_xy(path, var_plane='x'):
         area = -_np.trapz(aper[0],x=aper[1])
 
     return aper, area, dados
-def dynap_xy(**kwards):
+def dynap_xy(**kwargs):
     mand_keys = _commom_keys.copy()
-    mand_keys.extend(['de', 'nr_turns ', 'x_nrpts', 'x_min', 'x_max',
+    mand_keys.extend(['de', 'nr_turns', 'x_nrpts', 'x_min', 'x_max',
                       'y_nrpts', 'y_min', 'y_max', 'nr_threads'])
     dynap = 'dynap_xy'
 
-    args = _prepare_args(dynap, mand_keys,**kwards)
+    args = _prepare_args(dynap, mand_keys,**kwargs)
     _subprocess.call(args)
 
 # -- dynap_ex --
@@ -119,13 +119,13 @@ def load_dynap_ex(path):
     aper = _np.vstack([h,v])
 
     return aper, dados
-def dynap_ex(**kwards):
+def dynap_ex(**kwargs):
     mand_keys = _commom_keys.copy()
     mand_keys.extend(['y','nr_turns','e_nrpts','e_min','e_max',
                       'x_nrpts','x_min','x_max','nr_threads'])
     dynap = 'dynap_ex'
 
-    args = _prepare_args(dynap, mand_keys,**kwards)
+    args = _prepare_args(dynap, mand_keys,**kwargs)
     _subprocess.call(args)
 
 # -- dynap_ma --
@@ -143,66 +143,66 @@ def load_dynap_ma(path):
     eLost = _np.vstack([el[1::2],  el[0::2]])
 
     return pos, accep, nLost, eLost
-def dynap_ma(**kwards):
+def dynap_ma(**kwargs):
     mand_keys = _commom_keys.copy()
     mand_keys.extend(['nr_turns','y0','e_init','e_delta','nr_steps_back',
-        'rescale','nr_iterations','s_min','s_max','nr_threads','fam_names'])
+        'rescale','nr_iterations','s_min','s_max','nr_threads'])
     dynap = 'dynap_ma'
 
-    args = _prepare_args(dynap, mand_keys,**kwards)
-    for famname in fam_names:
+    args = _prepare_args(dynap, mand_keys,**kwargs)
+    for famname in kwargs['fam_names']:
         args.append(famname)
     _subprocess.call(args)
 
 # -- dynap_pxa --
-def dynap_pxa(**kwards):
+def dynap_pxa(**kwargs):
     mand_keys = _commom_keys.copy()
     mand_keys.extend(['nr_turns','y0','e_init','e_delta','nr_steps_back',
-        'rescale','nr_iterations','s_min','s_max','nr_threads','fam_names'])
+        'rescale','nr_iterations','s_min','s_max','nr_threads'])
     dynap = 'dynap_pxa'
 
-    args = _prepare_args(dynap, mand_keys,**kwards)
+    args = _prepare_args(dynap, mand_keys,**kwargs)
     for famname in fam_names:
         args.append(famname)
     _subprocess.call(args)
 
 # -- dynap_pya --
-def dynap_pya(**kwards):
+def dynap_pya(**kwargs):
     mand_keys = _commom_keys.copy()
     mand_keys.extend(['nr_turns','y0','e_init','e_delta','nr_steps_back',
-            'rescale','nr_iterationss_min','s_max','nr_threads','fam_names'])
+            'rescale','nr_iterationss_min','s_max','nr_threads'])
     dynap = 'dynap_pya'
 
-    args = _prepare_args(dynap, mand_keys,**kwards)
+    args = _prepare_args(dynap, mand_keys,**kwargs)
     for famname in fam_names:
         args.append(famname)
     _subprocess.call(args)
 
 # -- dynap_xyfmap --
-def dynap_xyfmap(**kwards):
+def dynap_xyfmap(**kwargs):
     mand_keys = _commom_keys.copy()
     mand_keys.extend(['de','nr_turns','x_nrpts','x_min','x_max',
                       'y_nrpts','y_min','y_max','nr_threads'])
     dynap = 'dynap_xyfmap'
 
-    args = _prepare_args(dynap, mand_keys,**kwards)
+    args = _prepare_args(dynap, mand_keys,**kwargs)
     _subprocess.call(args)
 
 # -- dynap_exfmap --
-def dynap_exfmap(**kwards):
+def dynap_exfmap(**kwargs):
     mand_keys = _commom_keys.copy()
     mand_keys.extend(['y','nr_turns','e_nrpts','e_min','e_max',
                       'x_nrpts','x_min','x_max','nr_threads'])
     dynap = 'dynap_exfmap'
 
-    args = _prepare_args(dynap, mand_keys,**kwards)
+    args = _prepare_args(dynap, mand_keys,**kwargs)
     _subprocess.call(args)
 
 # -- track_linepass --
-def track_linepass(**kwards):
+def track_linepass(**kwargs):
     mand_keys = _commom_keys.copy()
     mand_keys.extend(['start_element','rx0','px0','ry0','py0','de0','dl0'])
     dynap = 'track_linepass'
 
-    args = _prepare_args(dynap, mand_keys,**kwards)
+    args = _prepare_args(dynap, mand_keys,**kwargs)
     _subprocess.call(args)
