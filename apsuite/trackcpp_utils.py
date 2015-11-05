@@ -4,7 +4,7 @@ import os as _os
 
 _full = lambda x: _os.path.sep.join(x)
 default_track_version = 'trackcpp'
-_commom_keys = ['track_version','flat_filename','energy','harmonic_number',
+_commom_keys = ['flat_filename','energy','harmonic_number',
                 'cavity_state','radiation_state','vchamber_state']
 
 
