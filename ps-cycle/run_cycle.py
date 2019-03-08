@@ -10,7 +10,7 @@ import time
 
 parms = {
     # dt, ampl, nrpts_period, nr_periods, tau_period
-    'BO-Fam:PS-QF': [0.5, 120.0, 50, 4, 1, False],
+    'BO-Fam:PS-QF': [0.5, 20.0, 50, 4, 1, False],
     'BO-Fam:PS-QD': [0.5, 30.0, 50, 4, 1, False],
     'BO-Fam:PS-SF': [0.5, 149.0, 50, 4, 1, False],
     'BO-Fam:PS-SD': [0.5, 149.0, 50, 4, 1, False],
@@ -70,10 +70,10 @@ def ps_cycle(psname, plot=True):
     else:
         pv_sp = epics.PV(psname + ':Current-SP')
         for i in range(0, len(t)-1):
-            print('{}/{} : {} A'.format(i, len(w), w[i]))
+            print('{}/{} : {} A'.format(i+1, len(w), w[i]))
             pv_sp.value = w[i]
             time.sleep(t[i+1]-t[i])
-        print('{}/{} : {} A'.format(len(w)-1, len(w), w[-1]))
+        print('{}/{} : {} A'.format(len(w), len(w), w[-1]))
         pv_sp.value = w[-1]
 
 
