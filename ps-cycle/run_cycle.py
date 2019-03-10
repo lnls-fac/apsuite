@@ -10,34 +10,34 @@ import time
 
 parms = {
     # dt, ampl, nrpts_period, nr_periods, tau_period
-    'BO-Fam:PS-QF': [0.5, 20.0, 50, 4, 1, False],
-    'BO-Fam:PS-QD': [0.5, 30.0, 50, 4, 1, False],
-    'BO-Fam:PS-SF': [0.5, 149.0, 50, 4, 1, False],
-    'BO-Fam:PS-SD': [0.5, 149.0, 50, 4, 1, False],
-    'BO-Fam:PS-B-2': [0.5, 60.0, 100, 4, 1, False],
-    'BO-02D:PS-QS': [0.5, 10.0, 50, 4, 1, False],
-    'TB-Fam:PS-B': [0.5, 250.0, 50, 4, 1, True],
-    'TB-01:PS-QD1': [0.5, 10.0, 50, 4, 1, False],
-    'TB-01:PS-QF1': [0.5, 10.0, 50, 4, 1, False],
-    'TB-02:PS-QD2A': [0.5, 10.0, 50, 4, 1, False],
-    'TB-02:PS-QF2A': [0.5, 10.0, 50, 4, 1, False],
-    'TB-02:PS-QD2B': [0.5, 10.0, 50, 4, 1, False],
-    'TB-02:PS-QF2B': [0.5, 10.0, 50, 4, 1, False],
-    'TB-03:PS-QD3': [0.5, 10.0, 50, 4, 1, False],
-    'TB-03:PS-QF3': [0.5, 10.0, 50, 4, 1, False],
-    'TB-04:PS-QD4': [0.5, 10.0, 50, 4, 1, False],
-    'TB-04:PS-QF4': [0.5, 10.0, 50, 4, 1, False],
-    'TB-01:PS-CH-1': [0.5, 10.0, 50, 4, 1, False],
-    'TB-01:PS-CV-1': [0.5, 10.0, 50, 4, 1, False],
-    'TB-01:PS-CH-2': [0.5, 10.0, 50, 4, 1, False],
-    'TB-01:PS-CV-2': [0.5, 10.0, 50, 4, 1, False],
-    'TB-02:PS-CH-1': [0.5, 10.0, 50, 4, 1, False],
-    'TB-02:PS-CV-1': [0.5, 10.0, 50, 4, 1, False],
-    'TB-02:PS-CH-2': [0.5, 10.0, 50, 4, 1, False],
-    'TB-02:PS-CV-2': [0.5, 10.0, 50, 4, 1, False],
-    'TB-04:PS-CH': [0.5, 10.0, 50, 4, 1, False],
-    'TB-04:PS-CV-1': [0.5, 10.0, 50, 4, 1, False],
-    'TB-04:PS-CV-2': [0.5, 10.0, 50, 4, 1, False],
+    'BO-Fam:PS-B-2': [0.5, 60.0, 100, 4, 1, False],  # 7.5 [A/s]
+    'BO-Fam:PS-QF': [0.5, 20.0, 50, 4, 1, False],  # 4.9 [A/s]
+    'BO-Fam:PS-QD': [0.5, 30.0, 50, 4, 1, False],  # 7.4 [A/s]
+    'BO-Fam:PS-SF': [0.5, 149.0, 50, 4, 1, False],  # 36.6 [A/s]
+    'BO-Fam:PS-SD': [0.5, 149.0, 50, 4, 1, False],  # 36.6 [A/s]
+    'BO-02D:PS-QS': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-Fam:PS-B': [0.5, 250.0, 50, 4, 1, True],  # 42.9 [A/s]
+    'TB-01:PS-QD1': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-01:PS-QF1': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-02:PS-QD2A': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-02:PS-QF2A': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-02:PS-QD2B': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-02:PS-QF2B': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-03:PS-QD3': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-03:PS-QF3': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-04:PS-QD4': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-04:PS-QF4': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-01:PS-CH-1': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-01:PS-CV-1': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-01:PS-CH-2': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-01:PS-CV-2': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-02:PS-CH-1': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-02:PS-CV-1': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-02:PS-CH-2': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-02:PS-CV-2': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-04:PS-CH': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-04:PS-CV-1': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
+    'TB-04:PS-CV-2': [0.5, 10.0, 50, 4, 1, False],  # 2.5 [A/s]
 }
 
 
@@ -63,6 +63,9 @@ def ps_cycle(psname, plot=True):
     """."""
     t, w = gen_waveform(*parms[psname])
     if plot:
+        dt = np.diff(t)
+        dw = np.diff(w)
+        print('max derivative of {}: {:.1f} A/s'.format(psname, max(dw/dt)))
         plt.plot(t, w, 'o')
         plt.xlabel('time [s]')
         plt.ylabel('Current [A]')
