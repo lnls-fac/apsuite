@@ -29,6 +29,10 @@ nrpts_pst03 = epics.PV('BO-03U:DI-BPM:ACQSamplesPost-SP')
 
 def calc_pos(A, B, C, D, Kx, Ky):
     """."""
+    # A: outter top
+    # B: inner bottom
+    # C: inner top
+    # D: outter bottom
     x = ((A-B)/(A+B) + (D-C)/(D+C))*Kx/2
     y = ((A-B)/(A+B) - (D-C)/(D+C))*Ky/2
     return x, y
