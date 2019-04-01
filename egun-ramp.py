@@ -1,4 +1,5 @@
 #!/usr/local/env python-sirius
+"""."""
 
 import time as _time
 from epics import PV as _PV
@@ -20,6 +21,7 @@ ccg2_rst = _PV('LA-CN:H1MPS-1:CCG2Warn_R')
 
 
 def main_loop():
+    """."""
     for i in range(100):
         print()
         print('ATTEMPT {0:04d}'.format(i))
@@ -35,10 +37,12 @@ def main_loop():
 
 
 def check_ok():
+    """."""
     return egun_permit.value == 1
 
 
 def turnon_egun(volt):
+    """."""
     print('Preparing Egun')
     egun_biasps.value = -40
     egun_filaps.value = 1.45
@@ -57,6 +61,7 @@ def turnon_egun(volt):
 
 
 def reset_interlocks():
+    """."""
     print('Reseting interlocks...')
     while ccg1_in.value != 0 or ccg2_in.value != 0:
         _time.sleep(0.5)
