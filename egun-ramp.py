@@ -20,13 +20,14 @@ ccg2_rst = _PV('LA-CN:H1MPS-1:CCG2Warn_R')
 
 
 def main_loop():
-    while True:
+    for i in range(100):
         print()
+        print('ATTEMPT {0:04d}'.format(i))
         reset_interlocks()
         if not check_ok():
             print('Error, could not reset all interlocks.')
             return
-        volt = 82
+        volt = 80
         turnon_egun(volt)
         while check_ok():
             _time.sleep(0.002)
