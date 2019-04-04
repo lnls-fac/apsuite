@@ -32,16 +32,10 @@ goal_pressure = 8.0e-9
 def main_loop():
     """."""
     for i in range(100):
-        print()
-        print('ATTEMPT {0:04d}'.format(i))
+        print('\nATTEMPT {0:04d}'.format(i))
         reset_interlocks()
         if not check_ok():
-            print('Error, could not reset all interlocks.')
-            t0 = _time.time()
-            while True:
-                print('\a')  # make a sound
-                if _time.time()-t0 > 20:
-                    break
+            exit_()
             return
         turnon_egun()
         max_hv = 0
@@ -89,6 +83,16 @@ def reset_interlocks():
         _time.sleep(1.0)
         rst.value = 0
     _time.sleep(2)
+
+
+def exit_():
+    print('Error, could not reset all interlocks.')
+    t0 = _time.time()
+    while True:
+        print('\a')  # make a sound
+        if _time.time()-t0 > 10:
+            break
+    print('I quit!')
 
 
 if __name__ == '__main__':
