@@ -14,10 +14,15 @@ egun_biasps = _PV('egun:biasps:voltoutsoft')
 egun_permit = _PV('LA-CN:H1MPS-1:GunPermit')
 ccg1_va = _PV('LA-VA:H1VGC-01:RdPrs-1')
 li_alarm = _PV('LA-CN:H1MPS-1:LAAlarm')
-ccg1_in = _PV('LA-CN:H1MPS-1:CCG1Warn_I')
-ccg2_in = _PV('LA-CN:H1MPS-1:CCG2Warn_I')
-ccg1_rst = _PV('LA-CN:H1MPS-1:CCG1Warn_R')
-ccg2_rst = _PV('LA-CN:H1MPS-1:CCG2Warn_R')
+
+names = ['LA-CN:H1MPS-1:CCG1', 'LA-CN:H1MPS-1:CCG2']
+resets = []
+sts_ou = []
+sts_in = []
+for name in names:
+    resets.append(_PV(name + 'Warn_R'))
+    sts_ou.append(_PV(name + 'Warn_L'))
+    sts_in.append(_PV(name + 'Warn_I'))
 
 
 goal_volt = 80  # [kV]
@@ -32,24 +37,32 @@ def main_loop():
         reset_interlocks()
         if not check_ok():
             print('Error, could not reset all interlocks.')
+            t0 = _time.time()
+            while True:
+                print('\a')  # make a sound
+                if _time.time()-t0 > 20:
+                    break
             return
-        turnon_egun(goal_volt)
+        turnon_egun()
         max_hv = 0
         while check_ok():
             max_hv = max(max_hv, egun_hvv_rb.value)
-            _time.sleep(0.002)
-        print('Vacuum Interlock! Max HV was {0:.4f}'.format(max_hv))
+            _time.sleep(0.1)
+        strtime = _time.strftime('%Y-%m-%d %H:%M:%S', _time.localtime())
+        print('{0:s} Vacuum Interlock!'.format(strtime))
+        print('Max HV was {0:.4f}'.format(max_hv))
 
 
 def check_ok():
     """."""
-    return egun_permit.value == 1
+    isok = [inn.value == 0 for inn in sts_in]
+    return all(isok) and egun_permit.value == 1
 
 
-def turnon_egun(volt):
+def turnon_egun():
     """."""
     print('Preparing Egun')
-    egun_biasps.value = -40
+    egun_biasps.value = -38  # 3nC
     egun_filaps.value = 1.45
     if egun_hves.value == 0:
         egun_hve.value = 1
@@ -57,24 +70,24 @@ def turnon_egun(volt):
 
     print('Waiting for vacuum recovery...')
     while ccg1_va.value > goal_pressure:
-        print('    Over pressure: {0:.4f}'.format(ccg1_va.value/goal_pressure))
+        print('    Over pressure: {0:.3f}'.format(ccg1_va.value/goal_pressure))
         _time.sleep(2)
 
-    print('Setting HV from {0:.2f} to {1:.2f} kV'.format(egun_hvv.value, volt))
-    egun_hvv.value = volt
+    print('Setting HV from {0:.2f} to {1:.2f} kV'.format(
+                                        egun_hvv_rb.value, goal_volt))
+    egun_hvv.value = goal_volt
 
 
 def reset_interlocks():
     """."""
     print('Reseting interlocks...')
-    while ccg1_in.value != 0 or ccg2_in.value != 0:
+    for rst, out, inn in zip(resets, sts_ou, sts_in):
+        while inn.value != 0:
+            _time.sleep(0.5)
         _time.sleep(0.5)
-
-    ccg1_rst.value = 1
-    ccg2_rst.value = 1
-    _time.sleep(0.5)
-    ccg1_rst.value = 0
-    ccg2_rst.value = 0
+        rst.value = 1
+        _time.sleep(1.0)
+        rst.value = 0
     _time.sleep(2)
 
 
