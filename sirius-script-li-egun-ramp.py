@@ -29,7 +29,7 @@ for name in names:
 
 goal_volt = 80  # [kV]
 goal_pressure = 8.0e-9
-fila_curr = 1.45  # A
+fila_curr = 1.54  # 1.45  # A
 bias_volt = -38  # V --> 3 nC
 leak_curr = 0.008  # mA
 
@@ -116,6 +116,8 @@ def control_egun(turn_on=True, filahot=True):
     print('Preparing Egun')
     filahot |= turn_on
     egun_biasps.value = bias_volt  # 3nC
+    if not filahot:
+        print('Setting filament current to zero.')
     egun_filaps.value = fila_curr if filahot else 0.0
     egun_trigger.value = turn_on
     if egun_hves.value == 0:
