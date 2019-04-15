@@ -9,6 +9,8 @@ from epics import PV as _PV
 
 
 class Egun:
+    MULTIBUNCH = 0
+    SINGLEBUNCH = 1
 
     def __init__(self):
         self.pv_hv_volt_sp = _PV('egun:hvps:voltoutsoft')
@@ -66,6 +68,7 @@ class Egun:
             self.pvs_mps_status_raw.append(_PV(name + 'Warn_I'))
             self.pvs_mps_status_proc.append(_PV(name + 'Warn_L'))
 
+        self.opmode = self.MULTIBUNCH
         self.goal_volt = 0.0
         self.goal_pressure = 1.0e-9
         self.fila_curr = 0.0
@@ -75,10 +78,10 @@ class Egun:
         self.beam_pulse = True
         self.keepfilahot = True
 
-        self.total_duration = -1
         self._ishot = True
-        self._stop_running = False
 
+        self.total_duration = -1
+        self._stop_running = False
         self._thread = _Thread(target=self._set_stop, daemon=True)
         self._thread.start()
 
@@ -110,12 +113,12 @@ class Egun:
 
             if not self._check_ok():
                 print('Error, some problem happened.')
-                self.exit_()
+                self.quit()
                 return
 
             print('Turning Egun ON!')
             if self.keep_egun_on(period=ton):
-                self.exit_()
+                self.quit()
                 return
             print('\n')
 
@@ -124,8 +127,12 @@ class Egun:
         for i in range(100):
             print('ATTEMPT {0:04d}'.format(i))
 
-            self._reset_interlocks()
-            if not self._check_ok():
+            for _ in range(3):
+                self._reset_interlocks()
+                if self._check_ok():
+                    break
+                print('Error, I will try again!')
+            else:
                 print('Error, could not reset all interlocks.')
                 return 1
 
@@ -161,17 +168,6 @@ class Egun:
         print('Problem! Too many vacuum breakdowns.')
         return 1
 
-    def _check_ok(self):
-        """."""
-        isok = [out.value == 0 for out in self.pvs_mps_status_proc]
-        allok = all(isok)
-        allok &= self.pv_mps_permit.value == 1
-        allok &= self.pv_trig_allow_mon.value == 1
-        allok &= self.pv_sys_valve_mon.value == 1
-        allok &= self.pv_sys_gate_mon.value == 1
-        allok &= self.pv_sys_vacuum_mon.value == 1
-        return allok
-
     def control_egun(self, turn_on=True):
         """."""
         print('Preparing Egun')
@@ -190,8 +186,7 @@ class Egun:
         std = '    '
         while self.pv_vacuum_ccg1.value > self.goal_pressure:
             if not cnt:
-                print('Waiting for vacuum recovery...')
-                print('Over pressure: ')
+                print('Waiting for vacuum recovery. Over pressure: ')
             cnt += 1
             std += '{0:.3f} '.format(
                 self.pv_vacuum_ccg1.value/self.goal_pressure)
@@ -212,7 +207,7 @@ class Egun:
             self.pv_fila_cur_sp.value = val
             return
 
-        duration = self._fila_ramp_dur
+        duration = self._fila_ramp_dur * 60
 
         npts = 100
         x = _np.linspace(0, 1, npts)
@@ -233,6 +228,155 @@ class Egun:
         print('Filament Ready!' + 40*' ')
         self._ishot = True
 
+    def quit(self):
+        """."""
+        t0 = _time.time()
+        while True:
+            print('\a', end='\r')  # make a sound
+            if _time.time()-t0 > 10:
+                break
+        print('I quit!')
+
+    def turn_system_off(self):
+        print('Turning System off!')
+        print('  Disable Pulses')
+        self.pv_trig_state_sp.value = 0
+
+        self.pv_mult_swt_sp.value = 0
+        self.pv_sngl_swt_sp.value = 0
+        self._wait(
+            [self.pv_mult_swt_rb, self.pv_sngl_swt_rb],
+            [0, 0], ['equal', 'equal'])
+        self.pv_mult_sel_sp.value = 0
+        self.pv_sngl_sel_sp.value = 0
+        self._wait(
+            [self.pv_mult_sel_rb, self.pv_sngl_sel_rb],
+            [0, 0], ['equal', 'equal'])
+
+        print('  Zero HV and filament')
+        self.pv_hv_volt_sp.value = 0.0
+        self.set_fila_current(0.0)
+        self._wait(
+            [self.pv_hv_volt_rb, self.pv_fila_cur_rb],
+            [5, 0.2], ['less', 'less'])
+        self.pv_bias_volt_sp.value = 0.0
+        self._wait([self.pv_bias_volt_rb, ], [-3, ], ['more', ])
+
+        print('  Turn off HV')
+        self.pv_hv_enbl_sp.value = 0
+        self._wait([self.pv_hv_enbl_rb, ], [0, ], ['equal', ])
+        self.pv_hv_switch_sp.value = 0
+        self._wait([self.pv_hv_switch_rb, ], [0, ], ['equal', ])
+
+        print('  Turn off Filament')
+        self.pv_fila_switch_sp.value = 0
+        self._wait([self.pv_fila_switch_rb, ], [0, ], ['equal', ])
+        print('  Turn off Bias')
+        self.pv_bias_switch_sp.value = 0
+        self._wait([self.pv_bias_switch_rb, ], [0, ], ['equal', ])
+
+        print('  Turn off System')
+        self.pv_sys_start_sp.value = 0
+        _time.sleep(1)
+        print('System Off!')
+
+    def turn_system_on(self):
+        if self.pv_sys_start_sp.value == 1:
+            print('System is Already On')
+            return
+        print('Turning System on!')
+        print('  Start System')
+        self.pv_sys_start_sp.value = 1
+        _time.sleep(3)
+        print('  Turn on Bias')
+        self.pv_bias_switch_sp.value = 1
+        self._wait([self.pv_bias_switch_rb, ], [1, ], ['equal', ])
+        print('  Turn on Filament')
+        self.pv_fila_switch_sp.value = 1
+        self._wait([self.pv_fila_switch_rb, ], [1, ], ['equal', ])
+
+        print('  Set Bias Voltage')
+        self.pv_bias_volt_sp.value = self.bias_volt
+        self._wait(
+            [self.pv_bias_volt_rb, ], [self.bias_volt*0.9, ], ['less', ])
+        print('  Set Filament')
+        self.set_fila_current(self.fila_curr)
+        self._wait(
+            [self.pv_fila_cur_rb, ], [self.fila_curr*0.9, ], ['more', ])
+        print('  Turn on HV')
+        self.pv_hv_switch_sp.value = 1
+        self._wait([self.pv_hv_switch_rb, ], [1, ], ['equal', ])
+        self.pv_hv_enbl_sp.value = 1
+        self._wait([self.pv_hv_enbl_rb, ], [1, ], ['equal', ])
+        print('  Set HV')
+        self.pv_hv_curlim_sp.value = self.leak_curr
+        self.pv_hv_volt_sp.value = self.goal_volt
+        # self._wait(
+        #     [self.pv_hv_volt_rb, ], [self.goal_volt*0.9, ], ['more', ])
+
+        st = '  Turn on Pulse PS for '
+        st += 'MultiBunch' if self.opmode == self.MULTIBUNCH else 'SingleBunch'
+        print(st)
+        val = 1 if self.opmode == self.MULTIBUNCH else 0
+        self.pv_mult_sel_sp.value = val
+        self.pv_sngl_sel_sp.value = not val
+        self._wait(
+            [self.pv_mult_sel_rb, self.pv_sngl_sel_rb, ],
+            [val, not val, ], ['equal', 'equal'])
+        self.pv_mult_swt_sp.value = val
+        self.pv_sngl_swt_sp.value = not val
+        self._wait(
+            [self.pv_mult_swt_rb, self.pv_sngl_swt_rb, ],
+            [val, not val, ], ['equal', 'equal'])
+        print('System On!')
+
+    def put_system_standby(self):
+        print('Putting System in Standby!')
+        self.pv_sys_start_sp.value = 1
+        self.pv_trig_state_sp.value = 0
+        self.pv_mult_swt_sp.value = 0
+        self.pv_sngl_swt_sp.value = 0
+        self._wait(
+            [self.pv_mult_swt_rb, self.pv_sngl_swt_rb, ],
+            [0, 0], ['equal', 'equal'])
+        self.pv_mult_sel_sp.value = 0
+        self.pv_sngl_sel_sp.value = 0
+        self._wait(
+            [self.pv_mult_sel_rb, self.pv_sngl_sel_rb, ],
+            [0, 0], ['equal', 'equal'])
+
+        print('  Turning off HV')
+        self.pv_hv_volt_sp.value = 0.0
+        self._wait([self.pv_hv_volt_rb, ], [5, ], ['less', ])
+        self.pv_hv_enbl_sp.value = 0
+        self._wait([self.pv_hv_enbl_rb, ], [0, ], ['equal', ])
+        self.pv_hv_switch_sp.value = 0
+        self._wait([self.pv_hv_switch_rb, ], [0, ], ['equal', ])
+
+        print('  Turning on Bias and Filament')
+        self.pv_bias_switch_sp.value = 1
+        self.pv_fila_switch_sp.value = 1
+        self._wait(
+            [self.pv_bias_switch_rb, self.pv_fila_switch_rb],
+            [1, 1], ['equal', 'equal'])
+        self.pv_bias_volt_sp.value = -60.0
+        self._wait([self.pv_bias_volt_rb, ], [-55, ], ['less', ])
+        self.set_fila_current(1.1)
+        self._wait([self.pv_fila_cur_rb, ], [1, ], ['more', ])
+
+    def _wait(self, pvlist, vallist, oprlist):
+        oprdic = {
+            'equal': lambda x, y: x.value is not None and x.value == y,
+            'less': lambda x, y: x.value is not None and x.value < y,
+            'more': lambda x, y: x.value is not None and x.value > y}
+        while True:
+            allok = True
+            for pv, val, opr in zip(pvlist, vallist, oprlist):
+                allok &= oprdic[opr](pv, val)
+            if allok:
+                break
+            _time.sleep(0.1)
+
     def _reset_interlocks(self):
         """."""
         print('Reseting interlocks...')
@@ -250,104 +394,16 @@ class Egun:
                 if out.value == 0:
                     break
 
-    def turn_system_off(self):
-        print('Turning System off!')
-        print('  Disable Pulses')
-        self.pv_trig_state_sp.value = 0
-
-        self.pv_mult_swt_sp.value = 0
-        self.pv_sngl_swt_sp.value = 0
-        _time.sleep(2)
-        self.pv_mult_sel_sp.value = 0
-        self.pv_sngl_sel_sp.value = 0
-
-        print('  Zero HV and filament')
-        self.pv_hv_volt_sp.value = 0.0
-        self.set_fila_current(0.0)
-        _time.sleep(1)
-        self.pv_bias_volt_sp.value = 0.0
-        _time.sleep(10)
-
-        print('  Turn off HV')
-        self.pv_hv_enbl_sp.value = 0
-        _time.sleep(1)
-        self.pv_hv_switch_sp.value = 0
-        _time.sleep(1)
-
-        print('  Turn off Filament')
-        self.pv_fila_switch_sp.value = 0
-        _time.sleep(3)
-        print('  Turn off Bias')
-        self.pv_bias_switch_sp.value = 0
-
-        _time.sleep(3)
-        print('  Turn off System')
-        self.pv_sys_start_sp.value = 0
-        _time.sleep(1)
-        print('System Off!')
-
-    def turn_system_on(self):
-        print('Turning System on!')
-        print('  Start System')
-        self.pv_sys_start_sp.value = 1
-        _time.sleep(3)
-        print('  Turn on Bias')
-        self.pv_bias_switch_sp.value = 1
-        _time.sleep(2)
-        print('  Turn on Filament')
-        self.pv_fila_switch_sp.value = 1
-
-        _time.sleep(1)
-        print('  Set Bias Voltage')
-        self.pv_bias_volt_sp.value = self.bias_volt
-        _time.sleep(5)
-        print('  Set Filament')
-        self.set_fila_current(self.fila_curr)
-        _time.sleep(2)
-        print('  Turn on HV')
-        self.pv_hv_switch_sp.value = 1
-        _time.sleep(4)
-        self.pv_hv_enbl_sp.value = 1
-        _time.sleep(3)
-        print('  Set HV')
-        self.pv_hv_curlim_sp.value = self.leak_curr
-        self.pv_hv_volt_sp.value = self.goal_volt
-        _time.sleep(5)
-
-        print('  Turn on Pulse PS for Multibunch')
-        self.pv_mult_sel_sp.value = 1
-        _time.sleep(3)
-        self.pv_mult_swt_sp.value = 1
-        _time.sleep(1)
-        print('System On!')
-
-    def put_system_standby(self):
-        print('Putting System in Standby!')
-        self.pv_sys_start_sp.value = 1
-        self.pv_trig_state_sp.value = 0
-        self.pv_mult_swt_sp.value = 0
-        self.pv_sngl_swt_sp.value = 0
-        self.pv_mult_sel_sp.value = 0
-        self.pv_sngl_sel_sp.value = 0
-        _time.sleep(0.5)
-        self.pv_hv_volt_sp.value = 0.0
-        self.pv_bias_switch_sp.value = 1
-        self.pv_fila_switch_sp.value = 1
-        _time.sleep(5)
-        self.pv_hv_enbl_sp.value = 0
-        self.pv_hv_switch_sp.value = 0
-        self.pv_bias_volt_sp.value = -60.0
-        _time.sleep(2)
-        self.set_fila_current(1.1)
-
-    def exit_(self):
+    def _check_ok(self):
         """."""
-        t0 = _time.time()
-        while True:
-            print('\a', end='\r')  # make a sound
-            if _time.time()-t0 > 10:
-                break
-        print('I quit!')
+        isok = [out.value == 0 for out in self.pvs_mps_status_proc]
+        allok = all(isok)
+        allok &= self.pv_mps_permit.value == 1
+        allok &= self.pv_trig_allow_mon.value == 1
+        allok &= self.pv_sys_valve_mon.value == 1
+        allok &= self.pv_sys_gate_mon.value == 1
+        allok &= self.pv_sys_vacuum_mon.value == 1
+        return allok
 
 
 if __name__ == '__main__':
@@ -385,8 +441,8 @@ if __name__ == '__main__':
         egun.set_fila_current(egun.fila_curr)
     elif args.dowhat == opts[1]:
         if egun.keep_egun_on(period=-1):
-            egun.exit_()
-        egun.turn_system_off()
+            egun.quit()
+        # egun.turn_system_off()
     elif args.dowhat == opts[2]:
         egun.test_egun()
     elif args.dowhat == opts[3]:
