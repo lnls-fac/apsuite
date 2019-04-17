@@ -76,7 +76,6 @@ class Egun:
         self.bias_volt = -60
         self.leak_curr = 0.0
         self.beam_pulse = True
-        self.keepfilahot = True
 
         self._ishot = True
 
@@ -122,9 +121,9 @@ class Egun:
                 return
             print('\n')
 
-    def keep_egun_on(self, period=-1):
+    def keep_egun_on(self, nrattempts=100, period=-1):
         """."""
-        for i in range(100):
+        for i in range(nrattempts):
             print('ATTEMPT {0:04d}'.format(i))
 
             for _ in range(3):
@@ -171,11 +170,9 @@ class Egun:
     def control_egun(self, turn_on=True):
         """."""
         print('Preparing Egun')
-        filahot = self.keepfilahot
-        filahot |= turn_on
         self.pv_bias_volt_sp.value = self.bias_volt  # 3nC
 
-        self.set_fila_current(self.fila_curr if filahot else 0.0)
+        self.set_fila_current(self.fila_curr)
 
         self.pv_trig_state_sp.value = self.beam_pulse if turn_on else False
         if self.pv_hv_enbl_rb.value == 0:
@@ -425,22 +422,33 @@ if __name__ == '__main__':
         '-b', '--bias', type=float, default=-60,
         help='Which Voltage to put in Bias in V. (-60 A)')
     parser.add_argument(
+        '-l', '--leak', type=float, default=8,
+        help='Maximum Leak current allowed in uA. (8 uA)')
+    parser.add_argument(
+        '-p', '--pressure', type=float, default=8e-9,
+        help='Pressure bellow which HV is set, in mBar. (8e-9 mBar)')
+    parser.add_argument(
         '-d', '--duration', type=float, default=-1,
         help='How long should it last in minutes.' +
         'Put negative for infinity (-1)')
+    parser.add_argument(
+        '-n', '--nrattempts', type=int, default=100,
+        help='Number of times to try to reset Egun when in keepon mode' +
+        ' (100 attempts).')
 
     args = parser.parse_args()
     egun = Egun()
     egun.fila_curr = min(args.current, 1.54)
     egun.total_duration = args.duration
     egun.goal_volt = args.volt  # [kV]
-    egun.goal_pressure = 8.0e-9
+    egun.goal_pressure = min(max(3.0e-9, args.pressure), 10e-9)  # in mBar
     egun.bias_volt = max(min(args.bias, -20), -110)  # -38 V --> 3 nC
-    egun.leak_curr = 0.008  # mA
+    egun.leak_curr = min(max(0, args.leak), 20) * 1e-3  # mA
     if args.dowhat == opts[0]:
         egun.set_fila_current(egun.fila_curr)
     elif args.dowhat == opts[1]:
-        if egun.keep_egun_on(period=-1):
+        nrtimes = max(min(1000, args.nrattempts), 1)
+        if egun.keep_egun_on(nrattempts=nrtimes, period=-1):
             egun.quit()
         # egun.turn_system_off()
     elif args.dowhat == opts[2]:
