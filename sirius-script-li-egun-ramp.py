@@ -199,23 +199,27 @@ class Egun:
         self.pv_hv_volt_sp.value = volt
 
     def set_fila_current(self, val):
-        if val < 0.7 or self._ishot:
-            print('Setting filament current to {0:.3f}.'.format(val))
+        cond = abs(self.pv_fila_cur_rb.value - val) < 0.07
+        cond &= abs(self.pv_fila_cur_sp.value - val) < 1e-4
+        if cond:
+            print('Filament is already at {0:.3f}'.format(val))
             self.pv_fila_cur_sp.value = val
             return
 
-        duration = self._fila_ramp_dur * 60
-
-        npts = 100
+        isfast = val < 0.7 or self._ishot
+        if isfast:
+            duration = 5
+            npts = 10
+        else:
+            duration = self._fila_ramp_dur * 60
+            npts = 100
         x = _np.linspace(0, 1, npts)
-        y = 1 - (1-x)**3
-        # y = 1 - (1-x)**2
-        # y = _np.sqrt(1 - (1-x)**2)
-        # y = _np.sin(2*np.pi * x/4)
-        y *= val
+        y = self._get_ramp(x, val, isfast)
+
         t_inter = duration / (npts-1)
 
-        print('Starting Egun filament ramp:')
+        strg = 'fast' if isfast else 'slow'
+        print('Starting {0:s} filament ramp to {1:.3f}.'.format(strg, val))
         self.pv_fila_cur_sp.value = y[0]
         for i, cur in enumerate(y[1:]):
             dur = str(_timedelta(seconds=duration - i*t_inter)).split('.')[0]
@@ -224,6 +228,16 @@ class Egun:
             self.pv_fila_cur_sp.value = cur
         print('Filament Ready!' + 40*' ')
         self._ishot = True
+
+    def _get_ramp(self, x, val, isfast):
+        if isfast:
+            y = x.copy()
+        else:
+            y = 1 - (1-x)**3
+            # y = 1 - (1-x)**2
+            # y = _np.sqrt(1 - (1-x)**2)
+            # y = _np.sin(2*np.pi * x/4)
+        return y*val
 
     def quit(self):
         """."""
