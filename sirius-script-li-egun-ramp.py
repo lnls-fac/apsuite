@@ -160,6 +160,7 @@ class Egun:
                     else:
                         dur = str(_timedelta(minutes=dur)).split('.')[0]
                         print('Elapsed Time: {0:s}'.format(dur), end='\r')
+            print()
 
             strtime = _time.strftime('%Y-%m-%d %H:%M:%S', _time.localtime())
             print('{0:s} --> Vacuum Interlock!'.format(strtime))
@@ -427,14 +428,14 @@ if __name__ == '__main__':
     parser.add_argument(
         'dowhat', type=str, help="Choose what to do.", choices=opts)
     parser.add_argument(
-        '-c', '--current', type=float, default=1.45,
-        help='Which current to put in the filament in A. (1.45 A)')
+        '-c', '--current', type=float, default=1.35,
+        help='Which current to put in the filament in A. (1.35 A)')
     parser.add_argument(
-        '-v', '--volt', type=float, default=80,
-        help='Which Voltage to put in the HV in kV. (80 A)')
+        '-v', '--volt', type=float, default=90,
+        help='Which Voltage to put in the HV in kV. (90 A)')
     parser.add_argument(
-        '-b', '--bias', type=float, default=-60,
-        help='Which Voltage to put in Bias in V. (-60 A)')
+        '-b', '--bias', type=float, default=-38,
+        help='Which Voltage to put in Bias in V. (-38 A)')
     parser.add_argument(
         '-l', '--leak', type=float, default=8,
         help='Maximum Leak current allowed in uA. (8 uA)')
@@ -452,7 +453,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     egun = Egun()
-    egun.fila_curr = min(args.current, 1.54)
+    egun.fila_curr = max(min(args.current, 1.54), 0.0)
     egun.total_duration = args.duration
     egun.goal_volt = args.volt  # [kV]
     egun.goal_pressure = min(max(3.0e-9, args.pressure), 10e-9)  # in mBar
