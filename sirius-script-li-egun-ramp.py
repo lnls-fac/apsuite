@@ -204,7 +204,10 @@ class Egun:
         duration = 60
         ini_val = self.pv_hv_volt_sp.value
         npts = int(npts * abs(val-ini_val)/90)
+        if npts <= 0:
+            return
         if npts < 2:
+            self.pv_hv_volt_sp.value = val
             return
         duration = duration * abs(val-ini_val)/90
         y = _np.linspace(ini_val, val, npts)
