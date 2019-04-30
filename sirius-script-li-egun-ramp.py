@@ -197,7 +197,27 @@ class Egun:
         volt = self.goal_volt if turn_on else 0.0
         print('Setting HV from {0:.2f} to {1:.2f} kV'.format(
             self.pv_hv_volt_rb.value, volt))
-        self.pv_hv_volt_sp.value = volt
+        self.set_hv_volt(volt)
+
+    def set_hv_volt(self, val):
+        npts = 60
+        duration = 60
+        ini_val = self.pv_hv_volt_sp.value
+        npts = int(npts * abs(val-ini_val)/90)
+        if npts < 2:
+            return
+        duration = duration * abs(val-ini_val)/90
+        y = _np.linspace(ini_val, val, npts)
+
+        t_inter = duration / (npts-1)
+        print('Starting HV ramp to {0:.3f} kV.'.format(val))
+        self.pv_hv_volt_sp.value = y[0]
+        for i, cur in enumerate(y[1:]):
+            dur = str(_timedelta(seconds=duration - i*t_inter)).split('.')[0]
+            print('RemTime: {0:s}  HV: {1:.3f} kV'.format(dur, cur), end='\r')
+            _time.sleep(t_inter)
+            self.pv_hv_volt_sp.value = cur
+        print('HV Ready!' + 40*' ')
 
     def set_fila_current(self, val):
         cond = abs(self.pv_fila_cur_rb.value - val) < 0.07
@@ -322,7 +342,7 @@ class Egun:
         self._wait([self.pv_hv_enbl_rb, ], [1, ], ['equal', ])
         print('  Set HV')
         self.pv_hv_curlim_sp.value = self.leak_curr
-        self.pv_hv_volt_sp.value = self.goal_volt
+        self.set_hv_volt(self.goal_volt)
         # self._wait(
         #     [self.pv_hv_volt_rb, ], [self.goal_volt*0.9, ], ['more', ])
 
