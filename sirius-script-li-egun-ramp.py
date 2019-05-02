@@ -202,7 +202,7 @@ class Egun:
     def set_hv_volt(self, val):
         npts = 60
         duration = 60
-        ini_val = self.pv_hv_volt_sp.value
+        ini_val = self.pv_hv_volt_rb.value
         npts = int(npts * abs(val-ini_val)/90)
         if npts <= 0:
             return
