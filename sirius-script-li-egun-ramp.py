@@ -77,7 +77,7 @@ class Egun:
         self.leak_curr = 0.0
         self.beam_pulse = True
 
-        self._ishot = True
+        self.fila_ishot = False
 
         self.total_duration = -1
         self._stop_running = False
@@ -228,9 +228,10 @@ class Egun:
         if cond:
             print('Filament is already at {0:.3f}'.format(val))
             self.pv_fila_cur_sp.value = val
+            self.fila_ishot = True
             return
 
-        isfast = val < 0.7 or self._ishot
+        isfast = val < 0.7 or self.fila_ishot
         if isfast:
             duration = 5
             npts = 10
@@ -251,7 +252,7 @@ class Egun:
             _time.sleep(t_inter)
             self.pv_fila_cur_sp.value = cur
         print('Filament Ready!' + 40*' ')
-        self._ishot = True
+        self.fila_ishot = True
 
     def _get_ramp(self, x, val, isfast):
         if isfast:
@@ -473,6 +474,9 @@ if __name__ == '__main__':
         '-n', '--nrattempts', type=int, default=100,
         help='Number of times to try to reset Egun when in keepon mode' +
         ' (100 attempts).')
+    parser.add_argument(
+        '-f', '--filahot', action='store_true', default=False,
+        help="Whether egun's filament is hot (Default = False).")
 
     args = parser.parse_args()
     egun = Egun()
@@ -482,6 +486,7 @@ if __name__ == '__main__':
     egun.goal_pressure = min(max(3.0e-9, args.pressure), 10e-9)  # in mBar
     egun.bias_volt = max(min(args.bias, -20), -110)  # -38 V --> 3 nC
     egun.leak_curr = min(max(0, args.leak), 20) * 1e-3  # mA
+    egun.fila_ishot = args.filahot
     if args.dowhat == opts[0]:
         egun.set_fila_current(egun.fila_curr)
     elif args.dowhat == opts[1]:
