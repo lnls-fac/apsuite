@@ -6,7 +6,7 @@ from epics import PV as _PV
 
 
 class PSO:
-    def _init_(self, dim=5):
+    def __init__(self, dim=5):
         self.pv_ioc_prefix_SOFB = 'BO-Glob:AP-SOFB:'
         self.pv_ioc_prefix_PosAng = 'TB-Glob:AP-PosAng'
         self.pv_orbx = _PV(self.pv_ioc_prefix_SOFB + 'SPassOrbX-Mon')  # um
@@ -16,7 +16,11 @@ class PSO:
         self.pv_dxl = _PV(self.pv_ioc_prefix_PosAng + 'DeltaAngX-SP')  # mrad
         self.pv_dy = _PV(self.pv_ioc_prefix_PosAng + 'DeltaPosY-SP')  # mm
         self.pv_dyl = _PV(self.pv_ioc_prefix_PosAng + 'DeltaAngY-SP')  # mrad
+        self.pv_resetposang = _PV(
+            self.pv_ioc_prefix_PosAng + 'SetNewRefKick-Cmd')
         self.pv_kckr = _PV('BO-01D:PM-InjKckr:Kick-SP')
+        _time.sleep(2)
+        self.pv_resetposang.value = 1
 
         self.x_lim = 3
         self.y_lim = 3
@@ -40,6 +44,13 @@ class PSO:
         self.g_best = np.zeros(self.nswarm, self.dim)
 
         self.create_swarm()
+        self.reference = np.array([
+            self.pv_dx.value,
+            self.pv_dxl.value,
+            self.pv_dy.value,
+            self.pv_dyl.value,
+            self.pv_kckr.value,
+            ])
 
     def create_swarm(self):
         lim = [self.x_lim, self.y_lim, self.xl_lim, self.yl_lim, self.kckr_lim]
@@ -50,11 +61,11 @@ class PSO:
             self.p_best[j, :] = self.delta[j, :]
 
     def merit_func(self, eff_lim, part):
-        self.pv_dx.value += self.delta[part, 0]
-        self.pv_dxl.value += self.delta[part, 1]
-        self.pv_dy.value += self.delta[part, 2]
-        self.pv_dyl.value += self.delta[part, 3]
-        self.pv_kckr.value += self.delta[part, 4]
+        self.pv_dx.value = self.reference[0] + self.delta[part, 0]
+        self.pv_dxl.value = self.reference[1] + self.delta[part, 1]
+        self.pv_dy.value = self.reference[2] + self.delta[part, 2]
+        self.pv_dyl.value = self.reference[3] + self.delta[part, 3]
+        self.pv_kckr.value = self.reference[4] + self.delta[part, 4]
         _time.sleep(3)
         ind_bpm = np.arange(1, len(self.pv_sum.value)+1)
         f_bpm = np.dot(ind_bpm, self.pv_sum.value)
