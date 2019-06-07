@@ -6,9 +6,9 @@ from epics import PV as _PV
 
 
 class PSO:
-    def __init__(self, dim=5):
+    def __init__(self, dim=5, p_sum=1, p_orb=1e3):
         self.pv_ioc_prefix_SOFB = 'BO-Glob:AP-SOFB:'
-        self.pv_ioc_prefix_PosAng = 'TB-Glob:AP-PosAng'
+        self.pv_ioc_prefix_PosAng = 'TB-Glob:AP-PosAng:'
         self.pv_orbx = _PV(self.pv_ioc_prefix_SOFB + 'SPassOrbX-Mon')  # um
         self.pv_orby = _PV(self.pv_ioc_prefix_SOFB + 'SPassOrbY-Mon')  # um
         self.pv_sum = _PV(self.pv_ioc_prefix_SOFB + 'SPassSum-Mon')  # counts
@@ -28,8 +28,8 @@ class PSO:
         self.yl_lim = 3
         self.kckr_lim = 3
 
-        self.p_bpm = 1.0
-        self.p_orb = 1e-7
+        self.p_sum = p_sum
+        self.p_orb = p_orb
 
         self.c_inertia = 0.7984
         self.c_ind = 1.49618
@@ -74,7 +74,7 @@ class PSO:
         orby_sel = self.pv_orby.value[self.pv_sum.value > eff_lim]
         sigma_y = orby_sel * orby_sel
         f_orb = np.sqrt(np.sum(sigma_x + sigma_y))
-        return self.p_bpm * f_bpm + self.p_orb / f_orb
+        return self.p_sum * f_bpm + self.p_orb / f_orb
 
     def update_vlct(self, part):
         r_ind = np.random.rand()
@@ -103,9 +103,15 @@ if __name__ == "__main__":
     parser.add_argument(
         '-niter', '--niter', type=int, default=30,
         help='Number of Iteractions (30).')
+    parser.add_argument(
+        '-p_sum', '--psum', type=int, default=1,
+        help='Weigth for Sum Signal')
+    parser.add_argument(
+        '-p_orb', '--porb', type=int, default=1e3,
+        help='Weigth for Orbit Rms')
 
     args = parser.parse_args()
-    pso = PSO(args.dim)
+    pso = PSO(args.dim, args.psum, args.porb)
     f_old = np.zeros(pso.nswarm)
     f_new = np.zeros(pso.nswarm)
 
