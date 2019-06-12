@@ -200,9 +200,11 @@ class SimulAnneal():
                 nu += 1
 
             k += 1
-            phik = 1 / (1 + 1 / np.sqrt(k * (nu + 1) + nu))
-            self._temperature = phik * self._temperature
-            print('Temperature is: ' + str(self._temperature))
+
+            if self._temperature != 0:
+                phi = 1 / (1 + 1 / np.sqrt(k * (nu + 1) + nu))
+                self._temperature = phi * self._temperature
+                print('Temperature is: ' + str(self._temperature))
 
         print('Best solution is: ' + str(best))
         print('Best figure of merit is: ' + str(f_old))
@@ -214,11 +216,11 @@ class SimulAnneal():
 
 class SimpleScan():
 
-    def __init__(self, npoints):
-        self._npoints = npoints
+    def __init__(self):
         self._lower_limits = np.array([])
         self._upper_limits = np.array([])
         self._position = np.array([])
+        self._delta = np.array([])
         self._curr_dim = 0
         self.initialization()
         self._ndim = len(self._upper_limits)
@@ -241,8 +243,8 @@ class SimpleScan():
     def calc_merit_function(self):
         return np.zeros(self._ndim)
 
-    def _start_optimization(self):
-        self._delta = np.zeros(self._npoints)
+    def _start_optimization(self, npoints):
+        self._delta = np.zeros(npoints)
         f = np.zeros(self._ndim)
         best = np.zeros(self._ndim)
 
@@ -250,11 +252,77 @@ class SimpleScan():
             self._delta = np.linspace(
                                 self._lower_limits[i],
                                 self._upper_limits[i],
-                                self._npoints)
-            print(self._delta)
+                                npoints)
             self._curr_dim = i
             f[i], best[i] = self.calc_merit_function()
             self._position[i] = best[i]
 
         print('Best result is: ' + str(best))
         print('Figure of merit is: ' + str(np.min(f)))
+
+''' Powell Conjugated Direction Search Method for Minimization
+
+
+class Powell():
+
+    GOLDEN = (np.sqrt(5) - 1)/2
+
+    def __init__(self):
+        self._lower_limits = np.array([])
+        self._upper_limits = np.array([])
+        self._position = np.array([])
+        self._delta = np.array([])
+        self.initialization()
+        self._ndim = len(self._upper_limits)
+        self._check_initialization()
+
+    def initialization(self):
+        pass
+
+    def _check_initialization(self):
+        pass
+
+    def _set_lim(self, v):
+        new_v = v
+        over = v > self._upper_limits
+        under = v < self._lower_limits
+        new_v[over] = self._upper_limits[over]
+        new_v[under] = self._lower_limits[under]
+        return new_v
+
+    def calc_merit_function(self):
+        return np.zeros(self._ndim)
+
+    def golden_search(self):
+        k = 0
+        x = self._position
+        x_upper = x[1]
+        x_lower = x[0]
+        d = GOLDEN * (x_upper - x_lower)
+        x1 = x_lower + d
+        x2 = x_upper - d
+        f1 = self.calc_merit_func(x1)
+        f2 = self.calc_merit_func(x2)
+
+        while k < self._nint:
+            if f1 > f2:
+                x_lower = x2
+                x2 = x1
+                f2 = f1
+                x1 = x_lower + GOLDEN * (x_upper - x_lower)
+                f1 = self.calc_merit_func(x1)
+            elif f2 > f1:
+                x_upper = x1
+                x1 = x2
+                f1 = f2
+                x2 = x_upper - GOLDEN * (x_upper - x_lower)
+                f2 = self.calc_merit_func(x2)
+            k += 1
+        return x_lower, x_upper
+
+    def line_scan(self):
+        pass
+
+    def _start_optimization(self, niter):
+        pass
+        '''
