@@ -48,6 +48,8 @@ class PSOInjection(PSO):
         self._p_bpm = 1.0
         self._p_orb = 1.0e3
 
+        self._nswarm = 10 + 2 * int(np.sqrt(len(self._upper_limits)))
+
     def calc_merit_function(self):
         f_out = np.zeros(self._nswarm)
         ind_bpm = np.arange(1, len(self.diag[-1].value) + 1)
