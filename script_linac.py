@@ -9,6 +9,11 @@ from optimization import PSO
 
 class PSOLinac(PSO):
 
+    ENERGY = 0
+    SPREAD = 1
+    ICT1_CHG = 2
+    ICT2_CHG = 3
+
     def __init__(self, low_lim, up_lim):
         self._upper_limits = up_lim
         self._lower_limits = low_lim
@@ -58,9 +63,9 @@ class PSOLinac(PSO):
                 self.params[k].value = self._position[i, k]
 
             _time.sleep(self._wait)
-            transmit = self.diag[3] / self.diag[2]
-            f_out[i] = self.p_energy * self.diag[0] +
-                       self.p_spread / self.diag[1] +
+            transmit = self.diag[ICT2_CHG].value / self.diag[ICT1_CHG].value
+            f_out[i] = self.p_energy * self.diag[ENERGY].value +
+                       self.p_spread / self.diag[SPREAD].value +
                        self.p_transmit * transmit
         return - f_out
 
