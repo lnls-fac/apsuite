@@ -63,9 +63,9 @@ class PSOLinac(PSO):
                 self.params[k].value = self._position[i, k]
 
             _time.sleep(self._wait)
-            transmit = self.diag[ICT2_CHG].value / self.diag[ICT1_CHG].value
-            f_out[i] = self.p_energy * self.diag[ENERGY].value +
-                       self.p_spread / self.diag[SPREAD].value +
+            transmit = self.diag[self.ICT2_CHG].value / self.diag[self.ICT1_CHG].value
+            f_out[i] = self.p_energy * self.diag[self.ENERGY].value +
+                       self.p_spread / self.diag[self.SPREAD].value +
                        self.p_transmit * transmit
         return - f_out
 
