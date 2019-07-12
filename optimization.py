@@ -15,8 +15,6 @@ class PSO:
         self._c_coll = self.c_indiv
         self._upper_limits = np.array([])
         self._lower_limits = np.array([])
-        self._max_delta = np.array([])
-        self._min_delta = np.array([])
         self.initialization()
         self._ndim = len(self._upper_limits)
         self._check_initialization()
@@ -60,19 +58,18 @@ class PSO:
     def _create_swarm(self):
         self._best_particle = np.zeros((self._nswarm, self._ndim))
         self._best_global = np.zeros(self._ndim)
-        dlim = self._max_delta - self._min_delta
+        dlim = self._upper_limits - self._lower_limits
         rarray = np.random.rand(self._nswarm, self._ndim)
-        self._position = dlim * rarray + self._min_delta
+        self._position = dlim * rarray + self._lower_limits
         self._best_particle = self._position
         self._velocity = np.zeros((self._nswarm, self._ndim))
 
-    def _set_lim(self, v):
-        new_v = v
-        over = v > self._upper_limits
-        under = v < self._lower_limits
-        new_v[over] = self._upper_limits[over]
-        new_v[under] = self._lower_limits[under]
-        return new_v
+    def _set_lim(self):
+        for i in range(self._upper_limits.size):
+            over = self._position[:, i] > self._upper_limits[i]
+            under = self._position[:, i] < self._lower_limits[i]
+            self._position[over, i] = self._upper_limits[i]
+            self._position[under, i] = self._lower_limits[i]
 
     def initialization(self):
         pass
@@ -97,6 +94,7 @@ class PSO:
         self._velocity += r_indiv * (self._best_particle - self._position)
         self._velocity += r_coll * (self._best_global - self._position)
         self._position = self._position + self._velocity
+        self._set_lim()
 
     def _start_optimization(self, niter):
         self._create_swarm()
@@ -132,8 +130,6 @@ class SimulAnneal():
     def __init__(self):
         self._lower_limits = np.array([])
         self._upper_limits = np.array([])
-        self._max_delta = np.array([])
-        self._min_delta = np.array([])
         self._position = np.array([])
         self._delta = np.array([])
         self._temperature = 0
@@ -147,22 +143,22 @@ class SimulAnneal():
     def _check_initialization(self):
         pass
 
-    def _set_lim(self, v):
-        new_v = v
-        over = v > self._upper_limits
-        under = v < self._lower_limits
-        new_v[over] = self._upper_limits[over]
-        new_v[under] = self._lower_limits[under]
-        return new_v
+    def _set_lim(self):
+        for i in range(self._upper_limits.size):
+            over = self._position[:, i] > self._upper_limits[i]
+            under = self._position[:, i] < self._lower_limits[i]
+            self._position[over, i] = self._upper_limits[i]
+            self._position[under, i] = self._lower_limits[i]
 
     def calc_merit_function(self):
         return 0
 
     def random_change(self):
-        dlim = self._max_delta - self._min_delta
+        dlim = self._upper_limits - self._lower_limits
         rarray = np.random.rand(self._ndim)
-        self._delta = dlim * rarray + self._min_delta
+        self._delta = dlim * rarray + self._lower_limits
         self._position = self._position + self._delta
+        self._set_lim()
 
     def _start_optimization(self, niter):
         f_old = self.calc_merit_function()
@@ -232,23 +228,22 @@ class SimpleScan():
     def _check_initialization(self):
         pass
 
-    def _set_lim(self, v):
-        new_v = v
-        over = v > self._upper_limits
-        under = v < self._lower_limits
-        new_v[over] = self._upper_limits[over]
-        new_v[under] = self._lower_limits[under]
-        return new_v
+    def _set_lim(self):
+        for i in range(self._upper_limits.size):
+            over = self._position[:, i] > self._upper_limits[i]
+            under = self._position[:, i] < self._lower_limits[i]
+            self._position[over, i] = self._upper_limits[i]
+            self._position[under, i] = self._lower_limits[i]
 
     def calc_merit_function(self):
-        return np.zeros(self._ndim)
+        return np.zeros(self._ndim), np.zeros(self._ndim)
 
     def _start_optimization(self, npoints):
         self._delta = np.zeros(npoints)
         f = np.zeros(self._ndim)
         best = np.zeros(self._ndim)
 
-        for i in range(0, self._ndim):
+        for i in range(self._ndim):
             self._delta = np.linspace(
                                 self._lower_limits[i],
                                 self._upper_limits[i],
@@ -282,13 +277,7 @@ class Powell():
     def _check_initialization(self):
         pass
 
-    def _set_lim(self, v):
-        new_v = v
-        over = v > self._upper_limits
-        under = v < self._lower_limits
-        new_v[over] = self._upper_limits[over]
-        new_v[under] = self._lower_limits[under]
-        return new_v
+
 
     def calc_merit_function(self):
         return np.zeros(self._ndim)

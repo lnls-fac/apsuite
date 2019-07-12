@@ -6,18 +6,13 @@ class Test1(PSO):
     def initialization(self):
         self._upper_limits = np.array([10, 10])
         self._lower_limits = - self._upper_limits
-        self._max_delta = self._upper_limits
-        self._min_delta = self._lower_limits
         self._nswarm = 10 + 2 * int(np.sqrt(len(self._upper_limits)))
 
     def calc_merit_function(self):
         f_out = np.zeros(self._nswarm)
 
-        for i in range(0, self._nswarm):
-            v = self._position[i, :]
-            v = self._set_lim(v)
-            x = v[0]
-            y = v[1]
+        for i in range(self._nswarm):
+            x, y = self._position[i, 0], self._position[i, 1]
             # f_out[i] = (x - 1) ** 2
             f_out[i] = (x + 2 * y - 7) ** 2 + (2 * x + y - 5) ** 2
             # f_out[i] = 0.26 * (x**2 + y**2) - 0.48 * x * y
@@ -28,16 +23,11 @@ class Test2(SimulAnneal):
     def initialization(self):
         self._upper_limits = np.array([10, 10])
         self._lower_limits = - self._upper_limits
-        self._max_delta = self._upper_limits/2
-        self._min_delta = self._lower_limits/2
         self._position = np.array([0, 0])
         self._temperature = 0
 
     def calc_merit_function(self):
-        v = self._position
-        v = self._set_lim(v)
-        x = v[0]
-        y = v[1]
+        x, y = self._position[i, 0], self._position[i, 1]
         # f_out[i] = (x - 1) ** 2
         f_out = (x + 2 * y - 7) ** 2 + (2 * x + y - 5) ** 2
         # f_out[i] = 0.26 * (x**2 + y**2) - 0.48 * x * y
@@ -52,7 +42,7 @@ class Test3(SimpleScan):
 
     def calc_merit_function(self):
         f_scan = np.zeros(len(self._delta))
-        for j in range(0, len(self._delta)):
+        for j in range(len(self._delta)):
             v = self._position
             v[self._curr_dim] = self._delta[j]
             x = v[0]

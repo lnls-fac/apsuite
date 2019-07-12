@@ -50,9 +50,6 @@ class PSOLinac(PSO):
         self.p_spread = 75
         self.p_transmit = 150
 
-        self._max_delta = self._upper_limits/10
-        self._min_delta = - self._max_delta
-
         self._nswarm = 10 + 2 * int(np.sqrt(len(self._upper_limits)))
 
     def calc_merit_function(self):
