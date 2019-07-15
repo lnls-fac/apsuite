@@ -101,12 +101,15 @@ class PSO:
 
         f_old = np.zeros(self._nswarm)
         f_new = np.zeros(self._nswarm)
+        best_pos_hstry = np.zeros([niter, self._ndim])
+        best_fig_hstry = np.zeros(niter)
 
         f_old = self.calc_merit_function()
         self._best_global = self._best_particle[np.argmin(f_old), :]
 
         k = 0
         while k < niter:
+            print('>>> Iteraction Number:' + str(k+1))
             self._update_position()
             f_new = self.calc_merit_function()
             improve = f_new < f_old
@@ -116,10 +119,13 @@ class PSO:
             if improve.any():
                 print('Global best updated:' + str(self._best_global))
                 print('Figure of merit updated:' + str(np.min(f_old)))
+            best_pos_hstry[k, :] = self._best_global
+            best_fig_hstry[k] = np.min(f_old)
             k += 1
 
         print('Best Position Found:' + str(self._best_global))
         print('Best Figure of Merit Found:' + str(np.min(f_old)))
+        return best_pos_hstry, best_fig_hstry
 
 
 ''' Simulated Annealing Algorithm for Minimization'''
