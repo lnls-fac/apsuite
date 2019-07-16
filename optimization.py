@@ -136,6 +136,7 @@ class SimulAnneal():
     def __init__(self):
         self._lower_limits = np.array([])
         self._upper_limits = np.array([])
+        self._max_delta = np.array([])
         self._position = np.array([])
         self._delta = np.array([])
         self._temperature = 0
@@ -150,32 +151,36 @@ class SimulAnneal():
         pass
 
     def _set_lim(self):
-        for i in range(self._upper_limits.size):
-            over = self._position[:, i] > self._upper_limits[i]
-            under = self._position[:, i] < self._lower_limits[i]
-            self._position[over, i] = self._upper_limits[i]
-            self._position[under, i] = self._lower_limits[i]
+        over = self._position > self._upper_limits
+        under = self._position < self._lower_limits
+        self._position[over] = self._upper_limits[over]
+        self._position[under] = self._lower_limits[under]
 
     def calc_merit_function(self):
         return 0
 
-    def random_change(self):
-        dlim = self._upper_limits - self._lower_limits
+    def _random_change(self):
+        dlim = self._max_delta
         rarray = np.random.rand(self._ndim)
-        self._delta = dlim * rarray + self._lower_limits
+        self._delta = dlim * rarray
         self._position = self._position + self._delta
         self._set_lim()
 
+    def _init_pos(self):
+        dlim = self._upper_limits - self._lower_limits
+        rarray = np.random.rand(self._ndim)
+        self._position = dlim * rarray + self._lower_limits
+
     def _start_optimization(self, niter):
+        self._init_pos()
         f_old = self.calc_merit_function()
         best = self._position
-        k = 0
         n_acc = 0
         nu = 0
 
-        while k < niter:
+        for k in range(niter):
             flag_acc = False
-            self.random_change()
+            self._random_change()
             f_new = self.calc_merit_function()
 
             if f_new < f_old:
@@ -188,6 +193,7 @@ class SimulAnneal():
                 if np.random.rand(1) < np.exp(- df / self._temperature):
                     flag_acc = True
                     print('Worse solution accepted! ' + str(self._position))
+                    print('Temperature is: ' + str(self._temperature))
                 else:
                     flag_acc = False
             else:
@@ -201,12 +207,9 @@ class SimulAnneal():
                 self._position = self._position - self._delta
                 nu += 1
 
-            k += 1
-
             if self._temperature != 0:
-                phi = 1 / (1 + 1 / np.sqrt(k * (nu + 1) + nu))
+                phi = 1 / (1 + 1 / np.sqrt((k+1) * (nu + 1) + nu))
                 self._temperature = phi * self._temperature
-                print('Temperature is: ' + str(self._temperature))
 
         print('Best solution is: ' + str(best))
         print('Best figure of merit is: ' + str(f_old))
@@ -234,13 +237,6 @@ class SimpleScan():
     def _check_initialization(self):
         pass
 
-    def _set_lim(self):
-        for i in range(self._upper_limits.size):
-            over = self._position[:, i] > self._upper_limits[i]
-            under = self._position[:, i] < self._lower_limits[i]
-            self._position[over, i] = self._upper_limits[i]
-            self._position[under, i] = self._lower_limits[i]
-
     def calc_merit_function(self):
         return np.zeros(self._ndim), np.zeros(self._ndim)
 
@@ -260,6 +256,76 @@ class SimpleScan():
 
         print('Best result is: ' + str(best))
         print('Figure of merit is: ' + str(np.min(f)))
+
+
+class GA():
+
+    def __init__(self, npop, nparents):
+        self._lower_limits = np.array([])
+        self._upper_limits = np.array([])
+        self._indiv = np.array([])
+        self.initialization()
+        self._ndim = len(self._upper_limits)
+        self._npop = npop
+        self._nparents = nparents
+        self._nchildren = self._npop - self._nparents
+        self._crosspoint = int(self._ndim/2)
+        pass
+
+    def initialization(self):
+        pass
+
+    def _check_initialization(self):
+        pass
+
+    def calc_merit_function(self):
+        return 0
+
+    def _create_pop(self):
+        dlim = self._upper_limits - self._lower_limits
+        rarray = np.random.rand(self._npop, self._ndim)
+        self._indiv = dlim * rarray + self._lower_limits
+
+    def _select_parents(self, f):
+        ind_sort = np.argsort(f)
+        return self._indiv[ind_sort[:self._nparents], :]
+
+    def _crossover(self, parents):
+        child = np.zeros([self._nchildren, self._ndim])
+        for i in range(self._nchildren):
+            dad = i % self._nparents
+            mom = (i+1) % self._nparents
+            child[i, :self._crosspoint] = parents[dad, :self._crosspoint]
+            child[i, self._crosspoint:] = parents[mom, self._crosspoint:]
+        return child
+
+    def _mutation(self):
+        pass
+
+    def _start_optimization(self, niter):
+        self._create_pop()
+
+        for k in range(niter):
+            print('Generation number ' + str(k+1))
+            fout = self.calc_merit_function()
+            print('Best Figure of Merit: ' + str(np.min(fout)))
+            print(
+                'Best Configuration: ' + str(self._indiv[np.argmin(fout), :]))
+            parents = self._select_parents(fout)
+            children = self._crossover(parents)
+            self._indiv[:self._nparents, :] = parents
+            self._indiv[self._nparents:, :] = children
+
+
+
+
+
+
+
+
+
+
+
 
 ''' Powell Conjugated Direction Search Method for Minimization
 
