@@ -16,6 +16,9 @@ class PSOLinac(PSO):
     # def __init__(self, low_lim, up_lim):
     #     self._upper_limits = np.array(up_lim)
     #     self._lower_limits = np.array(low_lim)
+    #     self._ndim = len(self._upper_limits)
+    #     self._nswarm = 10 + 2 * int(np.sqrt(self._ndim))
+    #     PSO.__init__(self, nswarm=self._nswarm)
 
     def initialization(self):
         # prefix = 'murilo-lnls558-linux-'
@@ -23,7 +26,7 @@ class PSOLinac(PSO):
         self._lower_limits = np.array([-180, 0, -180, 0, -180, 0])
         self._upper_limits = np.array([180, 100, 180, 100, 180, 100])
 
-        self._wait = 0
+        self._wait = 3
         self.p_energy = 1
         self.p_spread = 75
         self.p_transmit = 150
@@ -58,14 +61,16 @@ class PSOLinac(PSO):
         f_out = np.zeros(self._nswarm)
 
         for i in range(self._nswarm):
-            for k in range(len(self.params)):
+            for k in range(self._ndim):
                 self.params[k].value = self._position[i, k]
 
+            # print('Waiting ' + str(self._wait) + ' seconds')
+            print('Particle ' + str(i+1) + '|' + str(self._nswarm))
             _time.sleep(self._wait)
-            transmit = self.diag[self.TRANSMIT].value
             f_out[i] = self.p_energy * self.diag[self.ENERGY].value + \
-                       self.p_spread / self.diag[self.SPREAD].value + \
-                       self.p_transmit * transmit
+                       self.p_transmit * self.diag[self.TRANSMIT].value
+            if self.diag[self.SPREAD].value:
+                f_out[i] += self.p_spread / self.diag[self.SPREAD].value
         return - f_out
 
 # if __name__ == "__main__":
