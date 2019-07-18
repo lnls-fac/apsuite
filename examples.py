@@ -59,8 +59,8 @@ class Test3(SimpleScan):
 
 class Test4(GA):
 
-    def __init__(self, npop, nparents):
-        GA.__init__(self, npop=npop, nparents=nparents)
+    def __init__(self, npop, nparents, mutrate):
+        GA.__init__(self, npop=npop, nparents=nparents, mutrate=mutrate)
 
     def initialization(self):
         self._upper_limits = np.array([10, 10])
