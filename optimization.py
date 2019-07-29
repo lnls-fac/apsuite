@@ -142,10 +142,15 @@ class PSO:
             # Storing history of best global position and best figure of merit
             best_pos_hstry[k, :] = self._best_global
             best_fig_hstry[k] = np.min(f_old)
+            with open('pos_swarm.txt', 'a') as f_pos:
+                f_pos.write('Step ' + str(k+1) + ' \n')
+                np.savetxt(f_pos, self._position, fmt='%+.8e')
             k += 1
 
         print('Best Position Found:' + str(self._best_global))
         print('Best Figure of Merit Found:' + str(np.min(f_old)))
+        np.savetxt('best_pos_history.txt', best_pos_hstry)
+        np.savetxt('best_fig_history.txt', best_fig_hstry)
         return best_pos_hstry, best_fig_hstry
 
 
