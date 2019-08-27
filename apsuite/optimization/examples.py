@@ -1,5 +1,5 @@
 import numpy as np
-from optimization import PSO, SimulAnneal, SimpleScan, GA
+from . import PSO, SimulAnneal, SimpleScan, GA
 
 
 class Test1(PSO):
