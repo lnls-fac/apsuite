@@ -49,7 +49,7 @@ class SimulAnneal:
         """."""
         self._temperature = value
 
-    def __init__(self):
+    def __init__(self, save=False):
         """."""
         # Boundary Limits
         self._ndim = []
@@ -64,6 +64,8 @@ class SimulAnneal:
         self._delta = np.array([])
         # Initial temperature of annealing
         self._temperature = 0
+        self._flag_save = save
+        self.f_init = []
         self.initialization()
 
     def initialization(self):
@@ -96,7 +98,7 @@ class SimulAnneal:
         """."""
         raise NotImplementedError
 
-    def calc_merit_function(self):
+    def calc_obj_fun(self):
         """Return a number."""
         raise NotImplementedError
 
@@ -112,23 +114,23 @@ class SimulAnneal:
         """."""
         with open('pos_SA.txt', 'a') as f_pos:
             if k == 0:
-                f_pos.write('==============NEW RUN==========\n')
+                f_pos.write('NEW RUN'.center(50, '='))
             f_pos.write('Step ' + str(k+1) + ' \n')
             np.savetxt(f_pos, self._position, fmt='%+.8e')
         with open('fig_SA.txt', 'a') as f_fig:
             if k == 0:
-                f_fig.write('==============NEW RUN==========\n')
+                f_fig.write('NEW RUN'.center(50, '='))
             f_fig.write('Step ' + str(k+1) + ' \n')
             np.savetxt(f_fig, np.array([f]), fmt='%+.8e')
         if acc:
             with open('best_pos_history_SA.txt', 'a') as f_posh:
                 if nacc == 1:
-                    f_posh.write('==============NEW RUN==========\n')
+                    f_posh.write('NEW RUN'.center(50, '='))
                 f_posh.write('Accep. Solution ' + str(nacc+1) + ' \n')
                 np.savetxt(f_posh, bp[nacc, :], fmt='%+.8e')
             with open('best_fig_history_SA.txt', 'a') as f_figh:
                 if nacc == 1:
-                    f_figh.write('==============NEW RUN==========\n')
+                    f_figh.write('NEW RUN'.center(50, '='))
                 f_figh.write('Accep. Solution ' + str(nacc+1) + ' \n')
                 np.savetxt(f_figh, np.array([bf[nacc]]), fmt='%+.8e')
 
@@ -137,7 +139,12 @@ class SimulAnneal:
         bpos_hstry = np.zeros([self.niter, self.ndim])
         bfig_hstry = np.zeros([self.niter])
 
-        f_old = self.calc_merit_function()
+        f_old = self.calc_obj_fun()
+
+        if self.f_init < f_old:
+            f_old = self.f_init
+            self._position = np.zeros([1, self.ndim])
+
         bfig_hstry[0] = f_old
         bpos_hstry[0, :] = self._position
         # Number of accepted solutions
@@ -145,14 +152,15 @@ class SimulAnneal:
         # Number of iteraction without accepting solutions
         nu = 0
 
-        self._save_data(k=0, f=f_old, acc=False)
+        if self._flag_save:
+            self._save_data(k=0, f=f_old, acc=False)
 
         for k in range(self.niter):
             # Flag that a solution was accepted
             flag_acc = False
             self._random_change()
             print('>>> Iteraction Number:' + str(k+1))
-            f_new = self.calc_merit_function()
+            f_new = self.calc_obj_fun()
 
             if f_new < f_old:
                 # Accepting solution if it reduces the merit function
@@ -185,9 +193,10 @@ class SimulAnneal:
                 self._position = self._position - self._delta
                 nu += 1
 
-            self._save_data(
-                k=k+1, f=f_old, acc=flag_acc, nacc=n_acc, bp=bpos_hstry,
-                bf=bfig_hstry)
+            if self._flag_save:
+                self._save_data(
+                    k=k+1, f=f_old, acc=flag_acc, nacc=n_acc, bp=bpos_hstry,
+                    bf=bfig_hstry)
 
             if self._temperature != 0:
                 # Reduces the temperature based on number of iteractions

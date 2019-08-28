@@ -22,7 +22,7 @@ class SimpleScan:
         """."""
         raise NotImplementedError
 
-    def calc_merit_function(self):
+    def calc_obj_fun(self):
         """Return arrays with dimension of search space."""
         raise NotImplementedError
 
@@ -38,7 +38,7 @@ class SimpleScan:
                                 self._upper_limits[i],
                                 npoints)
             self._curr_dim = i
-            f[i], best[i] = self.calc_merit_function()
+            f[i], best[i] = self.calc_obj_fun()
             self._position[i] = best[i]
 
         print('Best result is: ' + str(best))

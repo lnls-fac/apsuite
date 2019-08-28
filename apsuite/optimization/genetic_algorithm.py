@@ -27,7 +27,7 @@ class GA:
         """."""
         raise NotImplementedError
 
-    def calc_merit_function(self):
+    def calc_obj_fun(self):
         """Return array with size equal to the population size."""
         raise NotImplementedError
 
@@ -93,7 +93,7 @@ class GA:
 
         for k in range(niter):
             print('Generation number ' + str(k+1))
-            fout = self.calc_merit_function()
+            fout = self.calc_obj_fun()
             print('Best Figure of Merit: ' + str(np.min(fout)))
             print(
                 'Best Configuration: ' + str(self._indiv[np.argmin(fout), :]))
