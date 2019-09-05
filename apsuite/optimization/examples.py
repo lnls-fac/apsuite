@@ -3,16 +3,19 @@ from . import PSO, SimulAnneal, SimpleScan, GA
 
 
 class Test1(PSO):
-    def initialization(self):
-        self._upper_limits = np.array([10, 10])
-        self._lower_limits = - self._upper_limits
-        self._nswarm = 10 + 2 * int(np.sqrt(len(self._upper_limits)))
 
-    def calc_merit_function(self):
+    def __init__(self, save=False, niter=0):
+        PSO.__init__(self, save=save)
+        self.niter = niter
+
+    def initialization(self):
+        self.set_limits(upper=np.array([10, 10]), lower=np.array([-10, -10]))
+
+    def calc_obj_fun(self):
         f_out = np.zeros(self._nswarm)
 
         for i in range(self._nswarm):
-            x, y = self._position[i, 0], self._position[i, 1]
+            x, y = self.position[i, 0], self.position[i, 1]
             # f_out[i] = (x - 1) ** 2
             f_out[i] = (x + 2 * y - 7) ** 2 + (2 * x + y - 5) ** 2
             # f_out[i] = 0.26 * (x**2 + y**2) - 0.48 * x * y
@@ -20,14 +23,19 @@ class Test1(PSO):
 
 
 class Test2(SimulAnneal):
-    def initialization(self):
-        self._upper_limits = np.array([10, 10])
-        self._lower_limits = - self._upper_limits
-        self._max_delta = self._upper_limits
-        self._temperature = 0
 
-    def calc_merit_function(self):
-        x, y = self._position[0], self._position[1]
+    def __init__(self, save=False, niter=0):
+        SimulAnneal.__init__(self, save=save)
+        self.niter = niter
+
+    def initialization(self):
+        self.set_limits(upper=np.array([10, 10]), lower=np.array([-10, -10]))
+        self.set_deltas(dmax=np.array([1, 1]))
+        self.temperature = 0
+        self.position = np.array([0, 0])
+
+    def calc_obj_fun(self):
+        x, y = self.position[0], self.position[1]
         # f_out[i] = (x - 1) ** 2
         f_out = (x + 2 * y - 7) ** 2 + (2 * x + y - 5) ** 2
         # f_out[i] = 0.26 * (x**2 + y**2) - 0.48 * x * y
@@ -37,7 +45,7 @@ class Test2(SimulAnneal):
 class Test3(SimpleScan):
     def initialization(self):
         self._upper_limits = np.array([10, 10])
-        self._lower_limits = - self._upper_limits
+        self._lower_limits = np.array([-10, -10])
         self._position = np.array([0, 0])
 
     def calc_merit_function(self):
