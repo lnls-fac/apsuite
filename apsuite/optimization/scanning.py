@@ -1,5 +1,6 @@
 #!/usr/bin/env python-sirius
 
+from threading import Thread
 import numpy as np
 
 
@@ -8,15 +9,37 @@ import numpy as np
 
 class SimpleScan:
 
+    @property
+    def ndim(self):
+        """."""
+        return self._ndim
+
+    @ndim.setter
+    def ndim(self, value):
+        """."""
+        self._ndim = value
+
+    @property
+    def position(self):
+        """."""
+        return self._position
+
+    @position.setter
+    def position(self, value):
+        """."""
+        self._position = value
+
     def __init__(self):
         """."""
         self._lower_limits = np.array([])
         self._upper_limits = np.array([])
+        self._ndim = 0
         self._position = np.array([])
         self._delta = np.array([])
         self._curr_dim = 0
+        self._stop = False
+        self._thread = Thread(target=self._optimize, daemon=True)
         self.initialization()
-        self._ndim = len(self._upper_limits)
 
     def initialization(self):
         """."""
@@ -26,7 +49,29 @@ class SimpleScan:
         """Return arrays with dimension of search space."""
         raise NotImplementedError
 
-    def start_optimization(self, npoints):
+    def set_limits(self, upper=None, lower=None):
+        """."""
+        self._upper_limits = upper
+        self._lower_limits = lower
+        self.ndim = len(upper)
+
+    def start(self):
+        """."""
+        if not self._thread.is_alive():
+            self._stop = False
+            self._thread = Thread(target=self._optimize, daemon=True)
+            self._thread.start()
+
+    def stop(self):
+        """."""
+        self._stop = True
+
+    @property
+    def isrunning(self):
+        """."""
+        return self._thread.is_alive()
+
+    def _optimize(self, npoints):
         """."""
         self._delta = np.zeros(npoints)
         f = np.zeros(self._ndim)

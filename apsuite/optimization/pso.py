@@ -1,38 +1,13 @@
 #!/usr/bin/env python-sirius
 
+from threading import Thread
 import numpy as np
-
 
 '''Particle Swarm Optimization Algorithm for Minimization'''
 
 
 class PSO:
     """."""
-
-    def __init__(self, save=False):
-        """."""
-        # Number of particles in the swarm # (Recommended is 10 + 2 * sqrt(d))
-        # where d is the dimension of search space
-        self._nswarm = []
-        self._niter = []
-        self._coeff_inertia = 0.7984  # Inertia
-        self._coeff_indiv = 1.49618  # Best position of individual particle
-        self._coeff_coll = self._coeff_indiv  # Best position ever reached by
-        # the swarm
-
-        # Boundary limits of problem
-        self._upper_limits = np.array([])
-        self._lower_limits = np.array([])
-        self.initialization()
-        self._check_initialization()
-        # Elements of PSO
-        self._position = np.array([])
-        self._velocity = np.array([])
-        self._best_indiv = np.array([])
-        self._best_global = np.array([])
-        self.f_init = []
-
-        self._flag_save = save
 
     @property
     def coeff_inertia(self):
@@ -104,6 +79,35 @@ class PSO:
         """."""
         self._position = value
 
+    def __init__(self, save=False):
+        """."""
+        # Number of particles in the swarm # (Recommended is 10 + 2 * sqrt(d))
+        # where d is the dimension of search space
+        self._nswarm = 0
+        self._niter = 0
+        self._coeff_inertia = 0.7984  # Inertia
+        self._coeff_indiv = 1.49618  # Best position of individual particle
+        self._coeff_coll = self._coeff_indiv  # Best position ever reached by
+        # the swarm
+
+        # Boundary limits of problem
+        self._upper_limits = np.array([])
+        self._lower_limits = np.array([])
+        # Elements of PSO
+        self._position = np.array([])
+        self._velocity = np.array([])
+        self._best_indiv = np.array([])
+        self._best_global = np.array([])
+        self._stop = False
+        self._thread = Thread(target=self._optimize, daemon=True)
+        self.best_positions_history = np.array([])
+        self.best_figures_history = np.array([])
+
+        self._flag_save = save
+
+        self.initialization()
+        self._check_initialization()
+
     def initialization(self):
         """."""
         raise NotImplementedError
@@ -112,11 +116,12 @@ class PSO:
         """."""
         if len(self._upper_limits) != len(self._lower_limits):
             raise Exception(
-                'Upper and Lower Limits has different lengths')
+                'Upper and Lower Limits has different lengths!')
 
         if self._ndim != len(self._upper_limits):
             raise Exception(
                 'Dimension incompatible with limits!')
+
 
         if self._nswarm < int(10 + 2 * np.sqrt(self._ndim)):
             raise Warning(
@@ -126,18 +131,16 @@ class PSO:
         """."""
         self._best_indiv = np.zeros((self._nswarm, self._ndim))
         self._best_global = np.zeros(self._ndim)
-        # Random initialization of swarm position inside the bounday limits
+        # Random initialization of swarm position inside the boundary limits
         dlim = self._upper_limits - self._lower_limits
         rarray = np.random.rand(self._nswarm, self._ndim)
         self._position = dlim * rarray + self._lower_limits
+        # Include the zero variation as first particle in the swarm
+        self._position[0, :] *= 0
         # The first individual contribution will be zero
         self._best_indiv = self._position
         # Initializing with zero velocity
         self._velocity = np.zeros((self._nswarm, self._ndim))
-
-    def init_obj_func(self):
-        """."""
-        raise NotImplementedError
 
     def _update_position(self):
         """."""
@@ -170,14 +173,6 @@ class PSO:
         if not self.nswarm:
             self.nswarm = int(10 + 2 * np.sqrt(self.ndim))
 
-    def get_change(self):
-        """."""
-        raise NotImplementedError
-
-    def set_change(self):
-        """."""
-        raise NotImplementedError
-
     def _save_data(self, k, f, fbest):
         """."""
         with open('pos_PSO.txt', 'a') as f_pos:
@@ -205,7 +200,21 @@ class PSO:
         """Return a vector for every particle evaluation."""
         raise NotImplementedError
 
-    def start_optimization(self):
+    def start(self):
+        """."""
+        if not self._thread.is_alive():
+            self._stop = False
+            self._thread = Thread(target=self._optimize, daemon=True)
+            self._thread.start()
+
+    def stop(self):
+        self._stop = True
+
+    @property
+    def isrunning(self):
+        return self._thread.is_alive()
+
+    def _optimize(self):
         """."""
         self._create_swarm()
 
@@ -218,16 +227,10 @@ class PSO:
 
         print('>>> Iteraction Number:1')
         f_old = self.calc_obj_fun()
-        if np.min(f_old) < self.f_init:
-            self._best_global = self._best_indiv[np.argmin(f_old), :]
-        else:
-            min_idx = np.argmin(f_old)
-            self._position[min_idx, :] = np.zeros([1, self._ndim])
-            self._best_indiv[min_idx, :] = self._position[min_idx, :]
-            self._best_global[min_idx, :] = self._best_indiv[min_idx, :]
-
+        self._best_global = self._best_indiv[np.argmin(f_old), :]
         best_pos_hstry[0, :] = self._best_global
         best_fig_hstry[0] = np.min(f_old)
+
         if self._flag_save:
             self._save_data(k=0, f=f_old, fbest=best_fig_hstry[0])
         print('Best particle: ' + str(np.argmin(f_old)+1))
@@ -263,6 +266,6 @@ class PSO:
 
         print('Best Position Found:' + str(self._best_global))
         print('Best Obj. Func. Found:' + str(np.min(f_old)))
-        # np.savetxt('best_pos_history.txt', best_pos_hstry)
-        # np.savetxt('best_fig_history.txt', best_fig_hstry)
-        return best_pos_hstry, best_fig_hstry
+
+        self.best_positions_history = best_pos_hstry
+        self.best_figures_history = best_fig_hstry
