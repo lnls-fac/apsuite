@@ -94,14 +94,6 @@ class SimulAnneal:
         self.ndim = len(dmax)
         self._max_delta = dmax
 
-    def get_change(self):
-        """."""
-        raise NotImplementedError
-
-    def set_change(self):
-        """."""
-        raise NotImplementedError
-
     def calc_obj_fun(self):
         """Return a number."""
         raise NotImplementedError
