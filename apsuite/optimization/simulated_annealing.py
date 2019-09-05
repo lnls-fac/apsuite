@@ -71,10 +71,21 @@ class SimulAnneal:
         self.best_positions_history = np.array([])
         self.best_figures_history = np.array([])
         self.initialization()
+        self._check_initialization()
 
     def initialization(self):
         """."""
         raise NotImplementedError
+
+    def _check_initialization(self):
+        """."""
+        if len(self._upper_limits) != len(self._lower_limits):
+            raise Exception(
+                'Upper and Lower Limits has different lengths')
+
+        if self._ndim != len(self._upper_limits):
+            raise Exception(
+                'Dimension incompatible with limits!')
 
     def _check_lim(self):
         # If particle position exceeds the boundary, set the boundary value
@@ -138,13 +149,16 @@ class SimulAnneal:
             self._thread.start()
 
     def stop(self):
+        """."""
         self._stop = True
 
     @property
     def isrunning(self):
+        """."""
         return self._thread.is_alive()
 
     def _optimize(self):
+        """."""
         bpos_hstry = np.zeros([self.niter, self.ndim])
         bfig_hstry = np.zeros([self.niter])
 
@@ -204,7 +218,7 @@ class SimulAnneal:
                     bf=bfig_hstry)
 
             if self._temperature != 0:
-                # Reduces the temperature based on number of iteractions
+                # Reduces the temperature based on number of iterations
                 # without accepting solutions
                 # Ref: An Optimal Cooling Schedule Using a Simulated Annealing
                 # Based Approach - A. Peprah, S. Appiah, S. Amponsah
