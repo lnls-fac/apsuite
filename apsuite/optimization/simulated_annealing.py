@@ -52,8 +52,8 @@ class SimulAnneal:
     def __init__(self, save=False):
         """."""
         # Boundary Limits
-        self._ndim = []
-        self._niter = []
+        self._ndim = 0
+        self._niter = 0
         self._lower_limits = np.array([])
         self._upper_limits = np.array([])
         # Maximum variation to be applied
@@ -140,10 +140,6 @@ class SimulAnneal:
         bfig_hstry = np.zeros([self.niter])
 
         f_old = self.calc_obj_fun()
-
-        if self.f_init < f_old:
-            f_old = self.f_init
-            self._position = np.zeros([1, self.ndim])
 
         bfig_hstry[0] = f_old
         bpos_hstry[0, :] = self._position
