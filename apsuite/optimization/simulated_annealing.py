@@ -1,5 +1,6 @@
 #!/usr/bin/env python-sirius
 
+from threading import Thread
 import numpy as np
 
 
@@ -65,7 +66,10 @@ class SimulAnneal:
         # Initial temperature of annealing
         self._temperature = 0
         self._flag_save = save
-        self.f_init = []
+        self._stop = False
+        self._thread = Thread(target=self._optimize, daemon=True)
+        self.best_positions_history = np.array([])
+        self.best_figures_history = np.array([])
         self.initialization()
 
     def initialization(self):
@@ -134,8 +138,21 @@ class SimulAnneal:
                 f_figh.write('Accep. Solution ' + str(nacc+1) + ' \n')
                 np.savetxt(f_figh, np.array([bf[nacc]]), fmt='%+.8e')
 
-    def start_optimization(self):
+    def start(self):
         """."""
+        if not self._thread.is_alive():
+            self._stop = False
+            self._thread = Thread(target=self._optimize, daemon=True)
+            self._thread.start()
+
+    def stop(self):
+        self._stop = True
+
+    @property
+    def isrunning(self):
+        return self._thread.is_alive()
+
+    def _optimize(self):
         bpos_hstry = np.zeros([self.niter, self.ndim])
         bfig_hstry = np.zeros([self.niter])
 
@@ -201,9 +218,12 @@ class SimulAnneal:
                 # Based Approach - A. Peprah, S. Appiah, S. Amponsah
                 phi = 1 / (1 + 1 / np.sqrt((k+1) * (nu + 1) + nu))
                 self._temperature = phi * self._temperature
+
+            if self._stop:
+                break
         if n_acc:
-            bpos_hstry = bpos_hstry[:n_acc, :]
-            bfig_hstry = bfig_hstry[:n_acc]
+            bpos_hstry = bpos_hstry[:n_acc+1, :]
+            bfig_hstry = bfig_hstry[:n_acc+1]
 
             print('Best solution found: ' + str(bpos_hstry[-1, :]))
             print(
@@ -214,4 +234,5 @@ class SimulAnneal:
             bfig_hstry = bfig_hstry[0]
             print('It was not possible to find a better solution...')
 
-        return bpos_hstry, bfig_hstry
+        self.best_positions_history = bpos_hstry
+        self.best_figures_history = bfig_hstry
