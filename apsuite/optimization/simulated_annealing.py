@@ -121,23 +121,23 @@ class SimulAnneal:
         """."""
         with open('pos_SA.txt', 'a') as f_pos:
             if k == 0:
-                f_pos.write('NEW RUN'.center(50, '='))
+                f_pos.write('NEW RUN'.center(50, '=') + '\n')
             f_pos.write('Step ' + str(k+1) + ' \n')
             np.savetxt(f_pos, self._position, fmt='%+.8e')
         with open('fig_SA.txt', 'a') as f_fig:
             if k == 0:
-                f_fig.write('NEW RUN'.center(50, '='))
+                f_fig.write('NEW RUN'.center(50, '=') + '\n')
             f_fig.write('Step ' + str(k+1) + ' \n')
             np.savetxt(f_fig, np.array([f]), fmt='%+.8e')
         if acc:
             with open('best_pos_history_SA.txt', 'a') as f_posh:
                 if nacc == 1:
-                    f_posh.write('NEW RUN'.center(50, '='))
+                    f_posh.write('NEW RUN'.center(50, '=') + '\n')
                 f_posh.write('Accep. Solution ' + str(nacc+1) + ' \n')
                 np.savetxt(f_posh, bp[nacc, :], fmt='%+.8e')
             with open('best_fig_history_SA.txt', 'a') as f_figh:
                 if nacc == 1:
-                    f_figh.write('NEW RUN'.center(50, '='))
+                    f_figh.write('NEW RUN'.center(50, '=') + '\n')
                 f_figh.write('Accep. Solution ' + str(nacc+1) + ' \n')
                 np.savetxt(f_figh, np.array([bf[nacc]]), fmt='%+.8e')
 

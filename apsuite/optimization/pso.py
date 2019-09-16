@@ -176,22 +176,22 @@ class PSO:
         """."""
         with open('pos_PSO.txt', 'a') as f_pos:
             if k == 0:
-                f_pos.write('NEW RUN'.center(50, '='))
+                f_pos.write('NEW RUN'.center(50, '=') + '\n')
             f_pos.write('Step ' + str(k+1) + ' \n')
             np.savetxt(f_pos, self._position, fmt='%+.8e')
         with open('fig_PSO.txt', 'a') as f_fig:
             if k == 0:
-                f_fig.write('NEW RUN'.center(50, '='))
+                f_fig.write('NEW RUN'.center(50, '=') + '\n')
             f_fig.write('Step ' + str(k+1) + ' \n')
             np.savetxt(f_fig, f, fmt='%+.8e')
         with open('best_pos_history_PSO.txt', 'a') as f_posh:
             if k == 0:
-                f_posh.write('NEW RUN'.center(50, '='))
+                f_posh.write('NEW RUN'.center(50, '=') + '\n')
             f_posh.write('Step ' + str(k+1) + ' \n')
             np.savetxt(f_posh, self._best_global, fmt='%+.8e')
         with open('best_fig_history_PSO.txt', 'a') as f_figh:
             if k == 0:
-                f_figh.write('NEW RUN'.center(50, '='))
+                f_figh.write('NEW RUN'.center(50, '=') + '\n')
             f_figh.write('Step ' + str(k+1) + ' \n')
             np.savetxt(f_figh, np.array([fbest]), fmt='%+.8e')
 
