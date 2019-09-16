@@ -122,9 +122,8 @@ class PSO:
             raise Exception(
                 'Dimension incompatible with limits!')
 
-
         if self._nswarm < int(10 + 2 * np.sqrt(self._ndim)):
-            raise Warning(
+            print(
                 'Swarm population lower than recommended!')
 
     def _create_swarm(self):
@@ -209,6 +208,9 @@ class PSO:
 
     def stop(self):
         self._stop = True
+
+    def join(self):
+        self._thread.join()
 
     @property
     def isrunning(self):
