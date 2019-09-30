@@ -1,6 +1,6 @@
 #!/usr/bin/env python-sirius
 
-from threading import Thread
+from threading import Thread, Event
 import numpy as np
 
 
@@ -68,6 +68,7 @@ class SimulAnneal:
         self._flag_save = save
         self._stop = False
         self._thread = Thread(target=self._optimize, daemon=True)
+        self._stopped = Event()
         self.best_positions_history = np.array([])
         self.best_figures_history = np.array([])
         self.initialization()
@@ -144,13 +145,16 @@ class SimulAnneal:
     def start(self):
         """."""
         if not self._thread.is_alive():
-            self._stop = False
             self._thread = Thread(target=self._optimize, daemon=True)
+            self._stopped.clear()
             self._thread.start()
 
     def stop(self):
         """."""
-        self._stop = True
+        self._stopped.set()
+
+    def join(self):
+        self._thread.join()
 
     @property
     def isrunning(self):
@@ -225,8 +229,11 @@ class SimulAnneal:
                 phi = 1 / (1 + 1 / np.sqrt((k+1) * (nu + 1) + nu))
                 self._temperature = phi * self._temperature
 
-            if self._stop:
+            if self._stopped.is_set():
+                print('Stopped!')
                 break
+
+        print('Finished!')
         if n_acc:
             bpos_hstry = bpos_hstry[:n_acc+1, :]
             bfig_hstry = bfig_hstry[:n_acc+1]
