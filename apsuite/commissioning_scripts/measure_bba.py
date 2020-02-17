@@ -10,7 +10,7 @@ import matplotlib.gridspec as mpl_gs
 import matplotlib.cm as cm
 
 import pyaccel as _pyacc
-from pymodels.middlelayer.devices import SOFB, Quadrupole, Corrector
+from pymodels.middlelayer.devices import SOFB, Quadrupole
 from apsuite.commissioning_scripts.calc_orbcorr_mat import OrbRespmat
 from .base import BaseClass
 
@@ -187,6 +187,7 @@ class BBAParams:
         self.deltaorby = 100  # [um]
         self.meas_nrsteps = 8
         self.quad_deltakl = 0.02  # [1/m]
+        self.quad_nrcycles = 1
         self.wait_sofb = 0.3  # [s]
         self.wait_correctors = 2  # [s]
         self.wait_quadrupole = 2  # [s]
@@ -204,6 +205,7 @@ class BBAParams:
         st += ftmp('deltaorby [um]', self.deltaorby, '')
         st += dtmp('meas_nrsteps', self.meas_nrsteps, '')
         st += ftmp('quad_deltakl [1/m]', self.quad_deltakl, '')
+        st += ftmp('quad_nrcycles', self.quad_nrcycles, '')
         st += ftmp('wait_sofb [s]', self.wait_sofb, '(time to process calcs)')
         st += ftmp('wait_correctors [s]', self.wait_correctors, '')
         st += ftmp('wait_quadrupole [s]', self.wait_quadrupole, '')
@@ -225,10 +227,6 @@ class DoBBA(BaseClass):
         self.data['quadnames'] = list()
         self._bpms2dobba = list()
         self.devices['sofb'] = SOFB('SI')
-        for chname in self.devices['sofb'].data.CH_NAMES:
-            self.devices[chname] = Corrector(chname)
-        for cvname in self.devices['sofb'].data.CV_NAMES:
-            self.devices[cvname] = Corrector(cvname)
         self.data['bpmnames'] = list(BBAParams.BPMNAMES)
         self.data['quadnames'] = list(BBAParams.QUADNAMES)
         self.data['scancenterx'] = np.zeros(len(BBAParams.BPMNAMES))
@@ -312,23 +310,35 @@ class DoBBA(BaseClass):
         sofb = self.devices['sofb']
 
         print('Doing BBA for BPM {:03d}: {:s}'.format(idx, bpmname))
-        print('    turning quadrupole ' + quadname + ' On')
+        print('    turning quadrupole ' + quadname + ' On', end='')
         quad.turnon(self.params.timeout_quad_turnon)
         if not quad.pwr_state:
-            print('    error: quadrupole ' + quadname + ' is Off.')
+            print('\n    error: quadrupole ' + quadname + ' is Off.')
             self._stopevt.set()
             print('    exiting...')
             return
 
+        korig = quad.strength
+        deltakl = self.params.quad_deltakl
+
+        print(' and cycling it: ', end='')
+        for _ in range(self.params.quad_nrcycles):
+            print('.', end='')
+            quad.strength = korig + deltakl/2
+            _time.sleep(self.params.wait_quadrupole)
+            quad.strength = korig - deltakl/2
+            _time.sleep(self.params.wait_quadrupole)
+            quad.strength = korig
+            _time.sleep(self.params.wait_quadrupole)
+        print(' Ok!')
+
         nrsteps = self.params.meas_nrsteps
         dorbsx = self._calc_dorb_scan(self.params.deltaorbx, nrsteps//2)
         dorbsy = self._calc_dorb_scan(self.params.deltaorby, nrsteps//2)
-        deltakl = self.params.quad_deltakl
 
         refx0, refy0 = sofb.refx, sofb.refy
         enblx0, enbly0 = sofb.bpmxenbl, sofb.bpmyenbl
         ch0, cv0 = sofb.kickch, sofb.kickcv
-        korig = quad.strength
 
         enblx, enbly = 0*enblx0, 0*enbly0
         enblx[idx], enbly[idx] = 1, 1
@@ -379,11 +389,21 @@ class DoBBA(BaseClass):
         print('    restoring initial conditions.')
         sofb.refx, sofb.refy = refx0, refy0
         sofb.bpmxenbl, sofb.bpmyenbl = enblx0, enbly0
-        for ch, v0 in zip(sofb.data.CH_NAMES, ch0):
-            self.devices[ch].strength = v0
-        for cv, v0 in zip(sofb.data.CV_NAMES, cv0):
-            self.devices[cv].strength = v0
-        _time.sleep(self.params.wait_correctors)
+
+        # restore correctors gently to do not kill the beam.
+        factch, factcv = sofb.deltafactorch, sofb.deltafactorcv
+        chn, cvn = sofb.kickch, sofb.kickcv
+        dch, dcv = ch0 - chn, cv0 - cvn
+        sofb.deltakickch, sofb.deltakickcv = dch, dcv
+        nrsteps = np.ceil(max(np.abs(dch).max(), np.abs(dcv).max()) / 1.0)
+        for i in range(nrsteps):
+            sofb.deltafactorch = (i+1)/nrsteps * 100
+            sofb.deltafactorcv = (i+1)/nrsteps * 100
+            _time.sleep(self.params.wait_sofb)
+            sofb.applycorr()
+            _time.sleep(self.params.wait_correctors)
+        sofb.deltakickch, sofb.deltakickcv = dch*0, dcv*0
+        sofb.deltafactorch, sofb.deltafactorcv = factch, factcv
 
         print('    turning quadrupole ' + quadname + ' Off')
         quad.turnoff(self.params.timeout_quad_turnon)
@@ -415,13 +435,15 @@ class DoBBA(BaseClass):
                 _time.sleep(self.params.wait_correctors)
         return -1, fmet
 
-    def process_data(self, nbpms_linfit=None, thres=None, mode='symm'):
+    def process_data(self, nbpms_linfit=None, thres=None, mode='symm',
+                     discardpoints=None):
         for bpm in self.data['measure']:
             self.analysis[bpm] = self.process_data_single_bpm(
-                bpm, nbpms_linfit=nbpms_linfit, thres=thres, mode=mode)
+                bpm, nbpms_linfit=nbpms_linfit, thres=thres, mode=mode,
+                discardpoints=discardpoints)
 
     def process_data_single_bpm(self, bpm, nbpms_linfit=None, thres=None,
-                                mode='symm'):
+                                mode='symm', discardpoints=None):
         anl = dict()
         idx = self.data['bpmnames'].index(bpm)
         nbpms = len(self.data['bpmnames'])
@@ -429,16 +451,22 @@ class DoBBA(BaseClass):
         orbpos = self.data['measure'][bpm]['orbpos']
         orbneg = self.data['measure'][bpm]['orbneg']
 
-        xpos = orbini[:, idx]
-        ypos = orbini[:, idx+nbpms]
+        usepts = set(range(orbini.shape[0]))
+        if discardpoints is not None:
+            usepts = set(usepts) - set(discardpoints)
+        usepts = sorted(usepts)
+
+        xpos = orbini[usepts, idx]
+        ypos = orbini[usepts, idx+nbpms]
         if mode.lower().startswith('symm'):
             dorb = orbpos - orbneg
         elif mode.lower().startswith('pos'):
             dorb = orbpos - orbini
         else:
             dorb = orbini - orbneg
-        dorbx = dorb[:, :nbpms]
-        dorby = dorb[:, nbpms:]
+
+        dorbx = dorb[usepts, :nbpms]
+        dorby = dorb[usepts, nbpms:]
         if '-QS' in self.data['quadnames'][idx]:
             dorbx, dorby = dorby, dorbx
         anl['xpos'] = xpos
@@ -488,8 +516,8 @@ class DoBBA(BaseClass):
         anl['linear_fitting']['stdx0'] = stdx0
         anl['linear_fitting']['stdy0'] = stdy0
 
-        rmsx = np.sum(dorbx*dorbx, axis=1) / dorbx.shape[0]
-        rmsy = np.sum(dorby*dorby, axis=1) / dorby.shape[0]
+        rmsx = np.sum(dorbx*dorbx, axis=1) / dorbx.shape[1]
+        rmsy = np.sum(dorby*dorby, axis=1) / dorby.shape[1]
         if xpos.size > 3:
             px, covx = np.polyfit(xpos, rmsx, deg=2, cov=True)
             py, covy = np.polyfit(ypos, rmsy, deg=2, cov=True)
