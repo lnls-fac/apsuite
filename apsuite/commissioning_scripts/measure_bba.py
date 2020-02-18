@@ -271,8 +271,15 @@ class DoBBA(BaseClass):
         return self._thread.is_alive()
 
     @property
+    def measuredbpms(self):
+        return sorted(self.data['measure'])
+
+    @property
     def bpms2dobba(self):
-        return self._bpms2dobba or _dcopy(self.data['bpmnames'])
+        if self._bpms2dobba:
+            return self._bpms2dobba
+        return sorted(
+            set(self.data['bpmnames']) - self.data['measure'].keys())
 
     @bpms2dobba.setter
     def bpms2dobba(self, bpmlist):
@@ -301,6 +308,10 @@ class DoBBA(BaseClass):
             self._dobba_single_bpm(bpm)
         print('finished!')
 
+    @staticmethod
+    def get_cycling_curve():
+        return [1/2, -1/2, 0]
+
     def _dobba_single_bpm(self, bpmname):
         idx = self.data['bpmnames'].index(bpmname)
         quadname = self.data['quadnames'][idx]
@@ -320,16 +331,15 @@ class DoBBA(BaseClass):
 
         korig = quad.strength
         deltakl = self.params.quad_deltakl
+        cycling_curve = DoBBA.get_cycling_curve()
 
         print(' and cycling it: ', end='')
         for _ in range(self.params.quad_nrcycles):
             print('.', end='')
-            quad.strength = korig + deltakl/2
-            _time.sleep(self.params.wait_quadrupole)
-            quad.strength = korig - deltakl/2
-            _time.sleep(self.params.wait_quadrupole)
-            quad.strength = korig
-            _time.sleep(self.params.wait_quadrupole)
+            for fac in cycling_curve:
+                quad.strength = korig + deltakl*fac
+                _time.sleep(self.params.wait_quadrupole)
+
         print(' Ok!')
 
         nrsteps = self.params.meas_nrsteps
@@ -364,16 +374,13 @@ class DoBBA(BaseClass):
 
             orbini.append(self.get_orbit())
 
-            quad.strength = korig + deltakl/2
-            _time.sleep(self.params.wait_quadrupole)
-            orbpos.append(self.get_orbit())
-
-            quad.strength = korig - deltakl/2
-            _time.sleep(self.params.wait_quadrupole)
-            orbneg.append(self.get_orbit())
-
-            quad.strength = korig
-            _time.sleep(self.params.wait_quadrupole)
+            for j, fac in range(cycling_curve):
+                quad.strength = korig + deltakl*fac
+                _time.sleep(self.params.wait_quadrupole)
+                if not j:
+                    orbpos.append(self.get_orbit())
+                elif j == 1:
+                    orbneg.append(self.get_orbit())
 
             dorb = orbpos[-1] - orbneg[-1]
             dorbx = dorb[:len(self.data['bpmnames'])]
@@ -1115,7 +1122,7 @@ class DoBBA(BaseClass):
     def make_figure_compare_bbas_diff(bbalist, method='linear_fitting',
                                       labels=[], bpmsok=None, bpmsnok=None,
                                       fname='', title=''):
-        f  = plt.figure(figsize=(9.2, 9))
+        f = plt.figure(figsize=(9.2, 9))
         gs = mpl_gs.GridSpec(3, 2)
         gs.update(left=0.12, right=0.98, bottom=0.13, top=0.9, hspace=0, wspace=0.35)
 
