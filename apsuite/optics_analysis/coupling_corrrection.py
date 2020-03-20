@@ -107,7 +107,7 @@ class CouplingCorr():
             res = self.get_coupling_residue(model)
         else:
             res = res0
-        bestfm = np.sum(np.abs(res)**2)/res.size
+        bestfm = np.sqrt(np.sum(np.abs(res)**2)/res.size)
         ksl0 = self.get_ksl(model)
         ksl = ksl0
 
@@ -116,7 +116,7 @@ class CouplingCorr():
             ksl += np.reshape(dksl, (-1, 1))
             model = self.set_ksl(model=model, ksl=ksl)
             res = self.get_coupling_residue(model)
-            fm = np.sum(np.abs(res)**2)/res.size
+            fm = np.sqrt(np.sum(np.abs(res)**2)/res.size)
             diff_fm = np.abs(bestfm - fm)
             print(i, bestfm)
             if fm < bestfm:
