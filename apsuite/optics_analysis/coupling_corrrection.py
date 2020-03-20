@@ -20,17 +20,17 @@ class CouplingCorr():
         self.bpm_idx = self.respm.fam_data['BPM']['index']
         self.ch_idx = self.respm.fam_data['CH']['index']
         self.cv_idx = self.respm.fam_data['CV']['index']
-        self.nbpm = len(self.bpm_idx)
-        self.nch = len(self.ch_idx)
-        self.ncv = len(self.cv_idx)
-        self.nskew = len(self.skew_idx)
+        self._nbpm = len(self.bpm_idx)
+        self._nch = len(self.ch_idx)
+        self._ncv = len(self.cv_idx)
+        self._nskew = len(self.skew_idx)
 
     def calc_coupling_matrix(self, model=None):
         """."""
         if model is None:
             model = self.model
 
-        nvec = self.nbpm*(self.nch+self.ncv + 1)
+        nvec = self._nbpm * (self._nch + self._ncv + 1)
         self.coup_matrix = np.zeros((nvec, len(self.skew_idx)))
         delta = 1e-6
 
@@ -48,8 +48,10 @@ class CouplingCorr():
         orbmat = self.respm.get_respm()
         twi, *_ = pyaccel.optics.calc_twiss(model)
         dispy = twi.etay[self.bpm_idx]
-        mxy = orbmat[:self.nbpm, self.nch:-1]
-        myx = orbmat[self.nbpm:, :self.nch]
+        w_dispy = (self._nch + self._ncv)*10
+        dispy *= w_dispy
+        mxy = orbmat[:self._nbpm, self._nch:-1]
+        myx = orbmat[self._nbpm:, :self._nch]
         res = mxy.flatten()
         res = np.hstack((res, myx.flatten()))
         res = np.hstack((res, dispy.flatten()))
@@ -63,7 +65,10 @@ class CouplingCorr():
             skewidx = self.skew_idx
         ksl = []
         for mag in skewidx:
-            ksl.append(model[mag[0]].KsL)
+            ksl_seg = []
+            for seg in mag:
+                ksl_seg.append(model[seg].KsL)
+            ksl.append(ksl_seg)
         return np.array(ksl)
 
     def set_ksl(self, model=None, skewidx=None, ksl=None):
@@ -75,8 +80,9 @@ class CouplingCorr():
         if ksl is None:
             raise Exception('Missing KsL values')
         newmod = _dcopy(model)
-        for idx, mag in enumerate(skewidx):
-            newmod[mag[0]].KsL = ksl[idx]
+        for idx_mag, mag in enumerate(skewidx):
+            for idx_seg, seg in enumerate(mag):
+                newmod[seg].KsL = ksl[idx_mag][idx_seg]
         return newmod
 
     def correct_coupling(self,
@@ -96,7 +102,7 @@ class CouplingCorr():
         if nsv is not None:
             inv_s[nsv:] = 0
         inv_s = np.diag(inv_s)
-        inv_matrix = np.dot(np.dot(v.T, inv_s), u.T)
+        inv_matrix = -np.dot(np.dot(v.T, inv_s), u.T)
         if res0 is None:
             res = self.get_coupling_residue(model)
         else:
@@ -106,8 +112,8 @@ class CouplingCorr():
         ksl = ksl0
 
         for i in range(niter):
-            dksl = np.dot(inv_matrix, -res)
-            ksl += dksl
+            dksl = np.dot(inv_matrix, res)
+            ksl += np.reshape(dksl, (-1, 1))
             model = self.set_ksl(model=model, ksl=ksl)
             res = self.get_coupling_residue(model)
             fm = np.sum(np.abs(res)**2)/res.size
@@ -143,7 +149,7 @@ class CouplingCorr():
             traj, *_ = pyaccel.tracking.ring_pass(
                 model, particles=p0, nr_turns=nr_turns, turn_by_turn='closed')
             dtraj = traj - cod
-            emitx, emity = Coupling.calc_emittances(dtraj, twiss, 0)
+            emitx, emity = CouplingCorr.calc_emittances(dtraj, twiss, 0)
             coupling.append(emity/emitx)
         return coupling
 
