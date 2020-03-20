@@ -9,20 +9,22 @@ import pyaccel
 class TuneCorr():
     """."""
 
-    SIQUADS = ['QFA', 'QFB', 'QFP', 'QDA', 'QDB1', 'QDB2', 'QDP1', 'QDP2']
-    BOQUADS = ['QF', 'QD']
+    SIKNOBS = ['QFA', 'QFB', 'QFP', 'QDA', 'QDB1', 'QDB2', 'QDP1', 'QDP2']
+    BOKNOBS = ['QF', 'QD']
 
-    def __init__(self, model, acc):
+    def __init__(self, model, acc, knobs_names=None):
         """."""
         self.model = model
         self.acc = acc
         if acc == 'BO':
-            self.quads = self.BOQUADS
+            if knobs_names is None:
+                self.knobs = self.BOKNOBS
             self.fam = bo.get_family_data(model)
         elif acc == 'SI':
-            self.quads = self.SIQUADS
+            if knobs_names is None:
+                self.knobs = self.SIKNOBS
             self.fam = si.get_family_data(model)
-        self.matrix = []
+        self.tune_matrix = []
         self.tunex, self.tuney = self.get_tunes()
 
     def get_tunes(self, model=None):
@@ -35,56 +37,56 @@ class TuneCorr():
         tuney = twinom.muy[-1]/2/np.pi
         return tunex, tuney
 
-    def calctunematrix(self, model=None, acc=None):
+    def calc_tune_matrix(self, model=None, acc=None):
         """."""
         if model is None:
             model = self.model
         if acc is None:
             acc = self.acc
 
-        self.matrix = np.zeros((2, len(self.quads)))
+        self.tune_matrix = np.zeros((2, len(self.knobs)))
 
         delta = 1e-2
-        for idx, q in enumerate(self.quads):
+        for idx, q in enumerate(self.knobs):
             modcopy = _dcopy(model)
             for nmag in self.fam[q]['index']:
                 dlt = delta/len(nmag)
                 for seg in nmag:
                     modcopy[seg].KL += dlt
             tunex, tuney = self.get_tunes(model=modcopy)
-            self.matrix[:, idx] = [
+            self.tune_matrix[:, idx] = [
                 (tunex - self.tunex)/dlt, (tuney - self.tuney)/dlt]
-        return self.matrix
+        return self.tune_matrix
 
-    def get_kl(self, model=None, quads=None):
+    def get_kl(self, model=None, knobs=None):
         """."""
         if model is None:
             model = self.model
-        if quads is None:
-            quads = self.quads
+        if knobs is None:
+            knobs = self.knobs
         kl = []
-        for q in quads:
-            kl.append(model[self.fam[q]['index'][0][0]].KL)
+        for knb in knobs:
+            kl.append(model[self.fam[knb]['index'][0][0]].KL)
         return kl
 
-    def set_kl(self, model=None, quads=None, kl=None):
+    def set_kl(self, model=None, knobs=None, kl=None):
         """."""
         if model is None:
             model = self.model
-        if quads is None:
-            quads = self.quads
+        if knobs is None:
+            knobs = self.knobs
         if kl is None:
             raise Exception('Missing KL values')
         newmod = _dcopy(model)
-        for idx, q in enumerate(quads):
-            newmod[self.fam[q]['index'][0][0]].KL = kl[idx]
+        for idx, knb in enumerate(knobs):
+            newmod[self.fam[knb]['index'][0][0]].KL = kl[idx]
         return newmod
 
-    def change_tunes(self, model, tunex, tuney, matrix=None):
+    def change_tunes(self, model, tunex, tuney, tune_matrix=None):
         """."""
-        if matrix is None:
-            matrix = self.calctunematrix(model)
-        u, s, v = np.linalg.svd(matrix, full_matrices=False)
+        if tune_matrix is None:
+            tune_matrix = self.calc_tune_matrix(model)
+        u, s, v = np.linalg.svd(tune_matrix, full_matrices=False)
         inv_s = 1/s
         inv_s[np.isnan(inv_s)] = 0
         inv_s[np.isinf(inv_s)] = 0
