@@ -7,7 +7,7 @@ from pymodels import bo, si
 import pyaccel
 
 
-class Tune():
+class TuneCorr():
     """."""
 
     SIQUADS = ['QFA', 'QFB', 'QFP', 'QDA', 'QDB1', 'QDB2', 'QDP1', 'QDP2']
