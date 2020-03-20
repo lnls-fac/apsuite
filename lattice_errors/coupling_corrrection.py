@@ -6,7 +6,7 @@ from apsuite.commissioning_scripts.calc_orbcorr_mat import OrbRespmat
 import pyaccel
 
 
-class Coupling():
+class CouplingCorr():
     """."""
 
     def __init__(self, model, acc, dim='4d'):
