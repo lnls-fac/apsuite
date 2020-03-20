@@ -47,9 +47,9 @@ class TuneCorr():
         self.tune_matrix = np.zeros((2, len(self.knobs)))
 
         delta = 1e-2
-        for idx, q in enumerate(self.knobs):
+        for idx, knb in enumerate(self.knobs):
             modcopy = _dcopy(model)
-            for nmag in self.fam[q]['index']:
+            for nmag in self.fam[knb]['index']:
                 dlt = delta/len(nmag)
                 for seg in nmag:
                     modcopy[seg].KL += dlt
@@ -66,8 +66,14 @@ class TuneCorr():
             knobs = self.knobs
         kl = []
         for knb in knobs:
-            kl.append(model[self.fam[knb]['index'][0][0]].KL)
-        return kl
+            kl_mag = []
+            for mag in self.fam[knb]['index']:
+                kl_seg = []
+                for seg in mag:
+                    kl_seg.append(model[seg].KL)
+                kl_mag.append(kl_seg)
+            kl.append(np.mean(kl_mag))
+        return np.array(kl)
 
     def set_kl(self, model=None, knobs=None, kl=None):
         """."""
@@ -77,33 +83,42 @@ class TuneCorr():
             knobs = self.knobs
         if kl is None:
             raise Exception('Missing KL values')
-        newmod = _dcopy(model)
-        for idx, knb in enumerate(knobs):
-            newmod[self.fam[knb]['index'][0][0]].KL = kl[idx]
-        return newmod
+        mod = model[:]
+        for idx_knb, knb in enumerate(knobs):
+            for mag in self.fam[knb]['index']:
+                for seg in mag:
+                    mod[seg].KL = kl[idx_knb]/len(mag)
+        return mod
 
-    def change_tunes(self, model, tunex, tuney, tune_matrix=None):
+    def correct_tunes(self,
+                      model,
+                      tunex, tuney,
+                      tune_matrix=None,
+                      tol=1e-6,
+                      nr_max=10):
         """."""
         if tune_matrix is None:
             tune_matrix = self.calc_tune_matrix(model)
+        mod = model[:]
         u, s, v = np.linalg.svd(tune_matrix, full_matrices=False)
         inv_s = 1/s
         inv_s[np.isnan(inv_s)] = 0
         inv_s[np.isinf(inv_s)] = 0
         inv_s = np.diag(inv_s)
         inv_matrix = np.dot(np.dot(v.T, inv_s), u.T)
-        tunex0, tuney0 = self.get_tunes(model)
+        tunex0, tuney0 = self.get_tunes(mod)
         print(tunex0, tuney0)
         tunex_new, tuney_new = tunex0, tuney0
-        kl = self.get_kl(model)
-        tol = 1e-6
+        kl = self.get_kl(mod)
 
-        while abs(tunex_new - tunex) > tol or abs(tuney_new - tuney) > tol:
+        for _ in range(nr_max):
             dtune = [tunex-tunex_new, tuney-tuney_new]
             dkl = np.dot(inv_matrix, dtune)
             kl += dkl
-            model = self.set_kl(model=model, kl=kl)
-            tunex_new, tuney_new = self.get_tunes(model)
+            mod = self.set_kl(model=mod, kl=kl)
+            tunex_new, tuney_new = self.get_tunes(mod)
             print(tunex_new, tuney_new)
+            if abs(tunex_new - tunex) < tol and abs(tuney_new - tuney) < tol:
+                break
         print('done!')
-        return model
+        return mod
