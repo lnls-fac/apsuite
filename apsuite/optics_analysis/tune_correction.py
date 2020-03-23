@@ -56,7 +56,7 @@ class TuneCorr():
 
         self.tune_matrix = np.zeros((2, len(self.knobs)))
 
-        delta = 1e-2
+        delta = 1e-3
         for idx, knb in enumerate(self.knobs):
             modcopy = _dcopy(model)
             for nmag in self.fam[knb]['index']:
@@ -68,25 +68,36 @@ class TuneCorr():
                 (tunex - self.tunex)/dlt, (tuney - self.tuney)/dlt]
         return self.tune_matrix
 
+    def calc_group_matrix(self, tune_matrix=None):
+        """."""
+        if tune_matrix is None:
+            tune_matrix = self.calc_tune_matrix(self.model)
+
+        tune_group_matrix = np.zeros(tune_matrix.shape)
+        nfocus = len(self.focusing_knobs)
+
+        for fnum, knbf in enumerate(self.focusing_knobs):
+            idxf = self.knobs.index(knbf)
+            tune_group_matrix[:, fnum] += tune_matrix[:, idxf]
+        for dfnum, knbdf in enumerate(self.defocusing_knobs):
+            idxdf = self.knobs.index(knbdf)
+            tune_group_matrix[:, dfnum + nfocus] += tune_matrix[:, idxdf]
+        return tune_group_matrix
+
     def calc_group_2knobs_matrix(self, tune_matrix=None):
         """."""
         if tune_matrix is None:
             tune_matrix = self.calc_tune_matrix(self.model)
 
-        tune_group_matrix = np.zeros((2, 2))
+        tune_group_2knobs_matrix = np.zeros((2, 2))
 
         for knbf in self.focusing_knobs:
             idxf = self.knobs.index(knbf)
-            tune_group_matrix[0, 0] += tune_matrix[0, idxf]
-            tune_group_matrix[1, 0] += tune_matrix[1, idxf]
-
+            tune_group_2knobs_matrix[:, 0] += tune_matrix[:, idxf]
         for knbdf in self.defocusing_knobs:
             idxdf = self.knobs.index(knbdf)
-            tune_group_matrix[0, 1] += tune_matrix[0, idxdf]
-            tune_group_matrix[1, 1] += tune_matrix[1, idxdf]
-        return tune_group_matrix
-
-
+            tune_group_2knobs_matrix[:, 1] += tune_matrix[:, idxdf]
+        return tune_group_2knobs_matrix
 
     def get_kl(self, model=None, knobs=None):
         """."""
@@ -105,6 +116,19 @@ class TuneCorr():
             kl.append(np.mean(kl_mag))
         return np.array(kl)
 
+    def get_kl_group(self, kl):
+        """."""
+        kl_group = np.zeros(kl.shape)
+        nfocus = len(self.focusing_knobs)
+
+        for fnum, knbf in enumerate(self.focusing_knobs):
+            idxf = self.knobs.index(knbf)
+            kl_group[fnum] = kl[idxf]
+        for dfnum, knbdf in enumerate(self.defocusing_knobs):
+            idxdf = self.knobs.index(knbdf)
+            kl_group[dfnum + nfocus] = kl[idxdf]
+        return kl_group
+
     def set_kl(self, model=None, knobs=None, kl=None):
         """."""
         if model is None:
@@ -120,16 +144,42 @@ class TuneCorr():
                     mod[seg].KL = kl[idx_knb]/len(mag)
         return mod
 
+    def set_kl_group(self, model=None, kl=None):
+        """."""
+        if model is None:
+            model = self.model
+        if kl is None:
+            raise Exception('Missing KL values')
+        mod = model[:]
+        nfocus = len(self.focusing_knobs)
+        for idx_knbf, knbf in enumerate(self.focusing_knobs):
+            for mag in self.fam[knbf]['index']:
+                for seg in mag:
+                    mod[seg].KL = kl[idx_knbf]/len(mag)
+        for idx_knbdf, knbdf in enumerate(self.defocusing_knobs):
+            for mag in self.fam[knbdf]['index']:
+                for seg in mag:
+                    mod[seg].KL = kl[idx_knbdf + nfocus]/len(mag)
+        return mod
+
     def correct_tunes(self,
                       model,
                       tunex, tuney,
                       tune_matrix=None,
                       tol=1e-6,
                       nr_max=10,
-                      nsv=None):
+                      nsv=None,
+                      method='proportional'):
         """."""
         if tune_matrix is None:
             tune_matrix = self.calc_tune_matrix(model)
+
+        if method == 'proportional':
+            nominal_kl = self.get_kl_group(model)
+            tune_matrix *= nominal_kl
+        elif method == 'additional':
+            nominal_kl = self.get_kl(model)
+
         mod = model[:]
         u, s, v = np.linalg.svd(tune_matrix, full_matrices=False)
         inv_s = 1/s
@@ -142,13 +192,17 @@ class TuneCorr():
         tunex0, tuney0 = self.get_tunes(mod)
         print(tunex0, tuney0)
         tunex_new, tuney_new = tunex0, tuney0
-        kl = self.get_kl(mod)
+        dkl = np.zeros(nominal_kl.shape)
 
         for _ in range(nr_max):
             dtune = [tunex-tunex_new, tuney-tuney_new]
-            dkl = np.dot(inv_matrix, dtune)
-            kl += dkl
-            mod = self.set_kl(model=mod, kl=kl)
+            dkl += np.dot(inv_matrix, dtune)
+            if method == 'proportional':
+                newkl = nominal_kl * (1 + dkl)
+                mod = self.set_kl_group(model=mod, kl=newkl)
+            elif method == 'additional':
+                newkl = nominal_kl + dkl
+                mod = self.set_kl(model=mod, kl=newkl)
             tunex_new, tuney_new = self.get_tunes(mod)
             print(tunex_new, tuney_new)
             if abs(tunex_new - tunex) < tol and abs(tuney_new - tuney) < tol:
