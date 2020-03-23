@@ -25,6 +25,9 @@ class TuneCorr():
                 self.knobs = self.SIKNOBS
             self.fam = si.get_family_data(model)
         self.tune_matrix = []
+        self.focusing_knobs = []
+        self.defocusing_knobs = []
+        self._group_knobs()
         self.tunex, self.tuney = self.get_tunes()
 
     def get_tunes(self, model=None):
@@ -36,6 +39,13 @@ class TuneCorr():
         tunex = twinom.mux[-1]/2/np.pi
         tuney = twinom.muy[-1]/2/np.pi
         return tunex, tuney
+
+    def _group_knobs(self):
+        for knb in self.knobs:
+            if 'QF' in knb:
+                self.focusing_knobs.append(knb)
+            else:
+                self.defocusing_knobs.append(knb)
 
     def calc_tune_matrix(self, model=None, acc=None):
         """."""
@@ -57,6 +67,26 @@ class TuneCorr():
             self.tune_matrix[:, idx] = [
                 (tunex - self.tunex)/dlt, (tuney - self.tuney)/dlt]
         return self.tune_matrix
+
+    def calc_group_2knobs_matrix(self, tune_matrix=None):
+        """."""
+        if tune_matrix is None:
+            tune_matrix = self.calc_tune_matrix(self.model)
+
+        tune_group_matrix = np.zeros((2, 2))
+
+        for knbf in self.focusing_knobs:
+            idxf = self.knobs.index(knbf)
+            tune_group_matrix[0, 0] += tune_matrix[0, idxf]
+            tune_group_matrix[1, 0] += tune_matrix[1, idxf]
+
+        for knbdf in self.defocusing_knobs:
+            idxdf = self.knobs.index(knbdf)
+            tune_group_matrix[0, 1] += tune_matrix[0, idxdf]
+            tune_group_matrix[1, 1] += tune_matrix[1, idxdf]
+        return tune_group_matrix
+
+
 
     def get_kl(self, model=None, knobs=None):
         """."""
