@@ -167,6 +167,9 @@ class TuneCorr():
         if group:
             dkl = np.zeros(2)
             tunemat = self.calc_tune_2knobs_matrix(tunemat)
+            if method == 'additional':
+                tunemat[:, 0] /= len(self.focusing_knobs)
+                tunemat[:, 1] /= len(self.defocusing_knobs)
         else:
             dkl = np.zeros(nominal_kl.shape)
 
