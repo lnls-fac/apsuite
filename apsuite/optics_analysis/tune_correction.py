@@ -95,7 +95,8 @@ class TuneCorr():
                       tunex, tuney,
                       tune_matrix=None,
                       tol=1e-6,
-                      nr_max=10):
+                      nr_max=10,
+                      nsv=None):
         """."""
         if tune_matrix is None:
             tune_matrix = self.calc_tune_matrix(model)
@@ -104,6 +105,8 @@ class TuneCorr():
         inv_s = 1/s
         inv_s[np.isnan(inv_s)] = 0
         inv_s[np.isinf(inv_s)] = 0
+        if nsv is not None:
+            inv_s[nsv:] = 0
         inv_s = np.diag(inv_s)
         inv_matrix = np.dot(np.dot(v.T, inv_s), u.T)
         tunex0, tuney0 = self.get_tunes(mod)
