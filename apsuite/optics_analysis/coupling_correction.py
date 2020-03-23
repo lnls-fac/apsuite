@@ -9,21 +9,38 @@ import pyaccel
 class CouplingCorr():
     """."""
 
-    def __init__(self, model, acc, dim='4d'):
+    def __init__(self, model, acc, dim='4d', skew_list=None):
         """."""
         self.model = model
         self.acc = acc
         self.dim = dim
         self.coup_matrix = []
         self.respm = OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
-        self.skew_idx = self.respm.fam_data['QS']['index']
         self.bpm_idx = self.respm.fam_data['BPM']['index']
-        self.ch_idx = self.respm.fam_data['CH']['index']
-        self.cv_idx = self.respm.fam_data['CV']['index']
-        self._nbpm = len(self.bpm_idx)
-        self._nch = len(self.ch_idx)
-        self._ncv = len(self.cv_idx)
-        self._nskew = len(self.skew_idx)
+        if skew_list is None:
+            self.skew_idx = self.respm.fam_data['QS']['index']
+        else:
+            self.skew_idx = skew_list
+
+    @property
+    def _nbpm(self):
+        """."""
+        return len(self.bpm_idx)
+
+    @property
+    def _nch(self):
+        """."""
+        return len(self.respm.fam_data['CH']['index'])
+
+    @property
+    def _ncv(self):
+        """."""
+        return len(self.respm.fam_data['CH']['index'])
+
+    @property
+    def _nskew(self):
+        """."""
+        return len(self.skew_idx)
 
     def calc_coupling_matrix(self, model=None):
         """."""
@@ -85,6 +102,11 @@ class CouplingCorr():
                 newmod[seg].KsL = ksl[idx_mag][idx_seg]
         return newmod
 
+    @staticmethod
+    def get_fm(res):
+        """."""
+        return np.sqrt(np.sum(np.abs(res)**2)/res.size)
+
     def correct_coupling(self,
                          model,
                          matrix=None,
@@ -107,7 +129,7 @@ class CouplingCorr():
             res = self.get_coupling_residue(model)
         else:
             res = res0
-        bestfm = np.sqrt(np.sum(np.abs(res)**2)/res.size)
+        bestfm = CouplingCorr.get_fm(res)
         ksl0 = self.get_ksl(model)
         ksl = ksl0
 
@@ -116,7 +138,7 @@ class CouplingCorr():
             ksl += np.reshape(dksl, (-1, 1))
             model = self.set_ksl(model=model, ksl=ksl)
             res = self.get_coupling_residue(model)
-            fm = np.sqrt(np.sum(np.abs(res)**2)/res.size)
+            fm = CouplingCorr.get_fm(res)
             diff_fm = np.abs(bestfm - fm)
             print(i, bestfm)
             if fm < bestfm:
