@@ -113,22 +113,34 @@ class TuneCorr():
         if group and deltakl.size > 2:
             raise Exception(
                 'Grouping option requires only 2 delta KL values')
+        if method not in ['proportional', 'additional']:
+            raise Exception('Invalid correction method!')
         mod = model[:]
 
+        if group:
+            kl_f = self.get_kl(mod, knobs=self.focusing_knobs)
+            kl_df = self.get_kl(mod, knobs=self.defocusing_knobs)
+            kl_fsum = np.sum(kl_f)
+            kl_dfsum = np.sum(kl_df)
+        factor = 1
         for idx_knb, knb in enumerate(self.all_knobs):
             if group:
                 if knb in self.focusing_knobs:
+                    idx = self.focusing_knobs.index(knb)
                     delta = deltakl[0]
+                    factor = kl_f[idx]/kl_fsum
                 elif knb in self.defocusing_knobs:
+                    idx = self.defocusing_knobs.index(knb)
                     delta = deltakl[1]
+                    factor = kl_df[idx]/kl_dfsum
             else:
                 delta = deltakl[idx_knb]
             for mag in self.fam[knb]['index']:
                 for seg in mag:
                     if method == 'proportional':
                         mod[seg].KL *= (1 + delta/len(mag))
-                    elif method == 'aditional':
-                        mod[seg].KL += delta/len(mag)
+                    elif method == 'additional':
+                        mod[seg].KL += delta/len(mag) * factor
         return mod
 
     def correct_tunes(self,
@@ -141,6 +153,9 @@ class TuneCorr():
                       group=False,
                       method='proportional'):
         """."""
+        if method not in ['proportional', 'additional']:
+            raise Exception('Invalid correction method!')
+
         if tune_matrix is None:
             tunemat = self.calc_tune_matrix(model)
         else:
