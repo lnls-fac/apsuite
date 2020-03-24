@@ -32,7 +32,7 @@ class CouplingCorr():
 
     @property
     def _ncv(self):
-        return len(self.respm.fam_data['CH']['index'])
+        return len(self.respm.fam_data['CV']['index'])
 
     @property
     def _nskew(self):
@@ -54,19 +54,20 @@ class CouplingCorr():
 
         for idx, nmag in enumerate(self.skew_idx):
             modcopy = _dcopy(model)
+            dlt = delta/len(nmag)
             for seg in nmag:
-                modcopy[seg].KsL += delta/len(nmag)
-                elem = self._get_coupling_residue(modcopy) / (delta/len(nmag))
+                modcopy[seg].KsL += dlt
+                elem = self._get_coupling_residue(modcopy) / dlt
             self.coup_matrix[:, idx] = elem
         return self.coup_matrix
 
-    def _get_coupling_residue(self, model):
+    def _get_coupling_residue(self, model, weight_dispy=False):
         self.respm.model = model
         orbmat = self.respm.get_respm()
         twi, *_ = pyaccel.optics.calc_twiss(model)
         dispy = twi.etay[self.bpm_idx]
-        w_dispy = (self._nch + self._ncv)*10
-        dispy *= w_dispy
+        if weight_dispy:
+            dispy *= (self._nch + self._ncv)*10
         mxy = orbmat[:self._nbpm, self._nch:-1]
         myx = orbmat[self._nbpm:, :self._nch]
         res = mxy.flatten()
@@ -165,5 +166,5 @@ class CouplingCorr():
             mod = self.coupling_corr_orbrespm_dispy(
                 model, matrix=matrix, nsv=nsv, niter=niter, tol=tol, res0=res0)
         else:
-            raise NotImplementedError
+            raise Exception('Chosen method is not implemented!')
         return mod
