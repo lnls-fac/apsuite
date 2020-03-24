@@ -24,26 +24,27 @@ class CouplingCorr():
 
     @property
     def _nbpm(self):
-        """."""
         return len(self.bpm_idx)
 
     @property
     def _nch(self):
-        """."""
         return len(self.respm.fam_data['CH']['index'])
 
     @property
     def _ncv(self):
-        """."""
         return len(self.respm.fam_data['CH']['index'])
 
     @property
     def _nskew(self):
-        """."""
         return len(self.skew_idx)
 
     def calc_coupling_matrix(self, model=None):
-        """."""
+        """Coupling correction response matrix.
+
+        Calculates the variation of off-diagonal elements of orbit response
+        matrix and vertical dispersion given the variation of skew
+        quadrupoles strength.
+        """
         if model is None:
             model = self.model
 
@@ -55,12 +56,11 @@ class CouplingCorr():
             modcopy = _dcopy(model)
             for seg in nmag:
                 modcopy[seg].KsL += delta/len(nmag)
-                elem = self.get_coupling_residue(modcopy) / (delta/len(nmag))
+                elem = self._get_coupling_residue(modcopy) / (delta/len(nmag))
             self.coup_matrix[:, idx] = elem
         return self.coup_matrix
 
-    def get_coupling_residue(self, model):
-        """."""
+    def _get_coupling_residue(self, model):
         self.respm.model = model
         orbmat = self.respm.get_respm()
         twi, *_ = pyaccel.optics.calc_twiss(model)
@@ -75,7 +75,7 @@ class CouplingCorr():
         return res
 
     def get_ksl(self, model=None, skewidx=None):
-        """."""
+        """Return skew quadrupoles strengths."""
         if model is None:
             model = self.model
         if skewidx is None:
@@ -89,7 +89,7 @@ class CouplingCorr():
         return np.array(ksl)
 
     def set_ksl(self, model=None, skewidx=None, ksl=None):
-        """."""
+        """Set skew quadrupoles strengths in the model."""
         if model is None:
             model = self.model
         if skewidx is None:
@@ -103,18 +103,20 @@ class CouplingCorr():
         return newmod
 
     @staticmethod
-    def get_fm(res):
-        """."""
+    def get_fm(re   s):
+        """Calculate figure of merit from residue vector."""
         return np.sqrt(np.sum(np.abs(res)**2)/res.size)
 
-    def correct_coupling(self,
-                         model,
-                         matrix=None,
-                         nsv=None,
-                         niter=10,
-                         tol=1e-6,
-                         res0=None):
-        """."""
+    def coupling_corr_orbrespm_dispy(self,
+                                     model,
+                                     matrix=None,
+                                     nsv=None, niter=10, tol=1e-6,
+                                     res0=None):
+        """Coupling correction with orbrespm.
+
+        Calculates the pseudo-inverse of coupling correction matrix via SVD
+        and minimizes the residue vector [Mxy, Myx, Etay].
+        """
         if matrix is None:
             matrix = self.calc_coupling_matrix(model)
         u, s, v = np.linalg.svd(matrix, full_matrices=False)
@@ -126,7 +128,7 @@ class CouplingCorr():
         inv_s = np.diag(inv_s)
         inv_matrix = -np.dot(np.dot(v.T, inv_s), u.T)
         if res0 is None:
-            res = self.get_coupling_residue(model)
+            res = self._get_coupling_residue(model)
         else:
             res = res0
         bestfm = CouplingCorr.get_fm(res)
@@ -137,7 +139,7 @@ class CouplingCorr():
             dksl = np.dot(inv_matrix, res)
             ksl += np.reshape(dksl, (-1, 1))
             model = self.set_ksl(model=model, ksl=ksl)
-            res = self.get_coupling_residue(model)
+            res = self._get_coupling_residue(model)
             fm = CouplingCorr.get_fm(res)
             diff_fm = np.abs(bestfm - fm)
             print(i, bestfm)
@@ -147,3 +149,21 @@ class CouplingCorr():
                 break
         print('done!')
         return model
+
+    def coupling_correction(self,
+                            model,
+                            matrix=None, nsv=None, niter=10, tol=1e-6,
+                            res0=None,
+                            method='orbrespm'):
+        """Coupling correction method selection.
+
+        Methods available:
+        - Minimization of off-diagonal elements of orbit response matrix and
+        vertical dispersion.
+        """
+        if method == 'orbrespm':
+            mod = self.coupling_corr_orbrespm_dispy(
+                model, matrix=matrix, nsv=nsv, niter=niter, tol=tol, res0=res0)
+        else:
+            raise NotImplementedError
+        return mod
