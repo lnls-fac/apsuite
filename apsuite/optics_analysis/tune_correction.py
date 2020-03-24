@@ -28,6 +28,7 @@ class TuneCorr():
 
     METHODS = _namedtuple('Methods', ['Additional', 'Proportional'])(0, 1)
     GROUPING = _namedtuple('Grouping', ['Individual', 'TwoKnobs'])(0, 1)
+    CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
 
     def __init__(self, model, acc, qf_knobs=None, qd_knobs=None,
                  method=None, grouping=None):
@@ -105,9 +106,9 @@ class TuneCorr():
             model = self.model
         twinom, *_ = pyaccel.optics.calc_twiss(
             accelerator=model, indices='open')
-        tunex = twinom.mux[-1]/2/np.pi
-        tuney = twinom.muy[-1]/2/np.pi
-        return tunex, tuney
+        nux = twinom.mux[-1]/2/np.pi
+        nuy = twinom.muy[-1]/2/np.pi
+        return nux, nuy
 
     def calc_tune_matrix(self, model=None):
         """."""
@@ -145,41 +146,16 @@ class TuneCorr():
             kl.append(np.mean(kl_mag))
         return np.array(kl)
 
-    def set_deltakl(self, deltakl, model=None):
-        """."""
-        if model is None:
-            model = self.model
-        if deltakl is None:
-            raise Exception('Missing KL values')
-        if self._grouping == TuneCorr.GROUPING.TwoKnobs and deltakl.size > 2:
-            raise Exception(
-                'Grouping option requires only 2 delta KL values')
-        mod = model[:]
-
-        for idx_knb, knb in enumerate(self.knobs.ALL):
-            if self._grouping == TuneCorr.GROUPING.TwoKnobs:
-                if knb in self.knobs.QFs:
-                    delta = deltakl[0]
-                elif knb in self.knobs.QDs:
-                    delta = deltakl[1]
-            else:
-                delta = deltakl[idx_knb]
-            for mag in self.fam[knb]['index']:
-                for seg in mag:
-                    if self._method == TuneCorr.METHODS.Proportional:
-                        mod[seg].KL *= (1 + delta/len(mag))
-                    else:
-                        mod[seg].KL += delta/len(mag)
-        return mod
-
     def correct_tunes(self,
-                      model,
-                      tunex, tuney,
+                      nux, nuy,
+                      model=None,
                       tune_matrix=None,
                       tol=1e-6,
                       nr_max=10,
                       nsv=None):
         """."""
+        if model is None:
+            model = self.model
         if self.method not in TuneCorr.METHODS:
             raise Exception('Invalid correction method!')
 
@@ -197,7 +173,6 @@ class TuneCorr():
         else:
             dkl = np.zeros(nominal_kl.shape)
 
-        mod = model[:]
         U, S, V = np.linalg.svd(tunemat, full_matrices=False)
         iS = 1/S
         iS[np.isnan(iS)] = 0
@@ -206,21 +181,39 @@ class TuneCorr():
             iS[nsv:] = 0
         iS = np.diag(iS)
         invmat = -1 * np.dot(np.dot(V.T, iS), U.T)
-        tunex0, tuney0 = self.get_tunes(mod)
-        print(tunex0, tuney0)
-        tunex_new, tuney_new = tunex0, tuney0
+        nux0, nuy0 = self.get_tunes(model)
+        nux_new, nuy_new = nux0, nuy0
 
         for _ in range(nr_max):
-            mod = model[:]
-            dtune = [tunex_new-tunex, tuney_new-tuney]
-            dkl += np.dot(invmat, dtune)
-            mod = self.set_deltakl(dkl, model=mod)
-            tunex_new, tuney_new = self.get_tunes(mod)
-            print(tunex_new, tuney_new)
-            if abs(tunex_new - tunex) < tol and abs(tuney_new - tuney) < tol:
+            dtune = [nux_new-nux, nuy_new-nuy]
+            dkl = np.dot(invmat, dtune)
+            self._add_deltakl(dkl, model=model)
+            nux_new, nuy_new = self.get_tunes(model)
+            if abs(nux_new - nux) < tol and abs(nuy_new - nuy) < tol:
                 break
-        print('done!')
-        return mod
+        else:
+            return TuneCorr.CORR_STATUS.Fail
+        return TuneCorr.CORR_STATUS.Sucess
+
+    def _add_deltakl(self, deltakl, model=None):
+        """."""
+        if model is None:
+            model = self.model
+
+        for idx_knb, knb in enumerate(self.knobs.ALL):
+            if self._grouping == TuneCorr.GROUPING.TwoKnobs:
+                if knb in self.knobs.QFs:
+                    delta = deltakl[0]
+                elif knb in self.knobs.QDs:
+                    delta = deltakl[1]
+            else:
+                delta = deltakl[idx_knb]
+            for mag in self.fam[knb]['index']:
+                for seg in mag:
+                    if self._method == TuneCorr.METHODS.Proportional:
+                        model[seg].KL *= (1 + delta/len(mag))
+                    else:
+                        model[seg].KL += delta/len(mag)
 
     def _group_2knobs_matrix(self, tune_matrix=None):
         """."""
