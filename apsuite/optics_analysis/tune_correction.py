@@ -106,14 +106,10 @@ class TuneCorr():
             modcopy = model[:]
             for nmag in self.fam[knb]['index']:
                 for seg in nmag:
-                    if self._method == TuneCorr.METHODS.Proportional:
-                        dlt = modcopy[seg].KL * delta/len(nmag)
-                    else:
-                        dlt = delta/len(nmag)
-                    modcopy[seg].KL += dlt
+                    modcopy[seg].KL += delta/len(nmag)
             nux, nuy = self.get_tunes(model=modcopy)
             tune_matrix[:, idx] = [
-                (nux - nux0)/dlt, (nuy - nuy0)/dlt]
+                (nux - nux0)/delta, (nuy - nuy0)/delta]
         return tune_matrix
 
     def get_kl(self, model=None, knobs=None):
