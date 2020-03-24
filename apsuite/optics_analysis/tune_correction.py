@@ -49,6 +49,18 @@ class TuneCorr():
         self.method = method
         self.grouping = grouping
 
+    def __str__(self):
+        """."""
+        strg = '{0:25s}= {1:s}\n'.format(
+            'focusing quadrupoles', str(self.knobs.QFs))
+        strg += '{0:25s}= {1:s}\n'.format(
+            'defocusing quadrupoles', str(self.knobs.QDs))
+        strg += '{0:25s}= {1:30s}\n'.format(
+            'correction method', self.method_str)
+        strg += '{0:25s}= {1:30s}\n'.format(
+            'grouping', self.grouping_str)
+        return strg
+
     @property
     def grouping(self):
         """."""
