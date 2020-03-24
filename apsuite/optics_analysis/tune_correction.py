@@ -21,10 +21,10 @@ class KnobTypes(__KNOBTYPES):
 class TuneCorr():
     """."""
 
-    SIDEFKNOBS = KnobTypes(
+    SI_DEF_KNOBS = KnobTypes(
         ['QFA', 'QFB', 'QFP'],
         ['QDA', 'QDB1', 'QDB2', 'QDP1', 'QDP2'])
-    BODEFKNOBS = KnobTypes(['QF', ], ['QD', ])
+    BO_DEF_KNOBS = KnobTypes(['QF', ], ['QD', ])
 
     METHODS = _namedtuple('Methods', ['Additional', 'Proportional'])(0, 1)
     GROUPING = _namedtuple('Grouping', ['Individual', 'TwoKnobs'])(0, 1)
@@ -37,13 +37,13 @@ class TuneCorr():
         self._method = TuneCorr.METHODS.Proportional
         self._grouping = TuneCorr.GROUPING.TwoKnobs
         if acc == 'BO':
-            qf_knobs = qf_knobs or TuneCorr.BODEFKNOBS.QFs
-            qd_knobs = qd_knobs or TuneCorr.BODEFKNOBS.QDs
+            qf_knobs = qf_knobs or TuneCorr.BO_DEF_KNOBS.QFs
+            qd_knobs = qd_knobs or TuneCorr.BO_DEF_KNOBS.QDs
             self.knobs = KnobTypes(qf_knobs, qd_knobs)
             self.fam = bo.get_family_data(model)
         elif acc == 'SI':
-            qf_knobs = qf_knobs or TuneCorr.SIDEFKNOBS.QFs
-            qd_knobs = qd_knobs or TuneCorr.SIDEFKNOBS.QDs
+            qf_knobs = qf_knobs or TuneCorr.SI_DEF_KNOBS.QFs
+            qd_knobs = qd_knobs or TuneCorr.SI_DEF_KNOBS.QDs
             self.knobs = KnobTypes(qf_knobs, qd_knobs)
             self.fam = si.get_family_data(model)
         self.method = method
