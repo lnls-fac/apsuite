@@ -51,6 +51,7 @@ class TuneCorr():
 
     @property
     def grouping(self):
+        """."""
         return self._grouping
 
     @grouping.setter
@@ -64,10 +65,12 @@ class TuneCorr():
 
     @property
     def grouping_str(self):
+        """."""
         return TuneCorr.GROUPING._fields[self._grouping]
 
     @property
     def method(self):
+        """."""
         return self._method
 
     @method.setter
@@ -81,6 +84,7 @@ class TuneCorr():
 
     @property
     def method_str(self):
+        """."""
         return TuneCorr.METHODS._fields[self._method]
 
     def get_tunes(self, model=None):
@@ -140,22 +144,12 @@ class TuneCorr():
                 'Grouping option requires only 2 delta KL values')
         mod = model[:]
 
-        if self._grouping == TuneCorr.GROUPING.TwoKnobs:
-            kl_qf = self.get_kl(mod, knobs=self.knobs.QFs)
-            kl_qd = self.get_kl(mod, knobs=self.knobs.QDs)
-            kl_qfsum = np.sum(kl_qf)
-            kl_qdsum = np.sum(kl_qd)
-        factor = 1
         for idx_knb, knb in enumerate(self.knobs.ALL):
             if self._grouping == TuneCorr.GROUPING.TwoKnobs:
                 if knb in self.knobs.QFs:
-                    idx = self.knobs.QFs.index(knb)
                     delta = deltakl[0]
-                    factor = kl_qf[idx]/kl_qfsum
                 elif knb in self.knobs.QDs:
-                    idx = self.knobs.QDs.index(knb)
                     delta = deltakl[1]
-                    factor = kl_qd[idx]/kl_qdsum
             else:
                 delta = deltakl[idx_knb]
             for mag in self.fam[knb]['index']:
@@ -163,7 +157,7 @@ class TuneCorr():
                     if self._method == TuneCorr.METHODS.Proportional:
                         mod[seg].KL *= (1 + delta/len(mag))
                     else:
-                        mod[seg].KL += delta/len(mag) * factor
+                        mod[seg].KL += delta/len(mag)
         return mod
 
     def correct_tunes(self,
@@ -188,9 +182,6 @@ class TuneCorr():
         if self._grouping == TuneCorr.GROUPING.TwoKnobs:
             dkl = np.zeros(2)
             tunemat = self._group_2knobs_matrix(tunemat)
-            if self._method == TuneCorr.METHODS.Additional:
-                tunemat[:, 0] /= len(self.knobs.QFs)
-                tunemat[:, 1] /= len(self.knobs.QDs)
         else:
             dkl = np.zeros(nominal_kl.shape)
 
@@ -211,6 +202,7 @@ class TuneCorr():
             mod = model[:]
             dtune = [tunex_new-tunex, tuney_new-tuney]
             dkl += np.dot(invmat, dtune)
+            print(dkl)
             mod = self.set_deltakl(dkl, model=mod)
             tunex_new, tuney_new = self.get_tunes(mod)
             print(tunex_new, tuney_new)
