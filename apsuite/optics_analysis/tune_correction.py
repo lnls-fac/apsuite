@@ -202,7 +202,6 @@ class TuneCorr():
             mod = model[:]
             dtune = [tunex_new-tunex, tuney_new-tuney]
             dkl += np.dot(invmat, dtune)
-            print(dkl)
             mod = self.set_deltakl(dkl, model=mod)
             tunex_new, tuney_new = self.get_tunes(mod)
             print(tunex_new, tuney_new)
