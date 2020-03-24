@@ -108,13 +108,14 @@ class TuneCorr():
             modcopy = model[:]
             for nmag in self.fam[knb]['index']:
                 for seg in nmag:
-                    if self._method == TuneCorr.METHODS.Additional:
-                        modcopy[seg].KL += delta/len(nmag)
+                    if self.method:
+                        dlt = modcopy[seg].KL * delta/len(nmag)
                     else:
-                        modcopy[seg].KL *= 1 + delta
+                        dlt = delta/len(nmag)
+                    modcopy[seg].KL += dlt
             nux, nuy = self.get_tunes(model=modcopy)
             tune_matrix[:, idx] = [
-                (nux - nux0)/delta, (nuy - nuy0)/delta]
+                (nux - nux0)/dlt, (nuy - nuy0)/dlt]
         return tune_matrix
 
     def get_kl(self, model=None, knobs=None):
@@ -142,21 +143,21 @@ class TuneCorr():
             model = self.model
         if deltakl is None:
             raise Exception('Missing KL values')
-        if group and deltakl.size > 2:
+        if self.grouping and deltakl.size > 2:
             raise Exception(
                 'Grouping option requires only 2 delta KL values')
-        if method not in ['proportional', 'additional']:
+        if self.method not in TuneCorr.METHODS:
             raise Exception('Invalid correction method!')
         mod = model[:]
 
-        if group:
+        if self.grouping:
             kl_qf = self.get_kl(mod, knobs=self.knobs.QFs)
             kl_qd = self.get_kl(mod, knobs=self.knobs.QDs)
             kl_qfsum = np.sum(kl_qf)
             kl_qdsum = np.sum(kl_qd)
         factor = 1
         for idx_knb, knb in enumerate(self.knobs.ALL):
-            if group:
+            if self.grouping:
                 if knb in self.knobs.QFs:
                     idx = self.knobs.QFs.index(knb)
                     delta = deltakl[0]
@@ -169,9 +170,9 @@ class TuneCorr():
                 delta = deltakl[idx_knb]
             for mag in self.fam[knb]['index']:
                 for seg in mag:
-                    if method == 'proportional':
+                    if self.method:
                         mod[seg].KL *= (1 + delta/len(mag))
-                    elif method == 'additional':
+                    else:
                         mod[seg].KL += delta/len(mag) * factor
         return mod
 
@@ -183,7 +184,7 @@ class TuneCorr():
                       nr_max=10,
                       nsv=None):
         """."""
-        if method not in ['proportional', 'additional']:
+        if self.method not in TuneCorr.METHODS:
             raise Exception('Invalid correction method!')
 
         if tune_matrix is None:
@@ -192,12 +193,12 @@ class TuneCorr():
             tunemat = _dcopy(tune_matrix)
 
         nominal_kl = self.get_kl(model)
-        if method == 'proportional':
+        if self.method:
             tunemat *= nominal_kl
-        if group:
+        if self.grouping:
             dkl = np.zeros(2)
             tunemat = self._group_2knobs_matrix(tunemat)
-            if method == 'additional':
+            if not self.method:
                 tunemat[:, 0] /= len(self.knobs.QFs)
                 tunemat[:, 1] /= len(self.knobs.QDs)
         else:
@@ -221,7 +222,7 @@ class TuneCorr():
             dtune = [tunex_new-tunex, tuney_new-tuney]
             dkl += np.dot(invmat, dtune)
             mod = self.set_deltakl(
-                model=mod, deltakl=dkl, method=method, group=group)
+                model=mod, deltakl=dkl)
             tunex_new, tuney_new = self.get_tunes(mod)
             print(tunex_new, tuney_new)
             if abs(tunex_new - tunex) < tol and abs(tuney_new - tuney) < tol:
