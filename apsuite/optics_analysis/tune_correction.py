@@ -93,12 +93,10 @@ class TuneCorr():
         tuney = twinom.muy[-1]/2/np.pi
         return tunex, tuney
 
-    def calc_tune_matrix(self, model=None, acc=None):
+    def calc_tune_matrix(self, model=None):
         """."""
         if model is None:
             model = self.model
-        if acc is None:
-            acc = self.acc
 
         tune_matrix = np.zeros((2, len(self.knobs.ALL)))
         nux0, nuy0 = self.get_tunes(model)
@@ -135,9 +133,7 @@ class TuneCorr():
             kl.append(np.mean(kl_mag))
         return np.array(kl)
 
-    def set_deltakl(self,
-                    model=None,
-                    deltakl=None):
+    def set_deltakl(self, deltakl, model=None):
         """."""
         if model is None:
             model = self.model
@@ -219,8 +215,7 @@ class TuneCorr():
             mod = model[:]
             dtune = [tunex_new-tunex, tuney_new-tuney]
             dkl += np.dot(invmat, dtune)
-            mod = self.set_deltakl(
-                model=mod, deltakl=dkl)
+            mod = self.set_deltakl(dkl, model=mod)
             tunex_new, tuney_new = self.get_tunes(mod)
             print(tunex_new, tuney_new)
             if abs(tunex_new - tunex) < tol and abs(tuney_new - tuney) < tol:
