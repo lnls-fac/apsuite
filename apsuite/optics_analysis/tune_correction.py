@@ -181,15 +181,17 @@ class TuneCorr():
             iS[nsv:] = 0
         iS = np.diag(iS)
         invmat = -1 * np.dot(np.dot(V.T, iS), U.T)
-        nux0, nuy0 = self.get_tunes(model)
-        nux_new, nuy_new = nux0, nuy0
+        nux_new, nuy_new = self.get_tunes(model)
+        dtune = np.array([nux_new-nux, nuy_new-nuy])
+        if np.sum(dtune*dtune) < tol:
+            return TuneCorr.CORR_STATUS.Sucess
 
         for _ in range(nr_max):
-            dtune = [nux_new-nux, nuy_new-nuy]
             dkl = np.dot(invmat, dtune)
             self._add_deltakl(dkl, model=model)
             nux_new, nuy_new = self.get_tunes(model)
-            if abs(nux_new - nux) < tol and abs(nuy_new - nuy) < tol:
+            dtune = np.array([nux_new-nux, nuy_new-nuy])
+            if np.sum(dtune*dtune) < tol:
                 break
         else:
             return TuneCorr.CORR_STATUS.Fail
