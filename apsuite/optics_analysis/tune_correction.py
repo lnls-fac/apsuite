@@ -16,6 +16,7 @@ class TuneCorr():
         """."""
         self.model = model
         self.acc = acc
+        self.knobs_names = knobs_names
         if acc == 'BO':
             if knobs_names is None:
                 self.knobs_names = self.BOKNOBS
