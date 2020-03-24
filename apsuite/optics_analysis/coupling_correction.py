@@ -103,7 +103,7 @@ class CouplingCorr():
         return newmod
 
     @staticmethod
-    def get_fm(re   s):
+    def get_fm(res):
         """Calculate figure of merit from residue vector."""
         return np.sqrt(np.sum(np.abs(res)**2)/res.size)
 
