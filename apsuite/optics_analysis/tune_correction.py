@@ -108,7 +108,7 @@ class TuneCorr():
             modcopy = model[:]
             for nmag in self.fam[knb]['index']:
                 for seg in nmag:
-                    if self.method:
+                    if self._method == TuneCorr.METHODS.Proportional:
                         dlt = modcopy[seg].KL * delta/len(nmag)
                     else:
                         dlt = delta/len(nmag)
@@ -143,21 +143,19 @@ class TuneCorr():
             model = self.model
         if deltakl is None:
             raise Exception('Missing KL values')
-        if self.grouping and deltakl.size > 2:
+        if self._grouping == TuneCorr.GROUPING.TwoKnobs and deltakl.size > 2:
             raise Exception(
                 'Grouping option requires only 2 delta KL values')
-        if self.method not in TuneCorr.METHODS:
-            raise Exception('Invalid correction method!')
         mod = model[:]
 
-        if self.grouping:
+        if self._grouping == TuneCorr.GROUPING.TwoKnobs:
             kl_qf = self.get_kl(mod, knobs=self.knobs.QFs)
             kl_qd = self.get_kl(mod, knobs=self.knobs.QDs)
             kl_qfsum = np.sum(kl_qf)
             kl_qdsum = np.sum(kl_qd)
         factor = 1
         for idx_knb, knb in enumerate(self.knobs.ALL):
-            if self.grouping:
+            if self._grouping == TuneCorr.GROUPING.TwoKnobs:
                 if knb in self.knobs.QFs:
                     idx = self.knobs.QFs.index(knb)
                     delta = deltakl[0]
@@ -170,7 +168,7 @@ class TuneCorr():
                 delta = deltakl[idx_knb]
             for mag in self.fam[knb]['index']:
                 for seg in mag:
-                    if self.method:
+                    if self._method == TuneCorr.METHODS.Proportional:
                         mod[seg].KL *= (1 + delta/len(mag))
                     else:
                         mod[seg].KL += delta/len(mag) * factor
@@ -193,12 +191,12 @@ class TuneCorr():
             tunemat = _dcopy(tune_matrix)
 
         nominal_kl = self.get_kl(model)
-        if self.method:
+        if self._method == TuneCorr.METHODS.Proportional:
             tunemat *= nominal_kl
-        if self.grouping:
+        if self._grouping == TuneCorr.GROUPING.TwoKnobs:
             dkl = np.zeros(2)
             tunemat = self._group_2knobs_matrix(tunemat)
-            if not self.method:
+            if self._method == TuneCorr.METHODS.Additional:
                 tunemat[:, 0] /= len(self.knobs.QFs)
                 tunemat[:, 1] /= len(self.knobs.QDs)
         else:
