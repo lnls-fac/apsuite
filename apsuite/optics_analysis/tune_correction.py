@@ -168,10 +168,7 @@ class TuneCorr():
         if self._method == TuneCorr.METHODS.Proportional:
             tunemat *= nominal_kl
         if self._grouping == TuneCorr.GROUPING.TwoKnobs:
-            dkl = np.zeros(2)
             tunemat = self._group_2knobs_matrix(tunemat)
-        else:
-            dkl = np.zeros(nominal_kl.shape)
 
         U, S, V = np.linalg.svd(tunemat, full_matrices=False)
         iS = 1/S
