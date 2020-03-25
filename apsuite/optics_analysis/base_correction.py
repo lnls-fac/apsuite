@@ -23,7 +23,7 @@ class BaseCorr():
     GROUPING = _namedtuple('Grouping', ['Individual', 'TwoKnobs'])(0, 1)
     CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
 
-    def __init__(self, model, acc, method=None, grouping=None):
+    def __init__(self, model=None, acc=None, method=None, grouping=None):
         """."""
         self.model = model
         self.acc = acc
@@ -31,6 +31,7 @@ class BaseCorr():
         self._grouping = BaseCorr.GROUPING.TwoKnobs
         self.knobs = None
         self.fam = None
+        self.strength_type = None
         self.method = method
         self.grouping = grouping
 
@@ -72,9 +73,10 @@ class BaseCorr():
         """."""
         return BaseCorr.METHODS._fields[self._method]
 
-    def define_knobs(self, f_knobs=None, d_knobs=None):
+    def define_knobs(self, f_knobs, d_knobs, strength_type):
         """."""
         self.knobs = KnobTypes(Focusing=f_knobs, Defocusing=d_knobs)
+        self.strength_type = strength_type
 
     def get_parameter(self, model=None):
         """."""
@@ -84,11 +86,7 @@ class BaseCorr():
         """."""
         raise NotImplementedError
 
-    def get_family_data(self):
-        """."""
-        raise NotImplementedError
-
-    def get_strength(self, model=None, knobs=None, strength_type=None):
+    def get_strength(self, model=None, knobs=None):
         """."""
         if model is None:
             model = self.model
@@ -100,7 +98,7 @@ class BaseCorr():
             for mag in self.fam[knb]['index']:
                 stren_seg = []
                 for seg in mag:
-                    stren_seg.append(getattr(model[seg], strength_type))
+                    stren_seg.append(getattr(model[seg], self.strength_type))
                 stren_mag.append(sum(stren_seg))
             stren.append(np.mean(stren_mag))
         return np.array(stren)
@@ -153,7 +151,7 @@ class BaseCorr():
             return BaseCorr.CORR_STATUS.Fail
         return BaseCorr.CORR_STATUS.Sucess
 
-    def _add_delta_stren(self, delta_stren, model=None, strength_type=None):
+    def _add_delta_stren(self, delta_stren, model=None):
         """."""
         if model is None:
             model = self.model
@@ -168,12 +166,12 @@ class BaseCorr():
                 delta = delta_stren[idx_knb]
             for mag in self.fam[knb]['index']:
                 for seg in mag:
-                    stren = getattr(model[seg], strength_type)
+                    stren = getattr(model[seg], self.strength_type)
                     if self._method == BaseCorr.METHODS.Proportional:
                         stren *= (1 + delta/len(mag))
                     else:
                         stren += delta/len(mag)
-                    setattr(model[seg], strength_type, stren)
+                    setattr(model[seg], self.strength_type, stren)
 
     def _group_2knobs_matrix(self, param_matrix=None):
         """."""
