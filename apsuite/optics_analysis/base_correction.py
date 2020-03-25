@@ -106,7 +106,7 @@ class BaseCorr():
     def correct_parameters(self,
                            goal_parameters,
                            model=None,
-                           param_matrix=None,
+                           jacobian_matrix=None,
                            tol=1e-6,
                            nr_max=10,
                            nsv=None):
@@ -116,18 +116,18 @@ class BaseCorr():
         if self.method not in BaseCorr.METHODS:
             raise Exception('Invalid correction method!')
 
-        if param_matrix is None:
-            param_mat = self.calc_jacobian_matrix(model)
+        if jacobian_matrix is None:
+            jmat = self.calc_jacobian_matrix(model)
         else:
-            param_mat = _dcopy(param_matrix)
+            jmat = _dcopy(jacobian_matrix)
 
         nominal_stren = self.get_strength(model)
         if self._method == BaseCorr.METHODS.Proportional:
-            param_mat *= nominal_stren
+            jmat *= nominal_stren
         if self._grouping == BaseCorr.GROUPING.TwoKnobs:
-            param_mat = self._group_2knobs_matrix(param_mat)
+            jmat = self._group_2knobs_matrix(jmat)
 
-        U, S, V = np.linalg.svd(param_mat, full_matrices=False)
+        U, S, V = np.linalg.svd(jmat, full_matrices=False)
         iS = 1/S
         iS[np.isnan(iS)] = 0
         iS[np.isinf(iS)] = 0
@@ -173,16 +173,16 @@ class BaseCorr():
                         stren += delta/len(mag)
                     setattr(model[seg], self.strength_type, stren)
 
-    def _group_2knobs_matrix(self, param_matrix=None):
+    def _group_2knobs_matrix(self, jacobian_matrix=None):
         """."""
-        if param_matrix is None:
-            param_matrix = self.calc_jacobian_matrix(self.model)
+        if jacobian_matrix is None:
+            jacobian_matrix = self.calc_jacobian_matrix(self.model)
 
-        param_2knobs_matrix = np.zeros((2, 2))
+        jacobian_2knobs_matrix = np.zeros((2, 2))
         nfocus = len(self.knobs.Focusing)
 
         for nf, _ in enumerate(self.knobs.Focusing):
-            param_2knobs_matrix[:, 0] += param_matrix[:, nf]
+            jacobian_2knobs_matrix[:, 0] += jacobian_matrix[:, nf]
         for ndf, _ in enumerate(self.knobs.Defocusing):
-            param_2knobs_matrix[:, 1] += param_matrix[:, ndf+nfocus]
-        return param_2knobs_matrix
+            jacobian_2knobs_matrix[:, 1] += jacobian_matrix[:, ndf+nfocus]
+        return jacobian_2knobs_matrix
