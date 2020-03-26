@@ -29,9 +29,9 @@ class BaseCorr():
         self.acc = acc
         self._method = BaseCorr.METHODS.Proportional
         self._grouping = BaseCorr.GROUPING.TwoKnobs
-        self.knobs = None
+        self._strength_type = None
+        self._knobs = None
         self.fam = None
-        self.strength_type = None
         self.method = method
         self.grouping = grouping
 
@@ -73,12 +73,25 @@ class BaseCorr():
         """."""
         return BaseCorr.METHODS._fields[self._method]
 
-    def define_knobs(self, f_knobs, d_knobs, strength_type):
+    @property
+    def strength_type(self):
         """."""
-        self.knobs = KnobTypes(Focusing=f_knobs, Defocusing=d_knobs)
-        self.strength_type = strength_type
+        return self._strength_type
 
-    def get_parameter(self, model=None):
+    @strength_type.setter
+    def strength_type(self, value):
+        self._strength_type = value
+
+    @property
+    def knobs(self):
+        """."""
+        return self._knobs
+
+    @knobs.setter
+    def knobs(self, value):
+        self._knobs = value
+
+    def _get_parameter(self, model=None):
         """."""
         raise NotImplementedError
 
@@ -86,7 +99,7 @@ class BaseCorr():
         """."""
         raise NotImplementedError
 
-    def get_strength(self, model=None, knobs=None):
+    def _get_strength(self, model=None, knobs=None):
         """."""
         if model is None:
             model = self.model
@@ -98,7 +111,7 @@ class BaseCorr():
             for mag in self.fam[knb]['index']:
                 stren_seg = []
                 for seg in mag:
-                    stren_seg.append(getattr(model[seg], self.strength_type))
+                    stren_seg.append(getattr(model[seg], self._strength_type))
                 stren_mag.append(sum(stren_seg))
             stren.append(np.mean(stren_mag))
         return np.array(stren)
@@ -121,7 +134,7 @@ class BaseCorr():
         else:
             jmat = _dcopy(jacobian_matrix)
 
-        nominal_stren = self.get_strength(model)
+        nominal_stren = self._get_strength(model)
         if self._method == BaseCorr.METHODS.Proportional:
             jmat *= nominal_stren
         if self._grouping == BaseCorr.GROUPING.TwoKnobs:
@@ -135,7 +148,7 @@ class BaseCorr():
             iS[nsv:] = 0
         iS = np.diag(iS)
         invmat = -1 * np.dot(np.dot(V.T, iS), U.T)
-        param_new = self.get_parameter(model)
+        param_new = self._get_parameter(model)
         dparam = param_new - goal_parameters
         if np.sum(dparam*dparam) < tol:
             return BaseCorr.CORR_STATUS.Sucess
@@ -143,7 +156,7 @@ class BaseCorr():
         for _ in range(nr_max):
             dstren = np.dot(invmat, dparam)
             self._add_delta_stren(dstren, model=model)
-            param_new = self.get_parameter(model)
+            param_new = self._get_parameter(model)
             dparam = param_new - goal_parameters
             if np.sum(dparam*dparam) < tol:
                 break
@@ -166,12 +179,12 @@ class BaseCorr():
                 delta = delta_stren[idx_knb]
             for mag in self.fam[knb]['index']:
                 for seg in mag:
-                    stren = getattr(model[seg], self.strength_type)
+                    stren = getattr(model[seg], self._strength_type)
                     if self._method == BaseCorr.METHODS.Proportional:
                         stren *= (1 + delta/len(mag))
                     else:
                         stren += delta/len(mag)
-                    setattr(model[seg], self.strength_type, stren)
+                    setattr(model[seg], self._strength_type, stren)
 
     def _group_2knobs_matrix(self, jacobian_matrix=None):
         """."""
