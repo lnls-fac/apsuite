@@ -18,16 +18,18 @@ class TuneCorr(BaseCorr):
     def __init__(self, model, acc, qf_knobs=None, qd_knobs=None,
                  method=None, grouping=None):
         """."""
+        super().__init__(
+            model=model, acc=acc, method=method, grouping=grouping)
+        if self.acc == 'BO':
             self.knobs.focusing = qf_knobs or TuneCorr.BO_QF
             self.knobs.defocusing = qd_knobs or TuneCorr.BO_QD
             self.fam = bo.get_family_data(model)
+        elif self.acc == 'SI':
             self.knobs.focusing = qf_knobs or TuneCorr.SI_QF
             self.knobs.defocusing = qd_knobs or TuneCorr.SI_QD
             self.fam = si.get_family_data(model)
-        self.knobs = KnobTypes(Focusing=qf_knobs, Defocusing=qd_knobs)
-        self.strength_type = 'KL'
-        self.method = method
-        self.grouping = grouping
+        else:
+            raise TypeError('Accelerator not supported.')
 
     def __str__(self):
         """."""
@@ -41,8 +43,11 @@ class TuneCorr(BaseCorr):
             'grouping', self.grouping_str)
         return strg
 
-    def get_tunes(self, model):
+    def get_tunes(self, model=None):
         """."""
+        if model is None:
+            model = self.model
+
         return self._get_parameter(model)
 
     def get_kl(self, model):

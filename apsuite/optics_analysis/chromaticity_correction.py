@@ -19,16 +19,18 @@ class ChromCorr(BaseCorr):
     def __init__(self, model, acc, sf_knobs=None, sd_knobs=None,
                  method=None, grouping=None):
         """."""
+        super().__init__(
+            model=model, acc=acc, method=method, grouping=grouping)
+        if self.acc == 'BO':
             self.knobs.focusing = sf_knobs or ChromCorr.BO_SF
             self.knobs.defocusing = sd_knobs or ChromCorr.BO_SD
             self.fam = bo.get_family_data(model)
+        elif self.acc == 'SI':
             self.knobs.focusing = sf_knobs or ChromCorr.SI_SF
             self.knobs.defocusing = sd_knobs or ChromCorr.SI_SD
             self.fam = si.get_family_data(model)
-        self.knobs = KnobTypes(Focusing=sf_knobs, Defocusing=sd_knobs)
-        self.strength_type = 'SL'
-        self.method = method
-        self.grouping = grouping
+        else:
+            raise TypeError('Accelerator not supported.')
 
     def __str__(self):
         """."""
@@ -44,6 +46,8 @@ class ChromCorr(BaseCorr):
 
     def get_chromaticities(self, model):
         """."""
+        if model is None:
+            model = self.model
         return self._get_parameter(model)
 
     def get_sl(self, model):
@@ -70,5 +74,7 @@ class ChromCorr(BaseCorr):
 
     def _get_parameter(self, model=None):
         """."""
+        if model is None:
+            model = self.model
         chromx, chromy = pyaccel.optics.get_chromaticities(model)
         return np.array([chromx, chromy])

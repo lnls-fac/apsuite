@@ -27,10 +27,10 @@ class BaseCorr():
     GROUPING = _namedtuple('Grouping', ['Individual', 'TwoKnobs'])(0, 1)
     CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
 
-    def __init__(self, model=None, acc=None, method=None, grouping=None):
+    def __init__(self, model, acc=None, method=None, grouping=None):
         """."""
         self.model = model
-        self.acc = acc
+        self.acc = acc.upper()
         self._method = BaseCorr.METHODS.Proportional
         self._grouping = BaseCorr.GROUPING.TwoKnobs
         self.knobs = KnobTypes([], [])
@@ -102,12 +102,8 @@ class BaseCorr():
             stren.append(np.mean(stren_mag))
         return np.array(stren)
 
-    def correct_parameters(self,
-                           goal_parameters,
-                           model=None,
-                           jacobian_matrix=None,
-                           tol=1e-6,
-                           nr_max=10,
+    def correct_parameters(self, goal_parameters, model=None,
+                           jacobian_matrix=None, tol=1e-6, nr_max=10,
                            nsv=None):
         """."""
         if model is None:
