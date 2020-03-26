@@ -8,6 +8,7 @@ from apsuite.optics_analysis.base_correction import BaseCorr, KnobTypes
 class ChromCorr(BaseCorr):
     """."""
 
+    __STRENGHT_TYPE = 'SL'
     SI_SF = ['SFA1', 'SFA2', 'SFB1', 'SFB2', 'SFP1', 'SFP2']
     SI_SD = ['SDA1', 'SDA2', 'SDA3',
              'SDB1', 'SDB2', 'SDB3',

@@ -22,6 +22,7 @@ class KnobTypes:
 class BaseCorr():
     """."""
 
+    __STRENGTH_TYPE = ''
     METHODS = _namedtuple('Methods', ['Additional', 'Proportional'])(0, 1)
     GROUPING = _namedtuple('Grouping', ['Individual', 'TwoKnobs'])(0, 1)
     CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
@@ -75,24 +76,6 @@ class BaseCorr():
         """."""
         return BaseCorr.METHODS._fields[self._method]
 
-    @property
-    def strength_type(self):
-        """."""
-        return self._strength_type
-
-    @strength_type.setter
-    def strength_type(self, value):
-        self._strength_type = value
-
-    @property
-    def knobs(self):
-        """."""
-        return self._knobs
-
-    @knobs.setter
-    def knobs(self, value):
-        self._knobs = value
-
     def _get_parameter(self, model=None):
         """."""
         raise NotImplementedError
@@ -113,7 +96,8 @@ class BaseCorr():
             for mag in self.fam[knb]['index']:
                 stren_seg = []
                 for seg in mag:
-                    stren_seg.append(getattr(model[seg], self._strength_type))
+                    stren_seg.append(getattr(
+                        model[seg], self.__STRENGTH_TYPE))
                 stren_mag.append(sum(stren_seg))
             stren.append(np.mean(stren_mag))
         return np.array(stren)
@@ -181,12 +165,12 @@ class BaseCorr():
                 delta = delta_stren[idx_knb]
             for mag in self.fam[knb]['index']:
                 for seg in mag:
-                    stren = getattr(model[seg], self._strength_type)
+                    stren = getattr(model[seg], self.__STRENGTH_TYPE)
                     if self._method == BaseCorr.METHODS.Proportional:
                         stren *= (1 + delta/len(mag))
                     else:
                         stren += delta/len(mag)
-                    setattr(model[seg], self._strength_type, stren)
+                    setattr(model[seg], self.__STRENGTH_TYPE, stren)
 
     def _group_2knobs_matrix(self, jacobian_matrix=None):
         """."""
