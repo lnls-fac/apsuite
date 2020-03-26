@@ -4,16 +4,19 @@ from collections import namedtuple as _namedtuple
 from copy import deepcopy as _dcopy
 import numpy as np
 
-__KNOBTYPES = _namedtuple('KnobTypes', ['Focusing', 'Defocusing'])
 
-
-class KnobTypes(__KNOBTYPES):
+class KnobTypes:
     """."""
 
-    @property
-    def ALL(self):
+    def __init__(self, focusing, defocusing):
         """."""
-        return self.Focusing + self.Defocusing
+        self.focusing = focusing
+        self.defocusing = defocusing
+
+    @property
+    def all(self):
+        """."""
+        return self.focusing + self.defocusing
 
 
 class BaseCorr():
@@ -29,8 +32,7 @@ class BaseCorr():
         self.acc = acc
         self._method = BaseCorr.METHODS.Proportional
         self._grouping = BaseCorr.GROUPING.TwoKnobs
-        self._strength_type = None
-        self._knobs = None
+        self.knobs = KnobTypes([], [])
         self.fam = None
         self.method = method
         self.grouping = grouping
@@ -104,7 +106,7 @@ class BaseCorr():
         if model is None:
             model = self.model
         if knobs is None:
-            knobs = self.knobs.ALL
+            knobs = self.knobs.all
         stren = []
         for knb in knobs:
             stren_mag = []
@@ -169,11 +171,11 @@ class BaseCorr():
         if model is None:
             model = self.model
 
-        for idx_knb, knb in enumerate(self.knobs.ALL):
+        for idx_knb, knb in enumerate(self.knobs.all):
             if self._grouping == BaseCorr.GROUPING.TwoKnobs:
-                if knb in self.knobs.Focusing:
+                if knb in self.knobs.focusing:
                     delta = delta_stren[0]
-                elif knb in self.knobs.Defocusing:
+                elif knb in self.knobs.defocusing:
                     delta = delta_stren[1]
             else:
                 delta = delta_stren[idx_knb]
@@ -192,10 +194,10 @@ class BaseCorr():
             jacobian_matrix = self.calc_jacobian_matrix(self.model)
 
         jacobian_2knobs_matrix = np.zeros((2, 2))
-        nfocus = len(self.knobs.Focusing)
+        nfocus = len(self.knobs.focusing)
 
-        for nfoc, _ in enumerate(self.knobs.Focusing):
+        for nfoc, _ in enumerate(self.knobs.focusing):
             jacobian_2knobs_matrix[:, 0] += jacobian_matrix[:, nfoc]
-        for ndf, _ in enumerate(self.knobs.Defocusing):
+        for ndf, _ in enumerate(self.knobs.defocusing):
             jacobian_2knobs_matrix[:, 1] += jacobian_matrix[:, ndf+nfocus]
         return jacobian_2knobs_matrix

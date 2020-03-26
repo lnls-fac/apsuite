@@ -17,18 +17,11 @@ class TuneCorr(BaseCorr):
     def __init__(self, model, acc, qf_knobs=None, qd_knobs=None,
                  method=None, grouping=None):
         """."""
-        super().__init__()
-        self.model = model
-        self.acc = acc
-        self._method = TuneCorr.METHODS.Proportional
-        self._grouping = TuneCorr.GROUPING.TwoKnobs
-        if acc == 'BO':
-            qf_knobs = qf_knobs or TuneCorr.BO_QF
-            qd_knobs = qd_knobs or TuneCorr.BO_QD
+            self.knobs.focusing = qf_knobs or TuneCorr.BO_QF
+            self.knobs.defocusing = qd_knobs or TuneCorr.BO_QD
             self.fam = bo.get_family_data(model)
-        elif acc == 'SI':
-            qf_knobs = qf_knobs or TuneCorr.SI_QF
-            qd_knobs = qd_knobs or TuneCorr.SI_QD
+            self.knobs.focusing = qf_knobs or TuneCorr.SI_QF
+            self.knobs.defocusing = qd_knobs or TuneCorr.SI_QD
             self.fam = si.get_family_data(model)
         self.knobs = KnobTypes(Focusing=qf_knobs, Defocusing=qd_knobs)
         self.strength_type = 'KL'
@@ -38,9 +31,9 @@ class TuneCorr(BaseCorr):
     def __str__(self):
         """."""
         strg = '{0:25s}= {1:s}\n'.format(
-            'focusing quadrupoles', str(self.knobs.Focusing))
+            'focusing quadrupoles', str(self.knobs.focusing))
         strg += '{0:25s}= {1:s}\n'.format(
-            'defocusing quadrupoles', str(self.knobs.Defocusing))
+            'defocusing quadrupoles', str(self.knobs.defocusing))
         strg += '{0:25s}= {1:30s}\n'.format(
             'correction method', self.method_str)
         strg += '{0:25s}= {1:30s}\n'.format(
@@ -60,11 +53,11 @@ class TuneCorr(BaseCorr):
         if model is None:
             model = self.model
 
-        tune_matrix = np.zeros((2, len(self.knobs.ALL)))
+        tune_matrix = np.zeros((2, len(self.knobs.all)))
         nu0 = self.get_tunes(model)
 
         delta = 1e-6
-        for idx, knb in enumerate(self.knobs.ALL):
+        for idx, knb in enumerate(self.knobs.all):
             modcopy = model[:]
             for nmag in self.fam[knb]['index']:
                 for seg in nmag:

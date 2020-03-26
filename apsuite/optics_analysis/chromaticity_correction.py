@@ -18,18 +18,11 @@ class ChromCorr(BaseCorr):
     def __init__(self, model, acc, sf_knobs=None, sd_knobs=None,
                  method=None, grouping=None):
         """."""
-        super().__init__()
-        self.model = model
-        self.acc = acc
-        self._method = ChromCorr.METHODS.Proportional
-        self._grouping = ChromCorr.GROUPING.TwoKnobs
-        if acc == 'BO':
-            sf_knobs = sf_knobs or ChromCorr.BO_SF
-            sd_knobs = sd_knobs or ChromCorr.BO_SD
+            self.knobs.focusing = sf_knobs or ChromCorr.BO_SF
+            self.knobs.defocusing = sd_knobs or ChromCorr.BO_SD
             self.fam = bo.get_family_data(model)
-        elif acc == 'SI':
-            sf_knobs = sf_knobs or ChromCorr.SI_SF
-            sd_knobs = sd_knobs or ChromCorr.SI_SD
+            self.knobs.focusing = sf_knobs or ChromCorr.SI_SF
+            self.knobs.defocusing = sd_knobs or ChromCorr.SI_SD
             self.fam = si.get_family_data(model)
         self.knobs = KnobTypes(Focusing=sf_knobs, Defocusing=sd_knobs)
         self.strength_type = 'SL'
@@ -39,9 +32,9 @@ class ChromCorr(BaseCorr):
     def __str__(self):
         """."""
         strg = '{0:25s}= {1:s}\n'.format(
-            'focusing sextupoles', str(self.knobs.Focusing))
+            'focusing sextupoles', str(self.knobs.focusing))
         strg += '{0:25s}= {1:s}\n'.format(
-            'defocusing sextupoles', str(self.knobs.Defocusing))
+            'defocusing sextupoles', str(self.knobs.defocusing))
         strg += '{0:25s}= {1:30s}\n'.format(
             'correction method', self.method_str)
         strg += '{0:25s}= {1:30s}\n'.format(
@@ -61,11 +54,11 @@ class ChromCorr(BaseCorr):
         if model is None:
             model = self.model
 
-        chrom_matrix = np.zeros((2, len(self.knobs.ALL)))
+        chrom_matrix = np.zeros((2, len(self.knobs.all)))
         chrom0 = self.get_chromaticities(model)
 
         delta = 1e-6
-        for idx, knb in enumerate(self.knobs.ALL):
+        for idx, knb in enumerate(self.knobs.all):
             modcopy = model[:]
             for nmag in self.fam[knb]['index']:
                 for seg in nmag:
