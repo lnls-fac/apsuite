@@ -44,7 +44,7 @@ class BaseCorr():
     def grouping(self, value):
         if value is None:
             return
-        elif isinstance(value, str):
+        if isinstance(value, str):
             self._grouping = int(value in BaseCorr.GROUPING._fields[1])
         elif int(value) in BaseCorr.GROUPING:
             self._grouping = int(value)
@@ -63,7 +63,7 @@ class BaseCorr():
     def method(self, value):
         if value is None:
             return
-        elif isinstance(value, str):
+        if isinstance(value, str):
             self._method = int(value in BaseCorr.METHODS._fields[1])
         elif int(value) in BaseCorr.METHODS:
             self._method = int(value)
@@ -140,14 +140,14 @@ class BaseCorr():
         if self._grouping == BaseCorr.GROUPING.TwoKnobs:
             jmat = self._group_2knobs_matrix(jmat)
 
-        U, S, V = np.linalg.svd(jmat, full_matrices=False)
-        iS = 1/S
-        iS[np.isnan(iS)] = 0
-        iS[np.isinf(iS)] = 0
+        umat, smat, vmat = np.linalg.svd(jmat, full_matrices=False)
+        ismat = 1/smat
+        ismat[np.isnan(ismat)] = 0
+        ismat[np.isinf(ismat)] = 0
         if nsv is not None:
-            iS[nsv:] = 0
-        iS = np.diag(iS)
-        invmat = -1 * np.dot(np.dot(V.T, iS), U.T)
+            ismat[nsv:] = 0
+        ismat = np.diag(ismat)
+        invmat = -1 * np.dot(np.dot(vmat.T, ismat), umat.T)
         param_new = self._get_parameter(model)
         dparam = param_new - goal_parameters
         if np.sum(dparam*dparam) < tol:
@@ -194,8 +194,8 @@ class BaseCorr():
         jacobian_2knobs_matrix = np.zeros((2, 2))
         nfocus = len(self.knobs.Focusing)
 
-        for nf, _ in enumerate(self.knobs.Focusing):
-            jacobian_2knobs_matrix[:, 0] += jacobian_matrix[:, nf]
+        for nfoc, _ in enumerate(self.knobs.Focusing):
+            jacobian_2knobs_matrix[:, 0] += jacobian_matrix[:, nfoc]
         for ndf, _ in enumerate(self.knobs.Defocusing):
             jacobian_2knobs_matrix[:, 1] += jacobian_matrix[:, ndf+nfocus]
         return jacobian_2knobs_matrix
