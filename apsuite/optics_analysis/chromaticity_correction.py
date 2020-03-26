@@ -2,7 +2,7 @@
 import numpy as np
 from pymodels import bo, si
 import pyaccel
-from apsuite.optics_analysis.base_correction import BaseCorr
+from apsuite.optics_analysis.base_correction import BaseCorr, KnobTypes
 
 
 class ChromCorr(BaseCorr):
@@ -31,7 +31,8 @@ class ChromCorr(BaseCorr):
             sf_knobs = sf_knobs or ChromCorr.SI_SF
             sd_knobs = sd_knobs or ChromCorr.SI_SD
             self.fam = si.get_family_data(model)
-        self.define_knobs(sf_knobs, sd_knobs, strength_type='SL')
+        self.knobs = KnobTypes(Focusing=sf_knobs, Defocusing=sd_knobs)
+        self.strength_type = 'SL'
         self.method = method
         self.grouping = grouping
 
@@ -47,10 +48,13 @@ class ChromCorr(BaseCorr):
             'grouping', self.grouping_str)
         return strg
 
-    def get_parameter(self, model=None):
+    def get_chromaticities(self, model):
         """."""
-        chromx, chromy = pyaccel.optics.get_chromaticities(model)
-        return np.array([chromx, chromy])
+        return self._get_parameter(model)
+
+    def get_sl(self, model):
+        """."""
+        return self._get_strength(model)
 
     def calc_jacobian_matrix(self, model=None):
         """."""
@@ -58,7 +62,7 @@ class ChromCorr(BaseCorr):
             model = self.model
 
         chrom_matrix = np.zeros((2, len(self.knobs.ALL)))
-        chrom0 = self.get_parameter(model)
+        chrom0 = self.get_chromaticities(model)
 
         delta = 1e-6
         for idx, knb in enumerate(self.knobs.ALL):
@@ -66,6 +70,11 @@ class ChromCorr(BaseCorr):
             for nmag in self.fam[knb]['index']:
                 for seg in nmag:
                     modcopy[seg].SL += delta/len(nmag)
-            chrom = self.get_parameter(model=modcopy)
+            chrom = self.get_chromaticities(model=modcopy)
             chrom_matrix[:, idx] = (chrom - chrom0)/delta
         return chrom_matrix
+
+    def _get_parameter(self, model=None):
+        """."""
+        chromx, chromy = pyaccel.optics.get_chromaticities(model)
+        return np.array([chromx, chromy])
