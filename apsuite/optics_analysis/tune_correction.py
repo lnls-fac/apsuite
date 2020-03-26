@@ -1,9 +1,11 @@
 """."""
 
 import numpy as np
-from pymodels import bo, si
-from apsuite.optics_analysis.base_correction import BaseCorr, KnobTypes
+
 import pyaccel
+from pymodels import bo, si
+
+from .base_correction import BaseCorr
 
 
 class TuneCorr(BaseCorr):

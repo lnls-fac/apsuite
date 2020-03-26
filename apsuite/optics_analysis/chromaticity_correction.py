@@ -1,8 +1,10 @@
 """."""
 import numpy as np
-from pymodels import bo, si
+
 import pyaccel
-from apsuite.optics_analysis.base_correction import BaseCorr, KnobTypes
+from pymodels import bo, si
+
+from .base_correction import BaseCorr
 
 
 class ChromCorr(BaseCorr):
