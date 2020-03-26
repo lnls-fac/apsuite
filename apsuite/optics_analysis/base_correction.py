@@ -22,7 +22,7 @@ class KnobTypes:
 class BaseCorr():
     """."""
 
-    __STRENGTH_TYPE = ''
+    _STRENGTH_TYPE = ''
     METHODS = _namedtuple('Methods', ['Additional', 'Proportional'])(0, 1)
     GROUPING = _namedtuple('Grouping', ['Individual', 'TwoKnobs'])(0, 1)
     CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
@@ -97,7 +97,7 @@ class BaseCorr():
                 stren_seg = []
                 for seg in mag:
                     stren_seg.append(getattr(
-                        model[seg], self.__STRENGTH_TYPE))
+                        model[seg], self._STRENGTH_TYPE))
                 stren_mag.append(sum(stren_seg))
             stren.append(np.mean(stren_mag))
         return np.array(stren)
@@ -161,12 +161,12 @@ class BaseCorr():
                 delta = delta_stren[idx_knb]
             for mag in self.fam[knb]['index']:
                 for seg in mag:
-                    stren = getattr(model[seg], self.__STRENGTH_TYPE)
+                    stren = getattr(model[seg], self._STRENGTH_TYPE)
                     if self._method == BaseCorr.METHODS.Proportional:
                         stren *= (1 + delta/len(mag))
                     else:
                         stren += delta/len(mag)
-                    setattr(model[seg], self.__STRENGTH_TYPE, stren)
+                    setattr(model[seg], self._STRENGTH_TYPE, stren)
 
     def _group_2knobs_matrix(self, jacobian_matrix=None):
         """."""
