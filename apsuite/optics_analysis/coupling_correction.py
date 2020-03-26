@@ -39,7 +39,7 @@ class CouplingCorr():
     def _nskew(self):
         return len(self.skew_idx)
 
-    def calc_coupling_matrix(self, model=None):
+    def calc_jacobian_matrix(self, model=None):
         """Coupling correction response matrix.
 
         Calculates the variation of off-diagonal elements of orbit response
@@ -105,13 +105,13 @@ class CouplingCorr():
         return newmod
 
     @staticmethod
-    def get_fm(res):
+    def get_figm(res):
         """Calculate figure of merit from residue vector."""
         return np.sqrt(np.sum(np.abs(res)**2)/res.size)
 
     def coupling_corr_orbrespm_dispy(self,
                                      model,
-                                     matrix=None,
+                                     jacobian_matrix=None,
                                      nsv=None, niter=10, tol=1e-6,
                                      res0=None):
         """Coupling correction with orbrespm.
@@ -119,35 +119,35 @@ class CouplingCorr():
         Calculates the pseudo-inverse of coupling correction matrix via SVD
         and minimizes the residue vector [Mxy, Myx, Etay].
         """
-        if matrix is None:
-            matrix = self.calc_coupling_matrix(model)
-        u, s, v = np.linalg.svd(matrix, full_matrices=False)
-        inv_s = 1/s
-        inv_s[np.isnan(inv_s)] = 0
-        inv_s[np.isinf(inv_s)] = 0
+        if jacobian_matrix is None:
+            jmat = self.calc_jacobian_matrix(model)
+        umat, smat, vmat = np.linalg.svd(jmat, full_matrices=False)
+        ismat = 1/smat
+        ismat[np.isnan(ismat)] = 0
+        ismat[np.isinf(ismat)] = 0
         if nsv is not None:
-            inv_s[nsv:] = 0
-        inv_s = np.diag(inv_s)
-        inv_matrix = -np.dot(np.dot(v.T, inv_s), u.T)
+            ismat[nsv:] = 0
+        ismat = np.diag(ismat)
+        ijmat = -np.dot(np.dot(vmat.T, ismat), umat.T)
         if res0 is None:
             res = self._get_coupling_residue(model)
         else:
             res = res0
-        bestfm = CouplingCorr.get_fm(res)
+        bestfigm = CouplingCorr.get_figm(res)
         ksl0 = self.get_ksl(model)
         ksl = ksl0
 
         for i in range(niter):
-            dksl = np.dot(inv_matrix, res)
+            dksl = np.dot(ijmat, res)
             ksl += np.reshape(dksl, (-1, 1))
             model = self.set_ksl(model=model, ksl=ksl)
             res = self._get_coupling_residue(model)
-            fm = CouplingCorr.get_fm(res)
-            diff_fm = np.abs(bestfm - fm)
-            print(i, bestfm)
-            if fm < bestfm:
-                bestfm = fm
-            if diff_fm < tol:
+            figm = CouplingCorr.get_figm(res)
+            diff_figm = np.abs(bestfigm - figm)
+            print(i, bestfigm)
+            if figm < bestfigm:
+                bestfigm = figm
+            if diff_figm < tol:
                 break
         print('done!')
         return model
@@ -165,7 +165,8 @@ class CouplingCorr():
         """
         if method == 'orbrespm':
             mod = self.coupling_corr_orbrespm_dispy(
-                model, matrix=matrix, nsv=nsv, niter=niter, tol=tol, res0=res0)
+                model=model, jacobian_matrix=matrix, nsv=nsv, niter=niter,
+                tol=tol, res0=res0)
         else:
             raise Exception('Chosen method is not implemented!')
         return mod
