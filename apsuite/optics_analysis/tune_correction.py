@@ -2,7 +2,7 @@
 
 import numpy as np
 from pymodels import bo, si
-from apsuite.optics_analysis.base_correction import BaseCorr
+from apsuite.optics_analysis.base_correction import BaseCorr, KnobTypes
 import pyaccel
 
 
@@ -30,7 +30,8 @@ class TuneCorr(BaseCorr):
             qf_knobs = qf_knobs or TuneCorr.SI_QF
             qd_knobs = qd_knobs or TuneCorr.SI_QD
             self.fam = si.get_family_data(model)
-        self.define_knobs(qf_knobs, qd_knobs, strength_type='KL')
+        self.knobs = KnobTypes(Focusing=qf_knobs, Defocusing=qd_knobs)
+        self.strength_type = 'KL'
         self.method = method
         self.grouping = grouping
 
@@ -46,7 +47,33 @@ class TuneCorr(BaseCorr):
             'grouping', self.grouping_str)
         return strg
 
-    def get_parameter(self, model=None):
+    def get_tunes(self, model):
+        """."""
+        return self._get_parameter(model)
+
+    def get_kl(self, model):
+        """."""
+        return self._get_strength(model)
+
+    def calc_jacobian_matrix(self, model=None):
+        """."""
+        if model is None:
+            model = self.model
+
+        tune_matrix = np.zeros((2, len(self.knobs.ALL)))
+        nu0 = self.get_tunes(model)
+
+        delta = 1e-6
+        for idx, knb in enumerate(self.knobs.ALL):
+            modcopy = model[:]
+            for nmag in self.fam[knb]['index']:
+                for seg in nmag:
+                    modcopy[seg].KL += delta/len(nmag)
+            nu = self.get_tunes(model=modcopy)
+            tune_matrix[:, idx] = (nu-nu0)/delta
+        return tune_matrix
+
+    def _get_parameter(self, model=None):
         """."""
         if model is None:
             model = self.model
@@ -55,21 +82,3 @@ class TuneCorr(BaseCorr):
         nux = twinom.mux[-1]/2/np.pi
         nuy = twinom.muy[-1]/2/np.pi
         return np.array([nux, nuy])
-
-    def calc_jacobian_matrix(self, model=None):
-        """."""
-        if model is None:
-            model = self.model
-
-        tune_matrix = np.zeros((2, len(self.knobs.ALL)))
-        nu0 = self.get_parameter(model)
-
-        delta = 1e-6
-        for idx, knb in enumerate(self.knobs.ALL):
-            modcopy = model[:]
-            for nmag in self.fam[knb]['index']:
-                for seg in nmag:
-                    modcopy[seg].KL += delta/len(nmag)
-            nu = self.get_parameter(model=modcopy)
-            tune_matrix[:, idx] = (nu-nu0)/delta
-        return tune_matrix
