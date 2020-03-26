@@ -2,8 +2,9 @@
 
 from copy import deepcopy as _dcopy
 import numpy as np
-from apsuite.commissioning_scripts.calc_orbcorr_mat import OrbRespmat
+
 import pyaccel
+from apsuite.commissioning_scripts.calc_orbcorr_mat import OrbRespmat
 
 
 class CouplingCorr():
