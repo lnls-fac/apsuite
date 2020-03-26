@@ -11,7 +11,7 @@ from .base_correction import BaseCorr
 class TuneCorr(BaseCorr):
     """."""
 
-    __STRENGTH_TYPE = 'KL'
+    _STRENGTH_TYPE = 'KL'
     SI_QF = ['QFA', 'QFB', 'QFP']
     SI_QD = ['QDA', 'QDB1', 'QDB2', 'QDP1', 'QDP2']
     BO_QF = ['QF']
