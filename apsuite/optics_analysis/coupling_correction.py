@@ -158,7 +158,8 @@ class CouplingCorr():
 
     def coupling_correction(self,
                             model,
-                            matrix=None, nsv=None, niter=10, tol=1e-6,
+                            jacobian_matrix=None,
+                            nsv=None, nr_max=10, tol=1e-6,
                             res0=None,
                             method='orbrespm'):
         """Coupling correction method selection.
@@ -168,9 +169,9 @@ class CouplingCorr():
         vertical dispersion.
         """
         if method == 'orbrespm':
-            mod = self.coupling_corr_orbrespm_dispy(
-                model=model, jacobian_matrix=matrix, nsv=nsv, niter=niter,
-                tol=tol, res0=res0)
+            result = self.coupling_corr_orbrespm_dispy(
+                model=model, jacobian_matrix=jacobian_matrix,
+                nsv=nsv, nr_max=nr_max, tol=tol, res0=res0)
         else:
             raise Exception('Chosen method is not implemented!')
-        return mod
+        return result
