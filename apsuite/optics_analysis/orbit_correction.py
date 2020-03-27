@@ -106,9 +106,9 @@ class OrbitCorr():
         return newmod
 
     @staticmethod
-    def get_fm(res):
+    def get_figm(res):
         """Calculate figure of merit from residue vector."""
-        return np.sqrt(np.sum(np.abs(res)**2)/res.size)
+        return np.sqrt(np.sum(res*res)/res.size)
 
     def orbit_corr(self,
                    model,
@@ -141,7 +141,7 @@ class OrbitCorr():
         ismat = -1 * np.dot(np.dot(vmat.T, ismat), umat.T)
         orb = self._get_orbit_residue(model)
         dorb = orb - goal_orbit
-        bestfigm = OrbitCorr.get_fm(dorb)
+        bestfigm = OrbitCorr.get_figm(dorb)
         if bestfigm < tol:
             return OrbitCorr.CORR_STATUS.Sucess
 
@@ -153,7 +153,7 @@ class OrbitCorr():
             model = self.set_kicks(model=model, kicks=kicks)
             orb = self._get_orbit_residue(model)
             dorb = orb - goal_orbit
-            figm = OrbitCorr.get_fm(dorb)
+            figm = OrbitCorr.get_figm(dorb)
             diff_figm = np.abs(bestfigm - figm)
             if figm < bestfigm:
                 bestfigm = figm
