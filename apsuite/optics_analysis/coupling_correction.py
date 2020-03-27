@@ -1,6 +1,7 @@
 """."""
 
 from copy import deepcopy as _dcopy
+from collections import namedtuple as _namedtuple
 import numpy as np
 
 import pyaccel
@@ -9,6 +10,8 @@ from apsuite.commissioning_scripts.calc_orbcorr_mat import OrbRespmat
 
 class CouplingCorr():
     """."""
+
+    CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
 
     def __init__(self, model, acc, dim='4d', skew_list=None):
         """."""
@@ -112,7 +115,7 @@ class CouplingCorr():
     def coupling_corr_orbrespm_dispy(self,
                                      model,
                                      jacobian_matrix=None,
-                                     nsv=None, niter=10, tol=1e-6,
+                                     nsv=None, nr_max=10, tol=1e-6,
                                      res0=None):
         """Coupling correction with orbrespm.
 
@@ -134,23 +137,24 @@ class CouplingCorr():
         else:
             res = res0
         bestfigm = CouplingCorr.get_figm(res)
-        ksl0 = self.get_ksl(model)
-        ksl = ksl0
+        if bestfigm < tol:
+            return CouplingCorr.CORR_STATUS.Sucess
+        ksl = self.get_ksl(model)
 
-        for i in range(niter):
+        for _ in range(nr_max):
             dksl = np.dot(ijmat, res)
             ksl += np.reshape(dksl, (-1, 1))
             model = self.set_ksl(model=model, ksl=ksl)
             res = self._get_coupling_residue(model)
             figm = CouplingCorr.get_figm(res)
             diff_figm = np.abs(bestfigm - figm)
-            print(i, bestfigm)
             if figm < bestfigm:
                 bestfigm = figm
             if diff_figm < tol:
                 break
-        print('done!')
-        return model
+        else:
+            return CouplingCorr.CORR_STATUS.Fail
+        return CouplingCorr.CORR_STATUS.Sucess
 
     def coupling_correction(self,
                             model,
