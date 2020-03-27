@@ -12,6 +12,7 @@ class OpticsCorr():
     """."""
 
     METHODS = _namedtuple('Methods', ['Additional', 'Proportional'])(0, 1)
+    CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
 
     def __init__(self, model, acc, dim='4d', knobs_list=None, method=None):
         """."""
@@ -144,7 +145,7 @@ class OpticsCorr():
                     model,
                     goal_model=None,
                     jacobian_matrix=None,
-                    nsv=None, niter=10, tol=1e-6):
+                    nsv=None, nr_max=10, tol=1e-6):
         """Optics correction LOCO-like.
 
         Calculates the pseudo-inverse of optics correction matrix via SVD
@@ -173,8 +174,10 @@ class OpticsCorr():
         klcorr = nominal_stren
         dvec = goal_vec - vec
         bestfigm = OpticsCorr.get_figm(dvec)
+        if bestfigm < tol:
+            return OpticsCorr.CORR_STATUS.Sucess
 
-        for i in range(niter):
+        for _ in range(nr_max):
             dkl = np.dot(ijmat, dvec)
             dkl = np.reshape(dkl, (-1, 1))
             if self._method == OpticsCorr.METHODS.Proportional:
@@ -185,10 +188,10 @@ class OpticsCorr():
             vec = self._get_optics_vector(model)
             dvec = goal_vec - vec
             figm = OpticsCorr.get_figm(dvec)
-            print(i, bestfigm)
             if figm < bestfigm:
                 bestfigm = figm
             if bestfigm < tol:
                 break
-        print('done!')
-        return model
+        else:
+            return OpticsCorr.CORR_STATUS.Fail
+        return OpticsCorr.CORR_STATUS.Sucess
