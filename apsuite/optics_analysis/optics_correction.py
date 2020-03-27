@@ -139,7 +139,7 @@ class OpticsCorr():
     @staticmethod
     def get_figm(res):
         """Calculate figure of merit from residue vector."""
-        return np.sqrt(np.sum(np.abs(res)**2)/res.size)
+        return np.sqrt(np.sum(res*res)/res.size)
 
     def optics_corr_loco(self,
                          model,
