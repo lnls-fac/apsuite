@@ -141,11 +141,11 @@ class OpticsCorr():
         """Calculate figure of merit from residue vector."""
         return np.sqrt(np.sum(np.abs(res)**2)/res.size)
 
-    def optics_corr(self,
-                    model,
-                    goal_model=None,
-                    jacobian_matrix=None,
-                    nsv=None, nr_max=10, tol=1e-6):
+    def optics_corr_loco(self,
+                         model,
+                         goal_model=None,
+                         jacobian_matrix=None,
+                         nsv=None, nr_max=10, tol=1e-6):
         """Optics correction LOCO-like.
 
         Calculates the pseudo-inverse of optics correction matrix via SVD
@@ -195,3 +195,23 @@ class OpticsCorr():
         else:
             return OpticsCorr.CORR_STATUS.Fail
         return OpticsCorr.CORR_STATUS.Sucess
+
+    def optics_correction(self,
+                          model,
+                          goal_model=None,
+                          jacobian_matrix=None,
+                          nsv=None, nr_max=10, tol=1e-6,
+                          method='loco'):
+        """Optics correction method selection.
+
+        Methods available:
+        - LOCO-like correction
+        """
+        if method == 'loco':
+            result = self.optics_corr_loco(
+                model=model, goal_model=goal_model,
+                jacobian_matrix=jacobian_matrix, nsv=nsv, nr_max=nr_max,
+                tol=tol)
+        else:
+            raise Exception('Chosen method is not implemented!')
+        return result
