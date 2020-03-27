@@ -1,6 +1,7 @@
 """."""
 
 from copy import deepcopy as _dcopy
+from collections import namedtuple as _namedtuple
 import numpy as np
 
 import pyaccel
@@ -10,11 +11,14 @@ from pymodels import bo, si
 class OpticsCorr():
     """."""
 
-    def __init__(self, model, acc, dim='4d', knobs_list=None):
+    METHODS = _namedtuple('Methods', ['Additional', 'Proportional'])(0, 1)
+
+    def __init__(self, model, acc, dim='4d', knobs_list=None, method=None):
         """."""
         self.model = model
         self.acc = acc
         self.dim = dim
+        self._method = OpticsCorr.METHODS.Proportional
         self.jacobian_matrix = []
         if self.acc == 'BO':
             self.fam_data = bo.families.get_family_data(self.model)
@@ -29,6 +33,26 @@ class OpticsCorr():
         self.bpm_idx = self._get_idx(self.fam_data['BPM']['index'])
         self.ch_idx = self._get_idx(self.fam_data['CH']['index'])
         self.cv_idx = self._get_idx(self.fam_data['CV']['index'])
+        self.method = method
+
+    @property
+    def method(self):
+        """."""
+        return self._method
+
+    @method.setter
+    def method(self, value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            self._method = int(value in OpticsCorr.METHODS._fields[1])
+        elif int(value) in OpticsCorr.METHODS:
+            self._method = int(value)
+
+    @property
+    def method_str(self):
+        """."""
+        return OpticsCorr.METHODS._fields[self._method]
 
     @staticmethod
     def _get_idx(indcs):
@@ -131,6 +155,11 @@ class OpticsCorr():
             jmat = self.calc_jacobian_matrix(model)
         else:
             jmat = _dcopy(jacobian_matrix)
+
+        nominal_stren = self.get_kl(model)
+        if self._method == OpticsCorr.METHODS.Proportional:
+            jmat *= nominal_stren.flatten()
+
         umat, smat, vmat = np.linalg.svd(jmat, full_matrices=False)
         ismat = 1/smat
         ismat[np.isnan(ismat)] = 0
@@ -141,13 +170,17 @@ class OpticsCorr():
         ijmat = np.dot(np.dot(vmat.T, ismat), umat.T)
         goal_vec = self._get_optics_vector(goal_model)
         vec = self._get_optics_vector(model)
-        klcorr = self.get_kl(model)
+        klcorr = nominal_stren
         dvec = goal_vec - vec
         bestfigm = OpticsCorr.get_figm(dvec)
 
         for i in range(niter):
             dkl = np.dot(ijmat, dvec)
-            klcorr += np.reshape(dkl, (-1, 1))
+            dkl = np.reshape(dkl, (-1, 1))
+            if self._method == OpticsCorr.METHODS.Proportional:
+                klcorr *= (1 + dkl)
+            else:
+                klcorr += dkl
             model = self.set_kl(model=model, kl=klcorr)
             vec = self._get_optics_vector(model)
             dvec = goal_vec - vec
