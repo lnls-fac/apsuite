@@ -98,12 +98,10 @@ class OrbitCorr():
                 if idx_mag < self._nch:
                     if np.abs(kick) > OrbitCorr.MAX_HKICK:
                         kick = np.sign(kick) * OrbitCorr.MAX_HKICK
-                        print('Max CH reach')
                     newmod[seg].hkick_polynom = kick
                 else:
                     if np.abs(kick) > OrbitCorr.MAX_VKICK:
                         kick = np.sign(kick) * OrbitCorr.MAX_VKICK
-                        print('Max CV reach')
                     newmod[seg].vkick_polynom = kick
         return newmod
 
