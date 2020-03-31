@@ -92,7 +92,7 @@ class OrbitCorr():
         if delta_kicks is None:
             raise Exception('Missing Delta Kicks values')
         for idx_mag, mag in enumerate(corridx):
-            delta = delta_kicks[idx_mag]
+            delta = delta_kicks[idx_mag]/len(mag)
             for _, seg in enumerate(mag):
                 if idx_mag < self._nch:
                     kick = model[seg].hkick_polynom + delta
