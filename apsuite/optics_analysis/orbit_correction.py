@@ -72,38 +72,38 @@ class OrbitCorr():
             hkick_seg = []
             for seg in mag:
                 hkick_seg.append(model[seg].hkick_polynom)
-            hkick.append(hkick_seg)
+            hkick.append(sum(hkick_seg))
         vkick = []
         for mag in cvidx:
             vkick_seg = []
             for seg in mag:
                 vkick_seg.append(model[seg].vkick_polynom)
-            vkick.append(vkick_seg)
+            vkick.append(sum(vkick_seg))
         hkick = np.array(hkick)
         vkick = np.array(vkick)
-        return np.vstack((hkick, vkick))
+        return np.hstack((hkick, vkick))
 
-    def set_kicks(self, model=None, corridx=None, kicks=None):
+    def _set_delta_kicks(self, model=None, corridx=None, delta_kicks=None):
         """Set skew quadrupoles strengths in the model."""
         if model is None:
             model = self.model
         if corridx is None:
             corridx = self.corr_idx
-        if kicks is None:
-            raise Exception('Missing Kicks values')
-        newmod = _dcopy(model)
+        if delta_kicks is None:
+            raise Exception('Missing Delta Kicks values')
         for idx_mag, mag in enumerate(corridx):
-            for idx_seg, seg in enumerate(mag):
-                kick = kicks[idx_mag][idx_seg]
+            delta = delta_kicks[idx_mag]
+            for _, seg in enumerate(mag):
                 if idx_mag < self._nch:
+                    kick = model[seg].hkick_polynom + delta
                     if np.abs(kick) > OrbitCorr.MAX_HKICK:
                         kick = np.sign(kick) * OrbitCorr.MAX_HKICK
-                    newmod[seg].hkick_polynom = kick
+                    model[seg].hkick_polynom = kick
                 else:
+                    kick = model[seg].vkick_polynom + delta
                     if np.abs(kick) > OrbitCorr.MAX_VKICK:
                         kick = np.sign(kick) * OrbitCorr.MAX_VKICK
-                    newmod[seg].vkick_polynom = kick
-        return newmod
+                    model[seg].vkick_polynom = kick
 
     @staticmethod
     def get_figm(res):
@@ -145,12 +145,9 @@ class OrbitCorr():
         if bestfigm < tol:
             return OrbitCorr.CORR_STATUS.Sucess
 
-        kicks = self.get_kicks(model)
-
         for _ in range(nr_max):
             dkicks = np.dot(ismat, dorb)
-            kicks += np.reshape(dkicks, (-1, 1))
-            model = self.set_kicks(model=model, kicks=kicks)
+            self._set_delta_kicks(model=model, delta_kicks=dkicks)
             orb = self._get_orbit_residue(model)
             dorb = orb - goal_orbit
             figm = OrbitCorr.get_figm(dorb)
