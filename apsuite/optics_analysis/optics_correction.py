@@ -70,7 +70,7 @@ class OpticsCorr():
             return
         if isinstance(value, str):
             self._corr_method = int(
-                value in OpticsCorr.CORR_METHODS._fields[1])
+                value not in OpticsCorr.CORR_METHODS._fields[0])
         elif int(value) in OpticsCorr.CORR_METHODS:
             self._corr_method = int(value)
 
