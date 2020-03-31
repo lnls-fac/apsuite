@@ -12,14 +12,15 @@ class CouplingCorr():
     """."""
 
     CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
+    CORR_METHODS = _namedtuple('CorrMethods', ['Orbrespm'])(0)
 
     def __init__(self, model, acc, dim='4d',
-                 skew_list=None, method='orbrespm'):
+                 skew_list=None, correction_method=None):
         """."""
         self.model = model
         self.acc = acc
         self.dim = dim
-        self.method = method
+        self._corr_method = CouplingCorr.CORR_METHODS.Orbrespm
         self.coup_matrix = []
         self.respm = OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
         self.bpm_idx = self.respm.fam_data['BPM']['index']
@@ -27,6 +28,27 @@ class CouplingCorr():
             self.skew_idx = self.respm.fam_data['QS']['index']
         else:
             self.skew_idx = skew_list
+        self._corr_method = correction_method
+
+    @property
+    def corr_method(self):
+        """."""
+        return self._corr_method
+
+    @corr_method.setter
+    def corr_method(self, value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            self._corr_method = int(
+                value in CouplingCorr.CORR_METHODS._fields[1])
+        elif int(value) in CouplingCorr.CORR_METHODS:
+            self._corr_method = int(value)
+
+    @property
+    def corr_method_str(self):
+        """."""
+        return CouplingCorr.CORR_METHODS._fields[self._corr_method]
 
     @property
     def _nbpm(self):
