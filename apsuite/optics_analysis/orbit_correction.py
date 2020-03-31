@@ -119,7 +119,7 @@ class OrbitCorr():
             str_above += 'VKick > MaxVKick at CVs: {1:s}'
             xlist = str(np.argwhere(kicksx_above).flatten())
             ylist = str(np.argwhere(kicksy_above).flatten())
-            raise Exception(str_above.format(xlist, ylist))
+            raise ValueError(str_above.format(xlist, ylist))
 
     @staticmethod
     def get_figm(res):
