@@ -13,11 +13,13 @@ class CouplingCorr():
 
     CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
 
-    def __init__(self, model, acc, dim='4d', skew_list=None):
+    def __init__(self, model, acc, dim='4d',
+                 skew_list=None, method='orbrespm'):
         """."""
         self.model = model
         self.acc = acc
         self.dim = dim
+        self.method = method
         self.coup_matrix = []
         self.respm = OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
         self.bpm_idx = self.respm.fam_data['BPM']['index']
@@ -157,15 +159,14 @@ class CouplingCorr():
                             model,
                             jacobian_matrix=None,
                             nsv=None, nr_max=10, tol=1e-6,
-                            res0=None,
-                            method='orbrespm'):
+                            res0=None):
         """Coupling correction method selection.
 
         Methods available:
         - Minimization of off-diagonal elements of orbit response matrix and
         vertical dispersion.
         """
-        if method == 'orbrespm':
+        if self.method == 'orbrespm':
             result = self.coupling_corr_orbrespm_dispy(
                 model=model, jacobian_matrix=jacobian_matrix,
                 nsv=nsv, nr_max=nr_max, tol=tol, res0=res0)
