@@ -60,7 +60,7 @@ class OrbitCorr():
         return res
 
     def get_kicks(self, model=None, chidx=None, cvidx=None):
-        """Return skew quadrupoles strengths."""
+        """Return corrector kicks."""
         if model is None:
             model = self.model
         if chidx is None:
@@ -84,7 +84,6 @@ class OrbitCorr():
         return np.hstack((hkick, vkick))
 
     def _set_delta_kicks(self, model=None, corridx=None, delta_kicks=None):
-        """Set skew quadrupoles strengths in the model."""
         if model is None:
             model = self.model
         if corridx is None:
@@ -96,17 +95,31 @@ class OrbitCorr():
             for _, seg in enumerate(mag):
                 if idx_mag < self._nch:
                     kick = model[seg].hkick_polynom + delta
-                    if np.abs(kick) > OrbitCorr.MAX_HKICK:
-                        raise Exception(
-                            'HKick > MaxHKick at CH #{:d}'.format(idx_mag + 1))
                     model[seg].hkick_polynom = kick
                 else:
                     kick = model[seg].vkick_polynom + delta
-                    if np.abs(kick) > OrbitCorr.MAX_VKICK:
-                        raise Exception(
-                            'VKick > MaxVKick at CV #{:d}'.format(
-                                idx_mag - self._nch + 1))
                     model[seg].vkick_polynom = kick
+
+    def _check_kicks(self, model=None, chidx=None, cvidx=None):
+        if model is None:
+            model = self.model
+        if chidx is None:
+            chidx = self.ch_idx
+        if cvidx is None:
+            cvidx = self.cv_idx
+
+        kicks = self.get_kicks(model, chidx, cvidx)
+        kicksx, kicksy = kicks[:self._nch], kicks[self._nch:]
+        kicksx_above = kicksx > OrbitCorr.MAX_HKICK
+        kicksy_above = kicksy > OrbitCorr.MAX_VKICK
+
+        if sum(kicksx_above) or sum(kicksy_above):
+            str_above = '\n'
+            str_above += 'HKick > MaxHKick at CHs: {0:s} \n'
+            str_above += 'VKick > MaxVKick at CVs: {1:s}'
+            xlist = str(np.argwhere(kicksx_above).flatten())
+            ylist = str(np.argwhere(kicksy_above).flatten())
+            raise Exception(str_above.format(xlist, ylist))
 
     @staticmethod
     def get_figm(res):
@@ -151,6 +164,7 @@ class OrbitCorr():
         for _ in range(nr_max):
             dkicks = np.dot(ismat, dorb)
             self._set_delta_kicks(model=model, delta_kicks=dkicks)
+            self._check_kicks(model=model)
             orb = self._get_orbit_residue(model)
             dorb = orb - goal_orbit
             figm = OrbitCorr.get_figm(dorb)
