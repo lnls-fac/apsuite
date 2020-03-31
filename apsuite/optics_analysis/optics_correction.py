@@ -108,33 +108,37 @@ class OpticsCorr():
         vec = np.hstack((vec, vec_tune * w_tune / vec_tune.size))
         return vec
 
-    def get_kl(self, model=None, knobsidx=None):
+    def _get_kl(self, model=None, knobsidx=None):
         """Return integrated quadrupoles strengths."""
         if model is None:
             model = self.model
         if knobsidx is None:
             knobsidx = self.knobs_idx
-        kl = []
+        kl_mag = []
         for mag in knobsidx:
             kl_seg = []
             for seg in mag:
                 kl_seg.append(model[seg].KL)
-            kl.append(kl_seg)
-        return np.array(kl)
+            kl_mag.append(sum(kl_seg))
+        return np.array(kl_mag)
 
-    def set_kl(self, model=None, knobsidx=None, kl=None):
+    def _set_delta_kl(self, model=None, knobsidx=None, deltas_kl=None):
         """Set integrated quadrupoles strengths in the model."""
         if model is None:
             model = self.model
         if knobsidx is None:
             knobsidx = self.knobs_idx
-        if kl is None:
-            raise Exception('Missing KL values')
-        newmod = _dcopy(model)
+        if deltas_kl is None:
+            raise Exception('Missing Delta KL values')
         for idx_mag, mag in enumerate(knobsidx):
-            for idx_seg, seg in enumerate(mag):
-                newmod[seg].KL = kl[idx_mag][idx_seg]
-        return newmod
+            delta = deltas_kl[idx_mag]
+            for _, seg in enumerate(mag):
+                stren = model[seg].KL
+                if self.method == OpticsCorr.METHODS.Proportional:
+                    stren *= (1 + delta/len(mag))
+                else:
+                    stren += delta/len(mag)
+                model[seg].KL = stren
 
     @staticmethod
     def get_figm(res):
@@ -157,8 +161,8 @@ class OpticsCorr():
         else:
             jmat = _dcopy(jacobian_matrix)
 
-        nominal_stren = self.get_kl(model)
-        if self._method == OpticsCorr.METHODS.Proportional:
+        nominal_stren = self._get_kl(model)
+        if self.method == OpticsCorr.METHODS.Proportional:
             jmat *= nominal_stren.flatten()
 
         umat, smat, vmat = np.linalg.svd(jmat, full_matrices=False)
@@ -171,7 +175,6 @@ class OpticsCorr():
         ijmat = np.dot(np.dot(vmat.T, ismat), umat.T)
         goal_vec = self._get_optics_vector(goal_model)
         vec = self._get_optics_vector(model)
-        klcorr = nominal_stren
         dvec = goal_vec - vec
         bestfigm = OpticsCorr.get_figm(dvec)
         if bestfigm < tol:
@@ -179,12 +182,7 @@ class OpticsCorr():
 
         for _ in range(nr_max):
             dkl = np.dot(ijmat, dvec)
-            dkl = np.reshape(dkl, (-1, 1))
-            if self._method == OpticsCorr.METHODS.Proportional:
-                klcorr *= (1 + dkl)
-            else:
-                klcorr += dkl
-            model = self.set_kl(model=model, kl=klcorr)
+            self._set_delta_kl(model=model, deltas_kl=dkl)
             vec = self._get_optics_vector(model)
             dvec = goal_vec - vec
             figm = OpticsCorr.get_figm(dvec)
