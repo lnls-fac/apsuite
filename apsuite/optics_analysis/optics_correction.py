@@ -146,7 +146,7 @@ class OpticsCorr():
         return np.sqrt(np.sum(res*res)/res.size)
 
     def optics_corr_loco(self,
-                         model,
+                         model=None,
                          goal_model=None,
                          jacobian_matrix=None,
                          nsv=None, nr_max=10, tol=1e-6):
@@ -156,6 +156,8 @@ class OpticsCorr():
         and minimizes the residue vector:
         Delta [Bx@BPM, Bx@CH, By@BPM, By@CV, Dx@BPM, Tunex, Tuney].
         """
+        if model is None:
+            model = self.model
         if jacobian_matrix is None:
             jmat = self.calc_jacobian_matrix(model)
         else:
@@ -195,7 +197,7 @@ class OpticsCorr():
         return OpticsCorr.CORR_STATUS.Sucess
 
     def optics_correction(self,
-                          model,
+                          model=None,
                           goal_model=None,
                           jacobian_matrix=None,
                           nsv=None, nr_max=10, tol=1e-6,
@@ -205,6 +207,8 @@ class OpticsCorr():
         Methods available:
         - LOCO-like correction
         """
+        if model is None:
+            model = self.model
         if method == 'loco':
             result = self.optics_corr_loco(
                 model=model, goal_model=goal_model,
