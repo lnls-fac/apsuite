@@ -103,7 +103,7 @@ class CouplingCorr():
             raise Exception('Missing Delta KsL values')
         for idx_mag, mag in enumerate(skewidx):
             delta = delta_ksl[idx_mag]/len(mag)
-            for _, seg in enumerate(mag):
+            for seg in mag:
                 model[seg].KsL += delta
 
     @staticmethod
