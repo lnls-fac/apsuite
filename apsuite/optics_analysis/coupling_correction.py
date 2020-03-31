@@ -1,6 +1,7 @@
 """."""
 
 from copy import deepcopy as _dcopy
+from collections import namedtuple as _namedtuple
 import numpy as np
 
 import pyaccel
@@ -10,11 +11,16 @@ from apsuite.commissioning_scripts.calc_orbcorr_mat import OrbRespmat
 class CouplingCorr():
     """."""
 
-    def __init__(self, model, acc, dim='4d', skew_list=None):
+    CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
+    CORR_METHODS = _namedtuple('CorrMethods', ['Orbrespm'])(0)
+
+    def __init__(self, model, acc, dim='4d',
+                 skew_list=None, correction_method=None):
         """."""
         self.model = model
         self.acc = acc
         self.dim = dim
+        self._corr_method = CouplingCorr.CORR_METHODS.Orbrespm
         self.coup_matrix = []
         self.respm = OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
         self.bpm_idx = self.respm.fam_data['BPM']['index']
@@ -22,6 +28,27 @@ class CouplingCorr():
             self.skew_idx = self.respm.fam_data['QS']['index']
         else:
             self.skew_idx = skew_list
+        self._corr_method = correction_method
+
+    @property
+    def corr_method(self):
+        """."""
+        return self._corr_method
+
+    @corr_method.setter
+    def corr_method(self, value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            self._corr_method = int(
+                value not in CouplingCorr.CORR_METHODS._fields[0])
+        elif int(value) in CouplingCorr.CORR_METHODS:
+            self._corr_method = int(value)
+
+    @property
+    def corr_method_str(self):
+        """."""
+        return CouplingCorr.CORR_METHODS._fields[self._corr_method]
 
     @property
     def _nbpm(self):
@@ -39,7 +66,7 @@ class CouplingCorr():
     def _nskew(self):
         return len(self.skew_idx)
 
-    def calc_coupling_matrix(self, model=None):
+    def calc_jacobian_matrix(self, model=None):
         """Coupling correction response matrix.
 
         Calculates the variation of off-diagonal elements of orbit response
@@ -82,90 +109,89 @@ class CouplingCorr():
             model = self.model
         if skewidx is None:
             skewidx = self.skew_idx
-        ksl = []
+        ksl_mag = []
         for mag in skewidx:
             ksl_seg = []
             for seg in mag:
                 ksl_seg.append(model[seg].KsL)
-            ksl.append(ksl_seg)
-        return np.array(ksl)
+            ksl_mag.append(sum(ksl_seg))
+        return np.array(ksl_mag)
 
-    def set_ksl(self, model=None, skewidx=None, ksl=None):
+    def _set_delta_ksl(self, model=None, skewidx=None, delta_ksl=None):
         """Set skew quadrupoles strengths in the model."""
         if model is None:
             model = self.model
         if skewidx is None:
             skewidx = self.skew_idx
-        if ksl is None:
-            raise Exception('Missing KsL values')
-        newmod = _dcopy(model)
+        if delta_ksl is None:
+            raise Exception('Missing Delta KsL values')
         for idx_mag, mag in enumerate(skewidx):
-            for idx_seg, seg in enumerate(mag):
-                newmod[seg].KsL = ksl[idx_mag][idx_seg]
-        return newmod
+            delta = delta_ksl[idx_mag]/len(mag)
+            for seg in mag:
+                model[seg].KsL += delta
 
     @staticmethod
-    def get_fm(res):
+    def get_figm(res):
         """Calculate figure of merit from residue vector."""
-        return np.sqrt(np.sum(np.abs(res)**2)/res.size)
+        return np.sqrt(np.sum(res*res)/res.size)
 
     def coupling_corr_orbrespm_dispy(self,
                                      model,
-                                     matrix=None,
-                                     nsv=None, niter=10, tol=1e-6,
+                                     jacobian_matrix=None,
+                                     nsv=None, nr_max=10, tol=1e-6,
                                      res0=None):
         """Coupling correction with orbrespm.
 
         Calculates the pseudo-inverse of coupling correction matrix via SVD
         and minimizes the residue vector [Mxy, Myx, Etay].
         """
-        if matrix is None:
-            matrix = self.calc_coupling_matrix(model)
-        u, s, v = np.linalg.svd(matrix, full_matrices=False)
-        inv_s = 1/s
-        inv_s[np.isnan(inv_s)] = 0
-        inv_s[np.isinf(inv_s)] = 0
+        if jacobian_matrix is None:
+            jmat = self.calc_jacobian_matrix(model)
+        umat, smat, vmat = np.linalg.svd(jmat, full_matrices=False)
+        ismat = 1/smat
+        ismat[np.isnan(ismat)] = 0
+        ismat[np.isinf(ismat)] = 0
         if nsv is not None:
-            inv_s[nsv:] = 0
-        inv_s = np.diag(inv_s)
-        inv_matrix = -np.dot(np.dot(v.T, inv_s), u.T)
+            ismat[nsv:] = 0
+        ismat = np.diag(ismat)
+        ijmat = -np.dot(np.dot(vmat.T, ismat), umat.T)
         if res0 is None:
             res = self._get_coupling_residue(model)
         else:
             res = res0
-        bestfm = CouplingCorr.get_fm(res)
-        ksl0 = self.get_ksl(model)
-        ksl = ksl0
+        bestfigm = CouplingCorr.get_figm(res)
+        if bestfigm < tol:
+            return CouplingCorr.CORR_STATUS.Sucess
 
-        for i in range(niter):
-            dksl = np.dot(inv_matrix, res)
-            ksl += np.reshape(dksl, (-1, 1))
-            model = self.set_ksl(model=model, ksl=ksl)
+        for _ in range(nr_max):
+            dksl = np.dot(ijmat, res)
+            self._set_delta_ksl(model=model, delta_ksl=dksl)
             res = self._get_coupling_residue(model)
-            fm = CouplingCorr.get_fm(res)
-            diff_fm = np.abs(bestfm - fm)
-            print(i, bestfm)
-            if fm < bestfm:
-                bestfm = fm
-            if diff_fm < tol:
+            figm = CouplingCorr.get_figm(res)
+            diff_figm = np.abs(bestfigm - figm)
+            if figm < bestfigm:
+                bestfigm = figm
+            if diff_figm < tol:
                 break
-        print('done!')
-        return model
+        else:
+            return CouplingCorr.CORR_STATUS.Fail
+        return CouplingCorr.CORR_STATUS.Sucess
 
     def coupling_correction(self,
                             model,
-                            matrix=None, nsv=None, niter=10, tol=1e-6,
-                            res0=None,
-                            method='orbrespm'):
+                            jacobian_matrix=None,
+                            nsv=None, nr_max=10, tol=1e-6,
+                            res0=None):
         """Coupling correction method selection.
 
         Methods available:
         - Minimization of off-diagonal elements of orbit response matrix and
         vertical dispersion.
         """
-        if method == 'orbrespm':
-            mod = self.coupling_corr_orbrespm_dispy(
-                model, matrix=matrix, nsv=nsv, niter=niter, tol=tol, res0=res0)
+        if self.method == 'orbrespm':
+            result = self.coupling_corr_orbrespm_dispy(
+                model=model, jacobian_matrix=jacobian_matrix,
+                nsv=nsv, nr_max=nr_max, tol=tol, res0=res0)
         else:
             raise Exception('Chosen method is not implemented!')
-        return mod
+        return result
