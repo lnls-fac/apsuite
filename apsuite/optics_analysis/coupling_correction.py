@@ -85,27 +85,26 @@ class CouplingCorr():
             model = self.model
         if skewidx is None:
             skewidx = self.skew_idx
-        ksl = []
+        ksl_mag = []
         for mag in skewidx:
             ksl_seg = []
             for seg in mag:
                 ksl_seg.append(model[seg].KsL)
-            ksl.append(ksl_seg)
-        return np.array(ksl)
+            ksl_mag.append(sum(ksl_seg))
+        return np.array(ksl_mag)
 
-    def set_ksl(self, model=None, skewidx=None, ksl=None):
+    def _set_delta_ksl(self, model=None, skewidx=None, delta_ksl=None):
         """Set skew quadrupoles strengths in the model."""
         if model is None:
             model = self.model
         if skewidx is None:
             skewidx = self.skew_idx
-        if ksl is None:
-            raise Exception('Missing KsL values')
-        newmod = _dcopy(model)
+        if delta_ksl is None:
+            raise Exception('Missing Delta KsL values')
         for idx_mag, mag in enumerate(skewidx):
-            for idx_seg, seg in enumerate(mag):
-                newmod[seg].KsL = ksl[idx_mag][idx_seg]
-        return newmod
+            delta = delta_ksl[idx_mag]/len(mag)
+            for _, seg in enumerate(mag):
+                model[seg].KsL += delta
 
     @staticmethod
     def get_figm(res):
@@ -139,12 +138,10 @@ class CouplingCorr():
         bestfigm = CouplingCorr.get_figm(res)
         if bestfigm < tol:
             return CouplingCorr.CORR_STATUS.Sucess
-        ksl = self.get_ksl(model)
 
         for _ in range(nr_max):
             dksl = np.dot(ijmat, res)
-            ksl += np.reshape(dksl, (-1, 1))
-            model = self.set_ksl(model=model, ksl=ksl)
+            self._set_delta_ksl(model=model, delta_ksl=dksl)
             res = self._get_coupling_residue(model)
             figm = CouplingCorr.get_figm(res)
             diff_figm = np.abs(bestfigm - figm)
