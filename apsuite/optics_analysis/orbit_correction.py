@@ -127,7 +127,7 @@ class OrbitCorr():
         return np.sqrt(np.sum(res*res)/res.size)
 
     def orbit_corr(self,
-                   model,
+                   model=None,
                    jacobian_matrix=None,
                    goal_orbit=None,
                    nsv=None, nr_max=10, tol=1e-6):
@@ -136,6 +136,8 @@ class OrbitCorr():
         Calculates the pseudo-inverse of orbit correction matrix via SVD
         and minimizes the residue vector [CODx@BPM, CODy@BPM].
         """
+        if model is None:
+            model = self.model
         if goal_orbit is None:
             goal_orbit = np.zeros(2 * self._nbpm)
 
