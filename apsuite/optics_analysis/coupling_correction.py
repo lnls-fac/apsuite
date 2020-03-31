@@ -41,7 +41,7 @@ class CouplingCorr():
             return
         if isinstance(value, str):
             self._corr_method = int(
-                value in CouplingCorr.CORR_METHODS._fields[1])
+                value not in CouplingCorr.CORR_METHODS._fields[0])
         elif int(value) in CouplingCorr.CORR_METHODS:
             self._corr_method = int(value)
 
