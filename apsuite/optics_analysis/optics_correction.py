@@ -13,14 +13,15 @@ class OpticsCorr():
 
     METHODS = _namedtuple('Methods', ['Additional', 'Proportional'])(0, 1)
     CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
+    CORR_METHODS = _namedtuple('CorrMethods', ['LOCO'])(0)
 
     def __init__(self, model, acc, dim='4d', knobs_list=None,
-                 method=None, correction_method='loco'):
+                 method=None, correction_method=None):
         """."""
         self.model = model
         self.acc = acc
         self.dim = dim
-        self.corr_method = correction_method
+        self._corr_method = OpticsCorr.CORR_METHODS.LOCO
         self._method = OpticsCorr.METHODS.Proportional
         self.jacobian_matrix = []
         if self.acc == 'BO':
@@ -37,6 +38,7 @@ class OpticsCorr():
         self.ch_idx = self._get_idx(self.fam_data['CH']['index'])
         self.cv_idx = self._get_idx(self.fam_data['CV']['index'])
         self.method = method
+        self.corr_method = correction_method
 
     @property
     def method(self):
@@ -56,6 +58,26 @@ class OpticsCorr():
     def method_str(self):
         """."""
         return OpticsCorr.METHODS._fields[self._method]
+
+    @property
+    def corr_method(self):
+        """."""
+        return self._corr_method
+
+    @corr_method.setter
+    def corr_method(self, value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            self._corr_method = int(
+                value in OpticsCorr.CORR_METHODS._fields[1])
+        elif int(value) in OpticsCorr.CORR_METHODS:
+            self._corr_method = int(value)
+
+    @property
+    def corr_method_str(self):
+        """."""
+        return OpticsCorr.CORR_METHODS._fields[self._corr_method]
 
     @staticmethod
     def _get_idx(indcs):
@@ -210,7 +232,7 @@ class OpticsCorr():
         """
         if model is None:
             model = self.model
-        if self.corr_method == 'loco':
+        if self.corr_method == OpticsCorr.CORR_METHODS.LOCO:
             result = self.optics_corr_loco(
                 model=model, goal_model=goal_model,
                 jacobian_matrix=jacobian_matrix, nsv=nsv, nr_max=nr_max,
