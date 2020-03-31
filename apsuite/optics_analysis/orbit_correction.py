@@ -97,12 +97,15 @@ class OrbitCorr():
                 if idx_mag < self._nch:
                     kick = model[seg].hkick_polynom + delta
                     if np.abs(kick) > OrbitCorr.MAX_HKICK:
-                        kick = np.sign(kick) * OrbitCorr.MAX_HKICK
+                        raise Exception(
+                            'HKick > MaxHKick at CH #{:d}'.format(idx_mag + 1))
                     model[seg].hkick_polynom = kick
                 else:
                     kick = model[seg].vkick_polynom + delta
                     if np.abs(kick) > OrbitCorr.MAX_VKICK:
-                        kick = np.sign(kick) * OrbitCorr.MAX_VKICK
+                        raise Exception(
+                            'VKick > MaxVKick at CV #{:d}'.format(
+                                idx_mag - self._nch + 1))
                     model[seg].vkick_polynom = kick
 
     @staticmethod
