@@ -14,11 +14,13 @@ class OpticsCorr():
     METHODS = _namedtuple('Methods', ['Additional', 'Proportional'])(0, 1)
     CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
 
-    def __init__(self, model, acc, dim='4d', knobs_list=None, method=None):
+    def __init__(self, model, acc, dim='4d', knobs_list=None,
+                 method=None, correction_method='loco'):
         """."""
         self.model = model
         self.acc = acc
         self.dim = dim
+        self.corr_method = correction_method
         self._method = OpticsCorr.METHODS.Proportional
         self.jacobian_matrix = []
         if self.acc == 'BO':
@@ -200,8 +202,7 @@ class OpticsCorr():
                           model=None,
                           goal_model=None,
                           jacobian_matrix=None,
-                          nsv=None, nr_max=10, tol=1e-6,
-                          method='loco'):
+                          nsv=None, nr_max=10, tol=1e-6):
         """Optics correction method selection.
 
         Methods available:
@@ -209,7 +210,7 @@ class OpticsCorr():
         """
         if model is None:
             model = self.model
-        if method == 'loco':
+        if self.corr_method == 'loco':
             result = self.optics_corr_loco(
                 model=model, goal_model=goal_model,
                 jacobian_matrix=jacobian_matrix, nsv=nsv, nr_max=nr_max,
