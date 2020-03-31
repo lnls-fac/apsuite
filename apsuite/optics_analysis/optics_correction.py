@@ -131,13 +131,13 @@ class OpticsCorr():
         if deltas_kl is None:
             raise Exception('Missing Delta KL values')
         for idx_mag, mag in enumerate(knobsidx):
-            delta = deltas_kl[idx_mag]
+            delta = deltas_kl[idx_mag]/len(mag)
             for _, seg in enumerate(mag):
                 stren = model[seg].KL
                 if self.method == OpticsCorr.METHODS.Proportional:
-                    stren *= (1 + delta/len(mag))
+                    stren *= (1 + delta)
                 else:
-                    stren += delta/len(mag)
+                    stren += delta
                 model[seg].KL = stren
 
     @staticmethod
