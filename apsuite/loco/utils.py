@@ -28,6 +28,10 @@ class LOCOUtils:
         return data
 
     @staticmethod
+    def get_idx(indcs):
+        return np.array([idx[0] for idx in indcs])
+
+    @staticmethod
     def respm_calc(model, respm, use_dispersion):
         """."""
         respm.model = _dcopy(model)
