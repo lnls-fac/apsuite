@@ -253,8 +253,7 @@ class LOCOConfig:
         if self.weight_deltak is None:
             self.weight_deltak = np.ones(nquads)
         elif isinstance(self.weight_deltak, (int, float)):
-            self.weight_deltak = np.ones(nquads) * \
-                self.weight_deltak / (nquads)
+            self.weight_deltak = np.ones(nquads)*self.weight_deltak
 
     def update_quad_knobs(self, use_families):
         """."""
