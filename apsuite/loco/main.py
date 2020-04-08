@@ -465,7 +465,10 @@ class LOCO:
         """."""
         sigma_deltak = LOCO.DEFAULT_DELTAK_NORMALIZATION
         ncols = self._jloco.shape[1]
-        nknobs = len(self.config.quad_indices)
+        if self.config.use_quad_families:
+            nknobs = len(self.config.quadrupoles_to_fit)
+        else:
+            nknobs = len(self.config.quad_indices)
         deltak_mat = np.zeros((nknobs, ncols))
         for knb in range(nknobs):
             deltak_mat[knb, knb] = self.config.weight_deltak[knb]/sigma_deltak
@@ -821,12 +824,9 @@ class LOCO:
                 inv_s[self.config.svd_sel:] = 0
             self._jtjloco_inv = np.dot(
                 self._jtjloco_v.T * inv_s[None, :], self._jtjloco_u.T)
-            matrix_diff = self.config.goalmat - self._matrix
-            matrix_diff = LOCOUtils.apply_all_weight(
-                matrix_diff, self.config.weight_bpm, self.config.weight_corr)
+            res = self._calc_residue()
             param_new = np.dot(
-                self._jtjloco_inv, np.dot(
-                    self._jloco.T, matrix_diff.flatten()))
+                self._jtjloco_inv, np.dot(self._jloco.T, res))
             param_new = param_new.flatten()
             model_new, matrix_new = self._calc_model_matrix(param_new)
             chi_new = self.calc_chi(matrix_new)
