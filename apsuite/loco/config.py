@@ -1,5 +1,6 @@
 """."""
 
+from collections import namedtuple as _namedtuple
 from copy import deepcopy as _dcopy
 import numpy as np
 import pyaccel
@@ -10,9 +11,6 @@ from apsuite.loco.utils import LOCOUtils
 class LOCOConfig:
     """LOCO configuration template."""
 
-    SVD_METHOD_SELECTION = 0
-    SVD_METHOD_THRESHOLD = 1
-
     DEFAULT_DELTA_K = 1e-6  # [1/m^2]
     DEFAULT_DELTA_KS = 1e-6  # [1/m^2]
     DEFAULT_DELTA_DIP_KICK = 1e-6  # [rad]
@@ -21,8 +19,18 @@ class LOCOConfig:
 
     FAMNAME_RF = 'SRFCav'
 
+    INVERSION = _namedtuple(
+        'Methods', ['Normal', 'Transpose'])(0, 1)
+    MINIMIZATION = _namedtuple(
+        'Methods', ['GaussNewton', 'LevenbergMarquardt'])(0, 1)
+    SVD = _namedtuple(
+        'Methods', ['Selection', 'Threshold'])(0, 1)
+
     def __init__(self, **kwargs):
         """."""
+        self._inversion = LOCOConfig.INVERSION.Normal
+        self._minimization = LOCOConfig.MINIMIZATION.GaussNewton
+        self._svd_method = LOCOConfig.SVD.Selection
         self.model = None
         self.dim = None
         self.respm = None
@@ -40,7 +48,6 @@ class LOCOConfig:
         self.quadrupoles_to_fit = None
         self.sextupoles_to_fit = None
         self.use_dip_families = None
-        self.svd_method = None
         self.svd_sel = None
         self.svd_thre = None
         self.fit_quadrupoles = None
@@ -121,6 +128,64 @@ class LOCOConfig:
         """."""
         raise NotImplementedError
 
+    @property
+    def inv_method(self):
+        """."""
+        return self._inversion
+
+    @inv_method.setter
+    def inv_method(self, value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            self._inversion = int(value in LOCOConfig.INVERSION._fields[1])
+        elif int(value) in LOCOConfig.INVERSION:
+            self._inversion = int(value)
+
+    @property
+    def inv_method_str(self):
+        """."""
+        return LOCOConfig.INVERSION._fields[self._inversion]
+
+    @property
+    def min_method(self):
+        """."""
+        return self._minimization
+
+    @min_method.setter
+    def min_method(self, value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            self._minimization = int(
+                value in LOCOConfig.MINIMIZATION._fields[1])
+        elif int(value) in LOCOConfig.MINIMIZATION:
+            self._minimization = int(value)
+
+    @property
+    def min_method_str(self):
+        """."""
+        return LOCOConfig.MINIMIZATION._fields[self._minimization]
+
+    @property
+    def svd_method(self):
+        """."""
+        return self._svd_method
+
+    @svd_method.setter
+    def svd_method(self, value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            self._svd_method = int(value in LOCOConfig.SVD._fields[1])
+        elif int(value) in LOCOConfig.SVD:
+            self._svd_method = int(value)
+
+    @property
+    def svd_method_str(self):
+        """."""
+        return LOCOConfig.SVD._fields[self._svd_method]
+
     def update(self):
         """."""
         self.update_model(self.model, self.dim)
@@ -148,14 +213,14 @@ class LOCOConfig:
         """."""
         self.svd_sel = svd_sel
         self.svd_thre = svd_thre
-        if svd_method == LOCOConfig.SVD_METHOD_SELECTION:
+        if svd_method == LOCOConfig.SVD.Selection:
             if svd_sel is not None:
                 print(
                     'svd_selection: {:d} values will be used.'.format(
                         self.svd_sel))
             else:
                 print('svd_selection: all values will be used.')
-        if svd_method == LOCOConfig.SVD_METHOD_THRESHOLD:
+        if svd_method == LOCOConfig.SVD.Threshold:
             if svd_thre is None:
                 self.svd_thre = LOCOConfig.DEFAULT_SVD_THRESHOLD
             print('svd_threshold: {:f}'.format(self.svd_thre))
