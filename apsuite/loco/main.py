@@ -16,8 +16,8 @@ class LOCO:
     DEFAULT_TOL = 1e-3
     DEFAULT_REDUC_THRESHOLD = 5/100
     DEFAULT_LAMBDA_LM = 1e-3
+    DEFAULT_MAX_LAMBDA_LM = 1e6
     DEFAULT_DELTAK_NORMALIZATION = 1.0
-    JLOCO_INVERSION = 'normal'
 
     def __init__(self, config=None):
         """."""
@@ -26,9 +26,18 @@ class LOCO:
         else:
             self.config = LOCOConfig()
 
-        if self.config.fitting_method == 'Levenberg-Marquadt':
+        if self.config.min_method == \
+                LOCOConfig.MINIMIZATION.LevenbergMarquardt:
             if self.config.lambda_lm is None:
                 self.config.lambda_lm = LOCO.DEFAULT_LAMBDA_LM
+
+        check_problem = self.config.min_method == \
+            LOCOConfig.MINIMIZATION.LevenbergMarquardt
+        check_problem &= self.config.inv_method == LOCOConfig.INVERSION.Normal
+
+        if check_problem:
+            raise ValueError(
+                'Levenberg-Marquardt works with Transpose Inversion only!')
 
         self._model = None
         self._matrix = None
@@ -63,13 +72,10 @@ class LOCO:
 
         self._jloco = None
         self._jloco_inv = None
-        self._jtjloco_u = None
-        self._jtjloco_s = None
-        self._jtjloco_v = None
-        self._jtjloco_inv = None
         self._jloco_u = None
         self._jloco_s = None
-        self._jloco_v = None
+        self._jloco_vt = None
+        self._lm_dmat = None
 
         self._dip_k_inival = None
         self._dip_k_deltas = None
@@ -437,69 +443,64 @@ class LOCO:
             jloco_deltak = self.calc_jloco_deltak_constraint()
             self._jloco = np.vstack((self._jloco, jloco_deltak))
 
-        # calc jloco inv
-        if LOCO.JLOCO_INVERSION == 'transpose':
-            print('svd decomposition Jt * J')
-            if self.config.fitting_method == 'Gauss-Newton':
-                matrix2invert = self._jloco.T @ self._jloco
-            elif self.config.fitting_method == 'Levenberg-Marquadt':
-                dmat = self.calc_d_matrix()
-                matrix2invert = self._jloco.T @ self._jloco
-                matrix2invert += self.config.lambda_lm * dmat.T @ dmat
-            self._jtjloco_u, self._jtjloco_s, self._jtjloco_v = \
-                np.linalg.svd(matrix2invert, full_matrices=False)
-        elif LOCO.JLOCO_INVERSION == 'normal':
-            print('svd decomposition J')
-            self._jloco_u, self._jloco_s, self._jloco_v = \
-                np.linalg.svd(self._jloco, full_matrices=False)
+        self._jloco_u, self._jloco_s, self._jloco_vt = \
+            np.linalg.svd(self._jloco, full_matrices=False)
+        # if self.config.inv_method == LOCOConfig.INVERSION.Normal:
+        self._filter_svd_jloco()
 
-    def calc_d_matrix(self):
+    def _filter_svd_jloco(self):
+        print('filtering singular values jloco...')
+        umat, smat, vtmat = self._jloco_u, self._jloco_s, self._jloco_vt
+        if self.config.svd_method == self.config.SVD.Threshold:
+            bad_sv = smat/np.max(smat) < self.config.svd_thre
+            smat[bad_sv] = 0
+        elif self.config.svd_method == self.config.SVD.Selection:
+            smat[self.config.svd_sel:] = 0
+        self._jloco = np.dot(umat * smat[None, :], vtmat)
+
+    def calc_lm_dmat(self):
         """."""
         ncols = self._jloco.shape[1]
-        dmat = np.zeros(ncols)
+        self._lm_dmat = np.zeros(ncols)
         for col in range(ncols):
-            dmat[col] = np.linalg.norm(self._jloco[:, col])
-        return np.diag(dmat)
+            self._lm_dmat[col] = np.linalg.norm(self._jloco[:, col])
+        self._lm_dmat = np.diag(self._lm_dmat)
 
     def calc_jloco_deltak_constraint(self):
         """."""
         sigma_deltak = LOCO.DEFAULT_DELTAK_NORMALIZATION
         ncols = self._jloco.shape[1]
-        nknobs = len(self.config.quad_indices)
+        if self.config.use_quad_families:
+            nknobs = len(self.config.quadrupoles_to_fit)
+        else:
+            nknobs = len(self.config.quad_indices)
         deltak_mat = np.zeros((nknobs, ncols))
         for knb in range(nknobs):
             deltak_mat[knb, knb] = self.config.weight_deltak[knb]/sigma_deltak
         return deltak_mat
 
-    def update_svd(self, svd_thre=None, svd_sel=None):
+    def update_svd(self):
         """."""
-        if LOCO.JLOCO_INVERSION == 'transpose':
-            umat, smat, vmat = self._jtjloco_u, self._jtjloco_s, \
-                self._jtjloco_v
-        elif LOCO.JLOCO_INVERSION == 'normal':
-            umat, smat, vmat = self._jloco_u, self._jloco_s, self._jloco_v
+        if self.config.inv_method == LOCOConfig.INVERSION.Transpose:
+            print('svd decomposition Jt * J')
+            if self.config.min_method == LOCOConfig.MINIMIZATION.GaussNewton:
+                matrix2invert = self._jloco.T @ self._jloco
+            elif self.config.min_method == \
+                    LOCOConfig.MINIMIZATION.LevenbergMarquardt:
+                self.calc_lm_dmat()
+                dmat = self._lm_dmat
+                matrix2invert = self._jloco.T @ self._jloco
+                matrix2invert += self.config.lambda_lm * dmat.T @ dmat
+            umat, smat, vtmat = np.linalg.svd(
+                matrix2invert, full_matrices=False)
+        elif self.config.inv_method == LOCOConfig.INVERSION.Normal:
+            umat, smat, vtmat = self._jloco_u, self._jloco_s, self._jloco_vt
 
         ismat = 1/smat
         ismat[np.isnan(ismat)] = 0
         ismat[np.isinf(ismat)] = 0
 
-        if svd_thre is None:
-            svd_thre = self.config.svd_thre
-        if svd_sel is None:
-            svd_sel = self.config.svd_sel
-
-        if self.config.svd_method == self.config.SVD_METHOD_THRESHOLD:
-            bad_sv = smat/np.max(smat) < svd_thre
-            # print('removing {:d} bad singular values...'.format(
-            #     np.sum(bad_sv)))
-            ismat[bad_sv] = 0
-        elif self.config.svd_method == self.config.SVD_METHOD_SELECTION:
-            ismat[svd_sel:] = 0
-
-        if LOCO.JLOCO_INVERSION == 'transpose':
-            self._jtjloco_inv = np.dot(vmat.T * ismat[None, :], umat.T)
-        elif LOCO.JLOCO_INVERSION == 'normal':
-            self._jloco_inv = np.dot(vmat.T * ismat[None, :], umat.T)
+        self._jloco_inv = np.dot(vtmat.T * ismat[None, :], umat.T)
 
     def update_fit(self):
         """."""
@@ -597,11 +598,11 @@ class LOCO:
             self._chi_history.append(self._chi)
             print('iter # {}/{}'.format(_iter+1, niter))
             res = self._calc_residue()
-            if LOCO.JLOCO_INVERSION == 'transpose':
+            if self.config.inv_method == LOCOConfig.INVERSION.Transpose:
                 param_new = np.dot(
-                    self._jtjloco_inv, np.dot(
+                    self._jloco_inv, np.dot(
                         self._jloco.T, res))
-            elif LOCO.JLOCO_INVERSION == 'normal':
+            elif self.config.inv_method == LOCOConfig.INVERSION.Normal:
                 param_new = np.dot(self._jloco_inv, res)
             param_new = param_new.flatten()
             model_new, matrix_new = self._calc_model_matrix(param_new)
@@ -616,25 +617,44 @@ class LOCO:
                     break
                 else:
                     self._update_state(model_new, matrix_new, chi_new)
+                    if self.config.min_method == \
+                            LOCOConfig.MINIMIZATION.LevenbergMarquardt:
+                        self._recalculate_inv_jloco(case='good')
             else:
                 # print('recalculating jloco...')
                 # self.update_jloco()
                 # self.update_svd()
-                if self.config.fitting_method == 'Gauss-Newton':
+                if self.config.min_method == \
+                        LOCOConfig.MINIMIZATION.GaussNewton:
                     factor = \
                         self._try_refactor_param(param_new)
                     if factor <= self._reduc_threshold:
                         # could not converge at current iteration!
                         break
-                elif self.config.fitting_method == 'Levenberg-Marquadt':
-                    self.config.lambda_lm = self._try_refactor_lambda(chi_new)
-                    if self.config.lambda_lm >= 1e2:
+                elif self.config.min_method == \
+                        LOCOConfig.MINIMIZATION.LevenbergMarquardt:
+                    self._try_refactor_lambda(chi_new)
+                    if self.config.lambda_lm >= LOCO.DEFAULT_MAX_LAMBDA_LM:
                         break
             if self._chi < self._tol:
                 print('chi is lower than specified tolerance!')
                 break
         self._create_output_vars()
         print('Finished!')
+
+    def _recalculate_inv_jloco(self, case='good'):
+        if case == 'good':
+            self.config.lambda_lm /= 10
+        elif case == 'bad':
+            self.config.lambda_lm *= 10
+        dmat = self._lm_dmat
+        matrix2invert = self._jloco.T @ self._jloco
+        matrix2invert += self.config.lambda_lm * dmat.T @ dmat
+        umat, smat, vtmat = np.linalg.svd(matrix2invert, full_matrices=False)
+        ismat = 1/smat
+        ismat[np.isnan(ismat)] = 0
+        ismat[np.isinf(ismat)] = 0
+        self._jloco_inv = np.dot(vtmat.T * ismat[None, :], umat.T)
 
     def calc_chi(self, matrix=None):
         """."""
@@ -798,35 +818,14 @@ class LOCO:
 
     def _try_refactor_lambda(self, chi_new):
         """."""
-        lambda_lm = _dcopy(self.config.lambda_lm)
         _iter = 0
-        while chi_new > self._chi and lambda_lm < 1e2:
-            lambda_lm *= 10
+        while chi_new > self._chi and self.config.lambda_lm < \
+                LOCO.DEFAULT_MAX_LAMBDA_LM:
             print('chi was increased! Trial {0:d}'.format(_iter))
-            print('applying lambda {0:0.4f}'.format(lambda_lm))
-            dmat = self.calc_d_matrix()
-            matrix2invert = self._jloco.T @ self._jloco
-            matrix2invert += lambda_lm * dmat.T @ dmat
-            self._jtjloco_u, self._jtjloco_s, self._jtjloco_v = \
-                np.linalg.svd(matrix2invert, full_matrices=False)
-            inv_s = 1/self._jtjloco_s
-            inv_s[np.isnan(inv_s)] = 0
-            inv_s[np.isinf(inv_s)] = 0
-
-            if self.config.svd_method == self.config.SVD_METHOD_THRESHOLD:
-                bad_sv = self._jtjloco_s/np.max(self._jtjloco_s) < \
-                    self.config.svd_thre
-                inv_s[bad_sv] = 0
-            elif self.config.svd_method == self.config.SVD_METHOD_SELECTION:
-                inv_s[self.config.svd_sel:] = 0
-            self._jtjloco_inv = np.dot(
-                self._jtjloco_v.T * inv_s[None, :], self._jtjloco_u.T)
-            matrix_diff = self.config.goalmat - self._matrix
-            matrix_diff = LOCOUtils.apply_all_weight(
-                matrix_diff, self.config.weight_bpm, self.config.weight_corr)
-            param_new = np.dot(
-                self._jtjloco_inv, np.dot(
-                    self._jloco.T, matrix_diff.flatten()))
+            print('applying lambda {0:0.4e}'.format(self.config.lambda_lm))
+            self._recalculate_inv_jloco(case='bad')
+            res = self._calc_residue()
+            param_new = np.dot(self._jloco_inv, np.dot(self._jloco.T, res))
             param_new = param_new.flatten()
             model_new, matrix_new = self._calc_model_matrix(param_new)
             chi_new = self.calc_chi(matrix_new)
@@ -835,7 +834,6 @@ class LOCO:
                 self._update_state(model_new, matrix_new, chi_new)
                 break
             _iter += 1
-        return lambda_lm
 
     def _update_state(self, model_new, matrix_new, chi_new):
         """."""
