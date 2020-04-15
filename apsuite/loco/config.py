@@ -2,10 +2,11 @@
 
 from collections import namedtuple as _namedtuple
 from copy import deepcopy as _dcopy
-import numpy as np
-import pyaccel
-from apsuite.commissioning_scripts.calc_orbcorr_mat import OrbRespmat
-from apsuite.loco.utils import LOCOUtils
+import numpy as _np
+import pyaccel as _pyaccel
+
+from ..commissioning_scripts.calc_orbcorr_mat import OrbRespmat as _OrbRespmat
+from .utils import LOCOUtils as _LOCOUtils
 
 
 class LOCOConfig:
@@ -206,7 +207,7 @@ class LOCOConfig:
         self.model = _dcopy(model)
         self.model.cavity_on = dim == '6d'
         self.model.radiation_on = dim == '6d'
-        self.respm = OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
+        self.respm = _OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
         self._create_indices()
 
     def update_svd(self, svd_method, svd_sel=None, svd_thre=None):
@@ -234,7 +235,7 @@ class LOCOConfig:
         # coupling
         self.use_coupling = use_coupling
         if not use_coupling:
-            self.goalmat = LOCOUtils.remove_coupling(
+            self.goalmat = _LOCOUtils.remove_coupling(
                 goalmat, self.nr_bpm, self.nr_ch, self.nr_cv)
         else:
             self.goalmat = _dcopy(goalmat)
@@ -246,7 +247,7 @@ class LOCOConfig:
 
     def update_matrix(self, use_dispersion):
         """."""
-        self.matrix = LOCOUtils.respm_calc(
+        self.matrix = _LOCOUtils.respm_calc(
             self.model, self.respm, use_dispersion)
 
     def update_gain(self,
@@ -256,42 +257,42 @@ class LOCOConfig:
         # bpm
         if gain_bpm is None:
             if self.gain_bpm is None:
-                self.gain_bpm = np.ones(2*self.nr_bpm)
+                self.gain_bpm = _np.ones(2*self.nr_bpm)
         else:
             if isinstance(gain_bpm, (int, float)):
-                self.gain_bpm = np.ones(2*self.nr_bpm) * gain_bpm
+                self.gain_bpm = _np.ones(2*self.nr_bpm) * gain_bpm
             else:
                 print('setting initial bpm gain...')
                 self.gain_bpm = gain_bpm
         if roll_bpm is None:
             if self.roll_bpm is None:
-                self.roll_bpm = np.zeros(self.nr_bpm)
+                self.roll_bpm = _np.zeros(self.nr_bpm)
         else:
             if isinstance(roll_bpm, (int, float)):
-                self.roll_bpm = np.ones(self.nr_bpm) * roll_bpm
+                self.roll_bpm = _np.ones(self.nr_bpm) * roll_bpm
             else:
                 print('setting initial bpm roll...')
                 self.roll_bpm = roll_bpm
         # corr
         if gain_corr is None:
             if self.gain_corr is None:
-                self.gain_corr = np.ones(self.nr_corr)
+                self.gain_corr = _np.ones(self.nr_corr)
         else:
             if isinstance(gain_corr, (int, float)):
-                self.gain_bpm = np.ones(self.nr_corr) * gain_corr
+                self.gain_bpm = _np.ones(self.nr_corr) * gain_corr
             else:
                 print('setting initial corrector gain...')
                 self.gain_corr = gain_corr
         if roll_corr is None:
             if self.roll_corr is None:
-                self.roll_corr = np.zeros(self.nr_corr)
+                self.roll_corr = _np.zeros(self.nr_corr)
         else:
             if isinstance(roll_corr, (int, float)):
-                self.roll_corr = np.ones(self.nr_bpm) * roll_corr
+                self.roll_corr = _np.ones(self.nr_bpm) * roll_corr
             else:
                 self.roll_corr = roll_corr
 
-        self.matrix = LOCOUtils.apply_all_gain(
+        self.matrix = _LOCOUtils.apply_all_gain(
             matrix=self.matrix,
             gain_bpm=self.gain_bpm,
             roll_bpm=self.roll_bpm,
@@ -302,23 +303,23 @@ class LOCOConfig:
         """."""
         # bpm
         if self.weight_bpm is None:
-            self.weight_bpm = np.ones(2*self.nr_bpm)
+            self.weight_bpm = _np.ones(2*self.nr_bpm)
         elif isinstance(self.weight_bpm, (int, float)):
-            self.weight_bpm = np.ones(2*self.nr_bpm) * \
+            self.weight_bpm = _np.ones(2*self.nr_bpm) * \
                 self.weight_bpm / 2 / self.nr_bpm
         # corr
         if self.weight_corr is None:
-            self.weight_corr = np.ones(self.nr_corr + 1)
+            self.weight_corr = _np.ones(self.nr_corr + 1)
         elif isinstance(self.weight_corr, (int, float)):
-            self.weight_corr = np.ones(self.nr_corr + 1) * \
+            self.weight_corr = _np.ones(self.nr_corr + 1) * \
                 self.weight_corr / (self.nr_corr + 1)
 
         nquads = len(self.quad_indices)
         # delta K
         if self.weight_deltak is None:
-            self.weight_deltak = np.ones(nquads)
+            self.weight_deltak = _np.ones(nquads)
         elif isinstance(self.weight_deltak, (int, float)):
-            self.weight_deltak = np.ones(nquads)*self.weight_deltak
+            self.weight_deltak = _np.ones(nquads)*self.weight_deltak
 
     def update_quad_knobs(self, use_families):
         """."""
@@ -416,9 +417,9 @@ class LOCOConfig:
 
     def _create_indices(self):
         """."""
-        self.idx_cav = pyaccel.lattice.find_indices(
+        self.idx_cav = _pyaccel.lattice.find_indices(
             self.model, 'fam_name', self.FAMNAME_RF)[0]
-        self.idx_bpm = pyaccel.lattice.find_indices(
+        self.idx_bpm = _pyaccel.lattice.find_indices(
             self.model, 'fam_name', 'BPM')
 
 
