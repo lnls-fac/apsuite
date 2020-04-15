@@ -2,8 +2,8 @@
 
 from copy import deepcopy as _dcopy
 import pickle as _pickle
-import numpy as np
-import pyaccel
+import numpy as _np
+import pyaccel as _pyaccel
 
 
 class LOCOUtils:
@@ -29,7 +29,7 @@ class LOCOUtils:
 
     @staticmethod
     def get_idx(indcs):
-        return np.array([idx[0] for idx in indcs])
+        return _np.array([idx[0] for idx in indcs])
 
     @staticmethod
     def respm_calc(model, respm, use_dispersion):
@@ -48,11 +48,11 @@ class LOCOUtils:
     @staticmethod
     def apply_bpm_roll(matrix, roll):
         """."""
-        cos_mat = np.diag(np.cos(roll))
-        sin_mat = np.diag(np.sin(roll))
-        r_alpha = np.hstack((cos_mat, sin_mat))
-        r_alpha = np.vstack((r_alpha, np.hstack((-sin_mat, cos_mat))))
-        return np.dot(r_alpha, matrix)
+        cos_mat = _np.diag(_np.cos(roll))
+        sin_mat = _np.diag(_np.sin(roll))
+        r_alpha = _np.hstack((cos_mat, sin_mat))
+        r_alpha = _np.vstack((r_alpha, _np.hstack((-sin_mat, cos_mat))))
+        return _np.dot(r_alpha, matrix)
 
     @staticmethod
     def apply_corr_gain(matrix, gain):
@@ -88,7 +88,7 @@ class LOCOUtils:
     @staticmethod
     def remove_coupling(matrix_in, nr_bpm, nr_ch, nr_cv):
         """."""
-        matrix_out = np.zeros(matrix_in.shape)
+        matrix_out = _np.zeros(matrix_in.shape)
         matrix_out[:nr_bpm, :nr_ch] = matrix_in[:nr_bpm, :nr_ch]
         matrix_out[nr_bpm:, nr_ch:nr_ch+nr_cv] = \
             matrix_in[nr_bpm:, nr_ch:nr_ch+nr_cv]
@@ -107,15 +107,15 @@ class LOCOUtils:
         """."""
         kquads = []
         for qidx in indices:
-            kquads.append(pyaccel.lattice.get_attribute(
+            kquads.append(_pyaccel.lattice.get_attribute(
                 model, 'KL', qidx))
-        return np.array(kquads)
+        return _np.array(kquads)
 
     @staticmethod
     def set_quadmag_kdelta(model, idx_mag, kvalues, kdelta):
         """."""
         for idx, idx_seg in enumerate(idx_mag):
-            pyaccel.lattice.set_attribute(
+            _pyaccel.lattice.set_attribute(
                 model, 'KL', idx_seg, kvalues[idx] + kdelta/len(idx_mag))
 
     @staticmethod
@@ -128,14 +128,14 @@ class LOCOUtils:
     @staticmethod
     def set_dipmag_kdelta(model, idx_mag, kvalues, kdelta):
         """."""
-        ktotal = np.sum(kvalues)
+        ktotal = _np.sum(kvalues)
         if ktotal:
             newk = [kval*(1+kdelta/ktotal) for kval in kvalues]
-            pyaccel.lattice.set_attribute(
+            _pyaccel.lattice.set_attribute(
                 model, 'KL', idx_mag, newk)
         else:
             newk = [kval + kdelta/len(idx_mag) for kval in kvalues]
-            pyaccel.lattice.set_attribute(
+            _pyaccel.lattice.set_attribute(
                 model, 'KL', idx_mag, kvalues + kdelta/len(idx_mag))
 
     @staticmethod
@@ -148,29 +148,29 @@ class LOCOUtils:
     @staticmethod
     def set_quadmag_ksdelta(model, idx_mag, ksvalues, ksdelta):
         """."""
-        pyaccel.lattice.set_attribute(
+        _pyaccel.lattice.set_attribute(
             model, 'KsL', idx_mag, ksvalues + ksdelta)
 
     @staticmethod
     def set_dipmag_ksdelta(model, idx_mag, ksvalues, ksdelta):
         """."""
-        kstotal = np.sum(ksvalues)
+        kstotal = _np.sum(ksvalues)
         if kstotal:
             newks = [ksval*(1+ksdelta/kstotal) for ksval in ksvalues]
-            pyaccel.lattice.set_attribute(
+            _pyaccel.lattice.set_attribute(
                 model, 'KsL', idx_mag, newks)
         else:
             newks = [ksval + ksdelta/len(idx_mag) for ksval in ksvalues]
-            pyaccel.lattice.set_attribute(
+            _pyaccel.lattice.set_attribute(
                 model, 'KsL', idx_mag, newks)
 
     @staticmethod
     def set_dipmag_kick(model, idx_mag, kick_values, kick_delta):
         """."""
-        angle = np.array(
-            pyaccel.lattice.get_attribute(model, 'angle', idx_mag))
-        angle /= np.sum(angle)
-        pyaccel.lattice.set_attribute(
+        angle = _np.array(
+            _pyaccel.lattice.get_attribute(model, 'angle', idx_mag))
+        angle /= _np.sum(angle)
+        _pyaccel.lattice.set_attribute(
             model, 'hkick_polynom', idx_mag, kick_values + kick_delta * angle)
 
     @staticmethod
@@ -191,35 +191,35 @@ class LOCOUtils:
         if shape1 < ncorr + 1 and config.use_dispersion:
             raise Exception('There is no dispersion line in the matrix')
 
-        g_bpm = np.ones(2*nbpm)
-        alpha_bpm = np.zeros(nbpm)
-        cos_mat = np.diag(np.cos(alpha_bpm))
-        sin_mat = np.diag(np.sin(alpha_bpm))
+        g_bpm = _np.ones(2*nbpm)
+        alpha_bpm = _np.zeros(nbpm)
+        cos_mat = _np.diag(_np.cos(alpha_bpm))
+        sin_mat = _np.diag(_np.sin(alpha_bpm))
 
-        r_alpha = np.hstack((cos_mat, sin_mat))
-        r_alpha = np.vstack((r_alpha, np.hstack((-sin_mat, cos_mat))))
+        r_alpha = _np.hstack((cos_mat, sin_mat))
+        r_alpha = _np.vstack((r_alpha, _np.hstack((-sin_mat, cos_mat))))
 
-        dr_alpha = np.hstack((-sin_mat, cos_mat))
-        dr_alpha = np.vstack((dr_alpha, np.hstack((-cos_mat, sin_mat))))
+        dr_alpha = _np.hstack((-sin_mat, cos_mat))
+        dr_alpha = _np.vstack((dr_alpha, _np.hstack((-cos_mat, sin_mat))))
 
-        dmdg_bpm = np.zeros((shape0*shape1, 2*nbpm))
+        dmdg_bpm = _np.zeros((shape0*shape1, 2*nbpm))
         for num in range(shape0):
             kron = LOCOUtils.kronecker(num, num, shape0)
-            dbmat = np.dot(r_alpha, kron)
-            dmdg_bpm[:, num] = np.dot(dbmat, matrix).flatten()
+            dbmat = _np.dot(r_alpha, kron)
+            dmdg_bpm[:, num] = _np.dot(dbmat, matrix).flatten()
 
-        dmdalpha_bpm = np.zeros((shape0*shape1, nbpm))
+        dmdalpha_bpm = _np.zeros((shape0*shape1, nbpm))
         for idx in range(shape0//2):
             kron = LOCOUtils.kronecker(idx, idx, shape0//2)
-            kron = np.tile(kron, (2, 2))
-            drmat = np.dot(kron, dr_alpha)
+            kron = _np.tile(kron, (2, 2))
+            drmat = _np.dot(kron, dr_alpha)
             dbmat = drmat * g_bpm[:, None]
-            dmdalpha_bpm[:, idx] = np.dot(dbmat, matrix).flatten()
+            dmdalpha_bpm[:, idx] = _np.dot(dbmat, matrix).flatten()
 
-        dmdg_corr = np.zeros((shape0*shape1, ncorr))
+        dmdg_corr = _np.zeros((shape0*shape1, ncorr))
         for idx in range(ncorr):
             kron = LOCOUtils.kronecker(idx, idx, shape1)
-            dmdg_corr[:, idx] = np.dot(matrix, kron).flatten()
+            dmdg_corr[:, idx] = _np.dot(matrix, kron).flatten()
 
         return dmdg_bpm, dmdalpha_bpm, dmdg_corr
 
@@ -235,13 +235,13 @@ class LOCOUtils:
             set_quad_kdelta = LOCOUtils.set_quadset_kdelta
         else:
             kindices = config.respm.fam_data['QN']['index']
-            kvalues = np.array(
-                pyaccel.lattice.get_attribute(model, 'KL', kindices))
+            kvalues = _np.array(
+                _pyaccel.lattice.get_attribute(model, 'KL', kindices))
             set_quad_kdelta = LOCOUtils.set_quadmag_kdelta
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        kmatrix = np.zeros((
+        kmatrix = _np.zeros((
             matrix_nominal.shape[0]*matrix_nominal.shape[1], len(kindices)))
 
         model_this = _dcopy(model)
@@ -268,13 +268,13 @@ class LOCOUtils:
             set_quad_kdelta = LOCOUtils.set_dipset_kdelta
         else:
             dip_indices = config.respm.fam_data['BN']['index']
-            dip_kvalues = np.array(
-                pyaccel.lattice.get_attribute(model, 'KL', dip_indices))
+            dip_kvalues = _np.array(
+                _pyaccel.lattice.get_attribute(model, 'KL', dip_indices))
             set_quad_kdelta = LOCOUtils.set_dipmag_kdelta
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        dip_kmatrix = np.zeros((
+        dip_kmatrix = _np.zeros((
             matrix_nominal.shape[0]*matrix_nominal.shape[1], len(dip_indices)))
 
         model_this = _dcopy(model)
@@ -293,13 +293,13 @@ class LOCOUtils:
     def jloco_calc_k_sextupoles(config, model):
         """."""
         sn_indices = config.respm.fam_data['SN']['index']
-        sn_kvalues = np.array(
-            pyaccel.lattice.get_attribute(model, 'KL', sn_indices))
+        sn_kvalues = _np.array(
+            _pyaccel.lattice.get_attribute(model, 'KL', sn_indices))
         set_quad_kdelta = LOCOUtils.set_quadmag_kdelta
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        sn_kmatrix = np.zeros((
+        sn_kmatrix = _np.zeros((
             matrix_nominal.shape[0]*matrix_nominal.shape[1], len(sn_indices)))
 
         model_this = _dcopy(model)
@@ -317,13 +317,13 @@ class LOCOUtils:
     def jloco_calc_ks_quad(config, model):
         """."""
         kindices = config.respm.fam_data['QN']['index']
-        ksvalues = np.array(
-            pyaccel.lattice.get_attribute(model, 'KsL', kindices))
+        ksvalues = _np.array(
+            _pyaccel.lattice.get_attribute(model, 'KsL', kindices))
         set_quad_ksdelta = LOCOUtils.set_quadmag_ksdelta
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        ksmatrix = np.zeros((
+        ksmatrix = _np.zeros((
             matrix_nominal.shape[0]*matrix_nominal.shape[1], len(kindices)))
 
         model_this = _dcopy(model)
@@ -341,13 +341,13 @@ class LOCOUtils:
     def jloco_calc_ks_dipoles(config, model):
         """."""
         dip_indices = config.respm.fam_data['BN']['index']
-        dip_ksvalues = np.array(
-            pyaccel.lattice.get_attribute(model, 'KsL', dip_indices))
+        dip_ksvalues = _np.array(
+            _pyaccel.lattice.get_attribute(model, 'KsL', dip_indices))
         set_quad_ksdelta = LOCOUtils.set_dipmag_ksdelta
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        dip_ksmatrix = np.zeros((
+        dip_ksmatrix = _np.zeros((
             matrix_nominal.shape[0]*matrix_nominal.shape[1], len(dip_indices)))
 
         model_this = _dcopy(model)
@@ -366,13 +366,13 @@ class LOCOUtils:
     def jloco_calc_ks_sextupoles(config, model):
         """."""
         sn_indices = config.respm.fam_data['SN']['index']
-        sn_ksvalues = np.array(
-            pyaccel.lattice.get_attribute(model, 'KsL', sn_indices))
+        sn_ksvalues = _np.array(
+            _pyaccel.lattice.get_attribute(model, 'KsL', sn_indices))
         set_quad_ksdelta = LOCOUtils.set_quadmag_ksdelta
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        sn_ksmatrix = np.zeros((
+        sn_ksmatrix = _np.zeros((
             matrix_nominal.shape[0]*matrix_nominal.shape[1], len(sn_indices)))
 
         model_this = _dcopy(model)
@@ -390,13 +390,13 @@ class LOCOUtils:
     def jloco_calc_kick_dipoles(config, model):
         """."""
         dip_indices = config.respm.fam_data['BN']['index']
-        dip_kick_values = np.array(
-            pyaccel.lattice.get_attribute(model, 'hkick_polynom', dip_indices))
+        dip_kick_values = _np.array(_pyaccel.lattice.get_attribute(
+            model, 'hkick_polynom', dip_indices))
         set_dip_kick = LOCOUtils.set_dipmag_kick
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        dip_kick_matrix = np.zeros((
+        dip_kick_matrix = _np.zeros((
             matrix_nominal.shape[0]*matrix_nominal.shape[1], 1))
 
         delta_kick = config.DEFAULT_DELTA_DIP_KICK
@@ -421,8 +421,8 @@ class LOCOUtils:
         """."""
         matrix0 = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
-        energy_shift = np.zeros(config.nr_corr + 1)
-        dm_energy_shift = np.zeros((matrix0.size, config.nr_corr))
+        energy_shift = _np.zeros(config.nr_corr + 1)
+        dm_energy_shift = _np.zeros((matrix0.size, config.nr_corr))
         for cnum in range(config.nr_corr):
             energy_shift[cnum] = 1
             matrix_shift = config.measured_dispersion[:, None] * \
@@ -435,13 +435,13 @@ class LOCOUtils:
     def jloco_calc_ks_skewquad(config, model):
         """."""
         qsindices = config.respm.fam_data['QS']['index']
-        ksvalues = np.array(
-            pyaccel.lattice.get_attribute(model, 'KsL', qsindices))
+        ksvalues = _np.array(
+            _pyaccel.lattice.get_attribute(model, 'KsL', qsindices))
         set_quad_ksdelta = LOCOUtils.set_quadmag_ksdelta
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        ksmatrix = np.zeros((
+        ksmatrix = _np.zeros((
             matrix_nominal.shape[0]*matrix_nominal.shape[1], len(qsindices)))
 
         model_this = _dcopy(model)
@@ -497,7 +497,7 @@ class LOCOUtils:
             knobs_linear += 3
 
         nknobs = knobs_k + knobs_ks + knobs_linear + knobs_skewquad
-        jloco = np.zeros(
+        jloco = _np.zeros(
             (2*nbpm*(nch+ncv+1), nknobs))
         idx = 0
         if config.fit_quadrupoles:
@@ -614,7 +614,7 @@ class LOCOUtils:
     @staticmethod
     def kronecker(i, j, size):
         """."""
-        kron = np.zeros((size, size))
+        kron = _np.zeros((size, size))
         if i == j:
             kron[i, i] = 1
         else:
