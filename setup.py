@@ -1,22 +1,9 @@
 #!/usr/bin/env python-sirius
 
-from setuptools import setup
-from distutils.version import StrictVersion
+from setuptools import setup, find_packages
 
 
-trackcpp_version = '0.2.0'
-
-# try:
-#     import trackcpp
-# except ImportError:
-#     raise RuntimeError("trackcpp package not found")
-#
-# if StrictVersion(trackcpp.__version__) < StrictVersion(trackcpp_version):
-#     msg = ("trackcpp package version must be >= " + trackcpp_version +
-#         " (version installed is " + trackcpp.__version__ + ")")
-#     raise RuntimeError(msg)
-
-with open('VERSION','r') as _f:
+with open('VERSION', 'r') as _f:
     __version__ = _f.read().strip()
 
 setup(
@@ -32,7 +19,6 @@ setup(
         'Programming Language :: Python',
         'Topic :: Scientific/Engineering'
     ],
-    packages=['apsuite'],
+    packages=find_packages(),
     package_data={'apsuite': ['VERSION']},
-    zip_safe=False
-)
+    zip_safe=False)
