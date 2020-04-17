@@ -614,13 +614,10 @@ class LOCO:
     def run_fit(self, niter=1):
         """."""
         self._chi = self._chi_init
-        # deltak_fit = []
         for _iter in range(niter):
             self._chi_history.append(self._chi)
             print('iter # {}/{}'.format(_iter+1, niter))
-            # res, deltak_val = self._calc_residue()
-            # rms = _np.sqrt(_np.sum(deltak_val**2)/deltak_val.size)
-            # deltak_fit.append(rms)
+            res, *_ = self._calc_residue()
             if self.config.inv_method == _LOCOConfig.INVERSION.Transpose:
                 param_new = _np.dot(
                     self._jloco_inv, _np.dot(
@@ -662,7 +659,6 @@ class LOCO:
             if self._chi < self._tol:
                 print('chi is lower than specified tolerance!')
                 break
-        # _np.savetxt('deltakl_LM_constraint_w1000_B1', deltak_fit)
         self._create_output_vars()
         print('Finished!')
 
@@ -691,12 +687,6 @@ class LOCO:
         dmatrix[:, self.config.nr_ch:-1] *= self.config.delta_kicky_meas
         dmatrix[:, -1] *= self.config.delta_frequency_meas
         chi2 = _np.sum(dmatrix*dmatrix)/(dmatrix.size)
-        # print('RESPM {:e}'.format(np.sqrt(chi2)))
-        # chi_deltak = self.config.weight_deltak[:, None] * \
-        #     self._quad_k_deltas[None, :]/LOCO.DEFAULT_DELTAK_NORMALIZATION
-        # chi2_deltak = np.sum(chi_deltak * chi_deltak)/chi_deltak.size
-        # print('DeltaK {:e}'.format(np.std(self._quad_k_deltas)))
-        # print('DeltaK {:e}'.format(chi2_deltak))
         return _np.sqrt(chi2) * 1e6
 
     def _create_output_vars(self):
