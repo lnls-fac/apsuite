@@ -314,12 +314,19 @@ class LOCOConfig:
             self.weight_corr = _np.ones(self.nr_corr + 1) * \
                 self.weight_corr / (self.nr_corr + 1)
 
-        nquads = len(self.quad_indices)
-        # delta K
+        nknb = 0
+        if self.fit_quadrupoles:
+            nknb += len(self.quad_indices)
+        if self.fit_dipoles:
+            nknb += len(self.dip_indices)
+        if self.fit_sextupoles:
+            nknb += len(self.sext_indices)
+
+        # delta kl constraint weight
         if self.weight_deltak is None:
-            self.weight_deltak = _np.ones(nquads)
+            self.weight_deltak = _np.ones(nknb)
         elif isinstance(self.weight_deltak, (int, float)):
-            self.weight_deltak = _np.ones(nquads)*self.weight_deltak
+            self.weight_deltak = _np.ones(nknb)*self.weight_deltak
 
     def update_quad_knobs(self, use_families):
         """."""
