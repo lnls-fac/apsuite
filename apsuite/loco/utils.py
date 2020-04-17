@@ -57,7 +57,7 @@ class LOCOUtils:
     @staticmethod
     def apply_corr_gain(matrix, gain):
         """."""
-        matrix[:, :-1] = matrix[:, :-1] * gain[None, :]
+        matrix[:, :-1] *= gain[None, :]
         return matrix
 
     @staticmethod
