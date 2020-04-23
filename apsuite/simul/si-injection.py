@@ -17,11 +17,19 @@ class Params:
         self.nr_particles = 1000
         self.nr_turns = 300
         self.bo_coupling = 1*0.01
+
         self.si_cavity_on = True
         self.si_radiation_on = True
         self.si_vchamber_on = True
-        self.transf_ts2si_drx = -17.35/1000  # [m]
-        self.transf_ts2si_dpx = 2.4/1000  # [rad]
+
+        # NOTE: pos and injection angle can be varied using these
+        # two parameters
+        error_inj_rx = 0.0/1000  # [m]
+        error_inj_px = 0.0/1000  # [rad]
+
+        self.transf_ts2si_drx = -17.35/1000 + error_inj_rx  # [m]
+        self.transf_ts2si_dpx = 2.4/1000 + error_inj_px  # [rad]
+
         self.nlk_kick_error = 0.3/1000 * 0  # [rad]
         self.scrapper_h_max_delta = -2.0/1000 * 0  # [m]
         self.scrapper_h_min_delta = +0.0/1000  # [m]
