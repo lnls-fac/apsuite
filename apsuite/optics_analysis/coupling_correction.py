@@ -188,7 +188,7 @@ class CouplingCorr():
         - Minimization of off-diagonal elements of orbit response matrix and
         vertical dispersion.
         """
-        if self.method == 'orbrespm':
+        if self.corr_method == CouplingCorr.CORR_METHODS.Orbrespm:
             result = self.coupling_corr_orbrespm_dispy(
                 model=model, jacobian_matrix=jacobian_matrix,
                 nsv=nsv, nr_max=nr_max, tol=tol, res0=res0)
