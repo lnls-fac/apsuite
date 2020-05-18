@@ -45,6 +45,7 @@ class ID(IDParams):
         'QFA', 'QDA',
         'QFB', 'QDB1', 'QDB2',
         'QFP', 'QDP1', 'QDP2']
+    DEFAULT_DELTAKL = 1e-4
 
     def __init__(self, id_name):
         """."""
@@ -122,9 +123,9 @@ class ID(IDParams):
         mod = pyaccel.lattice.shift(mod, mcidx[-1])
 
         mcidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'mc')
-        mc = np.unique([0] + mcidx + [len(mod)])
+        mcidx = np.unique([0] + mcidx + [len(mod)])
         sec_nr = self.id_data.section_nr
-        line_idx = np.arange(mc[sec_nr-1], mc[sec_nr]+1)
+        line_idx = np.arange(mcidx[sec_nr-1], mcidx[sec_nr]+1)
         sline = mod[line_idx]
         knobs = ID.get_knob_idx(sline, ID.DEFAULT_KNOBS)
 
@@ -144,7 +145,7 @@ class ID(IDParams):
         nr_iters = 0
         while res > tol and nr_iters < max_niter and factor > 1e-3:
             print(res)
-            dk_temp = ijmat @ res_vec
+            dk_temp = -1 * ijmat @ res_vec
             dk_temp *= factor
             ID.set_dkl(sline, dk_temp, knobs)
             newres_vec = ID.local_residue(sline, data)
@@ -160,7 +161,8 @@ class ID(IDParams):
                 ID.set_dkl(sline, -dk_temp, knobs)
                 factor /= 2
             nr_iters += 1
-
+        mod[line_idx] = sline
+        return mod
 
     # static methods
     @staticmethod
@@ -233,17 +235,16 @@ class ID(IDParams):
     @staticmethod
     def calc_jacobian_matrix(model, knobs, data):
         """."""
-        deltakl = 1e-4
         res0 = ID.local_residue(model, data)
         mat = np.zeros((res0.size, knobs.size))
         for knb_num, knb in enumerate(knobs):
-            klorig = model[knb].KL
-            model[knb].KL += deltakl/2
+            kl_orig = model[knb].KL
+            model[knb].KL = kl_orig + ID.DEFAULT_DELTAKL/2
             res_up = ID.local_residue(model, data)
-            model[knb].KL -= deltakl
+            model[knb].KL = kl_orig - ID.DEFAULT_DELTAKL/2
             res_down = ID.local_residue(model, data)
-            mat[:, knb_num] = (res_up - res_down)/deltakl
-            model[knb].KL = klorig
+            mat[:, knb_num] = (res_up - res_down)/ID.DEFAULT_DELTAKL
+            model[knb].KL = kl_orig
         return mat
 
     @staticmethod
@@ -254,5 +255,5 @@ class ID(IDParams):
         ismat[np.isnan(ismat)] = 0
         ismat[np.isinf(ismat)] = 0
         ismat = np.diag(ismat)
-        ijmat = -1 * np.dot(np.dot(vhmat.T, ismat), umat.T)
+        ijmat = np.dot(np.dot(vhmat.T, ismat), umat.T)
         return ijmat
