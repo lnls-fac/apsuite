@@ -1,5 +1,7 @@
 """TbT Simulation Annealing."""
 
+import numpy as _np
+
 from apsuite.optimization import SimulAnneal as _SimulAnneal
 
 
