@@ -26,6 +26,8 @@ class DynapXYParams():
         self.x_nrpts = 70
         self.y_nrpts = 30
         self.de_offset = 0.0
+        self.intnux = 49.0
+        self.intnuy = 14.0
 
     def __str__(self):
         """."""
@@ -39,11 +41,15 @@ class DynapXYParams():
         strng += 'y_min [m]    : {:.2g}\n'.format(self.y_min)
         strng += 'y_max [m]    : {:.2g}\n'.format(self.y_max)
         strng += 'de_offset    : {:.3g}\n'.format(self.de_offset)
+        strng += 'intnux       : {:.2f} (for graphs)\n'.format(self.intnux)
+        strng += 'intnuy       : {:.2f} (for graphs)\n'.format(self.intnuy)
         return strng
 
 
 class DynapXY(_BaseClass):
     """."""
+
+    COLORS = ('k', 'b', 'r', 'g', 'm', 'c')
 
     def __init__(self, accelerator):
         """."""
@@ -221,9 +227,38 @@ class DynapXY(_BaseClass):
         self.y_diffusion[nlost] = diffy
         self.diffusion[nlost] = diff
 
+    def map_resons_to_xyplane(self, resons, maxdist=1e-5):
+        """."""
+        xdata = self.data['x_in'].ravel()*1e3
+        ydata = self.data['y_in'].ravel()*1e3
+        freqx = self.params.intnux + self.x_freq_ini
+        freqy = self.params.intnuy + self.y_freq_ini
+
+        ind = xdata != _np.nan
+        xdata = xdata[ind]
+        ydata = ydata[ind]
+        freqx = freqx[ind]
+        freqy = freqy[ind]
+
+        data = []
+        for coefx, coefy, coefc in resons:
+            if coefy == 0:
+                dist_to_reson = _np.abs(coefc/coefx - freqx)
+            else:
+                tan_theta = -coefx/coefy
+                reson_y0 = coefc/coefy
+                parallel_y0 = freqy - tan_theta*freqx
+                delta_y0 = reson_y0 - parallel_y0
+                dist_to_reson = _np.abs(delta_y0) / _np.sqrt(1 + tan_theta**2)
+
+            ind = (dist_to_reson < maxdist).nonzero()
+            data.append((xdata[ind], ydata[ind]))
+        return data
+
     # Make figures
     def make_figure_diffusion(
-            self, contour=True, orders=3, intnux=0, intnuy=0, symmetry=1):
+            self, contour=True, resons=None, orders=3, symmetry=1,
+            maxdist=1e-5):
         """."""
         fig = _mpyplot.figure(figsize=(7, 7))
         gs = _mgridspec.GridSpec(2, 20)
@@ -235,7 +270,7 @@ class DynapXY(_BaseClass):
         cbaxes = _mpyplot.subplot(gs[:, -1])
 
         diff = self.diffusion
-        diff = _np.log(diff)
+        diff = _np.log10(diff)
         norm = _mcolors.Normalize(vmin=-10, vmax=-2)
 
         if contour:
@@ -253,22 +288,36 @@ class DynapXY(_BaseClass):
         ax.set_xlabel('X [mm]')
         ax.set_ylabel('Y [mm]')
 
-        freqx = intnux + self.x_freq_ini
-        freqy = intnuy + self.y_freq_ini
+        freqx = self.params.intnux + self.x_freq_ini
+        freqy = self.params.intnuy + self.y_freq_ini
         line = ay.scatter(
             freqx, freqy, c=diff, norm=norm, cmap='jet')
         ay.set_xlabel(r'$\nu_x$')
         ay.set_ylabel(r'$\nu_y$')
-        self.add_resonances_to_axis(ay, orders=orders, symmetry=symmetry)
+
+        if resons is None:
+            bounds = ay.axis()
+            resons = self.calc_resonances_for_bounds(
+                    bounds, orders=orders, symmetry=symmetry)
+
+        map2xy = self.map_resons_to_xyplane(resons=resons, maxdist=maxdist)
+
+        for (coefx, coefy, coefc), (xdata, ydata) in zip(resons, map2xy):
+            order = int(_np.abs(coefx) + _np.abs(coefy))
+            idx = order - 1
+            ax.scatter(
+                xdata, ydata,
+                c=self.COLORS[idx % len(self.COLORS)])
+
+        self.add_resonances_to_axis(ay, resons=resons)
 
         cbar = fig.colorbar(line, cax=cbaxes)
         cbar.set_label('Diffusion')
 
-        fig.show()
-        return fig
+        return fig, ax, ay
 
     def make_figure_xandy_map_in_tune_plot(
-            self, orders=3, intnux=0, intnuy=0, symmetry=1):
+            self, resons=None, orders=3, symmetry=1):
         """."""
         fig = _mpyplot.figure(figsize=(7, 7))
         gs = _mgridspec.GridSpec(2, 20)
@@ -280,8 +329,8 @@ class DynapXY(_BaseClass):
         cbx = _mpyplot.subplot(gs[0, -1])
         cby = _mpyplot.subplot(gs[1, -1])
 
-        freqx = intnux + self.x_freq_ini
-        freqy = intnuy + self.y_freq_ini
+        freqx = self.params.intnux + self.x_freq_ini
+        freqy = self.params.intnuy + self.y_freq_ini
 
         # X
         norm = _mcolors.Normalize(
@@ -292,7 +341,13 @@ class DynapXY(_BaseClass):
             norm=norm, cmap='jet')
         ax.set_xlabel(r'$\nu_x$')
         ax.set_ylabel(r'$\nu_y$')
-        self.add_resonances_to_axis(ax, orders=orders, symmetry=symmetry)
+
+        if resons is None:
+            bounds = ax.axis()
+            resons = self.calc_resonances_for_bounds(
+                bounds, orders=orders, symmetry=symmetry)
+
+        self.add_resonances_to_axis(ax, resons=resons)
 
         cbar = fig.colorbar(line, cax=cbx)
         cbar.set_label('X [mm]')
@@ -306,14 +361,14 @@ class DynapXY(_BaseClass):
             norm=norm, cmap='jet')
         ay.set_xlabel(r'$\nu_x$')
         ay.set_ylabel(r'$\nu_y$')
-        self.add_resonances_to_axis(ay, orders=orders, symmetry=symmetry)
+        self.add_resonances_to_axis(ay, resons=resons)
 
         cbar = fig.colorbar(line, cax=cby)
         cbar.set_label('Y [mm]')
 
-        fig.show()
-        return fig
+        return fig, ax, ay
 
+    # class methods
     @classmethod
     def calc_resonances_for_bounds(cls, bounds, orders=3, symmetry=1):
         """."""
@@ -331,6 +386,15 @@ class DynapXY(_BaseClass):
         for order in orders:
             resons.extend(
                 cls._calc_resonances_fixed_order(points, order, symmetry))
+
+        # Unique resonances:
+        ress = set()
+        for reson in resons:
+            gcd = _np.gcd.reduce(reson)
+            if gcd > 1:
+                reson = (reson[0]//gcd, reson[1]//gcd, reson[2]//gcd)
+            ress.add(reson)
+        resons = list(ress)
         return resons
 
     @staticmethod
@@ -343,35 +407,33 @@ class DynapXY(_BaseClass):
             else:
                 raise TypeError('wrong number of dimensions for points.')
 
-        ang_coeffs = _np.zeros((2*order + 1, 2))
+        ang_coeffs = _np.zeros((2*order + 1, 2), dtype=int)
         ang_coeffs[:, 0] = _np.arange(-order, order + 1)
         ang_coeffs[:, 1] = order - _np.abs(ang_coeffs[:, 0])
 
         consts = _np.dot(ang_coeffs, points)
-        consts_min = _np.ceil(consts.min(axis=1))
-        consts_max = _np.floor(consts.max(axis=1))
-        resonances = []
+        consts_min = _np.array(_np.ceil(consts.min(axis=1)), dtype=int)
+        consts_max = _np.array(_np.floor(consts.max(axis=1)), dtype=int)
+        resons = []
         for ang_i, c_min, c_max in zip(ang_coeffs, consts_min, consts_max):
-            cons = _np.arange(c_min, c_max)
-            if c_min == c_max:
-                cons = [c_min, ]
+            cons = _np.arange(c_min, c_max+1)
             for c_i in cons:
                 if not c_i % symmetry:
-                    resonances.append([ang_i[0], ang_i[1], c_i])
-        return _np.array(resonances)
+                    resons.append((ang_i[0], ang_i[1], c_i))
+        return resons
 
     @classmethod
-    def add_resonances_to_axis(cls, axes, orders=3, symmetry=1):
+    def add_resonances_to_axis(cls, axes, resons=None, orders=3, symmetry=1):
         """."""
-        bounds = axes.axis()
-        resons = cls.calc_resonances_for_bounds(
-            bounds, orders=orders, symmetry=symmetry)
+        if resons is None:
+            bounds = axes.axis()
+            resons = cls.calc_resonances_for_bounds(
+                bounds, orders=orders, symmetry=symmetry)
 
-        cores = ['k', 'b', 'r', 'g', 'm']
         for coeffx, coeffy, coeffc in resons:
             order = int(_np.abs(coeffx) + _np.abs(coeffy))
             idx = order - 1
-            cor = cores[idx % len(cores)]
+            cor = cls.COLORS[idx % len(cls.COLORS)]
             lwid = max(3-idx, 1)
             if coeffy:
                 cls.add_reson_line(
