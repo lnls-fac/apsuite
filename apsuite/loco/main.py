@@ -611,7 +611,7 @@ class LOCO:
             if self.config.fit_sextupoles:
                 kdeltas = _np.hstack((kdeltas, self._sext_k_deltas))
             res = _np.hstack((res, kdeltas))
-        return res, kdeltas
+        return res
 
     def run_fit(self, niter=1):
         """."""
@@ -619,7 +619,7 @@ class LOCO:
         for _iter in range(niter):
             self._chi_history.append(self._chi)
             print('iter # {}/{}'.format(_iter+1, niter))
-            res, *_ = self._calc_residue()
+            res = self._calc_residue()
             self._res_history.append(res)
             if self.config.inv_method == _LOCOConfig.INVERSION.Transpose:
                 param_new = _np.dot(
