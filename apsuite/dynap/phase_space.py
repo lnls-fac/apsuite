@@ -6,7 +6,6 @@ import matplotlib.pyplot as _mpyplot
 import matplotlib.gridspec as _mgridspec
 
 import pyaccel.tracking as _pytrack
-import pyaccel.naff as _pynaff
 import pyaccel.lattice as _pylatt
 
 from .base import BaseClass as _BaseClass
@@ -157,7 +156,7 @@ class PhaseSpace(_BaseClass):
                 out = _pytrack.ring_pass(
                     self._acc, orb, nr_turns=self.params.nrturns,
                     turn_by_turn=True)
-            except Exception:
+            except _pytrack.TrackingException:
                 out = [_np.nan, 0, 0, 0, 'x']
 
             rout[:, i, :] = out[0]
@@ -185,54 +184,27 @@ class PhaseSpace(_BaseClass):
         rout = self.data[plane + '_rout']
         lost_plane = self.data[plane + '_lost_plane']
 
-        if not rout.size or len(rout.shape) < 3:
+        fxx, fyy = super()._calc_frequencies(rout, lost_plane)
+        if fxx is None:
             return
-
-        nmult = rout.shape[2] // 6
-        left = rout.shape[2] % 6
-        if nmult < 5:
-            return
-        if left < 1:
-            nmult -= 1
-
-        nlost = _np.array([l is None for l in lost_plane], dtype=bool)
-
-        nt_ini = nmult * 6 + 1
-        x_ini = rout[0, :, :nt_ini]
-        y_ini = rout[2, :, :nt_ini]
-
-        self.x_freq[plane] = _np.full(x_ini.shape[0], _np.nan, dtype=float)
-        self.y_freq[plane] = _np.full(x_ini.shape[0], _np.nan, dtype=float)
-
-        x_ini = x_ini[nlost, :]
-        y_ini = y_ini[nlost, :]
-
-        x_ini -= x_ini.mean(axis=1)[:, None]
-        y_ini -= y_ini.mean(axis=1)[:, None]
-
-        fx1, _ = _pynaff.naff_general(x_ini, nr_ff=1)
-        fy1, _ = _pynaff.naff_general(y_ini, nr_ff=1)
-        fx1 = _np.abs(fx1)
-        fy1 = _np.abs(fy1)
-
-        self.x_freq[plane][nlost] = fx1
-        self.y_freq[plane][nlost] = fy1
+        self.x_freq[plane] = fxx
+        self.y_freq[plane] = fyy
 
     # Make figures
     def make_figure(
             self, resons=None, orders=3, symmetry=1):
         """."""
         fig = _mpyplot.figure(figsize=(12, 7))
-        gs = _mgridspec.GridSpec(2, 3)
-        gs.update(
+        grid = _mgridspec.GridSpec(2, 3)
+        grid.update(
             left=0.1, right=0.98, top=0.97, bottom=0.1,
             hspace=0.25, wspace=0.35)
-        phx = _mpyplot.subplot(gs[0, 0])
-        phy = _mpyplot.subplot(gs[0, 1])
-        tune = _mpyplot.subplot(gs[0, 2])
-        axx = _mpyplot.subplot(gs[1, 0])
-        ayy = _mpyplot.subplot(gs[1, 1])
-        ade = _mpyplot.subplot(gs[1, 2])
+        phx = _mpyplot.subplot(grid[0, 0])
+        phy = _mpyplot.subplot(grid[0, 1])
+        tune = _mpyplot.subplot(grid[0, 2])
+        axx = _mpyplot.subplot(grid[1, 0])
+        ayy = _mpyplot.subplot(grid[1, 1])
+        ade = _mpyplot.subplot(grid[1, 2])
 
         routx = self.data['x_rout']
         routy = self.data['y_rout']
@@ -274,7 +246,7 @@ class PhaseSpace(_BaseClass):
         if resons is None:
             bounds = tune.axis()
             resons = self.calc_resonances_for_bounds(
-                    bounds, orders=orders, symmetry=symmetry)
+                bounds, orders=orders, symmetry=symmetry)
         self.add_resonances_to_axis(tune, resons=resons)
 
         inx = self.data['x_in']

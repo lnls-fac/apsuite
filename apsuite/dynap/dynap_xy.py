@@ -7,7 +7,6 @@ import matplotlib.gridspec as _mgridspec
 import matplotlib.colors as _mcolors
 
 import pyaccel.tracking as _pytrack
-import pyaccel.naff as _pynaff
 
 from .base import BaseClass as _BaseClass
 
@@ -91,8 +90,8 @@ class DynapXY(_BaseClass):
                 self._acc, energy_offset=self.params.de_offset))
         rin = _np.tile(orb, (x_in.size, 1)).T
         rin[0, :] += x_in.ravel()
-        rin[2, :] += y_in.ravel()
         rin[1, :] += self.params.xl_off
+        rin[2, :] += y_in.ravel()
         rin[3, :] += self.params.yl_off
 
         out = _pytrack.ring_pass(
@@ -117,215 +116,107 @@ class DynapXY(_BaseClass):
         y_in = self.data['y_in']
         lost_plane = self.data['lost_plane']
 
-        shape = x_in.shape
-        nlost = _np.array([l is None for l in lost_plane], dtype=bool)
-        nlost = nlost.reshape(shape)
-        r_sqr = x_in*x_in + y_in*y_in
-        idx = _np.unravel_index(_np.argmin(r_sqr), r_sqr.shape)
-        tolook = set()
-        tolook.add(idx)
-        inner = set(idx)
-        border = set()
-        looked = set()
-        neigbs = [
-            (-1, 0), (0, -1), (0, 1), (1, 0),
-            # uncomment these lines to include diagonal neighboors:
-            # (-1, -1), (-1, 1), (1, -1), (1, 1),
-            ]
-        while tolook:
-            idx = tolook.pop()
-            isborder = False
-            for nei in neigbs:
-                idxn = idx[0] + nei[0], idx[1] + nei[1]
-                if 0 <= idxn[0] < shape[0] and 0 <= idxn[1] < shape[1]:
-                    if nlost[idxn]:
-                        if idxn not in looked:
-                            tolook.add(idxn)
-                            inner.add(idxn)
-                    else:
-                        isborder = True
-            if isborder:
-                border.add(idx)
-            looked.add(idx)
-
-        # tuple(zip(*border)) transforms:
-        #     ((x1, y1), ..., (xn, yn)) --> ((x1, ..., xn), (y1, ..., yn))
-        border = tuple(zip(*border))
-        x_dyn = x_in[border]
-        y_dyn = y_in[border]
-
-        r_sqr = x_dyn*x_dyn + y_dyn*y_dyn
-        theta = _np.arctan2(y_dyn, x_dyn)
-
-        tup = _np.argsort(zip(theta, r_sqr))
-
-        self.x_dynap = x_dyn[tup]
-        self.y_dynap = y_dyn[tup]
+        self.x_dynap, self.y_dynap = self._calc_dynap(x_in, y_in, lost_plane)
 
     def calc_fmap(self):
         """."""
         rout = self.data['rout']
         lost_plane = self.data['lost_plane']
 
-        if not rout.size or len(rout.shape) < 3:
-            return
+        fx1, fx2, fy1, fy2, diffx, diffy, diff = super()._calc_fmap(
+            rout, lost_plane)
 
-        nmult = rout.shape[2] // 12
-        left = rout.shape[2] % 12
-        if nmult < 5:
-            return
-        if left < 2:
-            nmult -= 1
+        self.x_freq_ini = fx1
+        self.x_freq_fin = fx2
+        self.y_freq_ini = fy1
+        self.y_freq_fin = fy2
+        self.x_diffusion = diffx
+        self.y_diffusion = diffy
+        self.diffusion = diff
 
-        nlost = _np.array([l is None for l in lost_plane], dtype=bool)
-
-        nt_ini = nmult * 6 + 1
-        nt_fin = nmult * 12 + 2
-        x_ini = rout[0, :, :nt_ini]
-        x_fin = rout[0, :, nt_ini:nt_fin]
-        y_ini = rout[2, :, :nt_ini]
-        y_fin = rout[2, :, nt_ini:nt_fin]
-
-        self.x_freq_ini = _np.full(x_ini.shape[0], _np.nan, dtype=float)
-        self.x_freq_fin = _np.full(x_ini.shape[0], _np.nan, dtype=float)
-        self.y_freq_ini = _np.full(x_ini.shape[0], _np.nan, dtype=float)
-        self.y_freq_fin = _np.full(x_ini.shape[0], _np.nan, dtype=float)
-        self.x_diffusion = _np.full(x_ini.shape[0], _np.nan, dtype=float)
-        self.y_diffusion = _np.full(x_ini.shape[0], _np.nan, dtype=float)
-        self.diffusion = _np.full(x_ini.shape[0], _np.nan, dtype=float)
-
-        x_ini = x_ini[nlost, :]
-        x_fin = x_fin[nlost, :]
-        y_ini = y_ini[nlost, :]
-        y_fin = y_fin[nlost, :]
-
-        x_ini -= x_ini.mean(axis=1)[:, None]
-        x_fin -= x_fin.mean(axis=1)[:, None]
-        y_ini -= y_ini.mean(axis=1)[:, None]
-        y_fin -= y_fin.mean(axis=1)[:, None]
-
-        fx1, _ = _pynaff.naff_general(x_ini, nr_ff=1)
-        fx2, _ = _pynaff.naff_general(x_fin, nr_ff=1)
-        fy1, _ = _pynaff.naff_general(y_ini, nr_ff=1)
-        fy2, _ = _pynaff.naff_general(y_fin, nr_ff=1)
-        fx1 = _np.abs(fx1)
-        fx2 = _np.abs(fx2)
-        fy1 = _np.abs(fy1)
-        fy2 = _np.abs(fy2)
-
-        diffx = _np.abs(fx1 - fx2)
-        diffy = _np.abs(fy1 - fy2)
-        diff = _np.sqrt(diffx*diffx + diffy*diffy)
-
-        self.x_freq_ini[nlost] = fx1
-        self.x_freq_fin[nlost] = fx2
-        self.y_freq_ini[nlost] = fy1
-        self.y_freq_fin[nlost] = fy2
-        self.x_diffusion[nlost] = diffx
-        self.y_diffusion[nlost] = diffy
-        self.diffusion[nlost] = diff
-
-    def map_resons_to_xyplane(self, resons, maxdist=1e-5):
+    def map_resons2real_plane(self, resons, maxdist=1e-5, min_diffusion=1e-3):
         """."""
-        xdata = self.data['x_in'].ravel()*1e3
-        ydata = self.data['y_in'].ravel()*1e3
         freqx = self.params.intnux + self.x_freq_ini
         freqy = self.params.intnuy + self.y_freq_ini
-
-        ind = xdata != _np.nan
-        xdata = xdata[ind]
-        ydata = ydata[ind]
-        freqx = freqx[ind]
-        freqy = freqy[ind]
-
-        data = []
-        for coefx, coefy, coefc in resons:
-            if coefy == 0:
-                dist_to_reson = _np.abs(coefc/coefx - freqx)
-            else:
-                tan_theta = -coefx/coefy
-                reson_y0 = coefc/coefy
-                parallel_y0 = freqy - tan_theta*freqx
-                delta_y0 = reson_y0 - parallel_y0
-                dist_to_reson = _np.abs(delta_y0) / _np.sqrt(1 + tan_theta**2)
-
-            ind = (dist_to_reson < maxdist).nonzero()
-            data.append((xdata[ind], ydata[ind]))
-        return data
+        diff = self.diffusion
+        return super()._map_resons2real_plane(
+            freqx, freqy, diff, resons, maxdist=maxdist, mindiff=min_diffusion)
 
     # Make figures
     def make_figure_diffusion(
             self, contour=True, resons=None, orders=3, symmetry=1,
-            maxdist=1e-5):
+            maxdist=1e-5, min_diffusion=1e-3):
         """."""
         fig = _mpyplot.figure(figsize=(7, 7))
-        gs = _mgridspec.GridSpec(2, 20)
-        gs.update(
+        grid = _mgridspec.GridSpec(2, 20)
+        grid.update(
             left=0.15, right=0.86, top=0.97, bottom=0.1,
             hspace=0.25, wspace=0.25)
-        ax = _mpyplot.subplot(gs[0, :19])
-        ay = _mpyplot.subplot(gs[1, :19])
-        cbaxes = _mpyplot.subplot(gs[:, -1])
+        axx = _mpyplot.subplot(grid[0, :19])
+        ayy = _mpyplot.subplot(grid[1, :19])
+        cbaxes = _mpyplot.subplot(grid[:, -1])
 
         diff = self.diffusion
         diff = _np.log10(diff)
         norm = _mcolors.Normalize(vmin=-10, vmax=-2)
 
         if contour:
-            ax.contourf(
+            axx.contourf(
                 self.data['x_in']*1e3,
                 self.data['y_in']*1e3,
                 diff.reshape(self.data['x_in'].shape),
                 norm=norm, cmap='jet')
         else:
-            ax.scatter(
+            axx.scatter(
                 self.data['x_in'].ravel()*1e3,
                 self.data['y_in'].ravel()*1e3,
                 c=diff, norm=norm, cmap='jet')
-            ax.grid(False)
-        ax.set_xlabel('X [mm]')
-        ax.set_ylabel('Y [mm]')
+            axx.grid(False)
+        axx.set_xlabel('X [mm]')
+        axx.set_ylabel('Y [mm]')
 
         freqx = self.params.intnux + self.x_freq_ini
         freqy = self.params.intnuy + self.y_freq_ini
-        line = ay.scatter(
+        line = ayy.scatter(
             freqx, freqy, c=diff, norm=norm, cmap='jet')
-        ay.set_xlabel(r'$\nu_x$')
-        ay.set_ylabel(r'$\nu_y$')
+        ayy.set_xlabel(r'$\nu_x$')
+        ayy.set_ylabel(r'$\nu_y$')
 
         if resons is None:
-            bounds = ay.axis()
+            bounds = ayy.axis()
             resons = self.calc_resonances_for_bounds(
-                    bounds, orders=orders, symmetry=symmetry)
+                bounds, orders=orders, symmetry=symmetry)
 
-        map2xy = self.map_resons_to_xyplane(resons=resons, maxdist=maxdist)
-
-        for (coefx, coefy, coefc), (xdata, ydata) in zip(resons, map2xy):
+        map2xy = self.map_resons2real_plane(
+            resons=resons, maxdist=maxdist, min_diffusion=min_diffusion)
+        xdata = self.data['x_in'].ravel()*1e3
+        ydata = self.data['y_in'].ravel()*1e3
+        for (coefx, coefy, _), ind in zip(resons, map2xy):
             order = int(_np.abs(coefx) + _np.abs(coefy))
             idx = order - 1
-            ax.scatter(
-                xdata, ydata,
+            axx.scatter(
+                xdata[ind], ydata[ind],
                 c=self.COLORS[idx % len(self.COLORS)])
 
-        self.add_resonances_to_axis(ay, resons=resons)
+        self.add_resonances_to_axis(ayy, resons=resons)
 
         cbar = fig.colorbar(line, cax=cbaxes)
         cbar.set_label('Diffusion')
 
         return fig, ax, ay
 
-    def make_figure_xandy_map_in_tune_plot(
+    def make_figure_map_real2tune_planes(
             self, resons=None, orders=3, symmetry=1):
         """."""
         fig = _mpyplot.figure(figsize=(7, 7))
-        gs = _mgridspec.GridSpec(2, 20)
-        gs.update(
+        grid = _mgridspec.GridSpec(2, 20)
+        grid.update(
             left=0.15, right=0.86, top=0.97, bottom=0.1,
             hspace=0.25, wspace=0.25)
-        ax = _mpyplot.subplot(gs[0, :19])
-        ay = _mpyplot.subplot(gs[1, :19])
-        cbx = _mpyplot.subplot(gs[0, -1])
-        cby = _mpyplot.subplot(gs[1, -1])
+        axx = _mpyplot.subplot(grid[0, :19])
+        ayy = _mpyplot.subplot(grid[1, :19])
+        cbx = _mpyplot.subplot(grid[0, -1])
+        cby = _mpyplot.subplot(grid[1, -1])
 
         freqx = self.params.intnux + self.x_freq_ini
         freqy = self.params.intnuy + self.y_freq_ini
@@ -334,18 +225,18 @@ class DynapXY(_BaseClass):
         norm = _mcolors.Normalize(
             vmin=self.params.x_min*1e3,
             vmax=self.params.x_max*1e3)
-        line = ax.scatter(
+        line = axx.scatter(
             freqx, freqy, c=self.data['x_in'].ravel()*1e3,
             norm=norm, cmap='jet')
-        ax.set_xlabel(r'$\nu_x$')
-        ax.set_ylabel(r'$\nu_y$')
+        axx.set_xlabel(r'$\nu_x$')
+        axx.set_ylabel(r'$\nu_y$')
 
         if resons is None:
-            bounds = ax.axis()
+            bounds = axx.axis()
             resons = self.calc_resonances_for_bounds(
                 bounds, orders=orders, symmetry=symmetry)
 
-        self.add_resonances_to_axis(ax, resons=resons)
+        self.add_resonances_to_axis(axx, resons=resons)
 
         cbar = fig.colorbar(line, cax=cbx)
         cbar.set_label('X [mm]')
@@ -354,14 +245,14 @@ class DynapXY(_BaseClass):
         norm = _mcolors.Normalize(
             vmin=self.params.y_min*1e3,
             vmax=self.params.y_max*1e3)
-        line = ay.scatter(
+        line = ayy.scatter(
             freqx, freqy, c=self.data['y_in'].ravel()*1e3,
             norm=norm, cmap='jet')
-        ay.set_xlabel(r'$\nu_x$')
-        ay.set_ylabel(r'$\nu_y$')
-        self.add_resonances_to_axis(ay, resons=resons)
+        ayy.set_xlabel(r'$\nu_x$')
+        ayy.set_ylabel(r'$\nu_y$')
+        self.add_resonances_to_axis(ayy, resons=resons)
 
         cbar = fig.colorbar(line, cax=cby)
         cbar.set_label('Y [mm]')
 
-        return fig, ax, ay
+        return fig, axx, ayy
