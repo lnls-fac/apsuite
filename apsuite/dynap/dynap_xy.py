@@ -202,8 +202,23 @@ class DynapXY(_BaseClass):
 
         cbar = fig.colorbar(line, cax=cbaxes)
         cbar.set_label('Diffusion')
+        fig.canvas.mpl_connect('button_press_event', self._onclick)
 
-        return fig, ax, ay
+        return fig, axx, ayy
+
+    def _onclick(self, event):
+        if not event.dblclick or event.inaxes is None or \
+                event.inaxes.name != 'Tune':
+            return
+        xdata = self.data['x_in'].ravel()
+        ydata = self.data['y_in'].ravel()
+        xfreq = self.params.intnux + self.x_freq_ini - event.xdata
+        yfreq = self.params.intnuy + self.y_freq_ini - event.ydata
+
+        ind = _np.nanargmin(_np.sqrt(xfreq*xfreq + yfreq*yfreq))
+        axes = [ax for ax in event.inaxes.figure.axes if ax.name == 'XY'][0]
+        axes.scatter(xdata[ind]*1e3, ydata[ind]*1e3, c='k')
+        event.inaxes.figure.canvas.draw()
 
     def make_figure_map_real2tune_planes(
             self, resons=None, orders=3, symmetry=1):
