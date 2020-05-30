@@ -5,6 +5,7 @@ import numpy as _np
 import matplotlib.pyplot as _mpyplot
 import matplotlib.gridspec as _mgridspec
 import matplotlib.colors as _mcolors
+import matplotlib.text as _mtext
 
 import pyaccel.tracking as _pytrack
 
@@ -206,6 +207,14 @@ class DynapEX(_BaseClass):
         cbar.set_label('Diffusion')
         fig.canvas.mpl_connect('button_press_event', self._onclick)
 
+        ann = ayy.annotate(
+            '', xy=(0, 0), xycoords='data',
+            xytext=(20, 20), textcoords='offset points',
+            arrowprops={'arrowstyle': '->'},
+            bbox={'boxstyle': 'round', 'fc': 'w'})
+        ann.set_visible(False)
+        fig.canvas.mpl_connect('motion_notify_event', self._onhover)
+
         return fig, axx, ayy
 
     def _onclick(self, event):
@@ -230,6 +239,28 @@ class DynapEX(_BaseClass):
         ind = _np.nanargmin(_np.sqrt(xdiff*xdiff + ydiff*ydiff))
         ax_xy.scatter(dedata[ind], xdata[ind], c='k')
         ax_nu.scatter(xfreq[ind], yfreq[ind], c='k')
+        fig.canvas.draw()
+
+    def _onhover(self, event):
+        if event.inaxes is None:
+            return
+        fig = event.inaxes.figure
+        ax_nu = [ax for ax in fig.axes if ax.name == 'Tune'][0]
+        chil = ax_nu.get_children()
+        ann = [c for c in chil if isinstance(c, _mtext.Annotation)][0]
+        if event.inaxes != ax_nu:
+            ann.set_visible(False)
+            fig.canvas.draw()
+            return
+
+        for line in ax_nu.lines:
+            if line.contains(event)[0] and line.name.startswith('reson'):
+                ann.set_text(line.name.split(':')[1])
+                ann.xy = (event.xdata, event.ydata)
+                ann.set_visible(True)
+                break
+        else:
+            ann.set_visible(False)
         fig.canvas.draw()
 
     def make_figure_map_real2tune_planes(

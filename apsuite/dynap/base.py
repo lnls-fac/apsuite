@@ -84,13 +84,21 @@ class BaseClass(_BaseClass):
             cor = cls.COLORS[idx % len(cls.COLORS)]
             lwid = max(3-idx, 1)
             if coeffy:
-                cls.add_reson_line(
+                line = cls.add_reson_line(
                     axes, const=coeffc/coeffy, slope=-coeffx/coeffy,
                     color=cor, linewidth=lwid)
             else:
-                cls.add_reson_line(
+                line = cls.add_reson_line(
                     axes, const=coeffc/coeffx, slope=None,
                     color=cor, linewidth=lwid)
+            if not coeffx:
+                line.name = f'reson: {coeffy}y = {coeffc}'
+            elif not coeffy:
+                line.name = f'reson: {coeffx}x = {coeffc}'
+            else:
+                sig = '+' if coeffy > 0 else '-'
+                line.name = \
+                    f'reson: {coeffx}x {sig} {abs(coeffy)}y = {coeffc}'
 
     @staticmethod
     def add_reson_line(axes, const=0, slope=None, **kwargs):
@@ -102,7 +110,7 @@ class BaseClass(_BaseClass):
         else:
             x11, x22 = const, const
             y11, y22 = axis[2:]
-        line = axes.plot([x11, x22], [y11, y22], **kwargs)
+        line = axes.plot([x11, x22], [y11, y22], **kwargs)[0]
         axes.set_xlim(axis[:2])
         axes.set_ylim(axis[2:])
         return line

@@ -5,6 +5,7 @@ import numpy as _np
 import matplotlib.pyplot as _mpyplot
 import matplotlib.gridspec as _mgridspec
 import matplotlib.colors as _mcolors
+import matplotlib.text as _mtext
 
 import pyaccel.tracking as _pytrack
 
@@ -155,6 +156,8 @@ class DynapXY(_BaseClass):
         axx = _mpyplot.subplot(grid[0, :19])
         ayy = _mpyplot.subplot(grid[1, :19])
         cbaxes = _mpyplot.subplot(grid[:, -1])
+        axx.name = 'XY'
+        ayy.name = 'Tune'
 
         diff = self.diffusion
         diff = _np.log10(diff)
@@ -204,21 +207,61 @@ class DynapXY(_BaseClass):
         cbar.set_label('Diffusion')
         fig.canvas.mpl_connect('button_press_event', self._onclick)
 
+        ann = ayy.annotate(
+            '', xy=(0, 0), xycoords='data',
+            xytext=(20, 20), textcoords='offset points',
+            arrowprops={'arrowstyle': '->'},
+            bbox={'boxstyle': 'round', 'fc': 'w'})
+        ann.set_visible(False)
+        fig.canvas.mpl_connect('motion_notify_event', self._onhover)
+
         return fig, axx, ayy
 
     def _onclick(self, event):
-        if not event.dblclick or event.inaxes is None or \
-                event.inaxes.name != 'Tune':
+        if not event.dblclick or event.inaxes is None:
             return
-        xdata = self.data['x_in'].ravel()
-        ydata = self.data['y_in'].ravel()
-        xfreq = self.params.intnux + self.x_freq_ini - event.xdata
-        yfreq = self.params.intnuy + self.y_freq_ini - event.ydata
+        fig = event.inaxes.figure
+        ax_nu = [ax for ax in fig.axes if ax.name == 'Tune'][0]
+        ax_xy = [ax for ax in fig.axes if ax.name == 'XY'][0]
 
-        ind = _np.nanargmin(_np.sqrt(xfreq*xfreq + yfreq*yfreq))
-        axes = [ax for ax in event.inaxes.figure.axes if ax.name == 'XY'][0]
-        axes.scatter(xdata[ind]*1e3, ydata[ind]*1e3, c='k')
-        event.inaxes.figure.canvas.draw()
+        xdata = self.data['x_in'].ravel()*1e3
+        ydata = self.data['y_in'].ravel()*1e3
+        xfreq = self.params.intnux + self.x_freq_ini
+        yfreq = self.params.intnuy + self.y_freq_ini
+
+        if event.inaxes == ax_nu:
+            xdiff = xfreq - event.xdata
+            ydiff = yfreq - event.ydata
+        if event.inaxes == ax_xy:
+            xdiff = xdata - event.xdata
+            ydiff = ydata - event.ydata
+
+        ind = _np.nanargmin(_np.sqrt(xdiff*xdiff + ydiff*ydiff))
+        ax_xy.scatter(xdata[ind], ydata[ind], c='k')
+        ax_nu.scatter(xfreq[ind], yfreq[ind], c='k')
+        fig.canvas.draw()
+
+    def _onhover(self, event):
+        if event.inaxes is None:
+            return
+        fig = event.inaxes.figure
+        ax_nu = [ax for ax in fig.axes if ax.name == 'Tune'][0]
+        chil = ax_nu.get_children()
+        ann = [c for c in chil if isinstance(c, _mtext.Annotation)][0]
+        if event.inaxes != ax_nu:
+            ann.set_visible(False)
+            fig.canvas.draw()
+            return
+
+        for line in ax_nu.lines:
+            if line.contains(event)[0] and line.name.startswith('reson'):
+                ann.set_text(line.name.split(':')[1])
+                ann.xy = (event.xdata, event.ydata)
+                ann.set_visible(True)
+                break
+        else:
+            ann.set_visible(False)
+        fig.canvas.draw()
 
     def make_figure_map_real2tune_planes(
             self, resons=None, orders=3, symmetry=1):
