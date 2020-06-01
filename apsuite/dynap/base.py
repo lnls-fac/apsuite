@@ -158,8 +158,8 @@ class BaseClass(_BaseClass):
         r_sqr = x_dyn*x_dyn + y_dyn*y_dyn
         theta = _np.arctan2(y_dyn, x_dyn)
 
-        tup = _np.argsort(zip(theta, r_sqr))
-        return x_dyn[tup], y_dyn[tup]
+        ind = _np.argsort(theta)
+        return x_dyn[ind], y_dyn[ind]
 
     @staticmethod
     def _calc_frequencies(rout, lost_plane):
