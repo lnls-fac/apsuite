@@ -1,13 +1,13 @@
 #!/usr/bin/env python-sirius
-
-from threading import Thread
-import numpy as np
+"""Multidimensional Simple Scan method for Minimization."""
 
 
-'''Multidimensional Simple Scan method for Minimization'''
+from threading import Thread as _Thread
+import numpy as _np
 
 
 class SimpleScan:
+    """."""
 
     @property
     def ndim(self):
@@ -31,14 +31,14 @@ class SimpleScan:
 
     def __init__(self):
         """."""
-        self._lower_limits = np.array([])
-        self._upper_limits = np.array([])
+        self._lower_limits = _np.array([])
+        self._upper_limits = _np.array([])
         self._ndim = 0
-        self._position = np.array([])
-        self._delta = np.array([])
+        self._position = _np.array([])
+        self._delta = _np.array([])
         self._curr_dim = 0
         self._stop = False
-        self._thread = Thread(target=self._optimize, daemon=True)
+        self._thread = _Thread(target=self._optimize, daemon=True)
         self.initialization()
 
     def initialization(self):
@@ -59,7 +59,7 @@ class SimpleScan:
         """."""
         if not self._thread.is_alive():
             self._stop = False
-            self._thread = Thread(target=self._optimize, daemon=True)
+            self._thread = _Thread(target=self._optimize, daemon=True)
             self._thread.start()
 
     def stop(self):
@@ -73,18 +73,18 @@ class SimpleScan:
 
     def _optimize(self, npoints):
         """."""
-        self._delta = np.zeros(npoints)
-        f = np.zeros(self._ndim)
-        best = np.zeros(self._ndim)
+        self._delta = _np.zeros(npoints)
+        func = _np.zeros(self._ndim)
+        best = _np.zeros(self._ndim)
 
         for i in range(self._ndim):
-            self._delta = np.linspace(
+            self._delta = _np.linspace(
                                 self._lower_limits[i],
                                 self._upper_limits[i],
                                 npoints)
             self._curr_dim = i
-            f[i], best[i] = self.calc_obj_fun()
+            func[i], best[i] = self.calc_obj_fun()
             self._position[i] = best[i]
 
         print('Best result is: ' + str(best))
-        print('Figure of merit is: ' + str(np.min(f)))
+        print('Figure of merit is: ' + str(_np.min(func)))

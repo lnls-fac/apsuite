@@ -1,24 +1,46 @@
 #!/usr/bin/env python-sirius
-
-from threading import Thread, Event
-import numpy as np
+"""Simulated Annealing Algorithm for Minimization."""
 
 
-''' Simulated Annealing Algorithm for Minimization'''
+from threading import Thread as _Thread
+from threading import Event as _Event
+import numpy as _np
 
 
 class SimulAnneal:
     """."""
 
+    # NOTE: objects with threading.Event cannot be serialized with pickle
+
+    def __init__(self, save=False, use_thread=True):
+        """."""
+        self._use_thread = use_thread
+
+        # search space
+        self._position = _np.array([])
+        self._pos_lim_lower = None
+        self._pos_lim_upper = None
+        self._pos_delta_max = None
+
+        # search control
+        self._niter = 0
+        self._temperature = 0
+        self._flag_save = save
+
+        if self._use_thread:
+            self._thread = None
+            self._stopped = _Event()
+        self.hist_best_positions = _np.array([])
+        self.hist_best_objfunc = _np.array([])
+
+        # initialization
+        self.initialization()
+        self._check_initialization()
+
     @property
     def ndim(self):
         """."""
-        return self._ndim
-
-    @ndim.setter
-    def ndim(self, value):
-        """."""
-        self._ndim = value
+        return len(self._position)
 
     @property
     def position(self):
@@ -45,158 +67,126 @@ class SimulAnneal:
         """."""
         return self._temperature
 
+    @property
+    def limits_upper(self):
+        """."""
+        return self._pos_lim_upper
+
+    @limits_upper.setter
+    def limits_upper(self, value):
+        """."""
+        if len(value) != len(self._position):
+            raise Exception('Incompatible upper limit!')
+        self._pos_lim_upper = _np.array(value)
+
+    @property
+    def limits_lower(self):
+        """."""
+        return self._pos_lim_lower
+
+    @limits_lower.setter
+    def limits_lower(self, value):
+        """."""
+        if len(value) != len(self._position):
+            raise Exception('Incompatible lower limit!')
+        self._pos_lim_lower = _np.array(value)
+
+    @property
+    def deltas(self):
+        """."""
+        return self._pos_delta_max
+
+    @deltas.setter
+    def deltas(self, value):
+        """."""
+        if len(value) != len(self._position):
+            raise Exception('Incompatible deltas!')
+        self._pos_delta_max = _np.array(value)
+
     @temperature.setter
     def temperature(self, value):
         """."""
         self._temperature = value
 
-    def __init__(self, save=False):
-        """."""
-        # Boundary Limits
-        self._ndim = 0
-        self._niter = 0
-        self._lower_limits = np.array([])
-        self._upper_limits = np.array([])
-        # Maximum variation to be applied
-        self._max_delta = np.array([])
-        # Reference configuration
-        self._position = np.array([])
-        # Variation to be applied
-        self._delta = np.array([])
-        # Initial temperature of annealing
-        self._temperature = 0
-        self._flag_save = save
-        self._stop = False
-        self._thread = Thread(target=self._optimize, daemon=True)
-        self._stopped = Event()
-        self.best_positions_history = np.array([])
-        self.best_figures_history = np.array([])
-        self.initialization()
-        self._check_initialization()
-
     def initialization(self):
         """."""
         raise NotImplementedError
-
-    def _check_initialization(self):
-        """."""
-        if len(self._upper_limits) != len(self._lower_limits):
-            raise Exception(
-                'Upper and Lower Limits has different lengths')
-
-        if self._ndim != len(self._upper_limits):
-            raise Exception(
-                'Dimension incompatible with limits!')
-
-    def _check_lim(self):
-        # If particle position exceeds the boundary, set the boundary value
-        over = self._position > self._upper_limits
-        under = self._position < self._lower_limits
-        self._position[over] = self._upper_limits[over]
-        self._position[under] = self._lower_limits[under]
-
-    def set_limits(self, upper=None, lower=None):
-        """."""
-        self._upper_limits = upper
-        self._lower_limits = lower
-        self.ndim = len(upper)
-
-    def set_deltas(self, dmax=None):
-        """."""
-        self.ndim = len(dmax)
-        self._max_delta = dmax
 
     def calc_obj_fun(self):
         """Return a number."""
         raise NotImplementedError
 
-    def _random_change(self):
-        # Random change applied in the current position
-        dlim = self._max_delta
-        rarray = 2 * np.random.rand(self.ndim) - 1  # [-1,1]
-        self._delta = dlim * rarray
-        self._position = self._position + self._delta
-        # self._check_lim()
-
-    def _save_data(self, k, f, acc=False, nacc=None, bp=None, bf=None):
+    def start(self, print_flag=True):
         """."""
-        with open('pos_SA.txt', 'a') as f_pos:
-            if k == 0:
-                f_pos.write('NEW RUN'.center(50, '=') + '\n')
-            f_pos.write('Step ' + str(k+1) + ' \n')
-            np.savetxt(f_pos, self._position, fmt='%+.8e')
-        with open('fig_SA.txt', 'a') as f_fig:
-            if k == 0:
-                f_fig.write('NEW RUN'.center(50, '=') + '\n')
-            f_fig.write('Step ' + str(k+1) + ' \n')
-            np.savetxt(f_fig, np.array([f]), fmt='%+.8e')
-        if acc:
-            with open('best_pos_history_SA.txt', 'a') as f_posh:
-                if nacc == 1:
-                    f_posh.write('NEW RUN'.center(50, '=') + '\n')
-                f_posh.write('Accep. Solution ' + str(nacc+1) + ' \n')
-                np.savetxt(f_posh, bp[nacc, :], fmt='%+.8e')
-            with open('best_fig_history_SA.txt', 'a') as f_figh:
-                if nacc == 1:
-                    f_figh.write('NEW RUN'.center(50, '=') + '\n')
-                f_figh.write('Accep. Solution ' + str(nacc+1) + ' \n')
-                np.savetxt(f_figh, np.array([bf[nacc]]), fmt='%+.8e')
-
-    def start(self):
-        """."""
-        if not self._thread.is_alive():
-            self._thread = Thread(target=self._optimize, daemon=True)
-            self._stopped.clear()
-            self._thread.start()
+        if self._use_thread:
+            if not self._thread.is_alive():
+                self._thread = _Thread(
+                    target=self._optimize, args=(print_flag, ), daemon=True)
+                self._stopped.clear()
+                self._thread.start()
+        else:
+            self._optimize(print_flag=print_flag)
 
     def stop(self):
         """."""
-        self._stopped.set()
+        if self._use_thread:
+            self._stopped.set()
 
     def join(self):
-        self._thread.join()
+        """."""
+        if self._use_thread:
+            self._thread.join()
 
     @property
     def isrunning(self):
         """."""
-        return self._thread.is_alive()
+        if self._use_thread:
+            return self._thread.is_alive()
+        else:
+            return False
 
-    def _optimize(self):
+    def _optimize(self, print_flag=True):
         """."""
-        bpos_hstry = np.zeros([self.niter, self.ndim])
-        bfig_hstry = np.zeros([self.niter])
+        if not self.niter:
+            return
 
-        f_old = self.calc_obj_fun()
+        bpos_hstry = _np.zeros([self.niter, self.ndim])
+        bfig_hstry = _np.zeros([self.niter])
 
+        # initial position
+        p_old, f_old = _np.copy(self._position), self.calc_obj_fun()
+        bpos_hstry[0, :] = p_old
         bfig_hstry[0] = f_old
-        bpos_hstry[0, :] = self._position
-        # Number of accepted solutions
-        n_acc = 0
-        # Number of iteraction without accepting solutions
-        nu = 0
+
+        # Number of accepted and unaccepted solutions.
+        nr_acc, nr_unacc = 0, 0
 
         if self._flag_save:
-            self._save_data(k=0, f=f_old, acc=False)
+            self._save_data(kiter=0, func=f_old, acc=False)
 
         for k in range(self.niter):
-            # Flag that a solution was accepted
-            flag_acc = False
+
+            if print_flag:
+                print('>>> Iteraction Number:' + str(k+1))
+
+            flag_acc = False  # Flag that a solution was accepted
+
             self._random_change()
-            print('>>> Iteraction Number:' + str(k+1))
             f_new = self.calc_obj_fun()
 
             if f_new < f_old:
-                # Accepting solution if it reduces the merit function
+                # Accepting solution if it improves the merit function
                 flag_acc = True
-                nu = 0
+                nr_unacc = 0
             elif f_new > f_old and self._temperature != 0:
                 # If solution increases the merit function there is a chance
                 # to accept it
-                df = f_new - f_old
-                if np.random.rand() < np.exp(- df / self._temperature):
+                f_dif = f_new - f_old
+                if _np.random.rand() < _np.exp(- f_dif / self._temperature):
                     flag_acc = True
-                    print('Worse solution accepted! ' + str(self._position))
-                    print('Temperature is: ' + str(self._temperature))
+                    if print_flag:
+                        print('Worse solution accepted! ' + str(self._position))
+                        print('Temperature is: ' + str(self._temperature))
                 else:
                     flag_acc = False
             else:
@@ -206,46 +196,106 @@ class SimulAnneal:
 
             if flag_acc:
                 # Stores the number of accepted solutions
-                f_old = f_new
-                n_acc += 1
-                bpos_hstry[n_acc, :] = self._position
-                bfig_hstry[n_acc] = f_old
-                print('Better solution found! Obj. Func: {:5f}'.format(f_old))
-                print('Number of accepted solutions: ' + str(n_acc))
+                nr_acc += 1
+                p_old, f_old = _np.copy(self._position), f_new
+                bpos_hstry[nr_acc, :] = self._position
+                bfig_hstry[nr_acc] = f_old
+                if print_flag:
+                    print('Better solution found! Obj. Func: '
+                          '{:5f}'.format(f_old))
+                    print('Number of accepted solutions: ' + str(nr_acc))
             else:
-                self._position = self._position - self._delta
-                nu += 1
+                self._position = p_old
+                nr_unacc += 1
 
             if self._flag_save:
                 self._save_data(
-                    k=k+1, f=f_old, acc=flag_acc, nacc=n_acc, bp=bpos_hstry,
-                    bf=bfig_hstry)
+                    kiter=k+1, func=f_old, acc=flag_acc,
+                    nacc=nr_acc, bpos=bpos_hstry,
+                    bfunc=bfig_hstry)
 
             if self._temperature != 0:
                 # Reduces the temperature based on number of iterations
                 # without accepting solutions
                 # Ref: An Optimal Cooling Schedule Using a Simulated Annealing
                 # Based Approach - A. Peprah, S. Appiah, S. Amponsah
-                phi = 1 / (1 + 1 / np.sqrt((k+1) * (nu + 1) + nu))
+                phi = 1 / (1 + 1 / _np.sqrt((k+1) * (nr_unacc + 1) + nr_unacc))
                 self._temperature = phi * self._temperature
 
-            if self._stopped.is_set():
-                print('Stopped!')
+            if self._use_thread and self._stopped.is_set():
+                if print_flag:
+                    print('Stopped!')
                 break
 
-        print('Finished!')
-        if n_acc:
-            bpos_hstry = bpos_hstry[:n_acc+1, :]
-            bfig_hstry = bfig_hstry[:n_acc+1]
-
-            print('Best solution found: ' + str(bpos_hstry[-1, :]))
-            print(
-                'Best Obj. Func. found: ' + str(bfig_hstry[-1]))
-            print('Number of accepted solutions: ' + str(n_acc))
+        if print_flag:
+            print('Finished!')
+        if nr_acc:
+            bpos_hstry = bpos_hstry[:nr_acc+1, :]
+            bfig_hstry = bfig_hstry[:nr_acc+1]
+            if print_flag:
+                print('Best solution found: ' + str(bpos_hstry[-1, :]))
+                print(
+                    'Best Obj. Func. found: ' + str(bfig_hstry[-1]))
+                print('Number of accepted solutions: ' + str(nr_acc))
         else:
             bpos_hstry = bpos_hstry[0, :]
             bfig_hstry = bfig_hstry[0]
-            print('It was not possible to find a better solution...')
+            if print_flag:
+                print('It was not possible to find a better solution...')
 
-        self.best_positions_history = bpos_hstry
-        self.best_figures_history = bfig_hstry
+        self.hist_best_positions = bpos_hstry
+        self.hist_best_objfunc = bfig_hstry
+
+    def _check_initialization(self):
+        """."""
+        if self._pos_lim_upper is None and self._pos_lim_lower is None:
+            return
+
+        if len(self._pos_lim_upper) != len(self._pos_lim_lower):
+            raise Exception(
+                'Upper and Lower Limits has different lengths')
+
+        if self.ndim != len(self._pos_lim_upper):
+            raise Exception(
+                'Dimension incompatible with limits!')
+
+    def _check_lim(self):
+        # If particle position exceeds the boundary, set the boundary value
+        if self._pos_lim_upper is not None:
+            over = self._position > self._pos_lim_upper
+            self._position[over] = self._pos_lim_upper[over]
+        if self._pos_lim_lower is not None:
+            under = self._position < self._pos_lim_lower
+            self._position[under] = self._pos_lim_lower[under]
+
+    def _random_change(self):
+        # Random change applied in the current position
+        rarray = 2 * _np.random.rand(self.ndim) - 1  # [-1,1]
+        delta = self._pos_delta_max * rarray
+        self._position = self._position + delta
+        self._check_lim()
+
+    def _save_data(self, kiter, func, acc=False, nacc=None,
+                   bpos=None, bfunc=None):
+        """."""
+        with open('pos_SA.txt', 'a') as f_pos:
+            if kiter == 0:
+                f_pos.write('NEW RUN'.center(50, '=') + '\n')
+            f_pos.write('Step ' + str(kiter+1) + ' \n')
+            _np.savetxt(f_pos, self._position, fmt='%+.8e')
+        with open('fig_SA.txt', 'a') as f_fig:
+            if kiter == 0:
+                f_fig.write('NEW RUN'.center(50, '=') + '\n')
+            f_fig.write('Step ' + str(kiter+1) + ' \n')
+            _np.savetxt(f_fig, _np.array([func]), fmt='%+.8e')
+        if acc:
+            with open('best_pos_history_SA.txt', 'a') as f_posh:
+                if nacc == 1:
+                    f_posh.write('NEW RUN'.center(50, '=') + '\n')
+                f_posh.write('Accep. Solution ' + str(nacc+1) + ' \n')
+                _np.savetxt(f_posh, bpos[nacc, :], fmt='%+.8e')
+            with open('best_fig_history_SA.txt', 'a') as f_figh:
+                if nacc == 1:
+                    f_figh.write('NEW RUN'.center(50, '=') + '\n')
+                f_figh.write('Accep. Solution ' + str(nacc+1) + ' \n')
+                _np.savetxt(f_figh, _np.array([bfunc[nacc]]), fmt='%+.8e')
