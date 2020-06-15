@@ -91,6 +91,56 @@ class LOCOConfig:
 
         self._process_input(kwargs)
 
+    def __str__(self):
+        """."""
+        stmp = '{0:26s}: {1:s}  {2:s}\n'.format
+        ftmp = '{0:26s} = {1:9.2f}  {2:s}\n'.format
+        dtmp = '{0:26s}: {1:9d}  {2:s}\n'.format
+
+        stg = stmp('Tracking dimension', self.dim, '')
+        stg += stmp('Include dispersion', self.use_dispersion, '')
+        stg += stmp('Include off-diagonal', self.use_coupling, '')
+        stg += stmp('Minimization method', self.min_method, '')
+        stg += stmp('Jacobian manipulation', self.inv_method, '')
+        stg += stmp('Constraint delta KL', self.constraint_deltak, '')
+        stg += stmp('Singular values method', self.svd_method, '')
+
+        if self.svd_method == LOCOConfig.SVD.Selection:
+            if self.svd_sel is not None:
+                stg += dtmp('SV to be used:', self.svd_sel, '')
+            else:
+                stg += stmp('SV to be used', 'All', '')
+        if self.svd_method == LOCOConfig.SVD.Threshold:
+            stg += ftmp('SV threshold (s/s_max):', self.svd_thre, '')
+
+        stg += ftmp(
+            'Horizontal kicks used to measure',
+            self.delta_kickx_meas, '[urad]')
+        stg += ftmp(
+            'Vertical kicks used to measure',
+            self.delta_kicky_meas, '[urad]')
+        stg += ftmp(
+            'RF frequency variation used to measure',
+            self.delta_frequency_meas, '[Hz]')
+
+        stg += stmp('Dipoles normal gradients', self.fit_dipoles, '')
+        stg += stmp('Quadrupoles normal gradients', self.fit_quadrupoles, '')
+        stg += stmp('Sextupoles normal gradients', self.fit_sextupoles, '')
+
+        stg += stmp('Use dipoles as families', self.use_dip_families, '')
+        stg += stmp('Use quadrupoles as families', self.use_quad_families, '')
+
+        stg += stmp('Dipoles skew gradients', self.fit_dipoles, '')
+        stg += stmp('Quadrupoles skew gradients', self.fit_quadrupoles, '')
+        stg += stmp('Sextupoles skew gradients', self.fit_sextupoles, '')
+        stg += stmp(
+            'Skew quadrupoles skew gradients', self.fit_skew_quadrupoles, '')
+
+        stg += stmp('BPM gains', self.fit_gain_bpm, '')
+        stg += stmp('Corrector gains', self.fit_gain_corr, '')
+        stg += stmp('BPM roll', self.fit_roll_bpm, '')
+        return stg
+
     @property
     def acc(self):
         """."""
