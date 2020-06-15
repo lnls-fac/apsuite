@@ -93,17 +93,17 @@ class LOCOConfig:
 
     def __str__(self):
         """."""
-        stmp = '{0:26s}: {1:s}  {2:s}\n'.format
-        ftmp = '{0:26s} = {1:9.2f}  {2:s}\n'.format
-        dtmp = '{0:26s}: {1:9d}  {2:s}\n'.format
+        stmp = '{0:35s}: {1:}  {2:s}\n'.format
+        ftmp = '{0:35s}: {1:3.2f}  {2:s}\n'.format
+        dtmp = '{0:35s}: {1:3d}  {2:s}\n'.format
 
         stg = stmp('Tracking dimension', self.dim, '')
         stg += stmp('Include dispersion', self.use_dispersion, '')
         stg += stmp('Include off-diagonal', self.use_coupling, '')
-        stg += stmp('Minimization method', self.min_method, '')
-        stg += stmp('Jacobian manipulation', self.inv_method, '')
+        stg += stmp('Minimization method', self.min_method_str, '')
+        stg += stmp('Jacobian manipulation', self.inv_method_str, '')
         stg += stmp('Constraint delta KL', self.constraint_deltak, '')
-        stg += stmp('Singular values method', self.svd_method, '')
+        stg += stmp('Singular values method', self.svd_method_str, '')
 
         if self.svd_method == LOCOConfig.SVD.Selection:
             if self.svd_sel is not None:
@@ -114,13 +114,13 @@ class LOCOConfig:
             stg += ftmp('SV threshold (s/s_max):', self.svd_thre, '')
 
         stg += ftmp(
-            'Horizontal kicks used to measure',
-            self.delta_kickx_meas, '[urad]')
+            'H. kicks used to measure',
+            self.delta_kickx_meas*1e6, '[urad]')
         stg += ftmp(
-            'Vertical kicks used to measure',
-            self.delta_kicky_meas, '[urad]')
+            'V. kicks used to measure',
+            self.delta_kicky_meas*1e6, '[urad]')
         stg += ftmp(
-            'RF frequency variation used to measure',
+            'RF freq. variation used to measure',
             self.delta_frequency_meas, '[Hz]')
 
         stg += stmp('Dipoles normal gradients', self.fit_dipoles, '')
