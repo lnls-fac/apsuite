@@ -17,6 +17,7 @@ class LOCOConfig:
     DEFAULT_DELTA_DIP_KICK = 1e-6  # [rad]
     DEFAULT_DELTA_RF = 100  # [Hz]
     DEFAULT_SVD_THRESHOLD = 1e-6
+    DEFAULT_DELTAK_NORMALIZATION = 1e-3
 
     FAMNAME_RF = 'SRFCav'
 
@@ -85,7 +86,8 @@ class LOCOConfig:
         self.k_nrsets = None
         self.weight_bpm = None
         self.weight_corr = None
-        self.weight_deltak = None
+        self.weight_deltakl = None
+        self.deltakl_normalization = None
 
         self._process_input(kwargs)
 
@@ -323,10 +325,14 @@ class LOCOConfig:
             nknb += len(self.sext_indices)
 
         # delta kl constraint weight
-        if self.weight_deltak is None:
-            self.weight_deltak = _np.ones(nknb)
-        elif isinstance(self.weight_deltak, (int, float)):
-            self.weight_deltak = _np.ones(nknb)*self.weight_deltak
+        if self.weight_deltakl is None:
+            self.weight_deltakl = _np.ones(nknb)
+        elif isinstance(self.weight_deltakl, (int, float)):
+            self.weight_deltakl = _np.ones(nknb)*self.weight_deltakl
+
+        if self.deltakl_normalization is None:
+            self.deltakl_normalization = LOCOConfig.\
+                DEFAULT_DELTAK_NORMALIZATION
 
     def update_quad_knobs(self, use_families):
         """."""

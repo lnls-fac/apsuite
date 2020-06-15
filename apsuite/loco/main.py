@@ -18,7 +18,6 @@ class LOCO:
     DEFAULT_REDUC_THRESHOLD = 5/100
     DEFAULT_LAMBDA_LM = 1e-3
     DEFAULT_MAX_LAMBDA_LM = 1e6
-    DEFAULT_DELTAK_NORMALIZATION = 1e-3
 
     def __init__(self, config=None):
         """."""
@@ -472,7 +471,7 @@ class LOCO:
 
     def calc_jloco_deltak_constraint(self):
         """."""
-        sigma_deltak = LOCO.DEFAULT_DELTAK_NORMALIZATION
+        sigma_deltak = self.config.deltakl_normalization
         ncols = self._jloco.shape[1]
         nknobs = 0
 
@@ -491,7 +490,7 @@ class LOCO:
 
         deltak_mat = _np.zeros((nknobs, ncols))
         for knb in range(nknobs):
-            deltak_mat[knb, knb] = self.config.weight_deltak[knb]/sigma_deltak
+            deltak_mat[knb, knb] = self.config.weight_deltakl[knb]/sigma_deltak
         return deltak_mat
 
     def update_svd(self):
