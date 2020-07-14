@@ -17,6 +17,7 @@ class LOCOConfig:
     DEFAULT_DELTA_DIP_KICK = 1e-6  # [rad]
     DEFAULT_DELTA_RF = 100  # [Hz]
     DEFAULT_SVD_THRESHOLD = 1e-6
+    DEFAULT_DELTAK_NORMALIZATION = 1e-3
 
     FAMNAME_RF = 'SRFCav'
 
@@ -85,9 +86,60 @@ class LOCOConfig:
         self.k_nrsets = None
         self.weight_bpm = None
         self.weight_corr = None
-        self.weight_deltak = None
+        self.weight_deltakl = None
+        self.deltakl_normalization = None
 
         self._process_input(kwargs)
+
+    def __str__(self):
+        """."""
+        stmp = '{0:35s}: {1:}  {2:s}\n'.format
+        ftmp = '{0:35s}: {1:3.2f}  {2:s}\n'.format
+        dtmp = '{0:35s}: {1:3d}  {2:s}\n'.format
+
+        stg = stmp('Tracking dimension', self.dim, '')
+        stg += stmp('Include dispersion', self.use_dispersion, '')
+        stg += stmp('Include off-diagonal', self.use_coupling, '')
+        stg += stmp('Minimization method', self.min_method_str, '')
+        stg += stmp('Jacobian manipulation', self.inv_method_str, '')
+        stg += stmp('Constraint delta KL', self.constraint_deltak, '')
+        stg += stmp('Singular values method', self.svd_method_str, '')
+
+        if self.svd_method == LOCOConfig.SVD.Selection:
+            if self.svd_sel is not None:
+                stg += dtmp('SV to be used:', self.svd_sel, '')
+            else:
+                stg += stmp('SV to be used', 'All', '')
+        if self.svd_method == LOCOConfig.SVD.Threshold:
+            stg += ftmp('SV threshold (s/s_max):', self.svd_thre, '')
+
+        stg += ftmp(
+            'H. kicks used to measure',
+            self.delta_kickx_meas*1e6, '[urad]')
+        stg += ftmp(
+            'V. kicks used to measure',
+            self.delta_kicky_meas*1e6, '[urad]')
+        stg += ftmp(
+            'RF freq. variation used to measure',
+            self.delta_frequency_meas, '[Hz]')
+
+        stg += stmp('Dipoles normal gradients', self.fit_dipoles, '')
+        stg += stmp('Quadrupoles normal gradients', self.fit_quadrupoles, '')
+        stg += stmp('Sextupoles normal gradients', self.fit_sextupoles, '')
+
+        stg += stmp('Use dipoles as families', self.use_dip_families, '')
+        stg += stmp('Use quadrupoles as families', self.use_quad_families, '')
+
+        stg += stmp('Dipoles skew gradients', self.fit_dipoles, '')
+        stg += stmp('Quadrupoles skew gradients', self.fit_quadrupoles, '')
+        stg += stmp('Sextupoles skew gradients', self.fit_sextupoles, '')
+        stg += stmp(
+            'Skew quadrupoles skew gradients', self.fit_skew_quadrupoles, '')
+
+        stg += stmp('BPM gains', self.fit_gain_bpm, '')
+        stg += stmp('Corrector gains', self.fit_gain_corr, '')
+        stg += stmp('BPM roll', self.fit_roll_bpm, '')
+        return stg
 
     @property
     def acc(self):
@@ -323,10 +375,14 @@ class LOCOConfig:
             nknb += len(self.sext_indices)
 
         # delta kl constraint weight
-        if self.weight_deltak is None:
-            self.weight_deltak = _np.ones(nknb)
-        elif isinstance(self.weight_deltak, (int, float)):
-            self.weight_deltak = _np.ones(nknb)*self.weight_deltak
+        if self.weight_deltakl is None:
+            self.weight_deltakl = _np.ones(nknb)
+        elif isinstance(self.weight_deltakl, (int, float)):
+            self.weight_deltakl = _np.ones(nknb)*self.weight_deltakl
+
+        if self.deltakl_normalization is None:
+            self.deltakl_normalization = LOCOConfig.\
+                DEFAULT_DELTAK_NORMALIZATION
 
     def update_quad_knobs(self, use_families):
         """."""
