@@ -18,6 +18,7 @@ class LOCOConfig:
     DEFAULT_DELTA_RF = 100  # [Hz]
     DEFAULT_SVD_THRESHOLD = 1e-6
     DEFAULT_DELTAK_NORMALIZATION = 1e-3
+    DEFAULT_GIRDER_SHIFT = 1e-6  # [m]
 
     FAMNAME_RF = 'SRFCav'
 
@@ -63,6 +64,7 @@ class LOCOConfig:
         self.fit_gain_corr = None
         self.fit_dipoles_kick = None
         self.fit_energy_shift = None
+        self.fit_girder_shift = None
         self.constraint_deltak = None
         self.fit_skew_quadrupoles = None
         self.cavidx = None
@@ -83,6 +85,7 @@ class LOCOConfig:
         self.b2_indices = None
         self.bc_indices = None
         self.skew_quad_indices = None
+        self.gir_indices = None
         self.k_nrsets = None
         self.weight_bpm = None
         self.weight_corr = None
@@ -249,6 +252,7 @@ class LOCOConfig:
         self.update_quad_knobs(self.use_quad_families)
         self.update_sext_knobs()
         self.update_dip_knobs(self.use_dip_families)
+        self.update_girder_knobs()
         self.update_skew_quad_knobs()
         self.update_weight()
         self.update_svd(self.svd_method, self.svd_sel, self.svd_thre)
@@ -462,6 +466,12 @@ class LOCOConfig:
                 self.dip_indices += self.respm.fam_data[fam_name]['index']
                 self.dip_indices.sort()
                 self.dip_indices_ks = self.dip_indices
+
+    def update_girder_knobs(self):
+        """."""
+        self.gir_indices = _pyaccel.lattice.find_indices(
+            self.model, 'fam_name', 'girder')
+        self.gir_indices = _np.reshape(self.gir_indices, (-1, 2))
 
     def _process_input(self, kwargs):
         for key, value in kwargs.items():
