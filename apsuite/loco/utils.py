@@ -655,7 +655,7 @@ class LOCOUtils:
             param_dict['skew_quadrupoles'] = param[idx:idx+size]
             idx += size
         if config.fit_girders:
-            size = len(config.gir_indices)
+            size = config.gir_indices.shape[0]
             param_dict['girders_shift'] = param[idx:idx+size]
             idx += size
         return param_dict
