@@ -178,8 +178,9 @@ class LOCOUtils:
     def set_girders_long_shift(model, girders, ds_shift):
         """."""
         for i, inds in enumerate(girders):
-            model[inds[0]-1].length += ds_shift[i]
-            model[inds[1]+1].length -= ds_shift[i]
+            if ds_shift[i]:
+                model[inds[0]-1].length += ds_shift[i]
+                model[inds[1]+1].length -= ds_shift[i]
         return model
 
     @staticmethod
@@ -474,7 +475,7 @@ class LOCOUtils:
             matrix_nominal.shape[0]*matrix_nominal.shape[1], len(gindices)))
 
         model_this = _dcopy(model)
-        ds_shift = _np.zeros((len(gindices), 1))
+        ds_shift = _np.zeros(gindices.shape[0])
         for idx, _ in enumerate(gindices):
             ds_shift[idx] = config.DEFAULT_GIRDER_SHIFT
             LOCOUtils.set_girders_long_shift(
@@ -654,7 +655,7 @@ class LOCOUtils:
             size = len(config.skew_quad_indices)
             param_dict['skew_quadrupoles'] = param[idx:idx+size]
             idx += size
-        if config.fit_girders:
+        if config.fit_girder_shift:
             size = config.gir_indices.shape[0]
             param_dict['girders_shift'] = param[idx:idx+size]
             idx += size
