@@ -69,6 +69,7 @@ class LOCO:
         self._jloco_kick_dip = None
 
         self._jloco_energy_shift = None
+        self._jloco_girder_shift = None
 
         self._jloco = None
         self._jloco_inv = None
