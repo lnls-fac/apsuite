@@ -133,7 +133,7 @@ class LOCO:
                fname_jloco_ks_dip=None,
                fname_jloco_kick_dip=None,
                fname_jloco_ks_skewquad=None,
-               fname_jloco_girder=None):
+               fname_jloco_girder_shift=None):
         """."""
         print('update config...')
         self.update_config()
@@ -152,7 +152,7 @@ class LOCO:
                 fname_jloco_ks_dip=fname_jloco_ks_dip,
                 fname_jloco_kick_dip=fname_jloco_kick_dip,
                 fname_jloco_ks_skewquad=fname_jloco_ks_skewquad,
-                fname_jloco_girder=fname_jloco_girder)
+                fname_jloco_girder_shift=fname_jloco_girder_shift)
             print('update svd...')
             self.update_svd()
         print('update fit...')
