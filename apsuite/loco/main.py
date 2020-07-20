@@ -131,7 +131,8 @@ class LOCO:
                fname_jloco_ks_sext=None,
                fname_jloco_ks_dip=None,
                fname_jloco_kick_dip=None,
-               fname_jloco_ks_skewquad=None):
+               fname_jloco_ks_skewquad=None,
+               fname_jloco_girder=None):
         """."""
         print('update config...')
         self.update_config()
@@ -149,7 +150,8 @@ class LOCO:
                 fname_jloco_ks_sext=fname_jloco_ks_sext,
                 fname_jloco_ks_dip=fname_jloco_ks_dip,
                 fname_jloco_kick_dip=fname_jloco_kick_dip,
-                fname_jloco_ks_skewquad=fname_jloco_ks_skewquad)
+                fname_jloco_ks_skewquad=fname_jloco_ks_skewquad,
+                fname_jloco_girder=fname_jloco_girder)
             print('update svd...')
             self.update_svd()
         print('update fit...')
@@ -324,6 +326,18 @@ class LOCO:
                 self._jloco_kick_dip = _LOCOUtils.load_data(
                     fname_jloco_kick_dip)['jloco_kmatrix']
 
+    def _handle_girder_shift(self, fname_jloco_girder_shift=None):
+        # calculate kick jacobian for dipole
+        if self.config.fit_girder_shift:
+            if fname_jloco_girder_shift is None:
+                print('calculating girder shift matrix...')
+                self._jloco_girder_shift = _LOCOUtils.jloco_calc_girders(
+                    self.config, self._model)
+            else:
+                print('loading girder shift matrix...')
+                self._jloco_girder_shift = _LOCOUtils.load_data(
+                    fname_jloco_girder_shift)['jloco_kmatrix']
+
     def create_new_jacobian_dict(self, jloco, idx, sub):
         """."""
         newjloco = dict()
@@ -392,7 +406,8 @@ class LOCO:
                      fname_jloco_ks_quad=None,
                      fname_jloco_ks_sext=None,
                      fname_jloco_kick_dip=None,
-                     fname_jloco_ks_skewquad=None):
+                     fname_jloco_ks_skewquad=None,
+                     fname_jloco_girder_shift=None):
         """."""
         # calc jloco linear parts
         self._jloco_gain_bpm, self._jloco_roll_bpm, self._jloco_gain_corr = \
@@ -414,6 +429,8 @@ class LOCO:
 
             self._handle_skewquad_fit_ks(fname_jloco_ks_skewquad)
 
+            self._handle_girder_shift(fname_jloco_girder_shift)
+
             # self.save_jacobian()
 
         if self.config.fit_energy_shift:
@@ -431,7 +448,8 @@ class LOCO:
             self._jloco_ks_quad, self._jloco_ks_sext, self._jloco_ks_dip,
             self._jloco_gain_bpm, self._jloco_roll_bpm,
             self._jloco_gain_corr, self._jloco_kick_dip,
-            self._jloco_energy_shift, self._jloco_ks_skew_quad)
+            self._jloco_energy_shift, self._jloco_ks_skew_quad,
+            self._jloco_girder_shift)
 
         # apply weight
         self._jloco = _LOCOUtils.jloco_apply_weight(
@@ -564,6 +582,9 @@ class LOCO:
         self._quad_k_deltas = _np.zeros(len(self.config.quad_indices))
         self._sext_k_deltas = _np.zeros(len(self.config.sext_indices))
         self._dip_k_deltas = _np.zeros(len(self.config.dip_indices))
+
+        self._girders_shift_inival = _np.zeros(len(self.config.gir_indices))
+        self._girders_shift_deltas = _np.zeros(len(self.config.gir_indices))
 
         # bpm inival and deltas
         if self._gain_bpm_inival is None:
@@ -701,6 +722,8 @@ class LOCO:
         self.energy_shift = self._energy_shift_inival + \
             self._energy_shift_deltas
         self.residue_history = self._res_history
+        self.girder_shift = self._girders_shift_inival + \
+            self._girders_shift_deltas
 
     def clear_output_vars(self):
         """."""
@@ -713,6 +736,7 @@ class LOCO:
         self.residue_history = []
         self._chi_history = []
         self._res_history = []
+        self.girder_shift = []
 
     def _calc_model_matrix(self, param):
         """."""
@@ -810,6 +834,13 @@ class LOCO:
                         model, idx_set,
                         self._skew_quad_ks_inival[idx],
                         self._skew_quad_ks_deltas[idx])
+            if 'girders_shift' in param_dict:
+                # update girders shift
+                self._girders_shift_deltas += param_dict['girders_shift']
+                # update model
+                _LOCOUtils.set_girders_long_shift(
+                    model, config.gir_indices,
+                    self._girders_shift_inival + self._girders_shift_deltas)
         else:
             matrix = _dcopy(self.config.matrix)
 
