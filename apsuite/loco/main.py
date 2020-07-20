@@ -120,6 +120,7 @@ class LOCO:
         self.corr_gain = None
         self.energy_shift = None
         self.residue_history = None
+        self.girder_shift = None
 
     def update(self,
                fname_jloco_k=None,
