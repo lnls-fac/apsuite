@@ -332,8 +332,11 @@ class LOCO:
         if self.config.fit_girder_shift:
             if fname_jloco_girder_shift is None:
                 print('calculating girder shift matrix...')
+                time0 = _time.time()
                 self._jloco_girder_shift = _LOCOUtils.jloco_calc_girders(
                     self.config, self._model)
+                dtime = _time.time() - time0
+                print('it took {} min to calculate'.format(dtime/60))
             else:
                 print('loading girder shift matrix...')
                 self._jloco_girder_shift = _LOCOUtils.load_data(
