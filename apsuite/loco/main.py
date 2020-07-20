@@ -242,7 +242,7 @@ class LOCO:
                 self._jloco_k_sext = _LOCOUtils.jloco_calc_k_sextupoles(
                     self.config, self._model)
                 dtime = _time.time() - time0
-                print('it took {} min to calculate'.format(dtime/60))
+                print('it took {:.2f} min to calculate'.format(dtime/60))
             else:
                 print('loading sextupoles kmatrix...')
                 jloco_k_sext_dict = _LOCOUtils.load_data(
@@ -273,7 +273,7 @@ class LOCO:
                 self._jloco_ks_skew_quad = _LOCOUtils.jloco_calc_ks_skewquad(
                     self.config, self._model)
                 dtime = _time.time() - time0
-                print('it took {} min to calculate'.format(dtime/60))
+                print('it took {:.2f} min to calculate'.format(dtime/60))
             else:
                 print('loading skew quadrupoles ksmatrix...')
                 jloco_ks_skewquad_dict = _LOCOUtils.load_data(
@@ -290,7 +290,7 @@ class LOCO:
                 self._jloco_ks_quad = _LOCOUtils.jloco_calc_ks_quad(
                     self.config, self._model)
                 dtime = _time.time() - time0
-                print('it took {} min to calculate'.format(dtime/60))
+                print('it took {:.2f} min to calculate'.format(dtime/60))
             else:
                 print('loading quadrupoles ksmatrix...')
                 jloco_ks_quad_dict = _LOCOUtils.load_data(
@@ -307,7 +307,7 @@ class LOCO:
                 self._jloco_ks_sext = _LOCOUtils.jloco_calc_ks_sextupoles(
                     self.config, self._model)
                 dtime = _time.time() - time0
-                print('it took {} min to calculate'.format(dtime/60))
+                print('it took {:.2f} min to calculate'.format(dtime/60))
             else:
                 print('loading sextupoles ksmatrix...')
                 jloco_ks_sext_dict = _LOCOUtils.load_data(
@@ -336,7 +336,7 @@ class LOCO:
                 self._jloco_girder_shift = _LOCOUtils.jloco_calc_girders(
                     self.config, self._model)
                 dtime = _time.time() - time0
-                print('it took {} min to calculate'.format(dtime/60))
+                print('it took {:.2f} min to calculate'.format(dtime/60))
             else:
                 print('loading girder shift matrix...')
                 self._jloco_girder_shift = _LOCOUtils.load_data(
