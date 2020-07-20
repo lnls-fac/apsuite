@@ -138,6 +138,8 @@ class LOCOConfig:
         stg += stmp('Sextupoles skew gradients', self.fit_sextupoles, '')
         stg += stmp(
             'Skew quadrupoles skew gradients', self.fit_skew_quadrupoles, '')
+        stg += stmp(
+            'Girders longitudinal shifts', self.fit_girder_shift, '')
 
         stg += stmp('BPM gains', self.fit_gain_bpm, '')
         stg += stmp('Corrector gains', self.fit_gain_corr, '')
