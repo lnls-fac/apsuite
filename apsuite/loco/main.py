@@ -584,8 +584,10 @@ class LOCO:
         self._sext_k_deltas = _np.zeros(len(self.config.sext_indices))
         self._dip_k_deltas = _np.zeros(len(self.config.dip_indices))
 
-        self._girders_shift_inival = _np.zeros(len(self.config.gir_indices))
-        self._girders_shift_deltas = _np.zeros(len(self.config.gir_indices))
+        self._girders_shift_inival = _np.zeros(
+            self.config.gir_indices.shape[0])
+        self._girders_shift_deltas = _np.zeros(
+            self.config.gir_indices.shape[0])
 
         # bpm inival and deltas
         if self._gain_bpm_inival is None:
