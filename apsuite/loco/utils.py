@@ -29,6 +29,7 @@ class LOCOUtils:
 
     @staticmethod
     def get_idx(indcs):
+        """."""
         return _np.array([idx[0] for idx in indcs])
 
     @staticmethod
@@ -172,6 +173,15 @@ class LOCOUtils:
         angle /= _np.sum(angle)
         _pyaccel.lattice.set_attribute(
             model, 'hkick_polynom', idx_mag, kick_values + kick_delta * angle)
+
+    @staticmethod
+    def set_girders_long_shift(model, girders, ds_shift):
+        """."""
+        for i, inds in enumerate(girders):
+            if ds_shift[i]:
+                model[inds[0]-1].length += ds_shift[i]
+                model[inds[1]+1].length -= ds_shift[i]
+        return model
 
     @staticmethod
     def jloco_calc_linear(config, matrix):
@@ -456,11 +466,37 @@ class LOCOUtils:
         return ksmatrix
 
     @staticmethod
+    def jloco_calc_girders(config, model):
+        """."""
+        gindices = config.gir_indices
+        matrix_nominal = LOCOUtils.respm_calc(
+            model, config.respm, config.use_dispersion)
+        gmatrix = _np.zeros((
+            matrix_nominal.shape[0]*matrix_nominal.shape[1], len(gindices)))
+
+        model_this = _dcopy(model)
+        ds_shift = _np.zeros(gindices.shape[0])
+        for idx, _ in enumerate(gindices):
+            ds_shift[idx] = config.DEFAULT_GIRDER_SHIFT
+            LOCOUtils.set_girders_long_shift(
+                model_this, gindices, ds_shift)
+            matrix_this = LOCOUtils.respm_calc(
+                model_this, config.respm, config.use_dispersion)
+            dmatrix = (matrix_this - matrix_nominal)
+            dmatrix /= config.DEFAULT_GIRDER_SHIFT
+            gmatrix[:, idx] = dmatrix.flatten()
+            ds_shift[idx] = 0
+            LOCOUtils.set_girders_long_shift(
+                model_this, gindices, ds_shift)
+        return gmatrix
+
+    @staticmethod
     def jloco_merge_linear(
             config, km_quad, km_sext, km_dip,
             ksm_quad, ksm_sext, ksm_dip,
             dmdg_bpm, dmdalpha_bpm, dmdg_corr,
-            kick_dip, energy_shift, ks_skewquad):
+            kick_dip, energy_shift, ks_skewquad,
+            girder_shift):
         """."""
         nbpm = config.nr_bpm
         nch = config.nr_ch
@@ -469,6 +505,7 @@ class LOCOUtils:
         knobs_ks = 0
         knobs_linear = 0
         knobs_skewquad = 0
+        knobs_gir = 0
 
         if km_quad is not None:
             knobs_k += km_quad.shape[1]
@@ -495,8 +532,13 @@ class LOCOUtils:
             knobs_linear += nch + ncv
         if config.fit_dipoles_kick:
             knobs_linear += 3
+        if config.fit_girder_shift:
+            knobs_gir += girder_shift.shape[1]
 
-        nknobs = knobs_k + knobs_ks + knobs_linear + knobs_skewquad
+        nknobs = knobs_k + knobs_ks + knobs_skewquad
+        nknobs += knobs_linear
+        nknobs += knobs_gir
+
         jloco = _np.zeros(
             (2*nbpm*(nch+ncv+1), nknobs))
         idx = 0
@@ -547,6 +589,10 @@ class LOCOUtils:
         if config.fit_skew_quadrupoles:
             num = knobs_skewquad
             jloco[:, idx:idx+num] = ks_skewquad
+            idx += num
+        if config.fit_girder_shift:
+            num = knobs_gir
+            jloco[:, idx:idx+num] = girder_shift
             idx += num
         return jloco
 
@@ -608,6 +654,10 @@ class LOCOUtils:
         if config.fit_skew_quadrupoles:
             size = len(config.skew_quad_indices)
             param_dict['skew_quadrupoles'] = param[idx:idx+size]
+            idx += size
+        if config.fit_girder_shift:
+            size = config.gir_indices.shape[0]
+            param_dict['girders_shift'] = param[idx:idx+size]
             idx += size
         return param_dict
 
