@@ -369,38 +369,38 @@ class LOCO:
         sub_qs = self.config.respm.fam_data['QS']['subsection']
 
         jloco_k_dip = self.create_new_jacobian_dict(
-            self._jloco_k_dip, idx_bn, sub_bn)
+           self._jloco_k_dip, idx_bn, sub_bn)
         jloco_k_quad = self.create_new_jacobian_dict(
             self._jloco_k_quad, idx_qn, sub_qn)
         jloco_k_sext = self.create_new_jacobian_dict(
-            self._jloco_k_sext, idx_sn, sub_sn)
+           self._jloco_k_sext, idx_sn, sub_sn)
 
         print('saving jacobian K')
         _LOCOUtils.save_data(
-            '4d_KL_dipoles', jloco_k_dip)
+           '6d_KL_dipoles', jloco_k_dip)
         _LOCOUtils.save_data(
-            '4d_KL_quadrupoles_trims', jloco_k_quad)
+            '6d_KL_quadrupoles_trims', jloco_k_quad)
         _LOCOUtils.save_data(
-            '4d_KL_sextupoles', jloco_k_sext)
+           '6d_KL_sextupoles', jloco_k_sext)
 
         jloco_ks_dip = self.create_new_jacobian_dict(
-            self._jloco_ks_dip, idx_bn, sub_bn)
+           self._jloco_ks_dip, idx_bn, sub_bn)
         jloco_ks_quad = self.create_new_jacobian_dict(
-            self._jloco_ks_quad, idx_qn, sub_qn)
+           self._jloco_ks_quad, idx_qn, sub_qn)
         jloco_ks_sext = self.create_new_jacobian_dict(
-            self._jloco_ks_sext, idx_sn, sub_sn)
+           self._jloco_ks_sext, idx_sn, sub_sn)
         jloco_ks_skewquad = self.create_new_jacobian_dict(
             self._jloco_ks_skew_quad, idx_qs, sub_qs)
 
         print('saving jacobian Ks')
         _LOCOUtils.save_data(
-            '4d_KsL_dipoles', jloco_ks_dip)
+           '6d_KsL_dipoles', jloco_ks_dip)
         _LOCOUtils.save_data(
-            '4d_KsL_quadrupoles_trims', jloco_ks_quad)
+           '6d_KsL_quadrupoles', jloco_ks_quad)
         _LOCOUtils.save_data(
-            '4d_KsL_sextupoles', jloco_ks_sext)
+           '6d_KsL_sextupoles', jloco_ks_sext)
         _LOCOUtils.save_data(
-            '4d_KsL_skew_quadrupoles', jloco_ks_skewquad)
+           '6d_KsL_skew_quadrupoles', jloco_ks_skewquad)
 
     def update_jloco(self,
                      fname_jloco_k=None,
@@ -626,6 +626,8 @@ class LOCO:
 
     def _calc_residue(self):
         matrix_diff = self.config.goalmat - self._matrix
+        if self.config.remove_diagonal:
+            matrix_diff = _LOCOUtils.remove_diagonal(matrix_diff, 160, 120)
         matrix_diff = _LOCOUtils.apply_all_weight(
             matrix_diff, self.config.weight_bpm, self.config.weight_corr)
         res = matrix_diff.flatten()
@@ -753,101 +755,112 @@ class LOCO:
         param_names = {
             'dipoles_gradient',
             'quadrupoles_gradient',
-            'sextupoles_gradient'}
-
-        if bool(param_names.intersection(set(param_dict.keys()))):
-            if 'dipoles_gradient' in param_dict:
-                self._dip_k_deltas += param_dict['dipoles_gradient']
-                # update local model
-                if self.config.use_dip_families:
-                    set_dip_kdelta = _LOCOUtils.set_dipset_kdelta
-                else:
-                    set_dip_kdelta = _LOCOUtils.set_dipmag_kdelta
-                for idx, idx_set in enumerate(config.dip_indices):
-                    set_dip_kdelta(
-                        model, idx_set,
-                        self._dip_k_inival[idx], self._dip_k_deltas[idx])
-            if 'quadrupoles_gradient' in param_dict:
-                # update quadrupole delta
-                self._quad_k_deltas += param_dict['quadrupoles_gradient']
-                # update local model
-                if self.config.use_quad_families:
-                    set_quad_kdelta = _LOCOUtils.set_quadset_kdelta
-                else:
-                    set_quad_kdelta = _LOCOUtils.set_quadmag_kdelta
-                for idx, idx_set in enumerate(config.quad_indices):
-                    set_quad_kdelta(
-                        model, idx_set,
-                        self._quad_k_inival[idx], self._quad_k_deltas[idx])
-            if 'sextupoles_gradient' in param_dict:
-                # update sextupole delta
-                self._sext_k_deltas += param_dict['sextupoles_gradient']
-                # update local model
+            'sextupoles_gradient'
+            'skew_quadrupoles'}
+        one_knob = False
+        if 'dipoles_gradient' in param_dict:
+            self._dip_k_deltas += param_dict['dipoles_gradient']
+            # update local model
+            if self.config.use_dip_families:
+                set_dip_kdelta = _LOCOUtils.set_dipset_kdelta
+            else:
+                set_dip_kdelta = _LOCOUtils.set_dipmag_kdelta
+            for idx, idx_set in enumerate(config.dip_indices):
+                set_dip_kdelta(
+                    model, idx_set,
+                    self._dip_k_inival[idx], self._dip_k_deltas[idx])
+            one_knob = True
+        if 'quadrupoles_gradient' in param_dict:
+            # update quadrupole delta
+            self._quad_k_deltas += param_dict['quadrupoles_gradient']
+            # update local model
+            if self.config.use_quad_families:
+                set_quad_kdelta = _LOCOUtils.set_quadset_kdelta
+            else:
                 set_quad_kdelta = _LOCOUtils.set_quadmag_kdelta
-                for idx, idx_set in enumerate(config.sext_indices):
-                    set_quad_kdelta(
-                        model, idx_set,
-                        self._sext_k_inival[idx], self._sext_k_deltas[idx])
-            if 'quadrupoles_coupling' in param_dict:
-                # update quadrupole Ks delta
-                self._quad_ks_deltas += param_dict['quadrupoles_coupling']
-                # update local model
-                set_quad_ksdelta = _LOCOUtils.set_quadmag_ksdelta
-                for idx, idx_set in enumerate(config.quad_indices_ks):
-                    set_quad_ksdelta(
-                        model, idx_set,
-                        self._quad_ks_inival[idx], self._quad_ks_deltas[idx])
-            if 'sextupoles_coupling' in param_dict:
-                # update sextupole Ks delta
-                self._sext_ks_deltas += param_dict['sextupoles_coupling']
-                # update local model
-                set_quad_ksdelta = _LOCOUtils.set_quadmag_ksdelta
-                for idx, idx_set in enumerate(config.sext_indices):
-                    set_quad_ksdelta(
-                        model, idx_set,
-                        self._sext_ks_inival[idx], self._sext_ks_deltas[idx])
-            if 'dipoles_coupling' in param_dict:
-                # update dipoles Ks delta
-                self._dip_ks_deltas += param_dict['dipoles_coupling']
-                # update local model
-                for idx, idx_set in enumerate(config.dip_indices_ks):
-                    _LOCOUtils.set_dipmag_ksdelta(
-                        model, idx_set,
-                        self._dip_ks_inival[idx], self._dip_ks_deltas[idx])
-            if 'dipoles_kicks' in param_dict:
-                # update dipoles kick delta
-                self._dip_kick_deltas += param_dict['dipoles_kick']
-                # update local model
-                for idx, idx_set in enumerate(config.dip_indices):
-                    _LOCOUtils.set_dipmag_kick(
-                        model, idx_set,
-                        self._dip_kick_inival[idx], self._dip_kick_deltas[idx])
+            for idx, idx_set in enumerate(config.quad_indices):
+                set_quad_kdelta(
+                    model, idx_set,
+                    self._quad_k_inival[idx], self._quad_k_deltas[idx])
+            one_knob = True
+        if 'sextupoles_gradient' in param_dict:
+            # update sextupole delta
+            self._sext_k_deltas += param_dict['sextupoles_gradient']
+            # update local model
+            set_quad_kdelta = _LOCOUtils.set_quadmag_kdelta
+            for idx, idx_set in enumerate(config.sext_indices):
+                set_quad_kdelta(
+                    model, idx_set,
+                    self._sext_k_inival[idx], self._sext_k_deltas[idx])
+            one_knob = True
+        if 'quadrupoles_coupling' in param_dict:
+            # update quadrupole Ks delta
+            self._quad_ks_deltas += param_dict['quadrupoles_coupling']
+            # update local model
+            set_quad_ksdelta = _LOCOUtils.set_quadmag_ksdelta
+            for idx, idx_set in enumerate(config.quad_indices_ks):
+                set_quad_ksdelta(
+                    model, idx_set,
+                    self._quad_ks_inival[idx], self._quad_ks_deltas[idx])
+            one_knob = True
+        if 'sextupoles_coupling' in param_dict:
+            # update sextupole Ks delta
+            self._sext_ks_deltas += param_dict['sextupoles_coupling']
+            # update local model
+            set_quad_ksdelta = _LOCOUtils.set_quadmag_ksdelta
+            for idx, idx_set in enumerate(config.sext_indices):
+                set_quad_ksdelta(
+                    model, idx_set,
+                    self._sext_ks_inival[idx], self._sext_ks_deltas[idx])
+            one_knob = True
+        if 'dipoles_coupling' in param_dict:
+            # update dipoles Ks delta
+            self._dip_ks_deltas += param_dict['dipoles_coupling']
+            # update local model
+            for idx, idx_set in enumerate(config.dip_indices_ks):
+                _LOCOUtils.set_dipmag_ksdelta(
+                    model, idx_set,
+                    self._dip_ks_inival[idx], self._dip_ks_deltas[idx])
+            one_knob = True
+        if 'dipoles_kicks' in param_dict:
+            # update dipoles kick delta
+            self._dip_kick_deltas += param_dict['dipoles_kick']
+            # update local model
+            for idx, idx_set in enumerate(config.dip_indices):
+                _LOCOUtils.set_dipmag_kick(
+                    model, idx_set,
+                    self._dip_kick_inival[idx], self._dip_kick_deltas[idx])
+        if 'energy_shift' in param_dict:
+            # update energy shift
+            self._energy_shift_deltas += param_dict['energy_shift']
+            matrix = _LOCOUtils.add_dispersion_to_respm(
+                matrix,
+                self._energy_shift_inival + self._energy_shift_deltas,
+                config.measured_dispersion)
+            one_knob = True
+        if 'skew_quadrupoles' in param_dict:
+            # update skew quadrupoles
+            self._skew_quad_ks_deltas += param_dict['skew_quadrupoles']
+            # update local model
+            set_quad_ksdelta = _LOCOUtils.set_quadmag_ksdelta
+            for idx, idx_set in enumerate(config.skew_quad_indices):
+                set_quad_ksdelta(
+                    model, idx_set,
+                    self._skew_quad_ks_inival[idx],
+                    self._skew_quad_ks_deltas[idx])
+            one_knob = True
+        if 'girders_shift' in param_dict:
+            # update girders shift
+            self._girders_shift_deltas += param_dict['girders_shift']
+            # update model
+            _LOCOUtils.set_girders_long_shift(
+                model, config.gir_indices,
+                self._girders_shift_inival + self._girders_shift_deltas)
+            one_knob = True
+
+        if one_knob:
             matrix = _LOCOUtils.respm_calc(
                 model, config.respm, config.use_dispersion)
-            if 'energy_shift' in param_dict:
-                # update energy shift
-                self._energy_shift_deltas += param_dict['energy_shift']
-                matrix = _LOCOUtils.add_dispersion_to_respm(
-                    matrix,
-                    self._energy_shift_inival + self._energy_shift_deltas,
-                    config.measured_dispersion)
-            if 'skew_quadrupoles' in param_dict:
-                # update skew quadrupoles
-                self._skew_quad_ks_deltas += param_dict['skew_quadrupoles']
-                # update local model
-                set_quad_ksdelta = _LOCOUtils.set_quadmag_ksdelta
-                for idx, idx_set in enumerate(config.skew_quad_indices):
-                    set_quad_ksdelta(
-                        model, idx_set,
-                        self._skew_quad_ks_inival[idx],
-                        self._skew_quad_ks_deltas[idx])
-            if 'girders_shift' in param_dict:
-                # update girders shift
-                self._girders_shift_deltas += param_dict['girders_shift']
-                # update model
-                _LOCOUtils.set_girders_long_shift(
-                    model, config.gir_indices,
-                    self._girders_shift_inival + self._girders_shift_deltas)
         else:
             matrix = _dcopy(self.config.matrix)
 
