@@ -97,6 +97,15 @@ class LOCOUtils:
         return matrix_out
 
     @staticmethod
+    def remove_diagonal(matrix_in, nr_bpm, nr_ch):
+        """."""
+        matrix_out = _np.zeros(matrix_in.shape)
+        matrix_out[:nr_bpm, nr_ch:-1] = matrix_in[:nr_bpm, nr_ch:-1]
+        matrix_out[nr_bpm:, :nr_ch] = matrix_in[nr_bpm:, :nr_ch]
+        matrix_out[nr_bpm:, -1] = matrix_in[nr_bpm:, -1]
+        return matrix_out
+
+    @staticmethod
     def add_dispersion_to_respm(matrix, energy_shift, dispersion):
         """."""
         matrix_out = _dcopy(matrix)
