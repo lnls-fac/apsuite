@@ -46,6 +46,7 @@ class LOCOConfig:
         self.lambda_lm = None
         self.use_dispersion = None
         self.use_coupling = None
+        self.remove_diagonal = None
         self.use_quad_families = None
         self.dipoles_to_fit = None
         self.quadrupoles_to_fit = None
@@ -102,6 +103,7 @@ class LOCOConfig:
 
         stg = stmp('Tracking dimension', self.dim, '')
         stg += stmp('Include dispersion', self.use_dispersion, '')
+        stg += stmp('Include diagonal', self.remove_diagonal, '')
         stg += stmp('Include off-diagonal', self.use_coupling, '')
         stg += stmp('Minimization method', self.min_method_str, '')
         stg += stmp('Jacobian manipulation', self.inv_method_str, '')
