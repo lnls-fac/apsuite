@@ -295,7 +295,7 @@ class LOCOConfig:
         # coupling
         self.use_offdiagonal = use_offdiagonal
         if not use_offdiagonal:
-            self.goalmat = _LOCOUtils.remove_coupling(
+            self.goalmat = _LOCOUtils.remove_offdiagonal(
                 goalmat, self.nr_bpm, self.nr_ch, self.nr_cv)
         else:
             self.goalmat = _dcopy(goalmat)
