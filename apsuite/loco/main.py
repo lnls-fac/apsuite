@@ -562,7 +562,7 @@ class LOCO:
             _pyaccel.lattice.get_attribute(
                 self._model, 'KL', self.config.sext_indices))
 
-        if self.config.use_coupling:
+        if self.config.use_offdiagonal:
             self._quad_ks_inival = _np.array(
                 _pyaccel.lattice.get_attribute(
                     self._model, 'KsL', self.config.quad_indices_ks))
@@ -626,7 +626,7 @@ class LOCO:
 
     def _calc_residue(self):
         matrix_diff = self.config.goalmat - self._matrix
-        if self.config.remove_diagonal:
+        if not self.config.use_diagonal:
             matrix_diff = _LOCOUtils.remove_diagonal(matrix_diff, 160, 120)
         matrix_diff = _LOCOUtils.apply_all_weight(
             matrix_diff, self.config.weight_bpm, self.config.weight_corr)

@@ -45,8 +45,8 @@ class LOCOConfig:
         self.fitting_method = None
         self.lambda_lm = None
         self.use_dispersion = None
-        self.use_coupling = None
-        self.remove_diagonal = None
+        self.use_offdiagonal = None
+        self.use_diagonal = None
         self.use_quad_families = None
         self.dipoles_to_fit = None
         self.quadrupoles_to_fit = None
@@ -103,8 +103,8 @@ class LOCOConfig:
 
         stg = stmp('Tracking dimension', self.dim, '')
         stg += stmp('Include dispersion', self.use_dispersion, '')
-        stg += stmp('Include diagonal', self.remove_diagonal, '')
-        stg += stmp('Include off-diagonal', self.use_coupling, '')
+        stg += stmp('Include diagonal', self.use_diagonal, '')
+        stg += stmp('Include off-diagonal', self.use_offdiagonal, '')
         stg += stmp('Minimization method', self.min_method_str, '')
         stg += stmp('Jacobian manipulation', self.inv_method_str, '')
         stg += stmp('Constraint delta KL', self.constraint_deltak, '')
@@ -251,7 +251,7 @@ class LOCOConfig:
         self.update_model(self.model, self.dim)
         self.update_matrix(self.use_dispersion)
         self.update_goalmat(
-            self.goalmat, self.use_dispersion, self.use_coupling)
+            self.goalmat, self.use_dispersion, self.use_offdiagonal)
         self.update_gain()
         self.update_quad_knobs(self.use_quad_families)
         self.update_sext_knobs()
@@ -286,15 +286,15 @@ class LOCOConfig:
                 self.svd_thre = LOCOConfig.DEFAULT_SVD_THRESHOLD
             print('svd_threshold: {:f}'.format(self.svd_thre))
 
-    def update_goalmat(self, goalmat, use_dispersion, use_coupling):
+    def update_goalmat(self, goalmat, use_dispersion, use_offdiagonal):
         """."""
         # init goalmat
         if goalmat is None:
             goalmat = _dcopy(self.matrix)
 
         # coupling
-        self.use_coupling = use_coupling
-        if not use_coupling:
+        self.use_offdiagonal = use_offdiagonal
+        if not use_offdiagonal:
             self.goalmat = _LOCOUtils.remove_coupling(
                 goalmat, self.nr_bpm, self.nr_ch, self.nr_cv)
         else:
