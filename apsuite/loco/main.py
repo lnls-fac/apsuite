@@ -713,13 +713,11 @@ class LOCO:
         if matrix is None:
             matrix = self._matrix
         dmatrix = matrix - self.config.goalmat
-        dmatrix = _LOCOUtils.apply_all_weight(
-            dmatrix, self.config.weight_bpm, self.config.weight_corr)
         dmatrix[:, :self.config.nr_ch] *= self.config.delta_kickx_meas
         dmatrix[:, self.config.nr_ch:-1] *= self.config.delta_kicky_meas
         dmatrix[:, -1] *= self.config.delta_frequency_meas
         chi2 = _np.sum(dmatrix*dmatrix)/(dmatrix.size)
-        return _np.sqrt(chi2) * 1e6
+        return _np.sqrt(chi2) * 1e6  # m to um
 
     def _create_output_vars(self):
         """."""
@@ -752,11 +750,6 @@ class LOCO:
         model = _dcopy(self._model)
         config = self.config
         param_dict = _LOCOUtils.param_select(config, param)
-        param_names = {
-            'dipoles_gradient',
-            'quadrupoles_gradient',
-            'sextupoles_gradient'
-            'skew_quadrupoles'}
         one_knob = False
         if 'dipoles_gradient' in param_dict:
             self._dip_k_deltas += param_dict['dipoles_gradient']
@@ -830,13 +823,6 @@ class LOCO:
                 _LOCOUtils.set_dipmag_kick(
                     model, idx_set,
                     self._dip_kick_inival[idx], self._dip_kick_deltas[idx])
-        if 'energy_shift' in param_dict:
-            # update energy shift
-            self._energy_shift_deltas += param_dict['energy_shift']
-            matrix = _LOCOUtils.add_dispersion_to_respm(
-                matrix,
-                self._energy_shift_inival + self._energy_shift_deltas,
-                config.measured_dispersion)
             one_knob = True
         if 'skew_quadrupoles' in param_dict:
             # update skew quadrupoles
@@ -864,6 +850,14 @@ class LOCO:
         else:
             matrix = _dcopy(self.config.matrix)
 
+        if 'energy_shift' in param_dict:
+            # update energy shift
+            self._energy_shift_deltas += param_dict['energy_shift']
+            matrix = _LOCOUtils.add_dispersion_to_respm(
+                matrix,
+                self._energy_shift_inival + self._energy_shift_deltas,
+                config.measured_dispersion)
+
         if 'gain_bpm' in param_dict:
             # update gain delta
             self._gain_bpm_delta += param_dict['gain_bpm']
@@ -881,7 +875,6 @@ class LOCO:
             self._gain_corr_delta += param_dict['gain_corr']
             gain = self._gain_corr_inival + self._gain_corr_delta
             matrix = _LOCOUtils.apply_corr_gain(matrix, gain)
-
         return model, matrix
 
     def _try_refactor_param(self, param_new):
