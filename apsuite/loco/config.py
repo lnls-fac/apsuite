@@ -546,7 +546,7 @@ class LOCOConfigSI(LOCOConfig):
     @property
     def famname_skewquadset(self):
         """."""
-        return ['SFA0', 'SDB0', 'SDP0', 'FC2', 'SDA2', 'SDB2',
+        return ['SFA0', 'SDB0', 'SDP0', 'SDA2', 'SDB2',
                 'SDP2', 'SDA3', 'SDB3', 'SDP3']
 
 
