@@ -19,7 +19,7 @@ class LOCO:
     DEFAULT_LAMBDA_LM = 1e-3
     DEFAULT_MAX_LAMBDA_LM = 1e6
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, save_jacobian_matrices=False):
         """."""
         if config is not None:
             self.config = config
@@ -122,6 +122,8 @@ class LOCO:
         self.energy_shift = None
         self.residue_history = None
         self.girder_shift = None
+
+        self.save_jacobian_matrices = save_jacobian_matrices
 
     def update(self,
                fname_jloco_k=None,
@@ -356,51 +358,60 @@ class LOCO:
 
     def save_jacobian(self):
         """."""
-        idx_qn = self.config.respm.fam_data['QN']['index']
-        sub_qn = self.config.respm.fam_data['QN']['subsection']
+        if self.config.fit_dipoles or self.config.fit_dipoles_coupling:
+            idx_bn = self.config.respm.fam_data['BN']['index']
+            sub_bn = self.config.respm.fam_data['BN']['subsection']
+        if self.config.fit_quadrupoles or self.config.fit_quadrupoles_coupling:
+            idx_qn = self.config.respm.fam_data['QN']['index']
+            sub_qn = self.config.respm.fam_data['QN']['subsection']
+        if self.config.fit_sextupoles or self.config.fit_sextupoles_coupling:
+            idx_sn = self.config.respm.fam_data['SN']['index']
+            sub_sn = self.config.respm.fam_data['SN']['subsection']
 
-        idx_sn = self.config.respm.fam_data['SN']['index']
-        sub_sn = self.config.respm.fam_data['SN']['subsection']
+        if self.config.fit_dipoles:
+            jloco_k_dip = self.create_new_jacobian_dict(
+                self._jloco_k_dip, idx_bn, sub_bn)
+            print('saving jacobian KL for dipoles')
+            _LOCOUtils.save_data('6d_KL_dipoles', jloco_k_dip)
+        if self.config.fit_quadrupoles:
+            jloco_k_quad = self.create_new_jacobian_dict(
+                self._jloco_k_quad, idx_qn, sub_qn)
+            print('saving jacobian KL for quadrupoles')
+            _LOCOUtils.save_data(
+                '6d_KL_quadrupoles_trims', jloco_k_quad)
+        if self.config.fit_sextupoles:
+            jloco_k_sext = self.create_new_jacobian_dict(
+                self._jloco_k_sext, idx_sn, sub_sn)
+            print('saving jacobian KL for sextupoles')
+            _LOCOUtils.save_data('6d_KL_sextupoles', jloco_k_sext)
 
-        idx_bn = self.config.respm.fam_data['BN']['index']
-        sub_bn = self.config.respm.fam_data['BN']['subsection']
+        if self.config.fit_skew_quadrupoles:
+            idx_qs = self.config.respm.fam_data['QS']['index']
+            sub_qs = self.config.respm.fam_data['QS']['subsection']
+            jloco_ks_skewquad = self.create_new_jacobian_dict(
+                self._jloco_ks_skew_quad, idx_qs, sub_qs)
+            print('saving jacobian KsL for skew quadrupoles')
+            _LOCOUtils.save_data(
+                '6d_KsL_skew_quadrupoles', jloco_ks_skewquad)
 
-        idx_qs = self.config.respm.fam_data['QS']['index']
-        sub_qs = self.config.respm.fam_data['QS']['subsection']
-
-        jloco_k_dip = self.create_new_jacobian_dict(
-           self._jloco_k_dip, idx_bn, sub_bn)
-        jloco_k_quad = self.create_new_jacobian_dict(
-            self._jloco_k_quad, idx_qn, sub_qn)
-        jloco_k_sext = self.create_new_jacobian_dict(
-           self._jloco_k_sext, idx_sn, sub_sn)
-
-        print('saving jacobian K')
-        _LOCOUtils.save_data(
-           '6d_KL_dipoles', jloco_k_dip)
-        _LOCOUtils.save_data(
-            '6d_KL_quadrupoles_trims', jloco_k_quad)
-        _LOCOUtils.save_data(
-           '6d_KL_sextupoles', jloco_k_sext)
-
-        jloco_ks_dip = self.create_new_jacobian_dict(
-           self._jloco_ks_dip, idx_bn, sub_bn)
-        jloco_ks_quad = self.create_new_jacobian_dict(
-           self._jloco_ks_quad, idx_qn, sub_qn)
-        jloco_ks_sext = self.create_new_jacobian_dict(
-           self._jloco_ks_sext, idx_sn, sub_sn)
-        jloco_ks_skewquad = self.create_new_jacobian_dict(
-            self._jloco_ks_skew_quad, idx_qs, sub_qs)
-
-        print('saving jacobian Ks')
-        _LOCOUtils.save_data(
-           '6d_KsL_dipoles', jloco_ks_dip)
-        _LOCOUtils.save_data(
-           '6d_KsL_quadrupoles', jloco_ks_quad)
-        _LOCOUtils.save_data(
-           '6d_KsL_sextupoles', jloco_ks_sext)
-        _LOCOUtils.save_data(
-           '6d_KsL_skew_quadrupoles', jloco_ks_skewquad)
+        if self.config.fit_dipoles_coupling:
+            jloco_ks_dip = self.create_new_jacobian_dict(
+                self._jloco_ks_dip, idx_bn, sub_bn)
+            print('saving jacobian KsL for dipoles')
+            _LOCOUtils.save_data(
+                '6d_KsL_dipoles', jloco_ks_dip)
+        if self.config.fit_quadrupoles_coupling:
+            jloco_ks_quad = self.create_new_jacobian_dict(
+                self._jloco_ks_quad, idx_qn, sub_qn)
+            print('saving jacobian KsL for quadrupoles')
+            _LOCOUtils.save_data(
+                '6d_KsL_quadrupoles', jloco_ks_quad)
+        if self.config.fit_sextupoles_coupling:
+            jloco_ks_sext = self.create_new_jacobian_dict(
+                self._jloco_ks_sext, idx_sn, sub_sn)
+            print('saving jacobian KsL for sextupoles')
+            _LOCOUtils.save_data(
+                '6d_KsL_sextupoles', jloco_ks_sext)
 
     def update_jloco(self,
                      fname_jloco_k=None,
@@ -436,7 +447,8 @@ class LOCO:
 
             self._handle_girder_shift(fname_jloco_girder_shift)
 
-            # self.save_jacobian()
+            if self.save_jacobian_matrices:
+                self.save_jacobian()
 
         if self.config.fit_energy_shift:
             print('calculating energy shift matrix...')
