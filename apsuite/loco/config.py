@@ -135,9 +135,11 @@ class LOCOConfig:
         stg += stmp('Use dipoles as families', self.use_dip_families, '')
         stg += stmp('Use quadrupoles as families', self.use_quad_families, '')
 
-        stg += stmp('Dipoles skew gradients', self.fit_dipoles, '')
-        stg += stmp('Quadrupoles skew gradients', self.fit_quadrupoles, '')
-        stg += stmp('Sextupoles skew gradients', self.fit_sextupoles, '')
+        stg += stmp('Dipoles skew gradients', self.fit_dipoles_coupling, '')
+        stg += stmp(
+            'Quadrupoles skew gradients', self.fit_quadrupoles_coupling, '')
+        stg += stmp(
+            'Sextupoles skew gradients', self.fit_sextupoles_coupling, '')
         stg += stmp(
             'Skew quadrupoles skew gradients', self.fit_skew_quadrupoles, '')
         stg += stmp(
