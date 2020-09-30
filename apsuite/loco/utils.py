@@ -1,8 +1,11 @@
 """."""
 
 from copy import deepcopy as _dcopy
-import pickle as _pickle
+
 import numpy as _np
+
+from mathphys.functions import save_pickle as _save_pickle, \
+    load_pickle as _load_pickle
 import pyaccel as _pyaccel
 
 
@@ -10,22 +13,14 @@ class LOCOUtils:
     """LOCO utils."""
 
     @staticmethod
-    def save_data(fname, jlocodict):
+    def save_data(fname, jlocodict, overwrite=True):
         """."""
-        data = jlocodict
-        if not fname.endswith('.pickle'):
-            fname += '.pickle'
-        with open(fname, 'wb') as fil:
-            _pickle.dump(data, fil)
+        _save_pickle(jlocodict, fname, overwrite=overwrite)
 
     @staticmethod
     def load_data(fname):
         """."""
-        if not fname.endswith('.pickle'):
-            fname += '.pickle'
-        with open(fname, 'rb') as fil:
-            data = _pickle.load(fil)
-        return data
+        return _load_pickle(fname)
 
     @staticmethod
     def get_idx(indcs):
