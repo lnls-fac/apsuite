@@ -345,15 +345,22 @@ class LOCO:
                 self._jloco_girder_shift = _LOCOUtils.load_data(
                     fname_jloco_girder_shift)['jloco_kmatrix']
 
-    def create_new_jacobian_dict(self, jloco, idx, sub):
-        """."""
-        newjloco = dict()
+    def _get_ps_names(self, idx, sub):
+        name_list = []
         for num, ind in enumerate(idx):
             name = 'SI-'
             name += sub[num]
             name += ':PS-'
             name += self._model[ind[0]].fam_name
-            newjloco[name] = jloco[:, num]
+            name_list.append(name)
+        return name_list
+
+    def create_new_jacobian_dict(self, jloco, idx, sub):
+        """."""
+        newjloco = dict()
+        name_list = self._get_ps_names(idx, sub)
+        for num, _ in enumerate(idx):
+            newjloco[name[num]] = jloco[:, num]
         return newjloco
 
     def save_jacobian(self):
