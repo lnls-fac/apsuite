@@ -200,24 +200,32 @@ class LOCO:
                     jloco_k_quad_dict, 'quadrupole')
 
     def _convert_dict2array(self, jlocodict, magtype, is_normal=True):
-        jloco = []
+
+        knobs_order = jlocodict['knobs_order']
         if magtype == 'dipole':
             if self.config.dipoles_to_fit is not None:
                 magstofit = self.config.dipoles_to_fit
             else:
                 magstofit = self.config.famname_dipset
+            index = self.config.dip_indices
         elif magtype == 'quadrupole':
             if self.config.quadrupoles_to_fit is not None:
                 magstofit = self.config.quadrupoles_to_fit
             else:
                 magstofit = self.config.famname_quadset
+            index = self.config.quad_indices
         elif magtype == 'sextupole':
             if self.config.sextupoles_to_fit is not None:
                 magstofit = self.config.sextupoles_to_fit
             else:
                 magstofit = self.config.famname_sextset
+            index = self.config.sext_indices
         elif magtype == 'skew_quadrupole':
-            magstofit = self.config.famname_skewquadset
+            if self.config.skew_quadrupoles_to_fit is not None:
+                magstofit = self.config.skew_quadrupoles_to_fit
+            else:
+                magstofit = self.config.famname_skewquadset
+            index = self.config.skew_quad_indices
         quadfam = self.config.use_quad_families
         quadfam &= magtype == 'quadrupole'
         quadfam &= is_normal
@@ -225,16 +233,33 @@ class LOCO:
         dipfam &= magtype == 'dipole'
         dipfam &= is_normal
         if dipfam or quadfam:
+            jloco = []
             for quad in magstofit:
                 famcols = [
                     val for key, val in jlocodict.items() if quad in key]
                 jloco.append(sum(famcols))
+            jloco = _np.array(jloco).T
         else:
+            first_key = next(iter(jlocodict))
+            jloco = _np.zeros(len(jlocodict[first_key]), len(index))
+
+            for idx, name in enumerate(knobs_order):
+                name = _PVName(name)
+                if name.dev not in magstofit:
+                    jlocodict.pop(name, None)
+                    knobs_order.pop(idx)
+
             for key in jlocodict:
                 key = _PVName(key)
                 if key.dev in magstofit:
-                    jloco.append(jlocodict[key])
-        return _np.array(jloco).T
+                    occur = [
+                        idx for idx, val in enumerate(knobs_order)
+                        if val == key]
+                    if len(occur) > 1:
+                        raise Exception(
+                            'Number of occurences > 1 in jloco dict!')
+                    jloco[:, occur[0]] = jlocodict[key]
+        return jloco
 
     def _handle_sext_fit_k(self, fname_jloco_k_sext):
         # calculate K jacobian for sextupole
@@ -359,8 +384,9 @@ class LOCO:
         """."""
         newjloco = dict()
         name_list = self._get_ps_names(idx, sub)
-        for num, _ in enumerate(idx):
-            newjloco[name[num]] = jloco[:, num]
+        newjloco['knobs_order'] = name_list
+        for num, name in enumerate(name_list):
+            newjloco[name] = jloco[:, num]
         return newjloco
 
     def save_jacobian(self):
