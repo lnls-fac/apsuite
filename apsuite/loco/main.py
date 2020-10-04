@@ -240,8 +240,8 @@ class LOCO:
                 jloco.append(sum(famcols))
             jloco = _np.array(jloco).T
         else:
-            first_key = next(iter(jlocodict))
-            jloco = _np.zeros(len(jlocodict[first_key]), len(index))
+            last_key = list(jlocodict.keys())[-1]
+            jloco = _np.zeros((len(jlocodict[last_key]), len(index)))
 
             for idx, name in enumerate(knobs_order):
                 name = _PVName(name)
