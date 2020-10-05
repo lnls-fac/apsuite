@@ -443,12 +443,16 @@ class LOCOConfig:
             skewquadfit = set(self.skew_quadrupoles_to_fit)
             skewquadall = set(self.famname_skewquadset)
             if not skewquadfit.issubset(skewquadall):
-                raise Exception('invalid sextupole name used to fit!')
+                raise Exception('invalid skew quadrupole name used to fit!')
             else:
                 self.skew_quad_indices = []
                 for fam_name in self.skew_quadrupoles_to_fit:
                     self.skew_quad_indices += self.respm.fam_data[
                         fam_name]['index']
+                idx_all = _np.array(
+                    self.respm.fam_data['QS']['index']).flatten()
+                idx_sub = _np.array(self.skew_quad_indices).flatten()
+                self.skew_quad_indices = list(set(idx_sub) & set(idx_all))
                 self.skew_quad_indices.sort()
 
     def update_b1_knobs(self):
