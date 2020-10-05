@@ -18,6 +18,9 @@ class LOCO:
     DEFAULT_REDUC_THRESHOLD = 5/100
     DEFAULT_LAMBDA_LM = 1e-3
     DEFAULT_MAX_LAMBDA_LM = 1e6
+    DEFAULT_MIN_LAMBDA_LM = 1e-6
+    DEFAULT_INCR_RATE_LAMBDA_LM = 10
+    DEFAULT_DECR_RATE_LAMBDA_LM = 10
 
     def __init__(self, config=None, save_jacobian_matrices=False):
         """."""
@@ -201,7 +204,10 @@ class LOCO:
 
     def _convert_dict2array(self, jlocodict, magtype, is_normal=True):
 
-        knobs_order = jlocodict['knobs_order']
+        if 'knobs_order' in jlocodict:
+            knobs_order = jlocodict['knobs_order']
+        else:
+            raise Exception('knobs_order missing in jloco dictionary!')
         if magtype == 'dipole':
             if self.config.dipoles_to_fit is not None:
                 magstofit = self.config.dipoles_to_fit
@@ -249,16 +255,8 @@ class LOCO:
                     jlocodict.pop(name, None)
                     knobs_order.pop(idx)
 
-            for key in jlocodict:
-                key = _PVName(key)
-                if key.dev in magstofit:
-                    occur = [
-                        idx for idx, val in enumerate(knobs_order)
-                        if val == key]
-                    if len(occur) > 1:
-                        raise Exception(
-                            'Number of occurences > 1 in jloco dict!')
-                    jloco[:, occur[0]] = jlocodict[key]
+            for idx, name in enumerate(knobs_order):
+                jloco[:, idx] = jlocodict[name]
         return jloco
 
     def _handle_sext_fit_k(self, fname_jloco_k_sext):
@@ -733,6 +731,8 @@ class LOCO:
                     self._try_refactor_lambda(chi_new)
                     if self.config.lambda_lm >= LOCO.DEFAULT_MAX_LAMBDA_LM:
                         break
+                    if self.config.lambda_lm <= LOCO.DEFAULT_MIN_LAMBDA_LM:
+                        break
             if self._chi < self._tol:
                 print('chi is lower than specified tolerance!')
                 break
@@ -741,9 +741,15 @@ class LOCO:
 
     def _recalculate_inv_jloco(self, case='good'):
         if case == 'good':
-            self.config.lambda_lm /= 10
+            if self.config.lambda_lm > LOCO.DEFAULT_MIN_LAMBDA_LM:
+                self.config.lambda_lm /= LOCO.DEFAULT_DECR_RATE_LAMBDA_LM
+            else:
+                self.config.lambda_lm = LOCO.DEFAULT_MIN_LAMBDA_LM
         elif case == 'bad':
-            self.config.lambda_lm *= 10
+            if self.config.lambda_lm < LOCO.DEFAULT_MAX_LAMBDA_LM:
+                self.config.lambda_lm *= LOCO.DEFAULT_INCR_RATE_LAMBDA_LM
+            else:
+                self.config.lambda_lm = LOCO.DEFAULT_MAX_LAMBDA_LM
         dmat = self._lm_dmat
         matrix2invert = self._jloco.T @ self._jloco
         matrix2invert += self.config.lambda_lm * dmat.T @ dmat
