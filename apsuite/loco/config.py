@@ -50,6 +50,7 @@ class LOCOConfig:
         self.use_quad_families = None
         self.dipoles_to_fit = None
         self.quadrupoles_to_fit = None
+        self.skew_quadrupoles_to_fit = None
         self.sextupoles_to_fit = None
         self.use_dip_families = None
         self.svd_sel = None
@@ -410,13 +411,13 @@ class LOCOConfig:
             for idx, fam_name in enumerate(self.quadrupoles_to_fit):
                 self.quad_indices[idx] = self.respm.fam_data[fam_name]['index']
                 self.quad_indices_ks += self.quad_indices[idx]
-                self.quad_indices_ks.sort()
+            self.quad_indices_ks.sort()
         else:
             self.quad_indices = []
             for fam_name in self.quadrupoles_to_fit:
                 self.quad_indices += self.respm.fam_data[fam_name]['index']
-                self.quad_indices.sort()
-                self.quad_indices_ks = self.quad_indices
+            self.quad_indices.sort()
+            self.quad_indices_ks = self.quad_indices
 
     def update_sext_knobs(self):
         """."""
@@ -431,11 +432,28 @@ class LOCOConfig:
                 self.sext_indices = []
                 for fam_name in self.sextupoles_to_fit:
                     self.sext_indices += self.respm.fam_data[fam_name]['index']
-                    self.sext_indices.sort()
+                self.sext_indices.sort()
 
     def update_skew_quad_knobs(self):
         """."""
-        self.skew_quad_indices = self.respm.fam_data['QS']['index']
+        """."""
+        if self.skew_quadrupoles_to_fit is None:
+            self.skew_quad_indices = self.respm.fam_data['QS']['index']
+        else:
+            skewquadfit = set(self.skew_quadrupoles_to_fit)
+            skewquadall = set(self.famname_skewquadset)
+            if not skewquadfit.issubset(skewquadall):
+                raise Exception('invalid skew quadrupole name used to fit!')
+            else:
+                self.skew_quad_indices = []
+                for fam_name in self.skew_quadrupoles_to_fit:
+                    self.skew_quad_indices += self.respm.fam_data[
+                        fam_name]['index']
+                idx_all = _np.array(
+                    self.respm.fam_data['QS']['index']).flatten()
+                idx_sub = _np.array(self.skew_quad_indices).flatten()
+                self.skew_quad_indices = list(set(idx_sub) & set(idx_all))
+                self.skew_quad_indices.sort()
 
     def update_b1_knobs(self):
         """."""
@@ -549,7 +567,7 @@ class LOCOConfigSI(LOCOConfig):
     def famname_skewquadset(self):
         """."""
         return ['SFA0', 'SDB0', 'SDP0', 'SDA2', 'SDB2',
-                'SDP2', 'SDA3', 'SDB3', 'SDP3']
+                'FC2', 'SDP2', 'SDA3', 'SDB3', 'SDP3']
 
 
 class LOCOConfigBO(LOCOConfig):

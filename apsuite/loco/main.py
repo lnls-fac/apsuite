@@ -18,6 +18,9 @@ class LOCO:
     DEFAULT_REDUC_THRESHOLD = 5/100
     DEFAULT_LAMBDA_LM = 1e-3
     DEFAULT_MAX_LAMBDA_LM = 1e6
+    DEFAULT_MIN_LAMBDA_LM = 1e-6
+    DEFAULT_INCR_RATE_LAMBDA_LM = 10
+    DEFAULT_DECR_RATE_LAMBDA_LM = 10
 
     def __init__(self, config=None, save_jacobian_matrices=False):
         """."""
@@ -200,24 +203,35 @@ class LOCO:
                     jloco_k_quad_dict, 'quadrupole')
 
     def _convert_dict2array(self, jlocodict, magtype, is_normal=True):
-        jloco = []
+
+        if 'knobs_order' in jlocodict:
+            knobs_order = jlocodict['knobs_order']
+        else:
+            raise Exception('knobs_order missing in jloco dictionary!')
         if magtype == 'dipole':
             if self.config.dipoles_to_fit is not None:
                 magstofit = self.config.dipoles_to_fit
             else:
                 magstofit = self.config.famname_dipset
+            index = self.config.dip_indices
         elif magtype == 'quadrupole':
             if self.config.quadrupoles_to_fit is not None:
                 magstofit = self.config.quadrupoles_to_fit
             else:
                 magstofit = self.config.famname_quadset
+            index = self.config.quad_indices
         elif magtype == 'sextupole':
             if self.config.sextupoles_to_fit is not None:
                 magstofit = self.config.sextupoles_to_fit
             else:
                 magstofit = self.config.famname_sextset
+            index = self.config.sext_indices
         elif magtype == 'skew_quadrupole':
-            magstofit = self.config.famname_skewquadset
+            if self.config.skew_quadrupoles_to_fit is not None:
+                magstofit = self.config.skew_quadrupoles_to_fit
+            else:
+                magstofit = self.config.famname_skewquadset
+            index = self.config.skew_quad_indices
         quadfam = self.config.use_quad_families
         quadfam &= magtype == 'quadrupole'
         quadfam &= is_normal
@@ -225,16 +239,25 @@ class LOCO:
         dipfam &= magtype == 'dipole'
         dipfam &= is_normal
         if dipfam or quadfam:
+            jloco = []
             for quad in magstofit:
                 famcols = [
                     val for key, val in jlocodict.items() if quad in key]
                 jloco.append(sum(famcols))
+            jloco = _np.array(jloco).T
         else:
-            for key in jlocodict:
-                key = _PVName(key)
-                if key.dev in magstofit:
-                    jloco.append(jlocodict[key])
-        return _np.array(jloco).T
+            last_key = list(jlocodict.keys())[-1]
+            jloco = _np.zeros((len(jlocodict[last_key]), len(index)))
+
+            for idx, name in enumerate(knobs_order):
+                name = _PVName(name)
+                if name.dev not in magstofit:
+                    jlocodict.pop(name, None)
+                    knobs_order.pop(idx)
+
+            for idx, name in enumerate(knobs_order):
+                jloco[:, idx] = jlocodict[name]
+        return jloco
 
     def _handle_sext_fit_k(self, fname_jloco_k_sext):
         # calculate K jacobian for sextupole
@@ -345,14 +368,22 @@ class LOCO:
                 self._jloco_girder_shift = _LOCOUtils.load_data(
                     fname_jloco_girder_shift)['jloco_kmatrix']
 
-    def create_new_jacobian_dict(self, jloco, idx, sub):
-        """."""
-        newjloco = dict()
+    def _get_ps_names(self, idx, sub):
+        name_list = []
         for num, ind in enumerate(idx):
             name = 'SI-'
             name += sub[num]
             name += ':PS-'
             name += self._model[ind[0]].fam_name
+            name_list.append(name)
+        return name_list
+
+    def create_new_jacobian_dict(self, jloco, idx, sub):
+        """."""
+        newjloco = dict()
+        name_list = self._get_ps_names(idx, sub)
+        newjloco['knobs_order'] = name_list
+        for num, name in enumerate(name_list):
             newjloco[name] = jloco[:, num]
         return newjloco
 
@@ -700,6 +731,8 @@ class LOCO:
                     self._try_refactor_lambda(chi_new)
                     if self.config.lambda_lm >= LOCO.DEFAULT_MAX_LAMBDA_LM:
                         break
+                    if self.config.lambda_lm <= LOCO.DEFAULT_MIN_LAMBDA_LM:
+                        break
             if self._chi < self._tol:
                 print('chi is lower than specified tolerance!')
                 break
@@ -708,9 +741,15 @@ class LOCO:
 
     def _recalculate_inv_jloco(self, case='good'):
         if case == 'good':
-            self.config.lambda_lm /= 10
+            if self.config.lambda_lm > LOCO.DEFAULT_MIN_LAMBDA_LM:
+                self.config.lambda_lm /= LOCO.DEFAULT_DECR_RATE_LAMBDA_LM
+            else:
+                self.config.lambda_lm = LOCO.DEFAULT_MIN_LAMBDA_LM
         elif case == 'bad':
-            self.config.lambda_lm *= 10
+            if self.config.lambda_lm < LOCO.DEFAULT_MAX_LAMBDA_LM:
+                self.config.lambda_lm *= LOCO.DEFAULT_INCR_RATE_LAMBDA_LM
+            else:
+                self.config.lambda_lm = LOCO.DEFAULT_MAX_LAMBDA_LM
         dmat = self._lm_dmat
         matrix2invert = self._jloco.T @ self._jloco
         matrix2invert += self.config.lambda_lm * dmat.T @ dmat
