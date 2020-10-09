@@ -85,6 +85,7 @@ class LOCO:
         self._dip_k_deltas = None
         self._quad_k_inival = None
         self._quad_k_deltas = None
+        self._quad_k_deltas_step = None
         self._sext_k_inival = None
         self._sext_k_deltas = None
 
@@ -96,6 +97,7 @@ class LOCO:
         self._sext_ks_deltas = None
         self._skew_quad_ks_inival = None
         self._skew_quad_ks_deltas = None
+        self._skew_quad_ks_deltas_step = None
 
         self._dip_kick_inival = None
         self._dip_kick_deltas = None
@@ -116,6 +118,8 @@ class LOCO:
         self._tol = None
         self._reduc_threshold = None
         self._res_history = []
+        self._kldelta_history = []
+        self._ksldelta_history = []
 
         self.fitmodel = None
         self.chi_history = None
@@ -125,6 +129,8 @@ class LOCO:
         self.energy_shift = None
         self.residue_history = None
         self.girder_shift = None
+        self.kldelta_history = None
+        self.ksldelta_history = None
 
         self.save_jacobian_matrices = save_jacobian_matrices
 
@@ -508,7 +514,7 @@ class LOCO:
                 self._jloco, (2*self.config.nr_bpm, self.config.nr_corr+1, -1))
             jloco_temp[:, -1, :] *= 0
 
-        if self.config.constraint_deltak:
+        if self.config.constraint_deltak_total:
             jloco_deltak = self.calc_jloco_deltak_constraint()
             self._jloco = _np.vstack((self._jloco, jloco_deltak))
 
@@ -571,6 +577,9 @@ class LOCO:
                 dmat = self._lm_dmat
                 matrix2invert = self._jloco.T @ self._jloco
                 matrix2invert += self.config.lambda_lm * dmat.T @ dmat
+            if self.config.constraint_deltak_step:
+                deltak_mat = self.calc_jloco_deltak_constraint()
+                matrix2invert += deltak_mat.T @ deltak_mat
             umat, smat, vtmat = _np.linalg.svd(
                 matrix2invert, full_matrices=False)
         elif self.config.inv_method == _LOCOConfig.INVERSION.Normal:
@@ -662,7 +671,7 @@ class LOCO:
 
         self._chi = self.calc_chi()
         self._chi_init = self._chi
-        print('chi_init: {0:.4f} um'.format(self._chi_init))
+        print('chi_init: {0:.6f} um'.format(self._chi_init))
 
         self._tol = LOCO.DEFAULT_TOL
         self._reduc_threshold = LOCO.DEFAULT_REDUC_THRESHOLD
@@ -674,7 +683,7 @@ class LOCO:
         matrix_diff = _LOCOUtils.apply_all_weight(
             matrix_diff, self.config.weight_bpm, self.config.weight_corr)
         res = matrix_diff.flatten()
-        if self.config.constraint_deltak:
+        if self.config.constraint_deltak_total:
             kdeltas = []
             if self.config.fit_quadrupoles:
                 kdeltas = _np.hstack((kdeltas, self._quad_k_deltas))
@@ -690,6 +699,8 @@ class LOCO:
         self._chi = self._chi_init
         for _iter in range(niter):
             self._chi_history.append(self._chi)
+            self._kldelta_history.append(self._quad_k_deltas_step)
+            self._ksldelta_history.append(self._skew_quad_ks_deltas_step)
             print('iter # {}/{}'.format(_iter+1, niter))
             res = self._calc_residue()
             self._res_history.append(res)
@@ -702,7 +713,7 @@ class LOCO:
             param_new = param_new.flatten()
             model_new, matrix_new = self._calc_model_matrix(param_new)
             chi_new = self.calc_chi(matrix_new)
-            print('chi: {0:.4f} um'.format(chi_new))
+            print('chi: {0:.6f} um'.format(chi_new))
             if _np.isnan(chi_new):
                 print('chi is NaN!')
                 break
@@ -817,6 +828,7 @@ class LOCO:
         if 'quadrupoles_gradient' in param_dict:
             # update quadrupole delta
             self._quad_k_deltas += param_dict['quadrupoles_gradient']
+            self._quad_k_deltas_step = param_dict['quadrupoles_gradient']
             # update local model
             if self.config.use_quad_families:
                 set_quad_kdelta = _LOCOUtils.set_quadset_kdelta
@@ -878,6 +890,7 @@ class LOCO:
         if 'skew_quadrupoles' in param_dict:
             # update skew quadrupoles
             self._skew_quad_ks_deltas += param_dict['skew_quadrupoles']
+            self._skew_quad_ks_deltas_step = param_dict['skew_quadrupoles']
             # update local model
             set_quad_ksdelta = _LOCOUtils.set_quadmag_ksdelta
             for idx, idx_set in enumerate(config.skew_quad_indices):
@@ -938,7 +951,7 @@ class LOCO:
             model_new, matrix_new = \
                 self._calc_model_matrix(factor*param_new)
             chi_new = self.calc_chi(matrix_new)
-            print('chi: {0:.4f} um'.format(chi_new))
+            print('chi: {0:.6f} um'.format(chi_new))
             if chi_new < self._chi:
                 self._update_state(model_new, matrix_new, chi_new)
                 break
@@ -954,12 +967,12 @@ class LOCO:
             print('chi was increased! Trial {0:d}'.format(_iter))
             print('applying lambda {0:0.4e}'.format(self.config.lambda_lm))
             self._recalculate_inv_jloco(case='bad')
-            res, *_ = self._calc_residue()
+            res = self._calc_residue()
             param_new = _np.dot(self._jloco_inv, _np.dot(self._jloco.T, res))
             param_new = param_new.flatten()
             model_new, matrix_new = self._calc_model_matrix(param_new)
             chi_new = self.calc_chi(matrix_new)
-            print('chi: {0:.4f} um'.format(chi_new))
+            print('chi: {0:.6f} um'.format(chi_new))
             if chi_new < self._chi:
                 self._update_state(model_new, matrix_new, chi_new)
                 break
