@@ -104,12 +104,14 @@ class LOCOConfig:
         stmp = '{0:35s}: {1:}  {2:s}\n'.format
         ftmp = '{0:35s}: {1:3.2f}  {2:s}\n'.format
         dtmp = '{0:35s}: {1:3d}  {2:s}\n'.format
+        etmp = '{0:35s}: {1:e}  {2:s}\n'.format
 
         stg = stmp('Tracking dimension', self.dim, '')
         stg += stmp('Include dispersion', self.use_dispersion, '')
         stg += stmp('Include diagonal', self.use_diagonal, '')
         stg += stmp('Include off-diagonal', self.use_offdiagonal, '')
         stg += stmp('Minimization method', self.min_method_str, '')
+        stg += etmp('Lambda LM', self.lambda_lm, '')
         stg += stmp('Jacobian manipulation', self.inv_method_str, '')
         stg += stmp(
             'Constraint delta KL total', self.constraint_deltak_total, '')
@@ -124,6 +126,9 @@ class LOCOConfig:
                 stg += stmp('SV to be used', 'All', '')
         if self.svd_method == LOCOConfig.SVD.Threshold:
             stg += ftmp('SV threshold (s/s_max):', self.svd_thre, '')
+
+        stg += etmp('Tolerance delta', self.tolerance_delta, '')
+        stg += etmp('Tolerance overfit', self.tolerance_overfit, '')
 
         stg += ftmp(
             'H. kicks used to measure',
