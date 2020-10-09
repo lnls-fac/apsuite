@@ -695,6 +695,9 @@ class LOCO:
                 kdeltas = _np.hstack((kdeltas, self._dip_k_deltas))
             if self.config.fit_sextupoles:
                 kdeltas = _np.hstack((kdeltas, self._sext_k_deltas))
+            wmat = self.config.weight_deltakl
+            wmat /= self.config.deltakl_normalization
+            kdeltas = - wmat * kdeltas
             res = _np.hstack((res, kdeltas))
         return res
 
