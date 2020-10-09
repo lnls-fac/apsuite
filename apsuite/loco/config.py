@@ -67,7 +67,8 @@ class LOCOConfig:
         self.fit_dipoles_kick = None
         self.fit_energy_shift = None
         self.fit_girder_shift = None
-        self.constraint_deltak = None
+        self.constraint_deltak_total = None
+        self.constraint_deltak_step = None
         self.fit_skew_quadrupoles = None
         self.cavidx = None
         self.matrix = None
