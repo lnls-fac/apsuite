@@ -111,7 +111,10 @@ class LOCOConfig:
         stg += stmp('Include off-diagonal', self.use_offdiagonal, '')
         stg += stmp('Minimization method', self.min_method_str, '')
         stg += stmp('Jacobian manipulation', self.inv_method_str, '')
-        stg += stmp('Constraint delta KL', self.constraint_deltak, '')
+        stg += stmp(
+            'Constraint delta KL total', self.constraint_deltak_total, '')
+        stg += stmp(
+            'Constraint delta KL step', self.constraint_deltak_step, '')
         stg += stmp('Singular values method', self.svd_method_str, '')
 
         if self.svd_method == LOCOConfig.SVD.Selection:
