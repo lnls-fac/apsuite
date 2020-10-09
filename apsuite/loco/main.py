@@ -748,11 +748,9 @@ class LOCO:
                         break
                 elif self.config.min_method == \
                         _LOCOConfig.MINIMIZATION.LevenbergMarquardt:
-                    self._try_refactor_lambda(chi_new)
-                    if self.config.lambda_lm >= LOCO.DEFAULT_MAX_LAMBDA_LM:
-                        break
                     if self.config.lambda_lm <= LOCO.DEFAULT_MIN_LAMBDA_LM:
                         break
+                    self._try_refactor_lambda(chi_new)
             if self._chi < self._tol_overfit:
                 print('chi is lower than overfitting tolerance...')
                 break
