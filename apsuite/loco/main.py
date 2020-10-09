@@ -14,7 +14,8 @@ from .config import LOCOConfig as _LOCOConfig
 class LOCO:
     """Main LOCO algorithm."""
 
-    DEFAULT_TOL = 1e-3
+    DEFAULT_TOL_DELTA = 1e-3
+    DEFAULT_TOL_OVERFIT = 1e-3
     DEFAULT_REDUC_THRESHOLD = 5/100
     DEFAULT_LAMBDA_LM = 1e-3
     DEFAULT_MAX_LAMBDA_LM = 1e6
@@ -80,6 +81,7 @@ class LOCO:
         self._jloco_s = None
         self._jloco_vt = None
         self._lm_dmat = None
+        self._deltak_mat = None
 
         self._dip_k_inival = None
         self._dip_k_deltas = None
@@ -515,8 +517,8 @@ class LOCO:
             jloco_temp[:, -1, :] *= 0
 
         if self.config.constraint_deltak_total:
-            jloco_deltak = self.calc_jloco_deltak_constraint()
-            self._jloco = _np.vstack((self._jloco, jloco_deltak))
+            self.calc_jloco_deltak_constraint()
+            self._jloco = _np.vstack((self._jloco, self._deltak_mat))
 
         self._jloco_u, self._jloco_s, self._jloco_vt = \
             _np.linalg.svd(self._jloco, full_matrices=False)
@@ -563,7 +565,7 @@ class LOCO:
         deltak_mat = _np.zeros((nknobs, ncols))
         for knb in range(nknobs):
             deltak_mat[knb, knb] = self.config.weight_deltakl[knb]/sigma_deltak
-        return deltak_mat
+        self._deltak_mat = deltak_mat
 
     def update_svd(self):
         """."""
@@ -578,8 +580,8 @@ class LOCO:
                 matrix2invert = self._jloco.T @ self._jloco
                 matrix2invert += self.config.lambda_lm * dmat.T @ dmat
             if self.config.constraint_deltak_step:
-                deltak_mat = self.calc_jloco_deltak_constraint()
-                matrix2invert += deltak_mat.T @ deltak_mat
+                self.calc_jloco_deltak_constraint()
+                matrix2invert += self._deltak_mat.T @ self._deltak_mat
             umat, smat, vtmat = _np.linalg.svd(
                 matrix2invert, full_matrices=False)
         elif self.config.inv_method == _LOCOConfig.INVERSION.Normal:
@@ -673,7 +675,9 @@ class LOCO:
         self._chi_init = self._chi
         print('chi_init: {0:.6f} um'.format(self._chi_init))
 
-        self._tol = LOCO.DEFAULT_TOL
+        self._tol_delta = self.config.tolerance_delta or LOCO.DEFAULT_TOL_DELTA
+        self._tol_overfit = self.config.tolerance_overfit or \
+            LOCO.DEFAULT_TOL_DELTA
         self._reduc_threshold = LOCO.DEFAULT_REDUC_THRESHOLD
 
     def _calc_residue(self):
@@ -718,8 +722,13 @@ class LOCO:
                 print('chi is NaN!')
                 break
             if chi_new < self._chi:
-                if _np.abs(chi_new - self._chi) < self._tol:
-                    print('chi reduction is lower than tolerance...')
+                case_delta = _np.abs(chi_new - self._chi) < self._tol_delta
+                case_overfit = chi_new < self._tol_overfit
+                if case_delta or case_overfit:
+                    if case_delta:
+                        print('chi reduction is lower than delta tolerance...')
+                    if case_delta:
+                        print('chi is lower than overfitting tolerance...')
                     break
                 else:
                     self._update_state(model_new, matrix_new, chi_new)
@@ -744,26 +753,22 @@ class LOCO:
                         break
                     if self.config.lambda_lm <= LOCO.DEFAULT_MIN_LAMBDA_LM:
                         break
-            if self._chi < self._tol:
-                print('chi is lower than specified tolerance!')
+            if self._chi < self._tol_overfit:
+                print('chi is lower than overfitting tolerance...')
                 break
         self._create_output_vars()
         print('Finished!')
 
     def _recalculate_inv_jloco(self, case='good'):
         if case == 'good':
-            if self.config.lambda_lm > LOCO.DEFAULT_MIN_LAMBDA_LM:
-                self.config.lambda_lm /= LOCO.DEFAULT_DECR_RATE_LAMBDA_LM
-            else:
-                self.config.lambda_lm = LOCO.DEFAULT_MIN_LAMBDA_LM
+            self.config.lambda_lm /= LOCO.DEFAULT_DECR_RATE_LAMBDA_LM
         elif case == 'bad':
-            if self.config.lambda_lm < LOCO.DEFAULT_MAX_LAMBDA_LM:
-                self.config.lambda_lm *= LOCO.DEFAULT_INCR_RATE_LAMBDA_LM
-            else:
-                self.config.lambda_lm = LOCO.DEFAULT_MAX_LAMBDA_LM
+            self.config.lambda_lm *= LOCO.DEFAULT_INCR_RATE_LAMBDA_LM
         dmat = self._lm_dmat
         matrix2invert = self._jloco.T @ self._jloco
         matrix2invert += self.config.lambda_lm * dmat.T @ dmat
+        if self.config.constraint_deltak_step:
+            matrix2invert += self._deltak_mat.T @ self._deltak_mat
         umat, smat, vtmat = _np.linalg.svd(matrix2invert, full_matrices=False)
         ismat = 1/smat
         ismat[_np.isnan(ismat)] = 0

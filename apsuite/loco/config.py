@@ -94,6 +94,8 @@ class LOCOConfig:
         self.weight_corr = None
         self.weight_deltakl = None
         self.deltakl_normalization = None
+        self.tolerance_delta = None
+        self.tolerance_overfit = None
 
         self._process_input(kwargs)
 
