@@ -382,7 +382,10 @@ class LOCO:
             name = 'SI-'
             name += sub[num]
             name += ':PS-'
-            name += self._model[ind[0]].fam_name
+            if type(ind) == list:
+                name += self._model[ind[0]].fam_name
+            else:
+                name += self._model[ind].fam_name
             name_list.append(name)
         return name_list
 
@@ -426,7 +429,13 @@ class LOCO:
 
         if self.config.fit_skew_quadrupoles:
             idx_qs = self.config.respm.fam_data['QS']['index']
-            sub_qs = self.config.respm.fam_data['QS']['subsection']
+            sub_qs = self.config.respm.fam_data['QS']['subsection']            
+            idx_qs = self.config.skew_quad_indices
+            selidx = []
+            for sel in self.config.skew_quad_indices:
+                selidx.append(idx_qs.index([sel]))
+            idx_qs = [idx_qs[idx] for idx in selidx]
+            sub_qs = [sub_qs[idx] for idx in selidx]
             jloco_ks_skewquad = self.create_new_jacobian_dict(
                 self._jloco_ks_skew_quad, idx_qs, sub_qs)
             print('saving jacobian KsL for skew quadrupoles')
@@ -516,6 +525,8 @@ class LOCO:
                 self._jloco, (2*self.config.nr_bpm, self.config.nr_corr+1, -1))
             jloco_temp[:, -1, :] *= 0
 
+       #  _np.savetxt('jloco_calc.txt', self._jloco)
+
         if self.config.constraint_deltak_total:
             self.calc_jloco_deltak_constraint()
             self._jloco = _np.vstack((self._jloco, self._deltak_mat))
@@ -523,6 +534,8 @@ class LOCO:
         self._jloco_u, self._jloco_s, self._jloco_vt = \
             _np.linalg.svd(self._jloco, full_matrices=False)
         # if self.config.inv_method == _LOCOConfig.INVERSION.Normal:
+        # print('save singular values for jloco')
+        # _np.savetxt('svalues_j_lambda0_w0.txt', self._jloco_s)
         self._filter_svd_jloco()
 
     def _filter_svd_jloco(self):
@@ -586,11 +599,13 @@ class LOCO:
                 matrix2invert, full_matrices=False)
         elif self.config.inv_method == _LOCOConfig.INVERSION.Normal:
             umat, smat, vtmat = self._jloco_u, self._jloco_s, self._jloco_vt
-
+        print('saving singular values for jtj loco')
+        # _np.savetxt('svalues_jtj_lambda1e-3_w1e3.txt', smat)
         ismat = 1/smat
         ismat[_np.isnan(ismat)] = 0
         ismat[_np.isinf(ismat)] = 0
-
+        if self.config.svd_method == self.config.SVD.Selection:
+           ismat[self.config.svd_sel:] = 0
         self._jloco_inv = _np.dot(vtmat.T * ismat[None, :], umat.T)
 
     def update_fit(self):
@@ -686,7 +701,7 @@ class LOCO:
             matrix_diff = _LOCOUtils.remove_diagonal(matrix_diff, 160, 120)
         matrix_diff = _LOCOUtils.apply_all_weight(
             matrix_diff, self.config.weight_bpm, self.config.weight_corr)
-        res = matrix_diff.flatten()
+        res = matrix_diff.ravel()
         if self.config.constraint_deltak_total:
             kdeltas = []
             if self.config.fit_quadrupoles:
@@ -697,7 +712,7 @@ class LOCO:
                 kdeltas = _np.hstack((kdeltas, self._sext_k_deltas))
             wmat = self.config.weight_deltakl
             wmat /= self.config.deltakl_normalization
-            kdeltas = - wmat * kdeltas
+            kdeltas *= - wmat 
             res = _np.hstack((res, kdeltas))
         return res
 
@@ -735,6 +750,9 @@ class LOCO:
                     break
                 else:
                     self._update_state(model_new, matrix_new, chi_new)
+                    # print('recalculating jloco...')
+                    # self.update_jloco()
+                    # self.update_svd()
                     if self.config.min_method == \
                             _LOCOConfig.MINIMIZATION.LevenbergMarquardt:
                         self._recalculate_inv_jloco(case='good')
@@ -783,11 +801,12 @@ class LOCO:
         if matrix is None:
             matrix = self._matrix
         dmatrix = matrix - self.config.goalmat
+        # dmatrix = _LOCOUtils.apply_all_weight(dmatrix, self.config.weight_bpm, self.config.weight_corr)
         dmatrix[:, :self.config.nr_ch] *= self.config.delta_kickx_meas
         dmatrix[:, self.config.nr_ch:-1] *= self.config.delta_kicky_meas
         dmatrix[:, -1] *= self.config.delta_frequency_meas
-        chi2 = _np.sum(dmatrix*dmatrix)/(dmatrix.size)
-        return _np.sqrt(chi2) * 1e6  # m to um
+        chi2 = _np.sum(dmatrix*dmatrix)/dmatrix.size
+        return _np.sqrt(chi2) * 1e6 # m to um
 
     def _create_output_vars(self):
         """."""
