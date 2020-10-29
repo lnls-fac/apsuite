@@ -280,7 +280,7 @@ class LOCOConfig:
         self.dim = dim
         self.model = _dcopy(model)
         self.model.cavity_on = dim == '6d'
-        self.model.radiation_on = dim == '6d'
+        self.model.radiation_on = False
         self.respm = _OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
         self._create_indices()
 
