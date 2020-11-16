@@ -14,8 +14,8 @@ from .config import LOCOConfig as _LOCOConfig
 class LOCO:
     """Main LOCO algorithm."""
 
-    DEFAULT_TOL_DELTA = 1e-3
-    DEFAULT_TOL_OVERFIT = 1e-3
+    DEFAULT_TOL_DELTA = 1e-10
+    DEFAULT_TOL_OVERFIT = 1e-10
     DEFAULT_REDUC_THRESHOLD = 5/100
     DEFAULT_LAMBDA_LM = 1e-3
     DEFAULT_MAX_LAMBDA_LM = 1e6
@@ -429,7 +429,7 @@ class LOCO:
 
         if self.config.fit_skew_quadrupoles:
             idx_qs = self.config.respm.fam_data['QS']['index']
-            sub_qs = self.config.respm.fam_data['QS']['subsection']            
+            sub_qs = self.config.respm.fam_data['QS']['subsection']
             idx_qs = self.config.skew_quad_indices
             selidx = []
             for sel in self.config.skew_quad_indices:
@@ -712,7 +712,7 @@ class LOCO:
                 kdeltas = _np.hstack((kdeltas, self._sext_k_deltas))
             wmat = self.config.weight_deltakl
             wmat /= self.config.deltakl_normalization
-            kdeltas *= - wmat 
+            kdeltas *= - wmat
             res = _np.hstack((res, kdeltas))
         return res
 
@@ -745,7 +745,7 @@ class LOCO:
                 if case_delta or case_overfit:
                     if case_delta:
                         print('chi reduction is lower than delta tolerance...')
-                    if case_delta:
+                    if case_overfit:
                         print('chi is lower than overfitting tolerance...')
                     break
                 else:
@@ -755,7 +755,8 @@ class LOCO:
                     # self.update_svd()
                     if self.config.min_method == \
                             _LOCOConfig.MINIMIZATION.LevenbergMarquardt:
-                        self._recalculate_inv_jloco(case='good')
+                        if not self.config.fixed_lambda:
+                           self._recalculate_inv_jloco(case='good')
             else:
                 # print('recalculating jloco...')
                 # self.update_jloco()
@@ -771,7 +772,10 @@ class LOCO:
                         _LOCOConfig.MINIMIZATION.LevenbergMarquardt:
                     if self.config.lambda_lm <= LOCO.DEFAULT_MIN_LAMBDA_LM:
                         break
-                    self._try_refactor_lambda(chi_new)
+                    if not self.config.fixed_lambda:
+                       self._try_refactor_lambda(chi_new)
+                    else:
+                        break
                     if self.config.lambda_lm >= LOCO.DEFAULT_MAX_LAMBDA_LM:
                         break
             if self._chi < self._tol_overfit:
@@ -792,6 +796,8 @@ class LOCO:
             matrix2invert += self._deltak_mat.T @ self._deltak_mat
         umat, smat, vtmat = _np.linalg.svd(matrix2invert, full_matrices=False)
         ismat = 1/smat
+        if self.config.svd_method == self.config.SVD.Selection:
+            ismat[self.config.svd_sel:] = 0
         ismat[_np.isnan(ismat)] = 0
         ismat[_np.isinf(ismat)] = 0
         self._jloco_inv = _np.dot(vtmat.T * ismat[None, :], umat.T)
@@ -820,6 +826,7 @@ class LOCO:
         self.residue_history = self._res_history
         self.girder_shift = self._girders_shift_inival + \
             self._girders_shift_deltas
+        self.kldelta_history = self._kldelta_history
 
     def clear_output_vars(self):
         """."""
@@ -833,6 +840,8 @@ class LOCO:
         self._chi_history = []
         self._res_history = []
         self.girder_shift = []
+        self.kldelta_history = []
+        self._kldelta_history = []
 
     def _calc_model_matrix(self, param):
         """."""
