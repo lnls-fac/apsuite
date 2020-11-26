@@ -46,7 +46,7 @@ class ChromCorr(BaseCorr):
             'grouping', self.grouping_str)
         return strg
 
-    def get_chromaticities(self, model):
+    def get_chromaticities(self, model=None):
         """."""
         if model is None:
             model = self.model
