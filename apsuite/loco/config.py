@@ -67,7 +67,8 @@ class LOCOConfig:
         self.fit_dipoles_kick = None
         self.fit_energy_shift = None
         self.fit_girder_shift = None
-        self.constraint_deltak = None
+        self.constraint_deltak_total = None
+        self.constraint_deltak_step = None
         self.fit_skew_quadrupoles = None
         self.cavidx = None
         self.matrix = None
@@ -93,6 +94,8 @@ class LOCOConfig:
         self.weight_corr = None
         self.weight_deltakl = None
         self.deltakl_normalization = None
+        self.tolerance_delta = None
+        self.tolerance_overfit = None
 
         self._process_input(kwargs)
 
@@ -101,14 +104,19 @@ class LOCOConfig:
         stmp = '{0:35s}: {1:}  {2:s}\n'.format
         ftmp = '{0:35s}: {1:3.2f}  {2:s}\n'.format
         dtmp = '{0:35s}: {1:3d}  {2:s}\n'.format
+        etmp = '{0:35s}: {1:e}  {2:s}\n'.format
 
         stg = stmp('Tracking dimension', self.dim, '')
         stg += stmp('Include dispersion', self.use_dispersion, '')
         stg += stmp('Include diagonal', self.use_diagonal, '')
         stg += stmp('Include off-diagonal', self.use_offdiagonal, '')
         stg += stmp('Minimization method', self.min_method_str, '')
+        stg += etmp('Lambda LM', self.lambda_lm, '')
         stg += stmp('Jacobian manipulation', self.inv_method_str, '')
-        stg += stmp('Constraint delta KL', self.constraint_deltak, '')
+        stg += stmp(
+            'Constraint delta KL total', self.constraint_deltak_total, '')
+        stg += stmp(
+            'Constraint delta KL step', self.constraint_deltak_step, '')
         stg += stmp('Singular values method', self.svd_method_str, '')
 
         if self.svd_method == LOCOConfig.SVD.Selection:
@@ -118,6 +126,9 @@ class LOCOConfig:
                 stg += stmp('SV to be used', 'All', '')
         if self.svd_method == LOCOConfig.SVD.Threshold:
             stg += ftmp('SV threshold (s/s_max):', self.svd_thre, '')
+
+        stg += etmp('Tolerance delta', self.tolerance_delta, '')
+        stg += etmp('Tolerance overfit', self.tolerance_overfit, '')
 
         stg += ftmp(
             'H. kicks used to measure',
@@ -269,7 +280,7 @@ class LOCOConfig:
         self.dim = dim
         self.model = _dcopy(model)
         self.model.cavity_on = dim == '6d'
-        self.model.radiation_on = dim == '6d'
+        self.model.radiation_on = False
         self.respm = _OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
         self._create_indices()
 

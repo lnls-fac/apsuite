@@ -205,8 +205,14 @@ class LOCOUtils:
         if shape1 < ncorr + 1 and config.use_dispersion:
             raise Exception('There is no dispersion line in the matrix')
 
-        g_bpm = _np.ones(2*nbpm)
-        alpha_bpm = _np.zeros(nbpm)
+        if config.gain_bpm is not None:
+            g_bpm = config.gain_bpm
+        else:
+            g_bpm = _np.ones(2*nbpm)
+        if config.roll_bpm is not None:
+            alpha_bpm = config.roll_bpm
+        else:
+            alpha_bpm = _np.zeros(nbpm)
         cos_mat = _np.diag(_np.cos(alpha_bpm))
         sin_mat = _np.diag(_np.sin(alpha_bpm))
 
@@ -234,7 +240,6 @@ class LOCOUtils:
         for idx in range(ncorr):
             kron = LOCOUtils.kronecker(idx, idx, shape1)
             dmdg_corr[:, idx] = _np.dot(matrix, kron).flatten()
-
         return dmdg_bpm, dmdalpha_bpm, dmdg_corr
 
     @staticmethod
@@ -448,7 +453,18 @@ class LOCOUtils:
     @staticmethod
     def jloco_calc_ks_skewquad(config, model):
         """."""
-        qsindices = config.respm.fam_data['QS']['index']
+        # qsindices = []
+        # if config.skew_quadrupoles_to_fit is not None:
+        #     for qsname in config.skew_quadrupoles_to_fit:
+        #         qsindices += config.respm.fam_data[qsname]['index']
+        #     qsindices = _np.array(qsindices).ravel()
+        #     qsindices = sorted(qsindices)
+        #     qsindices = [[val] for val in qsindices]
+        # else:
+        #     qsindices = config.respm.fam_data['QS']['index']
+        config.update_skew_quad_knobs()
+        qsindices = config.skew_quad_indices
+        # qsindices = [[val] for val in qsindices]
         ksvalues = _np.array(
             _pyaccel.lattice.get_attribute(model, 'KsL', qsindices))
         set_quad_ksdelta = LOCOUtils.set_quadmag_ksdelta

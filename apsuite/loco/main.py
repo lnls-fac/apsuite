@@ -14,7 +14,8 @@ from .config import LOCOConfig as _LOCOConfig
 class LOCO:
     """Main LOCO algorithm."""
 
-    DEFAULT_TOL = 1e-3
+    DEFAULT_TOL_DELTA = 1e-6
+    DEFAULT_TOL_OVERFIT = 1e-6
     DEFAULT_REDUC_THRESHOLD = 5/100
     DEFAULT_LAMBDA_LM = 1e-3
     DEFAULT_MAX_LAMBDA_LM = 1e6
@@ -80,11 +81,13 @@ class LOCO:
         self._jloco_s = None
         self._jloco_vt = None
         self._lm_dmat = None
+        self._deltak_mat = None
 
         self._dip_k_inival = None
         self._dip_k_deltas = None
         self._quad_k_inival = None
         self._quad_k_deltas = None
+        self._quad_k_deltas_step = None
         self._sext_k_inival = None
         self._sext_k_deltas = None
 
@@ -96,12 +99,15 @@ class LOCO:
         self._sext_ks_deltas = None
         self._skew_quad_ks_inival = None
         self._skew_quad_ks_deltas = None
+        self._skew_quad_ks_deltas_step = None
 
         self._dip_kick_inival = None
         self._dip_kick_deltas = None
 
         self._energy_shift_inival = None
         self._energy_shift_deltas = None
+        self._girders_shift_inival = None
+        self._girders_shift_deltas = None
 
         self._gain_bpm_inival = self.config.gain_bpm
         self._gain_bpm_delta = None
@@ -114,8 +120,12 @@ class LOCO:
         self._chi = None
         self._chi_history = []
         self._tol = None
+        self._tol_delta = None
+        self._tol_overfit = None
         self._reduc_threshold = None
         self._res_history = []
+        self._kldelta_history = []
+        self._ksldelta_history = []
 
         self.fitmodel = None
         self.chi_history = None
@@ -125,6 +135,8 @@ class LOCO:
         self.energy_shift = None
         self.residue_history = None
         self.girder_shift = None
+        self.kldelta_history = None
+        self.ksldelta_history = None
 
         self.save_jacobian_matrices = save_jacobian_matrices
 
@@ -374,7 +386,10 @@ class LOCO:
             name = 'SI-'
             name += sub[num]
             name += ':PS-'
-            name += self._model[ind[0]].fam_name
+            if type(ind) == list:
+                name += self._model[ind[0]].fam_name
+            else:
+                name += self._model[ind].fam_name
             name_list.append(name)
         return name_list
 
@@ -419,6 +434,12 @@ class LOCO:
         if self.config.fit_skew_quadrupoles:
             idx_qs = self.config.respm.fam_data['QS']['index']
             sub_qs = self.config.respm.fam_data['QS']['subsection']
+            idx_qs = self.config.skew_quad_indices
+            selidx = []
+            for sel in self.config.skew_quad_indices:
+                selidx.append(idx_qs.index([sel]))
+            idx_qs = [idx_qs[idx] for idx in selidx]
+            sub_qs = [sub_qs[idx] for idx in selidx]
             jloco_ks_skewquad = self.create_new_jacobian_dict(
                 self._jloco_ks_skew_quad, idx_qs, sub_qs)
             print('saving jacobian KsL for skew quadrupoles')
@@ -508,13 +529,16 @@ class LOCO:
                 self._jloco, (2*self.config.nr_bpm, self.config.nr_corr+1, -1))
             jloco_temp[:, -1, :] *= 0
 
-        if self.config.constraint_deltak:
-            jloco_deltak = self.calc_jloco_deltak_constraint()
-            self._jloco = _np.vstack((self._jloco, jloco_deltak))
+       #  _np.savetxt('jloco_calc.txt', self._jloco)
+
+        if self.config.constraint_deltak_total:
+            self.calc_jloco_deltak_constraint()
+            self._jloco = _np.vstack((self._jloco, self._deltak_mat))
 
         self._jloco_u, self._jloco_s, self._jloco_vt = \
             _np.linalg.svd(self._jloco, full_matrices=False)
-        # if self.config.inv_method == _LOCOConfig.INVERSION.Normal:
+        # print('save singular values for jloco')
+        # _np.savetxt('svalues_j_lambda0_w0.txt', self._jloco_s)
         self._filter_svd_jloco()
 
     def _filter_svd_jloco(self):
@@ -557,7 +581,7 @@ class LOCO:
         deltak_mat = _np.zeros((nknobs, ncols))
         for knb in range(nknobs):
             deltak_mat[knb, knb] = self.config.weight_deltakl[knb]/sigma_deltak
-        return deltak_mat
+        self._deltak_mat = deltak_mat
 
     def update_svd(self):
         """."""
@@ -571,15 +595,20 @@ class LOCO:
                 dmat = self._lm_dmat
                 matrix2invert = self._jloco.T @ self._jloco
                 matrix2invert += self.config.lambda_lm * dmat.T @ dmat
+            if self.config.constraint_deltak_step:
+                self.calc_jloco_deltak_constraint()
+                matrix2invert += self._deltak_mat.T @ self._deltak_mat
             umat, smat, vtmat = _np.linalg.svd(
                 matrix2invert, full_matrices=False)
         elif self.config.inv_method == _LOCOConfig.INVERSION.Normal:
             umat, smat, vtmat = self._jloco_u, self._jloco_s, self._jloco_vt
-
+        # print('saving singular values for jtj loco')
+        # _np.savetxt('svalues_jtj_lambda1e-3_w1e3.txt', smat)
         ismat = 1/smat
         ismat[_np.isnan(ismat)] = 0
         ismat[_np.isinf(ismat)] = 0
-
+        if self.config.svd_method == self.config.SVD.Selection:
+            ismat[self.config.svd_sel:] = 0
         self._jloco_inv = _np.dot(vtmat.T * ismat[None, :], umat.T)
 
     def update_fit(self):
@@ -662,9 +691,11 @@ class LOCO:
 
         self._chi = self.calc_chi()
         self._chi_init = self._chi
-        print('chi_init: {0:.4f} um'.format(self._chi_init))
+        print('chi_init: {0:.6f} um'.format(self._chi_init))
 
-        self._tol = LOCO.DEFAULT_TOL
+        self._tol_delta = self.config.tolerance_delta or LOCO.DEFAULT_TOL_DELTA
+        self._tol_overfit = self.config.tolerance_overfit or \
+            LOCO.DEFAULT_TOL_DELTA
         self._reduc_threshold = LOCO.DEFAULT_REDUC_THRESHOLD
 
     def _calc_residue(self):
@@ -673,8 +704,8 @@ class LOCO:
             matrix_diff = _LOCOUtils.remove_diagonal(matrix_diff, 160, 120)
         matrix_diff = _LOCOUtils.apply_all_weight(
             matrix_diff, self.config.weight_bpm, self.config.weight_corr)
-        res = matrix_diff.flatten()
-        if self.config.constraint_deltak:
+        res = matrix_diff.ravel()
+        if self.config.constraint_deltak_total:
             kdeltas = []
             if self.config.fit_quadrupoles:
                 kdeltas = _np.hstack((kdeltas, self._quad_k_deltas))
@@ -682,6 +713,9 @@ class LOCO:
                 kdeltas = _np.hstack((kdeltas, self._dip_k_deltas))
             if self.config.fit_sextupoles:
                 kdeltas = _np.hstack((kdeltas, self._sext_k_deltas))
+            wmat = self.config.weight_deltakl
+            wmat /= self.config.deltakl_normalization
+            kdeltas *= - wmat
             res = _np.hstack((res, kdeltas))
         return res
 
@@ -690,6 +724,8 @@ class LOCO:
         self._chi = self._chi_init
         for _iter in range(niter):
             self._chi_history.append(self._chi)
+            self._kldelta_history.append(self._quad_k_deltas_step)
+            self._ksldelta_history.append(self._skew_quad_ks_deltas_step)
             print('iter # {}/{}'.format(_iter+1, niter))
             res = self._calc_residue()
             self._res_history.append(res)
@@ -702,19 +738,28 @@ class LOCO:
             param_new = param_new.flatten()
             model_new, matrix_new = self._calc_model_matrix(param_new)
             chi_new = self.calc_chi(matrix_new)
-            print('chi: {0:.4f} um'.format(chi_new))
+            print('chi: {0:.6f} um'.format(chi_new))
             if _np.isnan(chi_new):
                 print('chi is NaN!')
                 break
             if chi_new < self._chi:
-                if _np.abs(chi_new - self._chi) < self._tol:
-                    print('chi reduction is lower than tolerance...')
+                case_delta = _np.abs(chi_new - self._chi) < self._tol_delta
+                case_overfit = chi_new < self._tol_overfit
+                if case_delta or case_overfit:
+                    if case_delta:
+                        print('chi reduction is lower than delta tolerance...')
+                    if case_overfit:
+                        print('chi is lower than overfitting tolerance...')
                     break
                 else:
                     self._update_state(model_new, matrix_new, chi_new)
+                    # print('recalculating jloco...')
+                    # self.update_jloco()
+                    # self.update_svd()
                     if self.config.min_method == \
                             _LOCOConfig.MINIMIZATION.LevenbergMarquardt:
-                        self._recalculate_inv_jloco(case='good')
+                        if not self.config.fixed_lambda:
+                           self._recalculate_inv_jloco(case='good')
             else:
                 # print('recalculating jloco...')
                 # self.update_jloco()
@@ -728,33 +773,34 @@ class LOCO:
                         break
                 elif self.config.min_method == \
                         _LOCOConfig.MINIMIZATION.LevenbergMarquardt:
-                    self._try_refactor_lambda(chi_new)
-                    if self.config.lambda_lm >= LOCO.DEFAULT_MAX_LAMBDA_LM:
-                        break
                     if self.config.lambda_lm <= LOCO.DEFAULT_MIN_LAMBDA_LM:
                         break
-            if self._chi < self._tol:
-                print('chi is lower than specified tolerance!')
+                    if not self.config.fixed_lambda:
+                        self._try_refactor_lambda(chi_new)
+                    else:
+                        break
+                    if self.config.lambda_lm >= LOCO.DEFAULT_MAX_LAMBDA_LM:
+                        break
+            if self._chi < self._tol_overfit:
+                print('chi is lower than overfitting tolerance...')
                 break
         self._create_output_vars()
         print('Finished!')
 
     def _recalculate_inv_jloco(self, case='good'):
         if case == 'good':
-            if self.config.lambda_lm > LOCO.DEFAULT_MIN_LAMBDA_LM:
-                self.config.lambda_lm /= LOCO.DEFAULT_DECR_RATE_LAMBDA_LM
-            else:
-                self.config.lambda_lm = LOCO.DEFAULT_MIN_LAMBDA_LM
+            self.config.lambda_lm /= LOCO.DEFAULT_DECR_RATE_LAMBDA_LM
         elif case == 'bad':
-            if self.config.lambda_lm < LOCO.DEFAULT_MAX_LAMBDA_LM:
-                self.config.lambda_lm *= LOCO.DEFAULT_INCR_RATE_LAMBDA_LM
-            else:
-                self.config.lambda_lm = LOCO.DEFAULT_MAX_LAMBDA_LM
+            self.config.lambda_lm *= LOCO.DEFAULT_INCR_RATE_LAMBDA_LM
         dmat = self._lm_dmat
         matrix2invert = self._jloco.T @ self._jloco
         matrix2invert += self.config.lambda_lm * dmat.T @ dmat
+        if self.config.constraint_deltak_step:
+            matrix2invert += self._deltak_mat.T @ self._deltak_mat
         umat, smat, vtmat = _np.linalg.svd(matrix2invert, full_matrices=False)
         ismat = 1/smat
+        if self.config.svd_method == self.config.SVD.Selection:
+            ismat[self.config.svd_sel:] = 0
         ismat[_np.isnan(ismat)] = 0
         ismat[_np.isinf(ismat)] = 0
         self._jloco_inv = _np.dot(vtmat.T * ismat[None, :], umat.T)
@@ -764,10 +810,11 @@ class LOCO:
         if matrix is None:
             matrix = self._matrix
         dmatrix = matrix - self.config.goalmat
+        # dmatrix = _LOCOUtils.apply_all_weight(dmatrix, self.config.weight_bpm, self.config.weight_corr)
         dmatrix[:, :self.config.nr_ch] *= self.config.delta_kickx_meas
         dmatrix[:, self.config.nr_ch:-1] *= self.config.delta_kicky_meas
         dmatrix[:, -1] *= self.config.delta_frequency_meas
-        chi2 = _np.sum(dmatrix*dmatrix)/(dmatrix.size)
+        chi2 = _np.sum(dmatrix*dmatrix)/dmatrix.size
         return _np.sqrt(chi2) * 1e6  # m to um
 
     def _create_output_vars(self):
@@ -782,6 +829,7 @@ class LOCO:
         self.residue_history = self._res_history
         self.girder_shift = self._girders_shift_inival + \
             self._girders_shift_deltas
+        self.kldelta_history = self._kldelta_history
 
     def clear_output_vars(self):
         """."""
@@ -795,6 +843,8 @@ class LOCO:
         self._chi_history = []
         self._res_history = []
         self.girder_shift = []
+        self.kldelta_history = []
+        self._kldelta_history = []
 
     def _calc_model_matrix(self, param):
         """."""
@@ -817,6 +867,7 @@ class LOCO:
         if 'quadrupoles_gradient' in param_dict:
             # update quadrupole delta
             self._quad_k_deltas += param_dict['quadrupoles_gradient']
+            self._quad_k_deltas_step = param_dict['quadrupoles_gradient']
             # update local model
             if self.config.use_quad_families:
                 set_quad_kdelta = _LOCOUtils.set_quadset_kdelta
@@ -878,6 +929,7 @@ class LOCO:
         if 'skew_quadrupoles' in param_dict:
             # update skew quadrupoles
             self._skew_quad_ks_deltas += param_dict['skew_quadrupoles']
+            self._skew_quad_ks_deltas_step = param_dict['skew_quadrupoles']
             # update local model
             set_quad_ksdelta = _LOCOUtils.set_quadmag_ksdelta
             for idx, idx_set in enumerate(config.skew_quad_indices):
@@ -938,7 +990,7 @@ class LOCO:
             model_new, matrix_new = \
                 self._calc_model_matrix(factor*param_new)
             chi_new = self.calc_chi(matrix_new)
-            print('chi: {0:.4f} um'.format(chi_new))
+            print('chi: {0:.6f} um'.format(chi_new))
             if chi_new < self._chi:
                 self._update_state(model_new, matrix_new, chi_new)
                 break
@@ -954,12 +1006,12 @@ class LOCO:
             print('chi was increased! Trial {0:d}'.format(_iter))
             print('applying lambda {0:0.4e}'.format(self.config.lambda_lm))
             self._recalculate_inv_jloco(case='bad')
-            res, *_ = self._calc_residue()
+            res = self._calc_residue()
             param_new = _np.dot(self._jloco_inv, _np.dot(self._jloco.T, res))
             param_new = param_new.flatten()
             model_new, matrix_new = self._calc_model_matrix(param_new)
             chi_new = self.calc_chi(matrix_new)
-            print('chi: {0:.4f} um'.format(chi_new))
+            print('chi: {0:.6f} um'.format(chi_new))
             if chi_new < self._chi:
                 self._update_state(model_new, matrix_new, chi_new)
                 break
