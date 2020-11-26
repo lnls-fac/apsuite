@@ -14,8 +14,8 @@ from .config import LOCOConfig as _LOCOConfig
 class LOCO:
     """Main LOCO algorithm."""
 
-    DEFAULT_TOL_DELTA = 1e-10
-    DEFAULT_TOL_OVERFIT = 1e-10
+    DEFAULT_TOL_DELTA = 1e-6
+    DEFAULT_TOL_OVERFIT = 1e-6
     DEFAULT_REDUC_THRESHOLD = 5/100
     DEFAULT_LAMBDA_LM = 1e-3
     DEFAULT_MAX_LAMBDA_LM = 1e6
@@ -106,6 +106,8 @@ class LOCO:
 
         self._energy_shift_inival = None
         self._energy_shift_deltas = None
+        self._girders_shift_inival = None
+        self._girders_shift_deltas = None
 
         self._gain_bpm_inival = self.config.gain_bpm
         self._gain_bpm_delta = None
@@ -118,6 +120,8 @@ class LOCO:
         self._chi = None
         self._chi_history = []
         self._tol = None
+        self._tol_delta = None
+        self._tol_overfit = None
         self._reduc_threshold = None
         self._res_history = []
         self._kldelta_history = []
@@ -533,7 +537,6 @@ class LOCO:
 
         self._jloco_u, self._jloco_s, self._jloco_vt = \
             _np.linalg.svd(self._jloco, full_matrices=False)
-        # if self.config.inv_method == _LOCOConfig.INVERSION.Normal:
         # print('save singular values for jloco')
         # _np.savetxt('svalues_j_lambda0_w0.txt', self._jloco_s)
         self._filter_svd_jloco()
@@ -599,13 +602,13 @@ class LOCO:
                 matrix2invert, full_matrices=False)
         elif self.config.inv_method == _LOCOConfig.INVERSION.Normal:
             umat, smat, vtmat = self._jloco_u, self._jloco_s, self._jloco_vt
-        print('saving singular values for jtj loco')
+        # print('saving singular values for jtj loco')
         # _np.savetxt('svalues_jtj_lambda1e-3_w1e3.txt', smat)
         ismat = 1/smat
         ismat[_np.isnan(ismat)] = 0
         ismat[_np.isinf(ismat)] = 0
         if self.config.svd_method == self.config.SVD.Selection:
-           ismat[self.config.svd_sel:] = 0
+            ismat[self.config.svd_sel:] = 0
         self._jloco_inv = _np.dot(vtmat.T * ismat[None, :], umat.T)
 
     def update_fit(self):
@@ -773,7 +776,7 @@ class LOCO:
                     if self.config.lambda_lm <= LOCO.DEFAULT_MIN_LAMBDA_LM:
                         break
                     if not self.config.fixed_lambda:
-                       self._try_refactor_lambda(chi_new)
+                        self._try_refactor_lambda(chi_new)
                     else:
                         break
                     if self.config.lambda_lm >= LOCO.DEFAULT_MAX_LAMBDA_LM:
@@ -812,7 +815,7 @@ class LOCO:
         dmatrix[:, self.config.nr_ch:-1] *= self.config.delta_kicky_meas
         dmatrix[:, -1] *= self.config.delta_frequency_meas
         chi2 = _np.sum(dmatrix*dmatrix)/dmatrix.size
-        return _np.sqrt(chi2) * 1e6 # m to um
+        return _np.sqrt(chi2) * 1e6  # m to um
 
     def _create_output_vars(self):
         """."""
