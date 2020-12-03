@@ -18,6 +18,7 @@ class LOCOConfig:
     DEFAULT_DELTA_RF = 100  # [Hz]
     DEFAULT_SVD_THRESHOLD = 1e-6
     DEFAULT_DELTAK_NORMALIZATION = 1e-3
+    DEFAULT_GIRDER_SHIFT = 1e-6  # [m]
 
     FAMNAME_RF = 'SRFCav'
 
@@ -44,10 +45,12 @@ class LOCOConfig:
         self.fitting_method = None
         self.lambda_lm = None
         self.use_dispersion = None
-        self.use_coupling = None
+        self.use_offdiagonal = None
+        self.use_diagonal = None
         self.use_quad_families = None
         self.dipoles_to_fit = None
         self.quadrupoles_to_fit = None
+        self.skew_quadrupoles_to_fit = None
         self.sextupoles_to_fit = None
         self.use_dip_families = None
         self.svd_sel = None
@@ -63,7 +66,9 @@ class LOCOConfig:
         self.fit_gain_corr = None
         self.fit_dipoles_kick = None
         self.fit_energy_shift = None
-        self.constraint_deltak = None
+        self.fit_girder_shift = None
+        self.constraint_deltak_total = None
+        self.constraint_deltak_step = None
         self.fit_skew_quadrupoles = None
         self.cavidx = None
         self.matrix = None
@@ -83,11 +88,14 @@ class LOCOConfig:
         self.b2_indices = None
         self.bc_indices = None
         self.skew_quad_indices = None
+        self.gir_indices = None
         self.k_nrsets = None
         self.weight_bpm = None
         self.weight_corr = None
         self.weight_deltakl = None
         self.deltakl_normalization = None
+        self.tolerance_delta = None
+        self.tolerance_overfit = None
 
         self._process_input(kwargs)
 
@@ -96,13 +104,19 @@ class LOCOConfig:
         stmp = '{0:35s}: {1:}  {2:s}\n'.format
         ftmp = '{0:35s}: {1:3.2f}  {2:s}\n'.format
         dtmp = '{0:35s}: {1:3d}  {2:s}\n'.format
+        etmp = '{0:35s}: {1:e}  {2:s}\n'.format
 
         stg = stmp('Tracking dimension', self.dim, '')
         stg += stmp('Include dispersion', self.use_dispersion, '')
-        stg += stmp('Include off-diagonal', self.use_coupling, '')
+        stg += stmp('Include diagonal', self.use_diagonal, '')
+        stg += stmp('Include off-diagonal', self.use_offdiagonal, '')
         stg += stmp('Minimization method', self.min_method_str, '')
+        stg += etmp('Lambda LM', self.lambda_lm, '')
         stg += stmp('Jacobian manipulation', self.inv_method_str, '')
-        stg += stmp('Constraint delta KL', self.constraint_deltak, '')
+        stg += stmp(
+            'Constraint delta KL total', self.constraint_deltak_total, '')
+        stg += stmp(
+            'Constraint delta KL step', self.constraint_deltak_step, '')
         stg += stmp('Singular values method', self.svd_method_str, '')
 
         if self.svd_method == LOCOConfig.SVD.Selection:
@@ -112,6 +126,9 @@ class LOCOConfig:
                 stg += stmp('SV to be used', 'All', '')
         if self.svd_method == LOCOConfig.SVD.Threshold:
             stg += ftmp('SV threshold (s/s_max):', self.svd_thre, '')
+
+        stg += etmp('Tolerance delta', self.tolerance_delta, '')
+        stg += etmp('Tolerance overfit', self.tolerance_overfit, '')
 
         stg += ftmp(
             'H. kicks used to measure',
@@ -130,11 +147,15 @@ class LOCOConfig:
         stg += stmp('Use dipoles as families', self.use_dip_families, '')
         stg += stmp('Use quadrupoles as families', self.use_quad_families, '')
 
-        stg += stmp('Dipoles skew gradients', self.fit_dipoles, '')
-        stg += stmp('Quadrupoles skew gradients', self.fit_quadrupoles, '')
-        stg += stmp('Sextupoles skew gradients', self.fit_sextupoles, '')
+        stg += stmp('Dipoles skew gradients', self.fit_dipoles_coupling, '')
+        stg += stmp(
+            'Quadrupoles skew gradients', self.fit_quadrupoles_coupling, '')
+        stg += stmp(
+            'Sextupoles skew gradients', self.fit_sextupoles_coupling, '')
         stg += stmp(
             'Skew quadrupoles skew gradients', self.fit_skew_quadrupoles, '')
+        stg += stmp(
+            'Girders longitudinal shifts', self.fit_girder_shift, '')
 
         stg += stmp('BPM gains', self.fit_gain_bpm, '')
         stg += stmp('Corrector gains', self.fit_gain_corr, '')
@@ -244,11 +265,12 @@ class LOCOConfig:
         self.update_model(self.model, self.dim)
         self.update_matrix(self.use_dispersion)
         self.update_goalmat(
-            self.goalmat, self.use_dispersion, self.use_coupling)
+            self.goalmat, self.use_dispersion, self.use_offdiagonal)
         self.update_gain()
         self.update_quad_knobs(self.use_quad_families)
         self.update_sext_knobs()
         self.update_dip_knobs(self.use_dip_families)
+        self.update_girder_knobs()
         self.update_skew_quad_knobs()
         self.update_weight()
         self.update_svd(self.svd_method, self.svd_sel, self.svd_thre)
@@ -258,7 +280,7 @@ class LOCOConfig:
         self.dim = dim
         self.model = _dcopy(model)
         self.model.cavity_on = dim == '6d'
-        self.model.radiation_on = dim == '6d'
+        self.model.radiation_on = False
         self.respm = _OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
         self._create_indices()
 
@@ -278,16 +300,16 @@ class LOCOConfig:
                 self.svd_thre = LOCOConfig.DEFAULT_SVD_THRESHOLD
             print('svd_threshold: {:f}'.format(self.svd_thre))
 
-    def update_goalmat(self, goalmat, use_dispersion, use_coupling):
+    def update_goalmat(self, goalmat, use_dispersion, use_offdiagonal):
         """."""
         # init goalmat
         if goalmat is None:
             goalmat = _dcopy(self.matrix)
 
         # coupling
-        self.use_coupling = use_coupling
-        if not use_coupling:
-            self.goalmat = _LOCOUtils.remove_coupling(
+        self.use_offdiagonal = use_offdiagonal
+        if not use_offdiagonal:
+            self.goalmat = _LOCOUtils.remove_offdiagonal(
                 goalmat, self.nr_bpm, self.nr_ch, self.nr_cv)
         else:
             self.goalmat = _dcopy(goalmat)
@@ -400,13 +422,13 @@ class LOCOConfig:
             for idx, fam_name in enumerate(self.quadrupoles_to_fit):
                 self.quad_indices[idx] = self.respm.fam_data[fam_name]['index']
                 self.quad_indices_ks += self.quad_indices[idx]
-                self.quad_indices_ks.sort()
+            self.quad_indices_ks.sort()
         else:
             self.quad_indices = []
             for fam_name in self.quadrupoles_to_fit:
                 self.quad_indices += self.respm.fam_data[fam_name]['index']
-                self.quad_indices.sort()
-                self.quad_indices_ks = self.quad_indices
+            self.quad_indices.sort()
+            self.quad_indices_ks = self.quad_indices
 
     def update_sext_knobs(self):
         """."""
@@ -421,11 +443,28 @@ class LOCOConfig:
                 self.sext_indices = []
                 for fam_name in self.sextupoles_to_fit:
                     self.sext_indices += self.respm.fam_data[fam_name]['index']
-                    self.sext_indices.sort()
+                self.sext_indices.sort()
 
     def update_skew_quad_knobs(self):
         """."""
-        self.skew_quad_indices = self.respm.fam_data['QS']['index']
+        """."""
+        if self.skew_quadrupoles_to_fit is None:
+            self.skew_quad_indices = self.respm.fam_data['QS']['index']
+        else:
+            skewquadfit = set(self.skew_quadrupoles_to_fit)
+            skewquadall = set(self.famname_skewquadset)
+            if not skewquadfit.issubset(skewquadall):
+                raise Exception('invalid skew quadrupole name used to fit!')
+            else:
+                self.skew_quad_indices = []
+                for fam_name in self.skew_quadrupoles_to_fit:
+                    self.skew_quad_indices += self.respm.fam_data[
+                        fam_name]['index']
+                idx_all = _np.array(
+                    self.respm.fam_data['QS']['index']).flatten()
+                idx_sub = _np.array(self.skew_quad_indices).flatten()
+                self.skew_quad_indices = list(set(idx_sub) & set(idx_all))
+                self.skew_quad_indices.sort()
 
     def update_b1_knobs(self):
         """."""
@@ -462,6 +501,12 @@ class LOCOConfig:
                 self.dip_indices += self.respm.fam_data[fam_name]['index']
                 self.dip_indices.sort()
                 self.dip_indices_ks = self.dip_indices
+
+    def update_girder_knobs(self):
+        """."""
+        self.gir_indices = _pyaccel.lattice.find_indices(
+            self.model, 'fam_name', 'girder')
+        self.gir_indices = _np.reshape(self.gir_indices, (-1, 2))
 
     def _process_input(self, kwargs):
         for key, value in kwargs.items():
@@ -532,8 +577,8 @@ class LOCOConfigSI(LOCOConfig):
     @property
     def famname_skewquadset(self):
         """."""
-        return ['SFA0', 'SDB0', 'SDP0', 'FC2', 'SDA2', 'SDB2',
-                'SDP2', 'SDA3', 'SDB3', 'SDP3']
+        return ['SFA0', 'SDB0', 'SDP0', 'SDA2', 'SDB2',
+                'FC2', 'SDP2', 'SDA3', 'SDB3', 'SDP3']
 
 
 class LOCOConfigBO(LOCOConfig):

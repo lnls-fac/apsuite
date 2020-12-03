@@ -49,7 +49,6 @@ class TuneCorr(BaseCorr):
         """."""
         if model is None:
             model = self.model
-
         return self._get_parameter(model)
 
     def get_kl(self, model):
