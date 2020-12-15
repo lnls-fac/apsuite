@@ -9,15 +9,19 @@ from pymodels import si
 class IDParams():
     """."""
 
-    def __init__(self, id_name):
+    ID_MODELS_FOLDER = '/home/facs/repos/MatlabMiddleLayer/Release' + \
+        '/lnls/fac_scripts/sirius/insertion_devices/id_modelling/'
+
+    def __init__(self, id_name=None, phase=0):
         """."""
         self.id_name = id_name
+        self.phase = phase
         self.kicktable_filename = None
         self.section_nr = None
         self.straight_label = None
         self.seg_nr = None
-        if id_name == 'manaca':
-            self.params_manaca()
+        if id_name == 'MANACA':
+            self.params_manaca(phase)
 
     def __str__(self):
         """."""
@@ -30,15 +34,17 @@ class IDParams():
         stg += stmp('Kicktable filename ', self.kicktable_filename, '')
         return stg
 
-    def params_manaca(self):
+    def params_manaca(self, phase=0):
         """."""
-        self.kicktable_filename = '2020-05-11_Kickmaps_APUKyma22mm/ APUKyma22mm_kickmap_shift_0.txt'
+        self.id_name = 'MANACA'
+        self.kicktable_filename = IDParams.ID_MODELS_FOLDER + \
+            'APU22/APUKyma22mm_kickmap_shift_' + str(phase) + '.txt'
         self.section_nr = 9
         self.straight_label = 'A'
         self.seg_nr = 20
 
 
-class ID(IDParams):
+class ID():
     """."""
 
     DEFAULT_KNOBS = [
@@ -47,10 +53,10 @@ class ID(IDParams):
         'QFP', 'QDP1', 'QDP2']
     DEFAULT_DELTAKL = 1e-4
 
-    def __init__(self, id_name):
+    def __init__(self, id_data):
         """."""
-        super().__init__()
-        self.id_data = IDParams(id_name)
+        self.id_data = id_data
+        # self.bare_model = si.lattice.create_lattice()
         self.bare_model = si.create_accelerator()
         if self.id_data.straight_label == 'A':
             self.id_data.straight_center = 'mia'
@@ -63,7 +69,6 @@ class ID(IDParams):
 
     def insert_ids(self):
         """."""
-        # Temporary, waiting for work in trackcpp and pyaccel about ID element
         mod = self.bare_model[:]
         mcidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'mc')
         mod = pyaccel.lattice.shift(mod, mcidx[-1])
@@ -71,22 +76,29 @@ class ID(IDParams):
         ssidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'id_enda')
         ssidx += pyaccel.lattice.find_indices(mod, 'fam_name', 'id_endb')
         ssidx += pyaccel.lattice.find_indices(mod, 'fam_name', 'id_endp')
-        del mod[ssidx]
+        # del mod[ssidx]
+        for ssi in sorted(ssidx, reverse=True):
+            del mod[ssi]
 
         mcidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'mc')
-        section_nr = self.section_nr
+        section_nr = self.id_data.section_nr
 
         mc = np.unique([0] + mcidx + [len(mod)])
-        elem = np.arange(mc[section_nr-1], mc[section_nr]+1)
+        elem = list(range(mc[section_nr-1], mc[section_nr]+1))
         center_idx = pyaccel.lattice.find_indices(
-            mod[elem], 'fam_name', self.id_data.straight_center)
+            mod[elem[0]:elem[-1]], 'fam_name', self.id_data.straight_center)
         center_idx = elem[center_idx[0]]
         mod = self.insert_kicktable(mod, center_idx)
         return mod
 
     def insert_kicktable(self, model, center_idx):
         """."""
-        # Temporary, waiting for work in trackcpp and pyaccel about ID element
+        id_kickmap = pyaccel.elements.kickmap(
+            fam_name=self.id_data.id_name,
+            kicktable_fname=self.id_data.kicktable_filename,
+            nr_steps=40)
+
+        print(id_kickmap.length)
         idx_dws = center_idx + 1
         while model[idx_dws].pass_method == 'drift_pass':
             idx_dws += 1
@@ -108,13 +120,24 @@ class ID(IDParams):
         ups_drift.pass_method = 'drift_pass'
         dws_drift.pass_method = 'drift_pass'
 
-        ups_drift.length = sum(lens_ups) - self.id_kicktable.length/2
-        dws_drift.length = sum(lens_dws) - self.id_kicktable.length/2
+        ups_drift.length = sum(lens_ups) - id_kickmap.length/2
+        dws_drift.length = sum(lens_dws) - id_kickmap.length/2
 
+        id_kickmap.length /= 2
         if ups_drift.length < 0 or dws_drift.length < 0:
             raise Exception(
                 'there is no space to insert id within the defined location!')
-        return model
+
+        model_id = model[:idx_ups]
+        model_id.append(ups_drift)
+        model_id.append(id_kickmap)
+        model_id += model[center_idx]
+        model_id.append(id_kickmap)
+        model_id.append(dws_drift)
+        model_id += model[idx_dws+1:]
+        idx = pyaccel.lattice.find_indices(model_id, 'fam_name', 'start')
+        model_id = pyaccel.lattice.shift(model_id, idx[0])
+        return model_id
 
     def symmetrize_straight_section(self, factor=1, max_niter=20, tol=1e-6):
         """."""
