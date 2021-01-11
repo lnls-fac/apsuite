@@ -4,7 +4,7 @@ import numpy as np
 
 import pyaccel
 from pymodels import si
-
+from apsuite.optics_analysis.tune_correction import TuneCorr
 
 class IDParams():
     """."""
@@ -12,16 +12,31 @@ class IDParams():
     ID_MODELS_FOLDER = '/home/facs/repos/MatlabMiddleLayer/Release' + \
         '/lnls/fac_scripts/sirius/insertion_devices/id_modelling/'
 
+    BEAMLINES_NAMES = [
+        'CARNAUBA',
+        'CATERETE',
+        'EMA',
+        'IPE',
+        'MANACA']
+
     def __init__(self, id_name=None, phase=0):
         """."""
         self.id_name = id_name
         self.phase = phase
-        self.kicktable_filename = None
+        self.kicktable_fname = None
         self.section_nr = None
         self.straight_label = None
         self.seg_nr = None
         if id_name == 'MANACA':
             self.params_manaca(phase)
+        elif id_name == 'CARNAUBA':
+            self.params_carnauba(phase)
+        elif id_name == 'CATERETE':
+            self.params_caterete(phase)
+        elif id_name == 'EMA':
+            self.params_ema(phase)
+        elif id_name == 'IPE':
+            self.params_ipe(phase)
 
     def __str__(self):
         """."""
@@ -31,16 +46,52 @@ class IDParams():
         stg += dtmp('Section ', self.section_nr, '')
         stg += stmp('Straight section ', self.straight_label, '')
         stg += dtmp('Number of segments ', self.seg_nr, '')
-        stg += stmp('Kicktable filename ', self.kicktable_filename, '')
+        stg += stmp('Kicktable filename ', self.kicktable_fname, '')
         return stg
+
+    def params_carnauba(self, phase=0):
+        """."""
+        self.id_name = 'CARNAUBA'
+        self.kicktable_fname = IDParams.ID_MODELS_FOLDER + \
+            'APU22/APUKyma22mm_kickmap_shift_' + str(phase) + '.txt'
+        self.section_nr = 6
+        self.straight_label = 'B'
+        self.seg_nr = 20
+
+    def params_caterete(self, phase=0):
+        """."""
+        self.id_name = 'CATERETE'
+        self.kicktable_fname = IDParams.ID_MODELS_FOLDER + \
+            'APU22/APUKyma22mm_kickmap_shift_' + str(phase) + '.txt'
+        self.section_nr = 7
+        self.straight_label = 'P'
+        self.seg_nr = 20
+
+    def params_ema(self, phase=0):
+        """."""
+        self.id_name = 'EMA'
+        self.kicktable_fname = IDParams.ID_MODELS_FOLDER + \
+            'APU22/APUKyma22mm_kickmap_shift_' + str(phase) + '.txt'
+        self.section_nr = 8
+        self.straight_label = 'B'
+        self.seg_nr = 20
 
     def params_manaca(self, phase=0):
         """."""
         self.id_name = 'MANACA'
-        self.kicktable_filename = IDParams.ID_MODELS_FOLDER + \
+        self.kicktable_fname = IDParams.ID_MODELS_FOLDER + \
             'APU22/APUKyma22mm_kickmap_shift_' + str(phase) + '.txt'
         self.section_nr = 9
         self.straight_label = 'A'
+        self.seg_nr = 20
+
+    def params_ipe(self, phase=0):
+        """."""
+        self.id_name = 'IPE'
+        self.kicktable_fname = IDParams.ID_MODELS_FOLDER + \
+            'APU58/APUKyma58mm_kickmap_shift_' + str(phase) + '.txt'
+        self.section_nr = 11
+        self.straight_label = 'P'
         self.seg_nr = 20
 
 
@@ -51,13 +102,14 @@ class ID():
         'QFA', 'QDA',
         'QFB', 'QDB1', 'QDB2',
         'QFP', 'QDP1', 'QDP2']
-    DEFAULT_DELTAKL = 1e-4
+    DEFAULT_DELTAKL = 1e-6
 
     def __init__(self, id_data):
         """."""
         self.id_data = id_data
         # self.bare_model = si.lattice.create_lattice()
         self.bare_model = si.create_accelerator()
+        self.fam_data = si.get_family_data(self.bare_model)
         if self.id_data.straight_label == 'A':
             self.id_data.straight_center = 'mia'
         elif self.id_data.straight_label == 'B':
@@ -69,87 +121,64 @@ class ID():
 
     def insert_ids(self):
         """."""
-        mod = self.bare_model[:]
-        mcidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'mc')
-        mod = pyaccel.lattice.shift(mod, mcidx[-1])
+        if 'APU22' in self.id_data.kicktable_fname:
+            idfam = self.fam_data['APU22']
+        elif 'APU58' in self.id_data.kicktable_fname:
+            idfam = self.fam_data['APU58']
 
-        ssidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'id_enda')
-        ssidx += pyaccel.lattice.find_indices(mod, 'fam_name', 'id_endb')
-        ssidx += pyaccel.lattice.find_indices(mod, 'fam_name', 'id_endp')
-        # del mod[ssidx]
-        for ssi in sorted(ssidx, reverse=True):
-            del mod[ssi]
+        for sub in idfam['subsection']:
+            if str(self.id_data.section_nr) in sub:
+                idx = idfam['subsection'].index(sub)
+                break
 
-        mcidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'mc')
-        section_nr = self.id_data.section_nr
+        lat_idx = idfam['index'][idx]
+        id_half = self.bare_model[lat_idx[0]]
 
-        mc = np.unique([0] + mcidx + [len(mod)])
-        elem = list(range(mc[section_nr-1], mc[section_nr]+1))
-        center_idx = pyaccel.lattice.find_indices(
-            mod[elem[0]:elem[-1]], 'fam_name', self.id_data.straight_center)
-        center_idx = elem[center_idx[0]]
-        mod = self.insert_kicktable(mod, center_idx)
-        return mod
-
-    def insert_kicktable(self, model, center_idx):
-        """."""
         id_kickmap = pyaccel.elements.kickmap(
             fam_name=self.id_data.id_name,
-            kicktable_fname=self.id_data.kicktable_filename,
+            kicktable_fname=self.id_data.kicktable_fname,
             nr_steps=40)
 
-        print(id_kickmap.length)
-        idx_dws = center_idx + 1
-        while model[idx_dws].pass_method == 'drift_pass':
-            idx_dws += 1
-        idx_dws -= 1
+        kickmap_half_len = id_kickmap.length/2
+        rescale = id_half.length/kickmap_half_len
 
-        idx_ups = center_idx - 1
-        while model[idx_ups].pass_method == 'drift_pass':
-            idx_ups -= 1
-        idx_ups += 1
+        id_half_kickmap = pyaccel.elements.kickmap(
+            fam_name=self.id_data.id_name,
+            kicktable_fname=self.id_data.kicktable_fname,
+            nr_steps=40,
+            rescale_length=0.5*rescale,
+            rescale_kicks=0.5*rescale)
 
-        range_ups = np.arange(idx_ups, center_idx+1)
-        range_dws = np.arange(center_idx, idx_dws+1)
+        mod_id = self.bare_model[:]
+        mod_id[lat_idx[0]] = id_half_kickmap
+        mod_id[lat_idx[1]] = id_half_kickmap
+        return mod_id
 
-        lens_ups = pyaccel.lattice.get_attribute(model, 'length', range_ups)
-        lens_dws = pyaccel.lattice.get_attribute(model, 'length', range_dws)
-
-        ups_drift = model[idx_ups]
-        dws_drift = model[idx_dws]
-        ups_drift.pass_method = 'drift_pass'
-        dws_drift.pass_method = 'drift_pass'
-
-        ups_drift.length = sum(lens_ups) - id_kickmap.length/2
-        dws_drift.length = sum(lens_dws) - id_kickmap.length/2
-
-        id_kickmap.length /= 2
-        if ups_drift.length < 0 or dws_drift.length < 0:
-            raise Exception(
-                'there is no space to insert id within the defined location!')
-
-        model_id = model[:idx_ups]
-        model_id.append(ups_drift)
-        model_id.append(id_kickmap)
-        model_id += model[center_idx]
-        model_id.append(id_kickmap)
-        model_id.append(dws_drift)
-        model_id += model[idx_dws+1:]
-        idx = pyaccel.lattice.find_indices(model_id, 'fam_name', 'start')
-        model_id = pyaccel.lattice.shift(model_id, idx[0])
-        return model_id
-
-    def symmetrize_straight_section(self, factor=1, max_niter=20, tol=1e-6):
+    def fix_tunes(self, model):
         """."""
-        mod = self.bare_model[:]
-        mcidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'mc')
-        mod = pyaccel.lattice.shift(mod, mcidx[-1])
+        tunecorr = TuneCorr(
+            model, 'SI', method='Proportional', grouping='TwoKnobs')
+        tunes0 = tunecorr.get_tunes(self.bare_model)
+        print('    tunes init  : ', tunecorr.get_tunes(model))
+        tunemat = tunecorr.calc_jacobian_matrix()
+        tunecorr.correct_parameters(
+            model=model,
+            goal_parameters=tunes0,
+            jacobian_matrix=tunemat)
+        print('    tunes final : ', tunecorr.get_tunes(model))
+        return model
 
-        mcidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'mc')
-        mcidx = np.unique([0] + mcidx + [len(mod)])
+    def symmetrize_straight_section(
+            self, model, factor=1, max_niter=20, tol=1e-6):
+        """."""
+        mcidx = pyaccel.lattice.find_indices(model, 'fam_name', 'mc')
+        model = pyaccel.lattice.shift(model, mcidx[-1])
+
+        mcidx = pyaccel.lattice.find_indices(model, 'fam_name', 'mc')
+        mcidx = np.unique([0] + mcidx + [len(model)])
         sec_nr = self.id_data.section_nr
         line_idx = np.arange(mcidx[sec_nr-1], mcidx[sec_nr]+1)
-        sline = mod[line_idx]
+        sline = model[line_idx]
         knobs = ID.get_knob_idx(sline, ID.DEFAULT_KNOBS)
 
         data = dict()
@@ -157,7 +186,7 @@ class ID():
             sline, 'fam_name', self.id_data.straight_center)[0]
         data['initial_point'] = line_idx[0]
         data['final_point'] = line_idx[-1]
-        data['twiss0'], *_ = pyaccel.optics.calc_twiss(mod)
+        data['twiss0'], _ = pyaccel.optics.calc_twiss(model)
 
         res_vec = ID.local_residue(sline, data)
         res = ID.calc_rms(res_vec)
@@ -166,8 +195,9 @@ class ID():
         dkl = np.zeros(knobs.size)
 
         nr_iters = 0
+        print('initial residue {}:'.format(res))
         while res > tol and nr_iters < max_niter and factor > 1e-3:
-            print(res)
+            print('residue {}:'.format(res))
             dk_temp = -1 * ijmat @ res_vec
             dk_temp *= factor
             ID.set_dkl(sline, dk_temp, knobs)
@@ -184,8 +214,12 @@ class ID():
                 ID.set_dkl(sline, -dk_temp, knobs)
                 factor /= 2
             nr_iters += 1
-        mod[line_idx] = sline
-        return mod
+        print('final residue {}:'.format(res))
+        model[line_idx] = sline
+
+        start = pyaccel.lattice.find_indices(model, 'fam_name', 'start')
+        model = pyaccel.lattice.shift(model, start[-1])
+        return model
 
     # static methods
     @staticmethod
@@ -195,10 +229,10 @@ class ID():
         for knb_nam in knobs_names:
             idx = np.array(
                 pyaccel.lattice.find_indices(
-                    sline, 'fam_name', knb_nam)).flatten()
+                    sline, 'fam_name', knb_nam)).ravel()
             if idx.size:
                 knobs_idx.append(idx)
-        return np.array(knobs_idx).flatten()
+        return np.array(knobs_idx).ravel()
 
     @staticmethod
     def set_dkl(model, dkl_value, kl_idx):
@@ -209,7 +243,7 @@ class ID():
     @staticmethod
     def calc_rms(residue):
         """."""
-        return np.sqrt(np.sum(residue*residue)/residue.size)
+        return np.sqrt(np.mean(residue*residue))
 
     @staticmethod
     def local_residue(sline, data, include_tune=False):
@@ -280,3 +314,76 @@ class ID():
         ismat = np.diag(ismat)
         ijmat = np.dot(np.dot(vhmat.T, ismat), umat.T)
         return ijmat
+
+
+# def insert_ids(self):
+    #     """."""
+    #     mod = self.bare_model[:]
+    #     mcidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'mc')
+    #     mod = pyaccel.lattice.shift(mod, mcidx[-1])
+
+    #     ssidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'id_enda')
+    #     ssidx += pyaccel.lattice.find_indices(mod, 'fam_name', 'id_endb')
+    #     ssidx += pyaccel.lattice.find_indices(mod, 'fam_name', 'id_endp')
+    #     # del mod[ssidx]
+    #     for ssi in sorted(ssidx, reverse=True):
+    #         del mod[ssi]
+
+    #     mcidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'mc')
+    #     section_nr = self.id_data.section_nr
+
+    #     mc = np.unique([0] + mcidx + [len(mod)])
+    #     elem = list(range(mc[section_nr-1], mc[section_nr]+1))
+    #     center_idx = pyaccel.lattice.find_indices(
+    #         mod[elem[0]:elem[-1]], 'fam_name', self.id_data.straight_center)
+    #     center_idx = elem[center_idx[0]]
+    #     mod = self.insert_kicktable(mod, center_idx)
+    #     return mod
+
+    # def insert_kicktable(self, model, center_idx):
+    #     """."""
+    #     id_kickmap = pyaccel.elements.kickmap(
+    #         fam_name=self.id_data.id_name,
+    #         kicktable_fname=self.id_data.kicktable_filename,
+    #         nr_steps=40)
+
+    #     print(id_kickmap.length)
+    #     idx_dws = center_idx + 1
+    #     while model[idx_dws].pass_method == 'drift_pass':
+    #         idx_dws += 1
+    #     idx_dws -= 1
+
+    #     idx_ups = center_idx - 1
+    #     while model[idx_ups].pass_method == 'drift_pass':
+    #         idx_ups -= 1
+    #     idx_ups += 1
+
+    #     range_ups = np.arange(idx_ups, center_idx+1)
+    #     range_dws = np.arange(center_idx, idx_dws+1)
+
+    #     lens_ups = pyaccel.lattice.get_attribute(model, 'length', range_ups)
+    #     lens_dws = pyaccel.lattice.get_attribute(model, 'length', range_dws)
+
+    #     ups_drift = model[idx_ups]
+    #     dws_drift = model[idx_dws]
+    #     ups_drift.pass_method = 'drift_pass'
+    #     dws_drift.pass_method = 'drift_pass'
+
+    #     ups_drift.length = sum(lens_ups) - id_kickmap.length/2
+    #     dws_drift.length = sum(lens_dws) - id_kickmap.length/2
+
+    #     id_kickmap.length /= 2
+    #     if ups_drift.length < 0 or dws_drift.length < 0:
+    #         raise Exception(
+    #             'there is no space to insert id within the defined location!')
+
+    #     model_id = model[:idx_ups]
+    #     model_id.append(ups_drift)
+    #     model_id.append(id_kickmap)
+    #     model_id += model[center_idx]
+    #     model_id.append(id_kickmap)
+    #     model_id.append(dws_drift)
+    #     model_id += model[idx_dws+1:]
+    #     idx = pyaccel.lattice.find_indices(model_id, 'fam_name', 'start')
+    #     model_id = pyaccel.lattice.shift(model_id, idx[0])
+    #     return model_id
