@@ -1,5 +1,6 @@
 """Main module."""
 import time as _time
+import datetime as _datetime
 from threading import Thread as _Thread, Event as _Event
 
 from copy import deepcopy as _dcopy
@@ -105,83 +106,83 @@ class BBAParams:
         )
     QUADNAMES = (
         'SI-01M2:PS-QS', 'SI-01C1:PS-Q1',
-        'SI-01C1:PS-QS', 'SI-01C2:PS-Q4',
+        'SI-01C1:PS-QS', 'SI-01C2:PS-QS',
         'SI-01C3:PS-Q4', 'SI-01C3:PS-QS',
         'SI-01C4:PS-Q1', 'SI-02M1:PS-QDB2',
         'SI-02M2:PS-QDB2', 'SI-02C1:PS-Q1',
-        'SI-02C1:PS-QS', 'SI-02C2:PS-Q4',
+        'SI-02C1:PS-QS', 'SI-02C2:PS-QS',
         'SI-02C3:PS-Q4', 'SI-02C3:PS-QS',
         'SI-02C4:PS-Q1', 'SI-03M1:PS-QDP2',
         'SI-03M2:PS-QDP2', 'SI-03C1:PS-Q1',
-        'SI-03C1:PS-QS', 'SI-03C2:PS-Q4',
+        'SI-03C1:PS-QS', 'SI-03C2:PS-QS',
         'SI-03C3:PS-Q4', 'SI-03C3:PS-QS',
         'SI-03C4:PS-Q1', 'SI-04M1:PS-QDB2',
         'SI-04M2:PS-QDB2', 'SI-04C1:PS-Q1',
-        'SI-04C1:PS-QS', 'SI-04C2:PS-Q4',
+        'SI-04C1:PS-QS', 'SI-04C2:PS-QS',
         'SI-04C3:PS-Q4', 'SI-04C3:PS-QS',
         'SI-04C4:PS-Q1', 'SI-05M1:PS-QS',
         'SI-05M2:PS-QS', 'SI-05C1:PS-Q1',
-        'SI-05C1:PS-QS', 'SI-05C2:PS-Q4',
+        'SI-05C1:PS-QS', 'SI-05C2:PS-QS',
         'SI-05C3:PS-Q4', 'SI-05C3:PS-QS',
         'SI-05C4:PS-Q1', 'SI-06M1:PS-QDB2',
         'SI-06M2:PS-QDB2', 'SI-06C1:PS-Q1',
-        'SI-06C1:PS-QS', 'SI-06C2:PS-Q4',
+        'SI-06C1:PS-QS', 'SI-06C2:PS-QS',
         'SI-06C3:PS-Q4', 'SI-06C3:PS-QS',
         'SI-06C4:PS-Q1', 'SI-07M1:PS-QDP2',
         'SI-07M2:PS-QDP2', 'SI-07C1:PS-Q1',
-        'SI-07C1:PS-QS', 'SI-07C2:PS-Q4',
+        'SI-07C1:PS-QS', 'SI-07C2:PS-QS',
         'SI-07C3:PS-Q4', 'SI-07C3:PS-QS',
         'SI-07C4:PS-Q1', 'SI-08M1:PS-QDB2',
         'SI-08M2:PS-QDB2', 'SI-08C1:PS-Q1',
-        'SI-08C1:PS-QS', 'SI-08C2:PS-Q4',
+        'SI-08C1:PS-QS', 'SI-08C2:PS-QS',
         'SI-08C3:PS-Q4', 'SI-08C3:PS-QS',
         'SI-08C4:PS-Q1', 'SI-09M1:PS-QS',
         'SI-09M2:PS-QS', 'SI-09C1:PS-Q1',
-        'SI-09C1:PS-QS', 'SI-09C2:PS-Q4',
+        'SI-09C1:PS-QS', 'SI-09C2:PS-QS',
         'SI-09C3:PS-Q4', 'SI-09C3:PS-QS',
         'SI-09C4:PS-Q1', 'SI-10M1:PS-QDB2',
         'SI-10M2:PS-QDB2', 'SI-10C1:PS-Q1',
-        'SI-10C1:PS-QS', 'SI-10C2:PS-Q4',
+        'SI-10C1:PS-QS', 'SI-10C2:PS-QS',
         'SI-10C3:PS-Q4', 'SI-10C3:PS-QS',
         'SI-10C4:PS-Q1', 'SI-11M1:PS-QDP2',
         'SI-11M2:PS-QDP2', 'SI-11C1:PS-Q1',
-        'SI-11C1:PS-QS', 'SI-11C2:PS-Q4',
+        'SI-11C1:PS-QS', 'SI-11C2:PS-QS',
         'SI-11C3:PS-Q4', 'SI-11C3:PS-QS',
         'SI-11C4:PS-Q1', 'SI-12M1:PS-QDB2',
         'SI-12M2:PS-QDB2', 'SI-12C1:PS-Q1',
-        'SI-12C1:PS-QS', 'SI-12C2:PS-Q4',
+        'SI-12C1:PS-QS', 'SI-12C2:PS-QS',
         'SI-12C3:PS-Q4', 'SI-12C3:PS-QS',
         'SI-12C4:PS-Q1', 'SI-13M1:PS-QS',
         'SI-13M2:PS-QS', 'SI-13C1:PS-Q1',
-        'SI-13C1:PS-QS', 'SI-13C2:PS-Q4',
+        'SI-13C1:PS-QS', 'SI-13C2:PS-QS',
         'SI-13C3:PS-Q4', 'SI-13C3:PS-QS',
         'SI-13C4:PS-Q1', 'SI-14M1:PS-QDB2',
         'SI-14M2:PS-QDB2', 'SI-14C1:PS-Q1',
-        'SI-14C1:PS-QS', 'SI-14C2:PS-Q4',
+        'SI-14C1:PS-QS', 'SI-14C2:PS-QS',
         'SI-14C3:PS-Q4', 'SI-14C3:PS-QS',
         'SI-14C4:PS-Q1', 'SI-15M1:PS-QDP2',
         'SI-15M2:PS-QDP2', 'SI-15C1:PS-Q1',
-        'SI-15C1:PS-QS', 'SI-15C2:PS-Q4',
+        'SI-15C1:PS-QS', 'SI-15C2:PS-QS',
         'SI-15C3:PS-Q4', 'SI-15C3:PS-QS',
         'SI-15C4:PS-Q1', 'SI-16M1:PS-QDB2',
         'SI-16M2:PS-QDB2', 'SI-16C1:PS-Q1',
-        'SI-16C1:PS-QS', 'SI-16C2:PS-Q4',
+        'SI-16C1:PS-QS', 'SI-16C2:PS-QS',
         'SI-16C3:PS-Q4', 'SI-16C3:PS-QS',
         'SI-16C4:PS-Q1', 'SI-17M1:PS-QS',
         'SI-17M2:PS-QS', 'SI-17C1:PS-Q1',
-        'SI-17C1:PS-QS', 'SI-17C2:PS-Q4',
+        'SI-17C1:PS-QS', 'SI-17C2:PS-QS',
         'SI-17C3:PS-Q4', 'SI-17C3:PS-QS',
         'SI-17C4:PS-Q1', 'SI-18M1:PS-QDB2',
         'SI-18M2:PS-QDB2', 'SI-18C1:PS-Q1',
-        'SI-18C1:PS-QS', 'SI-18C2:PS-Q4',
+        'SI-18C1:PS-QS', 'SI-18C2:PS-QS',
         'SI-18C3:PS-Q4', 'SI-18C3:PS-QS',
         'SI-18C4:PS-Q1', 'SI-19M1:PS-QDP2',
         'SI-19M2:PS-QDP2', 'SI-19C1:PS-Q1',
-        'SI-19C1:PS-QS', 'SI-19C2:PS-Q4',
+        'SI-19C1:PS-QS', 'SI-19C2:PS-QS',
         'SI-19C3:PS-Q4', 'SI-19C3:PS-QS',
         'SI-19C4:PS-Q1', 'SI-20M1:PS-QDB2',
         'SI-20M2:PS-QDB2', 'SI-20C1:PS-Q1',
-        'SI-20C1:PS-QS', 'SI-20C2:PS-Q4',
+        'SI-20C1:PS-QS', 'SI-20C2:PS-QS',
         'SI-20C3:PS-Q4', 'SI-20C3:PS-QS',
         'SI-20C4:PS-Q1', 'SI-01M1:PS-QS',
         )
@@ -339,7 +340,7 @@ class DoBBA(_BaseClass):
             if i < self.params.sofb_maxcorriter:
                 sofb.cmd_calccorr()
                 _time.sleep(self.params.wait_sofb)
-                sofb.cmd_applycorr()
+                sofb.cmd_applycorr_all()
                 _time.sleep(self.params.wait_correctors)
         return -1, fmet
 
@@ -494,8 +495,7 @@ class DoBBA(_BaseClass):
     def get_default_quads(model, fam_data):
         """."""
         quads_idx = _dcopy(fam_data['QN']['index'])
-        qs_idx = [idx for idx in fam_data['QS']['index']
-                  if not model[idx[0]].fam_name.startswith('FC2')]
+        qs_idx = [idx for idx in fam_data['QS']['index']]
         quads_idx.extend(qs_idx)
         quads_idx = _np.array([idx[len(idx)//2] for idx in quads_idx])
         quads_pos = _np.array(_pyacc.lattice.find_spos(model, quads_idx))
@@ -513,7 +513,7 @@ class DoBBA(_BaseClass):
             idc = fam_data[name]['index'].index([qidx, ])
             sub = fam_data[name]['subsection'][idc]
             inst = fam_data[name]['instance'][idc]
-            name = 'QS' if name.startswith('S') else name
+            name = 'QS' if name.startswith(('S', 'F')) else name
             qname = 'SI-{0:s}:PS-{1:s}-{2:s}'.format(sub, name, inst)
             qnames.append(qname.strip('-'))
 
@@ -1173,7 +1173,7 @@ class DoBBA(_BaseClass):
         if sofb.autocorrsts:
             loop_on = True
             print('SOFB feedback is enable, disabling it...')
-            sofb.cmd_autocorr_turn_off()
+            sofb.cmd_turn_off_autocorr()
 
         for i, bpm in enumerate(self._bpms2dobba):
             if self._stopevt.is_set():
@@ -1184,21 +1184,22 @@ class DoBBA(_BaseClass):
 
         if loop_on:
             print('SOFB feedback was enable, restoring original state...')
-            sofb.cmd_autocorr_turn_on()
+            sofb.cmd_turn_on_autocorr()
 
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)
         dtime = dtime.split('.')[0]
         print('finished! Elapsed time {:s}'.format(dtime))
-        
+
     def _dobba_single_bpm(self, bpmname):
         """."""
+        idx = self.data['bpmnames'].index(bpmname)
+
         tini = _datetime.datetime.fromtimestamp(_time.time())
         strtini = tini.strftime('%Hh%Mm%Ss')
         print('{:s} --> Doing BBA for BPM {:03d}: {:s}'.format(
             strtini, idx, bpmname))
 
-        idx = self.data['bpmnames'].index(bpmname)
         quadname = self.data['quadnames'][idx]
         x0 = self.data['scancenterx'][idx]
         y0 = self.data['scancentery'][idx]
@@ -1235,9 +1236,9 @@ class DoBBA(_BaseClass):
         dorbsx = self._calc_dorb_scan(self.params.deltaorbx, nrsteps//2)
         dorbsy = self._calc_dorb_scan(self.params.deltaorby, nrsteps//2)
 
-        refx0, refy0 = sofb.refx, sofb.refy
-        enblx0, enbly0 = sofb.bpmxenbl, sofb.bpmyenbl
-        ch0, cv0 = sofb.kickch, sofb.kickcv
+        refx0, refy0 = sofb.refx.copy(), sofb.refy.copy()
+        enblx0, enbly0 = sofb.bpmxenbl.copy(), sofb.bpmyenbl.copy()
+        ch0, cv0 = sofb.kickch.copy(), sofb.kickcv.copy()
 
         enblx, enbly = 0*enblx0, 0*enbly0
         enblx[idx], enbly[idx] = 1, 1
@@ -1293,19 +1294,19 @@ class DoBBA(_BaseClass):
         sofb.bpmxenbl, sofb.bpmyenbl = enblx0, enbly0
 
         # restore correctors gently to do not kill the beam.
-        factch, factcv = sofb.deltafactorch, sofb.deltafactorcv
+        factch, factcv = sofb.mancorrgainch, sofb.mancorrgaincv
         chn, cvn = sofb.kickch, sofb.kickcv
         dch, dcv = ch0 - chn, cv0 - cvn
         sofb.deltakickch, sofb.deltakickcv = dch, dcv
         nrsteps = _np.ceil(max(_np.abs(dch).max(), _np.abs(dcv).max()) / 1.0)
         for i in range(int(nrsteps)):
-            sofb.deltafactorch = (i+1)/nrsteps * 100
-            sofb.deltafactorcv = (i+1)/nrsteps * 100
+            sofb.mancorrgainch = (i+1)/nrsteps * 100
+            sofb.mancorrgaincv = (i+1)/nrsteps * 100
             _time.sleep(self.params.wait_sofb)
-            sofb.cmd_applycorr()
+            sofb.cmd_applycorr_all()
             _time.sleep(self.params.wait_correctors)
         sofb.deltakickch, sofb.deltakickcv = dch*0, dcv*0
-        sofb.deltafactorch, sofb.deltafactorcv = factch, factcv
+        sofb.mancorrgainch, sofb.mancorrgaincv = factch, factcv
 
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)

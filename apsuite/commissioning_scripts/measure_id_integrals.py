@@ -4,7 +4,7 @@ from collections import namedtuple as _namedtuple
 from copy import deepcopy as _dcopy
 import time as _time
 import numpy as _np
-from siriuspy.devices import SOFB, APU, Tune
+from siriuspy.devices import SOFB, APU, Tune, CurrInfoSI
 from apsuite.optics_analysis.tune_correction import TuneCorr
 from siriuspy.namesys import SiriusPVName as _SiriusPVName
 
@@ -25,6 +25,8 @@ class IDParams:
             self.phase_speed = 0.5
             self.sofb_mode = sofb.data.SOFBMode._fields[
                 sofb.data.SOFBMode.SlowOrb]
+            self.sofb_rate = sofb.trigchannel
+            self.sofb_nr_samples_post = sofb.trigsample
             self.sofb_buffer = 20
             self.wait_sofb = 1
             self.wait_to_move = 0
@@ -80,7 +82,7 @@ class MeasIDIntegral(BaseClass):
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
         self.devices['study_event'] = PV('AS-RaMO:TI-EVG:StudyExtTrig-Cmd')
-        self.devices['current_info'] = PV('SI-Glob:AP-CurrInfo:Current-Mon')
+        self.devices['current_info'] = CurrInfoSI(CurrInfoSI.DEVICES.SI)
         self.params = IDParams(phases, self.meas_type, self.devices['sofb'])
         self.id_idx = self._get_id_idx()
         self.bpm_idx = _np.array(self.famdata['BPM']['index']).flatten()
@@ -166,7 +168,7 @@ class MeasIDIntegral(BaseClass):
 
     def get_stored_curr(self):
         """."""
-        return self.devices['current_info'].value
+        return self.devices['current_info'].current
 
     def apu_move(self, phase, phase_speed):
         """."""
@@ -401,9 +403,9 @@ class MeasIDIntegral(BaseClass):
     def calc_field_integrals(self):
         """."""
         meas = self.data['measure']
-        phs = meas['phases']
+        phs = meas['phase']
         npts = len(phs)
-        orbs = meas['orbits']
+        orbs = meas['orbit']
 
         if phs[0] > phs[-1]:
             orbref = orbs[0]
