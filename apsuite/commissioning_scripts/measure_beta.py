@@ -2,8 +2,10 @@
 import time as _time
 from threading import Thread as _Thread, Event as _Event
 import math
-
 from copy import deepcopy as _dcopy
+from collections import namedtuple as _namedtuple
+from siriuspy.namesys import SiriusPVName as _PVName
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as mpl_gs
@@ -17,6 +19,40 @@ from .base import BaseClass
 
 class BetaParams:
     """."""
+
+    DELTA_CURRENT = {
+        'QDA': 1.37,
+        'QDB1': 1.40,
+        'QDP1': 1.40,
+        'QDB2': 1.48,
+        'QDP2': 1.48,
+
+        'QFA': 0.88,
+        'Q1': 0.86,
+        'Q2': 0.95,
+        'Q3': 0.86,
+        'Q4': 0.93,
+
+        'QFB': 0.59,
+        'QFP': 0.59,
+        }
+
+    RELATIVE_DELTA_KL = {
+        'QDA': 3.07487/100,
+        'QDB1': 2.05806/100,
+        'QDP1': 2.05806/100,
+        'QDB2': 1.49222/100,
+        'QDP2': 1.49222/100,
+
+        'QFA': 0.506614/100,
+        'Q1': 0.69606/100,
+        'Q2': 0.461894/100,
+        'Q3': 0.60985/100,
+        'Q4': 0.53178/100,
+
+        'QFB': 0.326264/100,
+        'QFP': 0.326264/100,
+        }
 
     def __init__(self):
         """."""
@@ -53,22 +89,30 @@ class BetaParams:
 class MeasBeta(BaseClass):
     """."""
 
-    def __init__(self, model, famdata=None):
+    METHODS = _namedtuple('Methods', ['Analytic', 'Numeric'])(0, 1)
+    MEASUREMENT = _namedtuple('Process', ['Current', 'KL'])(0, 1)
+    ANALYSIS = _namedtuple('Analysis', ['IMA', 'Excdata'])(0, 1)
+    _DEF_TIMEOUT = 60 * 60  # [s]
+
+    def __init__(
+            self, model, famdata=None, is_online=True,
+            meas_method=None, calc_method=None, anly_method=None):
         """."""
         super().__init__()
+        self.is_online = is_online
         self.quads_betax = []
         self.quads_betay = []
         self.params = BetaParams()
-        self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+        self._calc_method = MeasBeta.METHODS.Numeric
+        self._meas_method = MeasBeta.MEASUREMENT.Current
+        self._anly_method = MeasBeta.ANALYSIS.Excdata
+        if self.is_online:
+            self.devices['tune'] = Tune(Tune.DEVICES.SI)
+            self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
         self.data['quadnames'] = list()
         self.data['cycling'] = dict()
-        self.data['betax_in'] = dict()
-        self.data['betay_in'] = dict()
-        self.data['betax_mid'] = dict()
-        self.data['betay_mid'] = dict()
-        self.data['betax_out'] = dict()
-        self.data['betay_out'] = dict()
+        self.data['betax_int'] = dict()
+        self.data['betay_int'] = dict()
         self.data['measure'] = dict()
         self.data['tunex_ref'] = 0
         self.data['tuney_ref'] = 0
@@ -77,9 +121,70 @@ class MeasBeta(BaseClass):
         self._stopevt = _Event()
         self._thread = _Thread(target=self._meas_beta, daemon=True)
         self.model = model
+        self.meas_method = meas_method
+        self.calc_method = calc_method
+        self.anly_method = anly_method
         self.famdata = famdata or si.get_family_data(model)
         self._initialize_data()
-        self._connect_to_objects()
+        if self.is_online:
+            self._connect_to_objects()
+
+    @property
+    def calc_method_str(self):
+        """."""
+        return MeasBeta.METHODS._fields[self._calc_method]
+
+    @property
+    def calc_method(self):
+        """."""
+        return self._calc_method
+
+    @calc_method.setter
+    def calc_method(self, value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            self._calc_method = int(value in MeasBeta.METHODS._fields[1])
+        elif int(value) in MeasBeta.METHODS:
+            self._calc_method = int(value)
+
+    @property
+    def meas_method_str(self):
+        """."""
+        return MeasBeta.MEASUREMENT._fields[self._meas_method]
+
+    @property
+    def meas_method(self):
+        """."""
+        return self._meas_method
+
+    @meas_method.setter
+    def meas_method(self, value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            self._meas_method = int(value in MeasBeta.MEASUREMENT._fields[1])
+        elif int(value) in MeasBeta.MEASUREMENT:
+            self._meas_method = int(value)
+
+    @property
+    def anly_method_str(self):
+        """."""
+        return MeasBeta.ANALYSIS._fields[self._anly_method]
+
+    @property
+    def anly_method(self):
+        """."""
+        return self._anly_method
+
+    @anly_method.setter
+    def anly_method(self, value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            self._anly_method = int(value in MeasBeta.ANALYSIS._fields[1])
+        elif int(value) in MeasBeta.ANALYSIS:
+            self._anly_method = int(value)
 
     def start(self):
         """."""
@@ -97,6 +202,18 @@ class MeasBeta(BaseClass):
     def ismeasuring(self):
         """."""
         return self._thread.is_alive()
+
+    def wait(self, timeout=None):
+        """."""
+        timeout = timeout or MeasBeta._DEF_TIMEOUT
+        interval = 1  # [s]
+        ntrials = int(timeout/interval)
+        for _ in range(ntrials):
+            if not self.ismeasuring:
+                break
+            _time.sleep(interval)
+        else:
+            print('WARN: Timed out waiting beta measurement.')
 
     @property
     def measuredquads(self):
@@ -125,32 +242,51 @@ class MeasBeta(BaseClass):
     def _initialize_data(self):
         """."""
         quadnames, quadsidx = MeasBeta.get_quads(self.model, self.famdata)
-        twi, *_ = pyaccel.optics.calc_twiss(self.model, indices='open')
-        for idx, qname in zip(quadsidx, quadnames):
-            L = self.model[idx].length/2
-            K = self.model[idx].K
-            Kr = np.sqrt(abs(K))
-            Cx = math.cos(Kr*L) if K > 0 else math.cosh(Kr*L)
-            Sx = math.sin(Kr*L) if K > 0 else math.sinh(Kr*L)
-            Sx = (Sx / Kr) if Kr > 0 else L
-            Cy = math.cos(Kr*L) if K < 0 else math.cosh(Kr*L)
-            Sy = math.sin(Kr*L) if K < 0 else math.sinh(Kr*L)
-            Sy = (Sy / Kr) if Kr > 0 else L
-            bxi = twi.betax[idx]
-            byi = twi.betay[idx]
-            axi = twi.alphax[idx]
-            ayi = twi.alphay[idx]
-            gxi = (1+axi*axi)/bxi
-            gyi = (1+ayi*ayi)/byi
-            bxm = Cx*Cx*bxi - 2*Cx*Sx*axi + Sx*Sx*gxi
-            bym = Cy*Cy*byi - 2*Cy*Sy*ayi + Sy*Sy*gyi
-            self.data['betax_in'][qname] = bxi
-            self.data['betay_in'][qname] = byi
-            self.data['betax_mid'][qname] = bxm
-            self.data['betay_mid'][qname] = bym
-            self.data['betax_out'][qname] = twi.betax[idx+1]
-            self.data['betay_out'][qname] = twi.betay[idx+1]
         self.data['quadnames'] = quadnames
+        twi, *_ = pyaccel.optics.calc_twiss(self.model, indices='open')
+
+        if self.calc_method == MeasBeta.METHODS.Analytic:
+            for idx, qname in zip(quadsidx, quadnames):
+                L = self.model[idx].length
+                K = self.model[idx].K
+                Kr = np.sqrt(abs(K))
+                bxi = twi.betax[idx]
+                byi = twi.betay[idx]
+                axi = twi.alphax[idx]
+                ayi = twi.alphay[idx]
+                gxi = (1+axi*axi)/bxi
+                gyi = (1+ayi*ayi)/byi
+                self.data['betax_int'][qname] = self._calc_beta_integral(
+                    K, L, bxi, axi, gxi)
+                self.data['betay_int'][qname] = self._calc_beta_integral(
+                    -K, L, byi, ayi, gyi)
+        elif self.calc_method == MeasBeta.METHODS.Numeric:
+            nux0, nuy0, *_ = pyaccel.optics.get_frac_tunes(self.model)
+            dkl = self.params.quad_deltakl
+            for idx, qname in zip(quadsidx, quadnames):
+                korig = self.model[idx].KL
+                if 'QF' in self.model[idx].fam_name:
+                    deltakl = +dkl
+                else:
+                    deltakl = -dkl
+                self.model[idx].KL = korig + deltakl
+                nuxp, nuyp, *_ = pyaccel.optics.get_frac_tunes(self.model)
+                dnux = nuxp - nux0
+                dnuy = nuyp - nuy0
+                self.data['betax_int'][qname] = +4 * np.pi * dnux/deltakl
+                self.data['betay_int'][qname] = -4 * np.pi * dnuy/deltakl
+                self.model[idx].KL = korig
+
+    @staticmethod
+    def _calc_beta_integral(K, L, beta0, alpha0, gamma0):
+        Kr = np.sqrt(abs(K))
+        fac1 = math.sin(2*Kr*L) if K > 0 else math.sinh(2*Kr*L)
+        fac2 = (math.sin(Kr*L))**2 if K > 0 else \
+            (math.sinh(Kr*L))**2
+        beta_int = (beta0 + gamma0/K)/2
+        beta_int += fac1/Kr/L/4 * (beta0 - gamma0/K)
+        beta_int -= alpha0*fac2/abs(K)/L
+        return beta_int
 
     def _meas_beta(self):
         """."""
@@ -220,12 +356,13 @@ class MeasBeta(BaseClass):
         print('recovering tune...')
         tunex0 = meas['tunex_ini'][0]
         tuney0 = meas['tuney_ini'][0]
-        deltakl = meas['delta_kl']
+        datameas = self.data['measure'][quadname]
+        dkl = self._select_deltakl(datameas)
 
         dnux = meas['tunex_pos'][-1] - meas['tunex_ini'][-1]
         dnuy = meas['tuney_pos'][-1] - meas['tuney_ini'][-1]
-        cxx = dnux/deltakl
-        cyy = dnuy/deltakl
+        cxx = dnux/dkl
+        cyy = dnuy/dkl
 
         _time.sleep(self.params.wait_tune)
         tunex_now = self.devices['tune'].tunex
@@ -247,7 +384,7 @@ class MeasBeta(BaseClass):
             # minimization of squares [cx cy]*dkl = [dtunex dtuney]
             dkl = (cxx * dtunex + cyy * dtuney)/(cxx*cxx + cyy*cyy)
 
-            if np.abs(dkl) > np.abs(deltakl):
+            if np.abs(dkl) > np.abs(dkl):
                 print('   deltakl calculated is too big!')
                 return False
 
@@ -278,7 +415,12 @@ class MeasBeta(BaseClass):
             return
 
         deltakl = self.params.quad_deltakl
-        korig = quad.strength
+        curr_orig = quad.current
+        kl_orig = quad.strength
+        quadname = _PVName(quadname)
+        dcurr = self.params.DELTA_CURRENT[quadname.dev]
+        dkl_ima = self.params.RELATIVE_DELTA_KL[quadname.dev] * kl_orig
+
         cycling_curve = MeasBeta.get_cycling_curve()
 
         # measurement always increases the power supply current
@@ -303,9 +445,16 @@ class MeasBeta(BaseClass):
             tunex_wfm_ini.append(tune.tunex_wfm)
             tuney_wfm_ini.append(tune.tuney_wfm)
             for j, fac in enumerate(cycling_curve):
-                quad.strength = korig + deltakl*fac
+                if self.meas_method == self.MEASUREMENT.Current:
+                    quad.current = curr_orig + dcurr*fac
+                elif self.meas_method == self.MEASUREMENT.KL:
+                    quad.strength = kl_orig + deltakl*fac
                 _time.sleep(self.params.wait_quadrupole)
                 if not j:
+                    kl_new = quad.strength
+                    curr_new = quad.current
+                    dkl_exc = kl_new - kl_orig
+                    dcurr = curr_new - curr_orig
                     if 'QD' in quadname:
                         print(' -dk ', end='')
                     else:
@@ -333,14 +482,27 @@ class MeasBeta(BaseClass):
         meas['tunex_wfm_pos'] = np.array(tunex_wfm_pos)
         meas['tuney_wfm_pos'] = np.array(tuney_wfm_pos)
         meas['delta_kl'] = deltakl
+        meas['dkl_ima'] = dkl_ima
+        meas['dkl_exc'] = dkl_exc
+        meas['dcurr'] = dcurr
 
         if self.params.recover_tune:
             if self._recover_tune(meas, quadname):
                 print('tune recovered!')
             else:
-                print('cannot recover tune for :{:s}'.format(quadname))
+                print('could not recover tune for :{:s}'.format(quadname))
 
         self.data['measure'][quadname] = meas
+
+    def _select_deltakl(self, datameas):
+        if self.meas_method == self.MEASUREMENT.Current:
+            if self.anly_method == self.ANALYSIS.IMA:
+                dkl = datameas['dkl_ima']
+            elif self.anly_method == self.ANALYSIS.Excdata:
+                dkl = datameas['dkl_exc']
+        if self.meas_method == self.MEASUREMENT.KL:
+            dkl = datameas['delta_kl']
+        return dkl
 
     def process_data(self, mode='pos', discardpoints=None):
         """."""
@@ -348,7 +510,8 @@ class MeasBeta(BaseClass):
             self.analysis[quad] = self.calc_beta(
                 quad, mode=mode, discardpoints=discardpoints)
 
-    def calc_beta(self, quadname, mode='pos', discardpoints=None):
+    def calc_beta(
+            self, quadname, mode='pos', discardpoints=None):
         """."""
         anl = dict()
         datameas = self.data['measure'][quadname]
@@ -368,7 +531,7 @@ class MeasBeta(BaseClass):
             usepts = set(usepts) - set(discardpoints)
         usepts = sorted(usepts)
 
-        dkl = datameas['delta_kl']
+        dkl = self._select_deltakl(datameas)
         anl['betasx'] = +4 * np.pi * dnux[usepts] / dkl
         anl['betasy'] = -4 * np.pi * dnuy[usepts] / dkl
         anl['betax_ave'] = np.mean(anl['betasx'])
@@ -391,7 +554,7 @@ class MeasBeta(BaseClass):
             qnames.append(qname.strip('-'))
         return qnames, quads_idx
 
-    def plot_results(self, quads=None, title=''):
+    def plot_results(self, quads=None, title='', scale=1):
         """."""
         fig = plt.figure(figsize=(9, 7))
         grids = mpl_gs.GridSpec(ncols=1, nrows=2, figure=fig)
@@ -412,19 +575,19 @@ class MeasBeta(BaseClass):
             if quad not in self.analysis:
                 continue
             indcs.append(self.data['quadnames'].index(quad))
-            nom_bx.append(self.data['betax_mid'][quad])
-            nom_by.append(self.data['betay_mid'][quad])
+            nom_bx.append(self.data['betax_int'][quad])
+            nom_by.append(self.data['betay_int'][quad])
             mes_bx.append(self.analysis[quad]['betasx'])
             mes_by.append(self.analysis[quad]['betasy'])
             bx_ave.append(self.analysis[quad]['betax_ave'])
             by_ave.append(self.analysis[quad]['betay_ave'])
 
-        ax1.plot(indcs, bx_ave, '--bx')
-        ax1.plot(indcs, nom_bx, '-bo')
-        ax1.plot(indcs, mes_bx, '.b')
-        ax2.plot(indcs, by_ave, '--rx')
-        ax2.plot(indcs, nom_by, '-ro')
-        ax2.plot(indcs, mes_by, '.r')
+        ax1.plot(indcs, np.array(bx_ave)*scale, '--bx')
+        ax1.plot(indcs, nom_bx, '.-b')
+        ax1.plot(indcs, np.array(mes_bx)*scale, '.b')
+        ax2.plot(indcs, np.array(by_ave)*scale, '--rx')
+        ax2.plot(indcs, nom_by, '.-r')
+        ax2.plot(indcs, np.array(mes_by)*scale, '.r')
 
         ax1.set_ylabel(r'$\beta_x$ [m]')
         ax2.set_ylabel(r'$\beta_y$ [m]')

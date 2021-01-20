@@ -132,7 +132,7 @@ class BaseCorr():
         invmat = -1 * np.dot(np.dot(vmat.T, ismat), umat.T)
         param_new = self._get_parameter(model)
         dparam = param_new - goal_parameters
-        if np.sum(dparam*dparam) < tol:
+        if np.sqrt(np.mean(dparam*dparam)) < tol:
             return BaseCorr.CORR_STATUS.Sucess
 
         for _ in range(nr_max):
@@ -140,7 +140,7 @@ class BaseCorr():
             self._add_delta_stren(dstren, model=model)
             param_new = self._get_parameter(model)
             dparam = param_new - goal_parameters
-            if np.sum(dparam*dparam) < tol:
+            if np.sqrt(np.mean(dparam*dparam)) < tol:
                 break
         else:
             return BaseCorr.CORR_STATUS.Fail
