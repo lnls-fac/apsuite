@@ -735,7 +735,7 @@ class LOCO:
                         self._jloco.T, res))
             elif self.config.inv_method == _LOCOConfig.INVERSION.Normal:
                 param_new = _np.dot(self._jloco_inv, res)
-            param_new = param_new.flatten()
+            param_new = param_new.ravel()
             model_new, matrix_new = self._calc_model_matrix(param_new)
             chi_new = self.calc_chi(matrix_new)
             print('chi: {0:.6f} um'.format(chi_new))
@@ -1008,7 +1008,7 @@ class LOCO:
             self._recalculate_inv_jloco(case='bad')
             res = self._calc_residue()
             param_new = _np.dot(self._jloco_inv, _np.dot(self._jloco.T, res))
-            param_new = param_new.flatten()
+            param_new = param_new.ravel()
             model_new, matrix_new = self._calc_model_matrix(param_new)
             chi_new = self.calc_chi(matrix_new)
             print('chi: {0:.6f} um'.format(chi_new))

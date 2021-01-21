@@ -54,8 +54,8 @@ class OrbitCorr():
             cod = pyaccel.tracking.find_orbit4(model, indices='open')
         elif self.dim == '6d':
             cod = pyaccel.tracking.find_orbit6(model, indices='open')
-        codx = cod[0, self.bpm_idx].flatten()
-        cody = cod[2, self.bpm_idx].flatten()
+        codx = cod[0, self.bpm_idx].ravel()
+        cody = cod[2, self.bpm_idx].ravel()
         res = np.hstack((codx, cody))
         return res
 
@@ -117,8 +117,8 @@ class OrbitCorr():
             str_above = '\n'
             str_above += 'HKick > MaxHKick at CHs: {0:s} \n'
             str_above += 'VKick > MaxVKick at CVs: {1:s}'
-            xlist = str(np.argwhere(kicksx_above).flatten())
-            ylist = str(np.argwhere(kicksy_above).flatten())
+            xlist = str(np.argwhere(kicksx_above).ravel())
+            ylist = str(np.argwhere(kicksy_above).ravel())
             raise ValueError(str_above.format(xlist, ylist))
 
     @staticmethod
