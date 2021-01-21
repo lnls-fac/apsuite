@@ -371,7 +371,7 @@ class LOCOConfig:
             gain_bpm=self.gain_bpm,
             roll_bpm=self.roll_bpm,
             gain_corr=self.gain_corr)
-        self.vector = self.matrix.flatten()
+        self.vector = self.matrix.ravel()
 
     def update_weight(self):
         """."""
@@ -461,8 +461,8 @@ class LOCOConfig:
                     self.skew_quad_indices += self.respm.fam_data[
                         fam_name]['index']
                 idx_all = _np.array(
-                    self.respm.fam_data['QS']['index']).flatten()
-                idx_sub = _np.array(self.skew_quad_indices).flatten()
+                    self.respm.fam_data['QS']['index']).ravel()
+                idx_sub = _np.array(self.skew_quad_indices).ravel()
                 self.skew_quad_indices = list(set(idx_sub) & set(idx_all))
                 self.skew_quad_indices.sort()
 
