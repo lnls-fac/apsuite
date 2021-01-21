@@ -98,9 +98,9 @@ class CouplingCorr():
             dispy *= (self._nch + self._ncv)*10
         mxy = orbmat[:self._nbpm, self._nch:-1]
         myx = orbmat[self._nbpm:, :self._nch]
-        res = mxy.flatten()
-        res = np.hstack((res, myx.flatten()))
-        res = np.hstack((res, dispy.flatten()))
+        res = mxy.ravel()
+        res = np.hstack((res, myx.ravel()))
+        res = np.hstack((res, dispy.ravel()))
         return res
 
     def get_ksl(self, model=None, skewidx=None):

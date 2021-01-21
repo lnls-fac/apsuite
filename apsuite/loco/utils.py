@@ -226,7 +226,7 @@ class LOCOUtils:
         for num in range(shape0):
             kron = LOCOUtils.kronecker(num, num, shape0)
             dbmat = _np.dot(r_alpha, kron)
-            dmdg_bpm[:, num] = _np.dot(dbmat, matrix).flatten()
+            dmdg_bpm[:, num] = _np.dot(dbmat, matrix).ravel()
 
         dmdalpha_bpm = _np.zeros((shape0*shape1, nbpm))
         for idx in range(shape0//2):
@@ -234,12 +234,12 @@ class LOCOUtils:
             kron = _np.tile(kron, (2, 2))
             drmat = _np.dot(kron, dr_alpha)
             dbmat = drmat * g_bpm[:, None]
-            dmdalpha_bpm[:, idx] = _np.dot(dbmat, matrix).flatten()
+            dmdalpha_bpm[:, idx] = _np.dot(dbmat, matrix).ravel()
 
         dmdg_corr = _np.zeros((shape0*shape1, ncorr))
         for idx in range(ncorr):
             kron = LOCOUtils.kronecker(idx, idx, shape1)
-            dmdg_corr[:, idx] = _np.dot(matrix, kron).flatten()
+            dmdg_corr[:, idx] = _np.dot(matrix, kron).ravel()
         return dmdg_bpm, dmdalpha_bpm, dmdg_corr
 
     @staticmethod
@@ -271,7 +271,7 @@ class LOCOUtils:
             matrix_this = LOCOUtils.respm_calc(
                 model_this, config.respm, config.use_dispersion)
             dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_K
-            kmatrix[:, idx] = dmatrix.flatten()
+            kmatrix[:, idx] = dmatrix.ravel()
             set_quad_kdelta(model_this, idx_set, kvalues[idx], 0)
         return kmatrix
 
@@ -304,7 +304,7 @@ class LOCOUtils:
             matrix_this = LOCOUtils.respm_calc(
                 model_this, config.respm, config.use_dispersion)
             dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_K
-            dip_kmatrix[:, idx] = dmatrix.flatten()
+            dip_kmatrix[:, idx] = dmatrix.ravel()
             set_quad_kdelta(model_this, idx_set, dip_kvalues[idx], 0)
         return dip_kmatrix
 
@@ -328,7 +328,7 @@ class LOCOUtils:
             matrix_this = LOCOUtils.respm_calc(
                 model_this, config.respm, config.use_dispersion)
             dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_K
-            sn_kmatrix[:, idx] = dmatrix.flatten()
+            sn_kmatrix[:, idx] = dmatrix.ravel()
             set_quad_kdelta(model_this, idx_set, sn_kvalues[idx], 0)
         return sn_kmatrix
 
@@ -352,7 +352,7 @@ class LOCOUtils:
             matrix_this = LOCOUtils.respm_calc(
                 model_this, config.respm, config.use_dispersion)
             dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_KS
-            ksmatrix[:, idx] = dmatrix.flatten()
+            ksmatrix[:, idx] = dmatrix.ravel()
             set_quad_ksdelta(model_this, idx_set, ksvalues[idx], 0)
         return ksmatrix
 
@@ -377,7 +377,7 @@ class LOCOUtils:
             matrix_this = LOCOUtils.respm_calc(
                 model_this, config.respm, config.use_dispersion)
             dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_KS
-            dip_ksmatrix[:, idx] = dmatrix.flatten()
+            dip_ksmatrix[:, idx] = dmatrix.ravel()
             set_quad_ksdelta(model_this, idx_set, dip_ksvalues[idx], 0)
         return dip_ksmatrix
 
@@ -401,7 +401,7 @@ class LOCOUtils:
             matrix_this = LOCOUtils.respm_calc(
                 model_this, config.respm, config.use_dispersion)
             dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_KS
-            sn_ksmatrix[:, idx] = dmatrix.flatten()
+            sn_ksmatrix[:, idx] = dmatrix.ravel()
             set_quad_ksdelta(model_this, idx_set, sn_ksvalues[idx], 0)
         return sn_ksmatrix
 
@@ -429,7 +429,7 @@ class LOCOUtils:
         matrix_this = LOCOUtils.respm_calc(
             model_this, config.respm, config.use_dispersion)
         dmatrix = (matrix_this - matrix_nominal) / delta_kick / nmags
-        dip_kick_matrix[:, 0] = dmatrix.flatten()
+        dip_kick_matrix[:, 0] = dmatrix.ravel()
 
         for idx, idx_set in enumerate(dip_indices):
             set_dip_kick(model_this, idx_set, dip_kick_values[idx], 0)
@@ -446,7 +446,7 @@ class LOCOUtils:
             energy_shift[cnum] = 1
             matrix_shift = config.measured_dispersion[:, None] * \
                 energy_shift[None, :]
-            dm_energy_shift[:, cnum] = matrix_shift.flatten()
+            dm_energy_shift[:, cnum] = matrix_shift.ravel()
             energy_shift[cnum] = 0
         return dm_energy_shift
 
@@ -481,7 +481,7 @@ class LOCOUtils:
             matrix_this = LOCOUtils.respm_calc(
                 model_this, config.respm, config.use_dispersion)
             dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_KS
-            ksmatrix[:, idx] = dmatrix.flatten()
+            ksmatrix[:, idx] = dmatrix.ravel()
             set_quad_ksdelta(model_this, idx_set, ksvalues[idx], 0)
         return ksmatrix
 
@@ -504,7 +504,7 @@ class LOCOUtils:
                 model_this, config.respm, config.use_dispersion)
             dmatrix = (matrix_this - matrix_nominal)
             dmatrix /= config.DEFAULT_GIRDER_SHIFT
-            gmatrix[:, idx] = dmatrix.flatten()
+            gmatrix[:, idx] = dmatrix.ravel()
             ds_shift[idx] = 0
             LOCOUtils.set_girders_long_shift(
                 model_this, gindices, ds_shift)
@@ -619,7 +619,7 @@ class LOCOUtils:
     @staticmethod
     def jloco_apply_weight(jloco, weight_bpm, weight_corr):
         """."""
-        weight = (weight_bpm[:, None] * weight_corr[None, :]).flatten()
+        weight = (weight_bpm[:, None] * weight_corr[None, :]).ravel()
         return weight[:, None] * jloco
 
     @staticmethod
