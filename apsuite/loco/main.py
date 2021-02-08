@@ -529,8 +529,6 @@ class LOCO:
                 self._jloco, (2*self.config.nr_bpm, self.config.nr_corr+1, -1))
             jloco_temp[:, -1, :] *= 0
 
-       #  _np.savetxt('jloco_calc.txt', self._jloco)
-
         if self.config.constraint_deltak_total:
             self.calc_jloco_deltak_constraint()
             self._jloco = _np.vstack((self._jloco, self._deltak_mat))
@@ -759,7 +757,7 @@ class LOCO:
                     if self.config.min_method == \
                             _LOCOConfig.MINIMIZATION.LevenbergMarquardt:
                         if not self.config.fixed_lambda:
-                           self._recalculate_inv_jloco(case='good')
+                            self._recalculate_inv_jloco(case='good')
             else:
                 # print('recalculating jloco...')
                 # self.update_jloco()
