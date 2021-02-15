@@ -16,6 +16,10 @@ class OrbRespmat():
         self.model = model
         self.acc = acc
         if self.acc == 'BO':
+            # shift booster to start on injection point
+            inj = pyaccel.lattice.find_indices(
+                self.model, 'fam_name', 'InjSept')
+            self.model = pyaccel.lattice.shift(self.model, inj[0])
             self.fam_data = bo.families.get_family_data(self.model)
         elif self.acc == 'SI':
             self.fam_data = si.families.get_family_data(self.model)
@@ -90,7 +94,7 @@ class OrbRespmat():
                 respmat.append(respy)
 
         if self.acc == 'SI':
-            rfline = self._calc_rfline()
+            rfline = self._calc_rfline() * 1e6  # convert m/Hz -> um/Hz
             respmat.append(rfline)
         respmat = np.array(respmat).T
 
@@ -157,18 +161,22 @@ class TrajRespmat():
         self.acc = acc
         self.nturns = nturns
         if acc == 'TB':
-            self.fam_data = tb.get_family_data(model)
+            self.fam_data = tb.get_family_data(self.model)
         elif acc == 'BO':
-            self.fam_data = bo.get_family_data(model)
+            # shift booster to start on injection point
+            inj = pyaccel.lattice.find_indices(
+                self.model, 'fam_name', 'InjSept')
+            self.model = pyaccel.lattice.shift(self.model, inj[0])
+            self.fam_data = bo.get_family_data(self.model)
         elif acc == 'TS':
-            self.fam_data = ts.get_family_data(model)
+            self.fam_data = ts.get_family_data(self.model)
         elif acc == 'SI':
-            self.fam_data = si.get_family_data(model)
+            self.fam_data = si.get_family_data(self.model)
 
         self.ch_idx = self.fam_data['CH']['index']
         if acc == 'TS':
             ejesept = pyaccel.lattice.find_indices(
-                model, 'fam_name', 'EjeSeptG')
+                self.model, 'fam_name', 'EjeSeptG')
             segs = len(ejesept)
             self.ch_idx.append([ejesept[segs//2]])
             self.ch_idx = sorted(self.ch_idx)
@@ -220,6 +228,9 @@ class TrajRespmat():
             # RF column set as zero for trajectory correction in SI
             respmat.append(np.zeros(2*len(self.bpm_idx)))
         respmat = np.array(respmat).T
+
+        if self.nturns > 1:
+            respmat = self._calc_nturns_respm(respmat)
         return respmat
 
     def _get_respmat_line(self, rc_mat, rb_mat, corr, length,
@@ -257,3 +268,17 @@ class TrajRespmat():
         respyy[large] = rcb_mat[:, 2, 3]
         respy = np.hstack([respxy, respyy])
         return respx, respy
+
+    def _calc_nturns_respm(self, respmat):
+        """."""
+        hshape = respmat.shape[0]//2
+        respmx = respmat[:hshape, :]
+        respmy = respmat[hshape:, :]
+        matx = respmx.copy()
+        maty = respmy.copy()
+        nturns = self.nturns
+        nbpm = len(self.bpm_idx) // nturns
+        for iturn in range(1, nturns):
+            matx[iturn*nbpm:, :] += respmx[:(nturns - iturn)*nbpm, :]
+            maty[iturn*nbpm:, :] += respmy[:(nturns - iturn)*nbpm, :]
+        return np.vstack((matx, maty))
