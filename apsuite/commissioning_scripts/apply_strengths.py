@@ -93,7 +93,6 @@ class _Utils(_BaseClass):
             print('{:17s}: {:9.6f}  {:9.6f}  {:9.6f}%'.format(
                 self.devices[mag].devname, self.devices[mag].strength,
                 stren, diff[-1]*100))
-        print()
 
     def _print_strengths_to_be_implemented(
             self, percentage, magnets, init_strength, implem_strength):
@@ -110,7 +109,7 @@ class _Utils(_BaseClass):
         """."""
         for mag, stren in zip(magnets, strengths):
             self.devices[mag].strength = stren
-            print('\n applied!')
+        print('applied!')
 
     def _create_devices(self, devices_names):
         """."""
@@ -125,6 +124,11 @@ class _Utils(_BaseClass):
             regex = _re.compile(magname_filter)
             mags = [mag for mag in self.devices if regex.match(mag)]
         return mags
+
+    @staticmethod
+    def _get_idx(allidx):
+        # NOTE: This is incorrect for magnets with more than one segment
+        return _np.asarray([idx[0] for idx in allidx])
 
 
 class SetOpticsMode(_Utils):
@@ -164,6 +168,7 @@ class SetOpticsMode(_Utils):
         - acc: TB, BO, TS or SI.
         - optics_mode: available modes in pymodels. If None, default
         optics_mode for the accelerator will be used (optional).
+
         """
         super().__init__()
         self.acc = acc.upper()
@@ -304,9 +309,7 @@ class SISetTrimStrengths(_Utils):
             else:
                 fam = _pymod.si.get_family_data(refmod)
                 magidx = fam['QN']['index']
-                # NOTE: This is incorrect for magnets with more than one
-                # segment
-                magidx = _np.asarray([idx[0] for idx in magidx])
+                magidx = self._get_idx(magidx)
             stren_ref = _np.asarray([refmod[idx].KL for idx in magidx])
             stren_goal = _np.asarray([goal_model[idx].KL for idx in magidx])
         elif magname_filter.lower() == 'skew_quadrupole':
@@ -315,15 +318,13 @@ class SISetTrimStrengths(_Utils):
             else:
                 fam = _pymod.si.get_family_data(refmod)
                 magidx = fam['QS']['index']
-                # NOTE: This is incorrect for magnets with more than one
-                # segment
-                magidx = _np.asarray([idx[0] for idx in magidx])
+                magidx = self._get_idx(magidx)
             stren_ref = _np.asarray([refmod[idx].KsL for idx in magidx])
             stren_goal = _np.asarray([goal_model[idx].KsL for idx in magidx])
-        diff = (stren_goal - stren_ref) * (percentage/100)
-        implem = init + diff
+        diff = stren_goal - stren_ref
+        implem = init + diff * (percentage/100)
         if print_change:
-            self._print_current_status(magnets=mags, goal_strength=stren_goal)
+            self._print_current_status(magnets=mags, goal_strength=init + diff)
             print()
             print('percentage of application: {:5.1f} %'.format(percentage))
             print()
@@ -337,9 +338,8 @@ class SISetTrimStrengths(_Utils):
     # private methods
     def _get_quad_names(self):
         """."""
-        idcs = self.fam_data['QN']['index']
-        # NOTE: This is incorrect for magnets with more than one segment
-        self.quads_idx = _np.asarray([idx[0] for idx in idcs])
+        magidx = self.fam_data['QN']['index']
+        self.quads_idx = self._get_idx(magidx)
 
         for qidx in self.quads_idx:
             name = self.model[qidx].fam_name
@@ -351,9 +351,8 @@ class SISetTrimStrengths(_Utils):
 
     def _get_skewquad_names(self):
         """."""
-        idcs = self.fam_data['QS']['index']
-        # NOTE: This is incorrect for magnets with more than one segment
-        self.skewquads_idx = _np.asarray([idx[0] for idx in idcs])
+        magidx = self.fam_data['QS']['index']
+        self.skewquads_idx = self._get_idx(magidx)
 
         for qidx in self.skewquads_idx:
             name = self.model[qidx].fam_name
