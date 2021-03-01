@@ -247,10 +247,15 @@ class LOCO:
         quadfam = self.config.use_quad_families
         quadfam &= magtype == 'quadrupole'
         quadfam &= is_normal
+
         dipfam = self.config.use_dip_families
         dipfam &= magtype == 'dipole'
         dipfam &= is_normal
-        if dipfam or quadfam:
+
+        sextfam = self.config.use_sext_families
+        sextfam &= magtype == 'sextupole'
+        sextfam &= is_normal
+        if dipfam or quadfam or sextfam:
             jloco = []
             for quad in magstofit:
                 famcols = [
@@ -574,7 +579,10 @@ class LOCO:
             else:
                 nknobs += len(self.config.dip_indices)
         if self.config.fit_sextupoles:
-            nknobs += len(self.config.sext_indices)
+            if self.config.use_sext_families:
+                nknobs += len(self.config.sextupoles_to_fit)
+            else:
+                nknobs += len(self.config.sext_indices)
 
         deltak_mat = _np.zeros((nknobs, ncols))
         for knb in range(nknobs):
@@ -628,9 +636,13 @@ class LOCO:
                 _pyaccel.lattice.get_attribute(
                     self._model, 'KL', self.config.dip_indices))
 
-        self._sext_k_inival = _np.array(
-            _pyaccel.lattice.get_attribute(
-                self._model, 'KL', self.config.sext_indices))
+        if self.config.use_sext_families:
+            self._sext_k_inival = _LOCOUtils.get_quads_strengths(
+                model=self._model, indices=self.config.sext_indices)
+        else:
+            self._sext_k_inival = _np.array(
+                _pyaccel.lattice.get_attribute(
+                    self._model, 'KL', self.config.sext_indices))
 
         if self.config.use_offdiagonal:
             self._quad_ks_inival = _np.array(
@@ -880,9 +892,12 @@ class LOCO:
             # update sextupole delta
             self._sext_k_deltas += param_dict['sextupoles_gradient']
             # update local model
-            set_quad_kdelta = _LOCOUtils.set_quadmag_kdelta
+            if self.config.use_sext_families:
+                set_sext_kdelta = _LOCOUtils.set_quadset_kdelta
+            else:
+                set_sext_kdelta = _LOCOUtils.set_quadmag_kdelta
             for idx, idx_set in enumerate(config.sext_indices):
-                set_quad_kdelta(
+                set_sext_kdelta(
                     model, idx_set,
                     self._sext_k_inival[idx], self._sext_k_deltas[idx])
             one_knob = True
