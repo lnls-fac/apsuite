@@ -48,11 +48,12 @@ class LOCOConfig:
         self.use_dispersion = None
         self.use_offdiagonal = None
         self.use_diagonal = None
-        self.use_quad_families = None
         self.dipoles_to_fit = None
         self.quadrupoles_to_fit = None
         self.skew_quadrupoles_to_fit = None
         self.sextupoles_to_fit = None
+        self.use_quad_families = None
+        self.use_sext_families = None
         self.use_dip_families = None
         self.svd_sel = None
         self.svd_thre = None
@@ -83,6 +84,7 @@ class LOCOConfig:
         self.quad_indices = None
         self.quad_indices_ks = None
         self.sext_indices = None
+        self.sext_indices_ks = None
         self.dip_indices = None
         self.dip_indices_ks = None
         self.b1_indices = None
@@ -113,7 +115,7 @@ class LOCOConfig:
         stg += stmp('Include off-diagonal', self.use_offdiagonal, '')
         stg += stmp('Minimization method', self.min_method_str, '')
         stg += etmp('Lambda LM', self.lambda_lm, '')
-        stg += etmp('Fixed lambda LM', self.fixed_lambda, '')
+        stg += stmp('Fixed lambda LM', self.fixed_lambda, '')
         stg += stmp('Jacobian manipulation', self.inv_method_str, '')
         stg += stmp(
             'Constraint delta KL total', self.constraint_deltak_total, '')
@@ -148,6 +150,7 @@ class LOCOConfig:
 
         stg += stmp('Use dipoles as families', self.use_dip_families, '')
         stg += stmp('Use quadrupoles as families', self.use_quad_families, '')
+        stg += stmp('Use sextupoles as families', self.use_sext_families, '')
 
         stg += stmp('Dipoles skew gradients', self.fit_dipoles_coupling, '')
         stg += stmp(
@@ -270,7 +273,7 @@ class LOCOConfig:
             self.goalmat, self.use_dispersion, self.use_offdiagonal)
         self.update_gain()
         self.update_quad_knobs(self.use_quad_families)
-        self.update_sext_knobs()
+        self.update_sext_knobs(self.use_sext_families)
         self.update_dip_knobs(self.use_dip_families)
         self.update_girder_knobs()
         self.update_skew_quad_knobs()
@@ -432,23 +435,31 @@ class LOCOConfig:
             self.quad_indices.sort()
             self.quad_indices_ks = self.quad_indices
 
-    def update_sext_knobs(self):
+    def update_sext_knobs(self, use_families):
         """."""
         if self.sextupoles_to_fit is None:
-            self.sext_indices = self.respm.fam_data['SN']['index']
+            self.sextupoles_to_fit = self.famname_sextset
         else:
             setsextfit = set(self.sextupoles_to_fit)
             setsextall = set(self.famname_sextset)
             if not setsextfit.issubset(setsextall):
                 raise Exception('invalid sextupole name used to fit!')
-            else:
-                self.sext_indices = []
-                for fam_name in self.sextupoles_to_fit:
-                    self.sext_indices += self.respm.fam_data[fam_name]['index']
-                self.sext_indices.sort()
+        self.use_sext_families = use_families
+        if self.use_sext_families:
+            self.sext_indices = [None] * len(self.sextupoles_to_fit)
+            self.sext_indices_ks = []
+            for idx, fam_name in enumerate(self.sextupoles_to_fit):
+                self.sext_indices[idx] = self.respm.fam_data[fam_name]['index']
+                self.sext_indices_ks += self.sext_indices[idx]
+            self.sext_indices_ks.sort()
+        else:
+            self.sext_indices = []
+            for fam_name in self.sextupoles_to_fit:
+                self.sext_indices += self.respm.fam_data[fam_name]['index']
+            self.sext_indices.sort()
+            self.sext_indices_ks = self.sext_indices
 
     def update_skew_quad_knobs(self):
-        """."""
         """."""
         if self.skew_quadrupoles_to_fit is None:
             self.skew_quad_indices = self.respm.fam_data['QS']['index']
