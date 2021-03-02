@@ -650,7 +650,7 @@ class LOCO:
                     self._model, 'KsL', self.config.quad_indices_ks))
             self._sext_ks_inival = _np.array(
                 _pyaccel.lattice.get_attribute(
-                    self._model, 'KsL', self.config.sext_indices))
+                    self._model, 'KsL', self.config.sext_indices_ks))
             self._dip_ks_inival = _np.array(
                 _pyaccel.lattice.get_attribute(
                     self._model, 'KsL', self.config.dip_indices_ks))
@@ -658,7 +658,7 @@ class LOCO:
                 _pyaccel.lattice.get_attribute(
                     self._model, 'KsL', self.config.skew_quad_indices))
             self._quad_ks_deltas = _np.zeros(len(self.config.quad_indices_ks))
-            self._sext_ks_deltas = _np.zeros(len(self.config.sext_indices))
+            self._sext_ks_deltas = _np.zeros(len(self.config.sext_indices_ks))
             self._dip_ks_deltas = _np.zeros(len(self.config.dip_indices_ks))
             self._skew_quad_ks_deltas = _np.zeros(
                 len(self.config.skew_quad_indices))
@@ -916,7 +916,7 @@ class LOCO:
             self._sext_ks_deltas += param_dict['sextupoles_coupling']
             # update local model
             set_quad_ksdelta = _LOCOUtils.set_quadmag_ksdelta
-            for idx, idx_set in enumerate(config.sext_indices):
+            for idx, idx_set in enumerate(config.sext_indices_ks):
                 set_quad_ksdelta(
                     model, idx_set,
                     self._sext_ks_inival[idx], self._sext_ks_deltas[idx])

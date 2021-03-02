@@ -644,7 +644,7 @@ class LOCOUtils:
             param_dict['quadrupoles_coupling'] = param[idx:idx+size]
             idx += size
         if config.fit_sextupoles_coupling:
-            size = len(config.sext_indices)
+            size = len(config.sext_indices_ks)
             param_dict['sextupoles_coupling'] = param[idx:idx+size]
             idx += size
         if config.fit_dipoles_coupling:
