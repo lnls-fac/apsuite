@@ -5,10 +5,11 @@ from collections import namedtuple as _namedtuple
 import numpy as np
 
 import pyaccel
-from apsuite.commissioning_scripts.calc_orbcorr_mat import OrbRespmat
+
+from .calc_orbcorr_mat import OrbRespmat
 
 
-class OrbitCorr():
+class OrbitCorr:
     """."""
 
     MAX_HKICK = 300e-6  # urad

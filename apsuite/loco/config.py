@@ -5,7 +5,7 @@ from copy import deepcopy as _dcopy
 import numpy as _np
 import pyaccel as _pyaccel
 
-from ..commissioning_scripts.calc_orbcorr_mat import OrbRespmat as _OrbRespmat
+from ..orbcorr.calc_orbcorr_mat import OrbRespmat as _OrbRespmat
 from .utils import LOCOUtils as _LOCOUtils
 
 

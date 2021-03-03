@@ -5,7 +5,7 @@ from pymodels import tb, bo, ts, si
 import pyaccel
 
 
-class OrbRespmat():
+class OrbRespmat:
     """."""
 
     _FREQ_DELTA = 10
@@ -152,7 +152,7 @@ class OrbRespmat():
         return respx, respy
 
 
-class TrajRespmat():
+class TrajRespmat:
     """."""
 
     def __init__(self, model, acc, nturns=1):
