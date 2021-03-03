@@ -1,37 +1,38 @@
 """."""
-
 from copy import deepcopy as _dcopy
 
 import numpy as np
+
 import pyaccel
-from apsuite.commissioning_scripts.calcrespm import CalcRespm
-from apsuite.optimization.simulated_annealing import SimulAnneal
-from apsuite.commissioning_scripts.measure_respmat_tbbo import \
-    calc_model_respmatTBBO
-from apsuite.commissioning_scripts.measure_disp_tbbo import \
-    calc_model_dispersionTBBO
+
+from ..optimization import SimulAnneal
+from ..orbcorr import OrbRespmat
+
+from .measure_respmat_tbbo import calc_model_respmatTBBO
+from .measure_disp_tbbo import calc_model_dispersionTBBO
 
 
 class FitQuads():
 
     def __init__(self, model):
         self.model = model
-        self.respm = CalcRespm(model=model)
-        self.vector = self.respm.respm.ravel()
+        self.respm = OrbRespmat(model=model, acc='BO')
+        self._origresp = self.respm.get_respm()
+        self.vector = self._origresp.ravel()
         self.qfidx = self.respm.fam_data['QF']['index']
         self.qdidx = self.respm.fam_data['QD']['index']
         self.kmatrix = self._calc_kmatrix()
 
     def _vector2respm(self, vector):
-        row = self.respm.respm.shape[0]
-        col = self.respm.respm.shape[1]
+        row = self._origresp.shape[0]
+        col = self._origresp.shape[1]
         return np.reshape(vector, (row, col))
 
     def _calc_kmatrix(self, deltak=1e-6):
         self.kqfs = pyaccel.lattice.get_attribute(
-            self.respm.model, 'K', self.qfidx)
+            self.model, 'K', self.qfidx)
         self.kqds = pyaccel.lattice.get_attribute(
-            self.respm.model, 'K', self.qdidx)
+            self.model, 'K', self.qdidx)
 
         nquads = len(self.qfidx) + len(self.qdidx)
         kmatrix = np.zeros((len(self.vector), nquads))
@@ -39,34 +40,34 @@ class FitQuads():
         for i, idx in enumerate(self.qfidx):
             for ii, idx_seg in enumerate(idx):
                 pyaccel.lattice.set_attribute(
-                    self.respm.model, 'K', idx_seg, self.kqfs[i][ii] + deltak)
-            new_respm = self.respm.get_respm(model=self.respm.model)
-            dmdk = (new_respm - self.respm.respm)/deltak
+                    self.model, 'K', idx_seg, self.kqfs[i][ii] + deltak)
+            new_respm = self.respm.get_respm()
+            dmdk = (new_respm - self._origresp)/deltak
             kmatrix[:, i] = dmdk.ravel()
             for ii, idx_seg in enumerate(idx):
                 pyaccel.lattice.set_attribute(
-                    self.respm.model, 'K', idx_seg, self.kqfs[i][ii])
+                    self.model, 'K', idx_seg, self.kqfs[i][ii])
 
         for i, idx in enumerate(self.qdidx):
             for ii, idx_seg in enumerate(idx):
                 pyaccel.lattice.set_attribute(
-                    self.respm.model, 'K', idx_seg, self.kqds[i][ii] + deltak)
-            new_respm = self.respm.get_respm(model=self.respm.model)
-            dmdk = (new_respm - self.respm.respm)/deltak
+                    self.model, 'K', idx_seg, self.kqds[i][ii] + deltak)
+            new_respm = self.respm.get_respm()
+            dmdk = (new_respm - self._origresp)/deltak
             kmatrix[:, i+len(self.qfidx)] = dmdk.ravel()
             for ii, idx_seg in enumerate(idx):
                 pyaccel.lattice.set_attribute(
-                    self.respm.model, 'K', idx_seg, self.kqds[i][ii])
+                    self.model, 'K', idx_seg, self.kqds[i][ii])
         return kmatrix
 
     @staticmethod
-    def chi2(self, M1, M2):
+    def chi2(M1, M2):
         return np.sqrt(np.mean((M1-M2)**2))
 
     def fit_matrices(self, model, measmat, niter=10, nsv=None):
         bomod = _dcopy(model)
-        respm_model = CalcRespm(bomod)
-        modelmat = respm_model.respm
+        respm_model = OrbRespmat(model=bomod, acc='BO')
+        modelmat = respm_model.get_respm()
         diffmat = measmat - modelmat
         chi2_old = FitQuads.chi2(measmat, modelmat)
         qfidx = respm_model.fam_data['QF']['index']
@@ -100,10 +101,10 @@ class FitQuads():
                         bomod, 'K', idx_seg,
                         grad_qd[i][ii] + grad_delta[len(qfidx) + i])
 
-            fitmat = CalcRespm(bomod)
-            diffmat = measmat - fitmat.respm
+            fitmat = OrbRespmat(model=bomod, acc='BO').get_respm()
+            diffmat = measmat - fitmat
             print('Iter {:.1f}'.format(n+1))
-            chi2_new = FitQuads.chi2(measmat, fitmat.respm)
+            chi2_new = FitQuads.chi2(measmat, fitmat)
             print('Matrix Deviation: {:.16e}'.format(chi2_new))
 
             if (chi2_old - chi2_new) < tol:
@@ -121,13 +122,13 @@ class FitQuads():
                         pyaccel.lattice.set_attribute(
                             bomod, 'K', idx_seg,
                             grad_qd[i][ii] + grad_delta[len(qfidx) + i])
-                fitmat = CalcRespm(bomod)
+                fitmat = OrbRespmat(model=bomod, acc='BO').get_respm()
                 break
             else:
                 chi2_old = chi2_new
         fit_grad_qf = grad_qf[:, 0] + grad_delta[:len(qfidx)]
         fit_grad_qd = grad_qd[:, 0] + grad_delta[len(qfidx):]
-        return fitmat.respm, fit_grad_qf, fit_grad_qd
+        return fitmat, fit_grad_qf, fit_grad_qd
 
 
 class FindSeptQuad(SimulAnneal):

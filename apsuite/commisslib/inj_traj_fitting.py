@@ -249,7 +249,7 @@ class SIFitInjTraj(_FitInjTrajBase):
     Examples:
     ---------
     >>> import numpy as np
-    >>> from apsuite.commissioning_scripts.inj_traj_fitting import SIFitInjTraj
+    >>> from apsuite.commisslib.inj_traj_fitting import SIFitInjTraj
     >>> np.random.seed(42)
     >>> fit_traj = SIFitInjTraj()
     >>> x0, xl0, y0, yl0, de0 = -9.0e-3, 0.0e-3, 0.0e-3, 0.0, 0.01
@@ -321,7 +321,7 @@ class BOFitInjTraj(_FitInjTrajBase):
     Examples:
     ---------
     >>> import numpy as np
-    >>> from apsuite.commissioning_scripts.inj_traj_fitting import BOFitInjTraj
+    >>> from apsuite.commisslib.inj_traj_fitting import BOFitInjTraj
     >>> np.random.seed(42)
     >>> fit_traj = BOFitInjTraj()
     >>> x0, xl0, y0, yl0, de0 = -2.0e-3, 0.0e-3, 0.0e-3, 0.0, -0.01
