@@ -5,7 +5,8 @@ from collections import namedtuple as _namedtuple
 import numpy as np
 
 import pyaccel
-from apsuite.commissioning_scripts.calc_orbcorr_mat import OrbRespmat
+
+from ..orbcorr import OrbRespmat
 
 
 class CouplingCorr():
