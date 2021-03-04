@@ -2,180 +2,197 @@
 
 from copy import deepcopy as _dcopy
 from collections import namedtuple as _namedtuple
-import numpy as np
+import numpy as _np
 
 import pyaccel
 
 from .calc_orbcorr_mat import OrbRespmat
 
 
+class CorrParams:
+    """."""
+
+    def __init__(self):
+        """."""
+        self.minsingval = 0.2
+        self.maxkickch = 300e-6  # rad
+        self.maxkickcv = 300e-6  # rad
+        self.maxkickrf = 500e6  # Hz
+        self.maxdeltakickch = 300e-6  # rad
+        self.maxdeltakickcv = 300e-6  # rad
+        self.maxdeltakickrf = 1000  # Hz
+        self.maxnriters = 10
+        self.tolerance = 0.5e-6  # m
+        self.userf = True
+
+
 class OrbitCorr:
     """."""
 
-    MAX_HKICK = 300e-6  # urad
-    MAX_VKICK = 300e-6  # urad
     CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
 
-    def __init__(self, model, acc, dim='4d'):
+    def __init__(self, model, acc):
         """."""
-        self.model = model
         self.acc = acc
-        self.dim = dim
-        self.respm = OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
-        self.bpm_idx = self.respm.fam_data['BPM']['index']
-        self.ch_idx = self.respm.fam_data['CH']['index']
-        self.cv_idx = self.respm.fam_data['CV']['index']
-        self.corr_idx = np.vstack((self.ch_idx, self.cv_idx))
+        self.params = CorrParams()
+        self.respm = OrbRespmat(model=model, acc=self.acc, dim='6d')
+        self.respm.model.cavity_on = True
 
-    @property
-    def _nbpm(self):
-        return len(self.bpm_idx)
-
-    @property
-    def _nch(self):
-        return len(self.ch_idx)
-
-    @property
-    def _ncv(self):
-        return len(self.cv_idx)
-
-    @property
-    def _ncorr(self):
-        return self._nch + self._ncv
-
-    def calc_jacobian_matrix(self, model=None):
+    def get_jacobian_matrix(self):
         """."""
-        if model is None:
-            model = self.model
-        self.respm.model = model
         return self.respm.get_respm()
 
-    def _get_orbit_residue(self, model):
-        if self.dim == '4d':
-            cod = pyaccel.tracking.find_orbit4(model, indices='open')
-        elif self.dim == '6d':
-            cod = pyaccel.tracking.find_orbit6(model, indices='open')
-        codx = cod[0, self.bpm_idx].ravel()
-        cody = cod[2, self.bpm_idx].ravel()
-        res = np.hstack((codx, cody))
-        return res
-
-    def get_kicks(self, model=None, chidx=None, cvidx=None):
+    def get_kicks(self):
         """Return corrector kicks."""
         if model is None:
-            model = self.model
-        if chidx is None:
-            chidx = self.ch_idx
-        if cvidx is None:
-            cvidx = self.cv_idx
-        hkick = []
-        for mag in chidx:
-            hkick_seg = []
-            for seg in mag:
-                hkick_seg.append(model[seg].hkick_polynom)
-            hkick.append(sum(hkick_seg))
-        vkick = []
-        for mag in cvidx:
-            vkick_seg = []
-            for seg in mag:
-                vkick_seg.append(model[seg].vkick_polynom)
-            vkick.append(sum(vkick_seg))
-        hkick = np.array(hkick)
-        vkick = np.array(vkick)
-        return np.hstack((hkick, vkick))
-
-    def _set_delta_kicks(self, model=None, corridx=None, delta_kicks=None):
-        if model is None:
-            model = self.model
-        if corridx is None:
-            corridx = self.corr_idx
-        if delta_kicks is None:
-            raise Exception('Missing Delta Kicks values')
-        for idx_mag, mag in enumerate(corridx):
-            delta = delta_kicks[idx_mag]/len(mag)
-            for _, seg in enumerate(mag):
-                if idx_mag < self._nch:
-                    kick = model[seg].hkick_polynom + delta
-                    model[seg].hkick_polynom = kick
-                else:
-                    kick = model[seg].vkick_polynom + delta
-                    model[seg].vkick_polynom = kick
-
-    def _check_kicks(self, model=None, chidx=None, cvidx=None):
-        if model is None:
-            model = self.model
-        if chidx is None:
-            chidx = self.ch_idx
-        if cvidx is None:
-            cvidx = self.cv_idx
-
-        kicks = self.get_kicks(model, chidx, cvidx)
-        kicksx, kicksy = kicks[:self._nch], kicks[self._nch:]
-        kicksx_above = kicksx > OrbitCorr.MAX_HKICK
-        kicksy_above = kicksy > OrbitCorr.MAX_VKICK
-
-        if sum(kicksx_above) or sum(kicksy_above):
-            str_above = '\n'
-            str_above += 'HKick > MaxHKick at CHs: {0:s} \n'
-            str_above += 'VKick > MaxVKick at CVs: {1:s}'
-            xlist = str(np.argwhere(kicksx_above).ravel())
-            ylist = str(np.argwhere(kicksy_above).ravel())
-            raise ValueError(str_above.format(xlist, ylist))
+            model = self.respm.model
+        chidx = self.respm.ch_idx
+        cvidx = self.respm.cv_idx
+        rfidx = self.respm.rf_idx
+        kickch = pyaccel.lattice.get_attribute(model, 'hkick_polynom', chidx)
+        kickcv = pyaccel.lattice.get_attribute(model, 'vkick_polynom', cvidx)
+        kickrf = pyaccel.lattice.get_attribute(model, 'rf_frequency', rfidx)
+        return _np.array(kickch + kickcv + kickrf)
 
     @staticmethod
     def get_figm(res):
         """Calculate figure of merit from residue vector."""
-        return np.sqrt(np.sum(res*res)/res.size)
+        return _np.sqrt(_np.sum(res*res)/res.size)
 
-    def orbit_corr(self,
-                   model=None,
-                   jacobian_matrix=None,
-                   goal_orbit=None,
-                   nsv=None, nr_max=10, tol=1e-6):
+    def get_inverse_matrix(self, jacobian_matrix, full=False):
+        """."""
+        jmat = _dcopy(jacobian_matrix)
+        if not self.params.userf:
+            jmat[:, -1] *= 0
+
+        umat, smat, vmat = _np.linalg.svd(jmat, full_matrices=False)
+        idx = smat > self.params.minsingval
+        ismat = _np.zeros(smat.shape, dtype=float)
+        ismat[idx] = 1/smat[idx]
+
+        ismat = _np.diag(ismat)
+        ismat = _np.dot(vmat.T*ismat, umat.T)
+        if full:
+            return ismat, umat, smat, vmat
+        else:
+            return ismat
+
+    def correct_orbit(self, jacobian_matrix=None, goal_orbit=None):
         """Orbit correction.
 
         Calculates the pseudo-inverse of orbit correction matrix via SVD
         and minimizes the residue vector [CODx@BPM, CODy@BPM].
         """
-        if model is None:
-            model = self.model
         if goal_orbit is None:
-            goal_orbit = np.zeros(2 * self._nbpm)
+            nbpm = len(self.respm.bpm_idx)
+            goal_orbit = _np.zeros(2 * nbpm)
 
         if jacobian_matrix is None:
-            jmat = self.calc_jacobian_matrix(model)
-        else:
-            jmat = _dcopy(jacobian_matrix)
+            jmat = self.get_jacobian_matrix()
 
-        if jmat.shape[1] > self._ncorr:
-            jmat = jmat[:, :-1]
+        ismat = self.get_inverse_matrix(jmat)
 
-        umat, smat, vmat = np.linalg.svd(jmat, full_matrices=False)
-        ismat = 1/smat
-        ismat[np.isnan(ismat)] = 0
-        ismat[np.isinf(ismat)] = 0
-        if nsv is not None:
-            ismat[nsv:] = 0
-        ismat = np.diag(ismat)
-        ismat = -1 * np.dot(np.dot(vmat.T, ismat), umat.T)
-        orb = self._get_orbit_residue(model)
+        orb = self.get_orbit()
         dorb = orb - goal_orbit
         bestfigm = OrbitCorr.get_figm(dorb)
-        if bestfigm < tol:
+        if bestfigm < self.params.tolerance:
             return OrbitCorr.CORR_STATUS.Sucess
 
-        for _ in range(nr_max):
-            dkicks = np.dot(ismat, dorb)
-            self._set_delta_kicks(model=model, delta_kicks=dkicks)
-            self._check_kicks(model=model)
-            orb = self._get_orbit_residue(model)
+        for _ in range(self.params.maxnriters):
+            dkicks = -1*_np.dot(ismat, dorb)
+            kicks = self._process_kicks(dkicks)
+            self.set_kicks(kicks)
+            orb = self.get_orbit()
             dorb = orb - goal_orbit
             figm = OrbitCorr.get_figm(dorb)
-            diff_figm = np.abs(bestfigm - figm)
+            diff_figm = _np.abs(bestfigm - figm)
             if figm < bestfigm:
                 bestfigm = figm
-            if diff_figm < tol:
+            if diff_figm < self.params.tolerance:
                 break
         else:
             return OrbitCorr.CORR_STATUS.Fail
         return OrbitCorr.CORR_STATUS.Sucess
+
+    def get_orbit(self):
+        """."""
+        cod = pyaccel.tracking.find_orbit6(self.respm.model, indices='open')
+        codx = cod[0, self.respm.bpm_idx].ravel()
+        cody = cod[2, self.respm.bpm_idx].ravel()
+        res = _np.hstack((codx, cody))
+        return res
+
+    def set_delta_kicks(self, dkicks):
+        """."""
+        kicks = self.get_kicks()
+        kicks += dkicks
+        self.set_kicks(kicks)
+
+    def set_kicks(self, kicks):
+        """."""
+        model = self.respm.model
+        nch = len(self.respm.ch_idx)
+        ncv = len(self.respm.cv_idx)
+
+        kickch, kickcv = kicks[:nch], kicks[nch:ncv]
+
+        for i, idx in enumerate(self.respm.ch_idx):
+            model[idx].hkick_polynom = kickch[i]
+        for i, idx in enumerate(self.respm.cv_idx):
+            model[idx].vkick_polynom = kickcv[i]
+        if self.params.userf:
+            model[self.respm.rf_idx[0]].rf_frequency = kicks[-1]
+
+    def _process_kicks(self, dkicks):
+        chidx = self.respm.ch_idx
+        cvidx = self.respm.cv_idx
+
+        par = self.params
+
+        # if kicks are larger the maximum tolerated raise error
+        kicks = self.get_kicks()
+        nch = len(chidx)
+        ncv = len(cvidx)
+        kickch, kickcv, kickrf = kicks[:nch], kicks[nch:ncv], kicks[-1]
+        cond = _np.any(_np.abs(kickch) >= par.maxkickch)
+        cond &= _np.any(_np.abs(kickcv) >= par.maxkickcv)
+        if par.userf:
+            cond &= kickrf >= par.maxkickrf
+        if cond:
+            raise ValueError('Kicks above maximum allowed value')
+
+        dkickch, dkickcv, dkickrf = dkicks[:nch], dkicks[nch:ncv], dkicks[-1]
+
+        # apply factor to dkicks in case they are larger than maximum delta:
+        dkickch *= min(1, par.maxdeltakickch / _np.abs(dkickch).max())
+        dkickcv *= min(1, par.maxdeltakickcv / _np.abs(dkickcv).max())
+        if par.userf and dkickrf != 0:
+            dkickrf *= min(1, par.maxdeltakickrf / _np.abs(dkickrf))
+
+        # Do not allow kicks to be larger than maximum after application
+        # Algorithm:
+        # perform the modulus inequality and then
+        # since we know that any initial kick is lesser than max_kick
+        # from the previous comparison, at this point each column of 'que'
+        # has a positive and a negative value. We must consider only
+        # the positive one and take the minimum value along the columns
+        # to be the multiplicative factor:
+        que = [(-par.maxkickch - kickch) / dkickch, ]
+        que.append((par.maxkickch - kickch) / dkickch)
+        que = _np.max(que, axis=0)
+        dkickch *= min(_np.min(que), 1.0)
+
+        que = [(-par.maxkickcv - kickcv) / dkickcv, ]
+        que.append((par.maxkickcv - kickcv) / dkickcv)
+        que = _np.max(que, axis=0)
+        dkickcv *= min(_np.min(que), 1.0)
+
+        que = [(-par.maxkickrf - kickrf) / dkickrf, ]
+        que.append((par.maxkickrf - kickrf) / dkickrf)
+        que = _np.max(que, axis=0)
+        dkickrf *= min(_np.min(que), 1.0)
+
+        kicks[:nch] += dkickch
+        kicks[nch:ncv] += dkickcv
+        kicks[-1] += dkickrf
+        return kicks
