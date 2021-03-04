@@ -1,6 +1,6 @@
 
 __all__ = (
-    'commissioning_scripts', 'loco', 'optics_analysis', 'optimization',
+    'commisslib', 'loco', 'optics_analysis', 'optimization',
     'trackcpp_utils')
 
 import os as _os
