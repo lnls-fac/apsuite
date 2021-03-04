@@ -11,7 +11,8 @@ import matplotlib.gridspec as _mpl_gs
 import matplotlib.cm as _cmap
 
 from siriuspy.namesys import SiriusPVName as _PVName
-from siriuspy.devices import SOFB as _SOFB, PowerSupply as _PowerSupply
+from siriuspy.devices import SOFB as _SOFB, PowerSupply as _PowerSupply, \
+    CurrInfoSI as _CurrInfoSI
 from siriuspy.clientconfigdb import ConfigDBClient
 from siriuspy.epics import PV as _PV
 
@@ -244,8 +245,7 @@ class DoBBA(_BaseClass):
 
         if self.isonline:
             self.devices['sofb'] = _SOFB(_SOFB.DEVICES.SI)
-            self.devices['havebeam'] = _PV(
-                'SI-Glob:AP-CurrInfo:StoredEBeam-Mon')
+            self.devices['currinfosi'] = _CurrInfoSI()
             self.connect_to_quadrupoles()
 
     def __str__(self):
@@ -270,8 +270,8 @@ class DoBBA(_BaseClass):
     @property
     def havebeam(self):
         """."""
-        haveb = self.devices['havebeam']
-        return haveb.connected and haveb.value
+        haveb = self.devices['currinfosi']
+        return haveb.connected and haveb.storedbeam
 
     @property
     def measuredbpms(self):
