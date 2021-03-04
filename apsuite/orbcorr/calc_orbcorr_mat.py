@@ -20,50 +20,17 @@ class OrbRespmat:
             inj = pyaccel.lattice.find_indices(
                 self.model, 'fam_name', 'InjSept')
             self.model = pyaccel.lattice.shift(self.model, inj[0])
-            self.fam_data = bo.families.get_family_data(self.model)
+            self.fam_data = bo.get_family_data(self.model)
+            self.rf_idx = self._get_idx(self.fam_data['P5Cav']['index'])
         elif self.acc == 'SI':
-            self.fam_data = si.families.get_family_data(self.model)
+            self.fam_data = si.get_family_data(self.model)
+            self.rf_idx = self._get_idx(self.fam_data['SRFCav']['index'])
         else:
             raise Exception('Set models: BO or SI')
         self.dim = dim
         self.bpm_idx = self._get_idx(self.fam_data['BPM']['index'])
         self.ch_idx = self._get_idx(self.fam_data['CH']['index'])
         self.cv_idx = self._get_idx(self.fam_data['CV']['index'])
-
-    @staticmethod
-    def _get_idx(indcs):
-        return np.array([idx[0] for idx in indcs])
-
-    def _calc_rfline(self):
-        idx = pyaccel.lattice.find_indices(
-            self.model, 'pass_method', 'cavity_pass')[0]
-        rffreq = self.model[idx].frequency
-        if self.dim == '6d':
-            dfreq = OrbRespmat._FREQ_DELTA
-            self.model[idx].frequency = rffreq + dfreq
-            orbp = pyaccel.tracking.find_orbit6(self.model, indices='open')
-            self.model[idx].frequency = rffreq - dfreq
-            orbn = pyaccel.tracking.find_orbit6(self.model, indices='open')
-            self.model[idx].frequency = rffreq
-            rfline = (orbp[[0, 2], :] - orbn[[0, 2], :])/2/dfreq
-            rfline = rfline[:, self.bpm_idx].ravel()
-        else:
-            denergy = OrbRespmat._ENERGY_DELTA
-            orbp = pyaccel.tracking.find_orbit4(
-                self.model, energy_offset=denergy, indices='open')
-            orbn = pyaccel.tracking.find_orbit4(
-                self.model, energy_offset=-denergy, indices='open')
-            dispbpm = (orbp[[0, 2], :] - orbn[[0, 2], :])/2/denergy
-            dispbpm = dispbpm[:, self.bpm_idx].ravel()
-
-            rin = np.zeros((6, 2))
-            rin[4, :] = [denergy, -denergy]
-            rout, *_ = pyaccel.tracking.ring_pass(self.model, rin)
-            leng = self.model.length
-            alpha = -1 * np.diff(rout[5, :]) / 2 / denergy / leng
-            # Convert dispersion to deltax/deltaf:
-            rfline = - dispbpm / rffreq / alpha
-        return rfline
 
     def get_respm(self):
         """."""
@@ -93,16 +60,16 @@ class OrbRespmat:
             else:
                 respmat.append(respy)
 
-        if self.acc == 'SI':
-            rfline = self._calc_rfline() # m/Hz
-            respmat.append(rfline)
+        rfline = self._get_rfline()  # m/Hz
+        respmat.append(rfline)
         respmat = np.array(respmat).T
 
         self.model.cavity_on = cav
         return respmat
 
-    def _get_respmat_line(self, rc_mat, rb_mat, m_mat, corr, length,
-                          kxl=0, kyl=0, ksxl=0, ksyl=0):
+    def _get_respmat_line(
+            self, rc_mat, rb_mat, m_mat, corr, length,
+            kxl=0, kyl=0, ksxl=0, ksyl=0):
         # create a symplectic integrator of second order
         # for the last half of the element:
         drift = np.eye(rc_mat.shape[0], dtype=float)
@@ -150,6 +117,40 @@ class OrbRespmat:
         respyy[small] = rcbs_mat[:, 2, 3]
         respy = np.hstack([respxy, respyy])
         return respx, respy
+
+    def _get_rfline(self):
+        idx = self.rf_idx[0]
+        rffreq = self.model[idx].frequency
+        if self.dim == '6d':
+            dfreq = OrbRespmat._FREQ_DELTA
+            self.model[idx].frequency = rffreq + dfreq
+            orbp = pyaccel.tracking.find_orbit6(self.model, indices='open')
+            self.model[idx].frequency = rffreq - dfreq
+            orbn = pyaccel.tracking.find_orbit6(self.model, indices='open')
+            self.model[idx].frequency = rffreq
+            rfline = (orbp[[0, 2], :] - orbn[[0, 2], :])/2/dfreq
+            rfline = rfline[:, self.bpm_idx].ravel()
+        else:
+            denergy = OrbRespmat._ENERGY_DELTA
+            orbp = pyaccel.tracking.find_orbit4(
+                self.model, energy_offset=denergy, indices='open')
+            orbn = pyaccel.tracking.find_orbit4(
+                self.model, energy_offset=-denergy, indices='open')
+            dispbpm = (orbp[[0, 2], :] - orbn[[0, 2], :])/2/denergy
+            dispbpm = dispbpm[:, self.bpm_idx].ravel()
+
+            rin = np.zeros((6, 2))
+            rin[4, :] = [denergy, -denergy]
+            rout, *_ = pyaccel.tracking.ring_pass(self.model, rin)
+            leng = self.model.length
+            alpha = -1 * np.diff(rout[5, :]) / 2 / denergy / leng
+            # Convert dispersion to deltax/deltaf:
+            rfline = - dispbpm / rffreq / alpha
+        return rfline
+
+    @staticmethod
+    def _get_idx(indcs):
+        return np.array([idx[0] for idx in indcs])
 
 
 class TrajRespmat:
