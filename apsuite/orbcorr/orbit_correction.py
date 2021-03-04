@@ -44,14 +44,13 @@ class OrbitCorr:
 
     def get_kicks(self):
         """Return corrector kicks."""
-        if model is None:
-            model = self.respm.model
+        model = self.respm.model
         chidx = self.respm.ch_idx
         cvidx = self.respm.cv_idx
         rfidx = self.respm.rf_idx
         kickch = pyaccel.lattice.get_attribute(model, 'hkick_polynom', chidx)
         kickcv = pyaccel.lattice.get_attribute(model, 'vkick_polynom', cvidx)
-        kickrf = pyaccel.lattice.get_attribute(model, 'rf_frequency', rfidx)
+        kickrf = pyaccel.lattice.get_attribute(model, 'frequency', rfidx)
         return _np.array(kickch + kickcv + kickrf)
 
     @staticmethod
@@ -141,7 +140,7 @@ class OrbitCorr:
         for i, idx in enumerate(self.respm.cv_idx):
             model[idx].vkick_polynom = kickcv[i]
         if self.params.userf:
-            model[self.respm.rf_idx[0]].rf_frequency = kicks[-1]
+            model[self.respm.rf_idx[0]].frequency = kicks[-1]
 
     def _process_kicks(self, dkicks):
         chidx = self.respm.ch_idx
