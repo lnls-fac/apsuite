@@ -51,7 +51,7 @@ class OrbitCorr:
         kickch = pyaccel.lattice.get_attribute(model, 'hkick_polynom', chidx)
         kickcv = pyaccel.lattice.get_attribute(model, 'vkick_polynom', cvidx)
         kickrf = pyaccel.lattice.get_attribute(model, 'frequency', rfidx)
-        return _np.array(kickch + kickcv + kickrf)
+        return _np.hstack((kickch, kickcv, kickrf))
 
     @staticmethod
     def get_figm(res):
@@ -69,7 +69,6 @@ class OrbitCorr:
         ismat = _np.zeros(smat.shape, dtype=float)
         ismat[idx] = 1/smat[idx]
 
-        ismat = _np.diag(ismat)
         ismat = _np.dot(vmat.T*ismat, umat.T)
         if full:
             return ismat, umat, smat, vmat
@@ -133,14 +132,14 @@ class OrbitCorr:
         nch = len(self.respm.ch_idx)
         ncv = len(self.respm.cv_idx)
 
-        kickch, kickcv = kicks[:nch], kicks[nch:ncv]
+        kickch, kickcv, kickrf = kicks[:nch], kicks[nch:nch+ncv], kicks[-1]
 
         for i, idx in enumerate(self.respm.ch_idx):
             model[idx].hkick_polynom = kickch[i]
         for i, idx in enumerate(self.respm.cv_idx):
             model[idx].vkick_polynom = kickcv[i]
         if self.params.userf:
-            model[self.respm.rf_idx[0]].frequency = kicks[-1]
+            model[self.respm.rf_idx[0]].frequency = kickrf
 
     def _process_kicks(self, dkicks):
         chidx = self.respm.ch_idx
@@ -152,7 +151,7 @@ class OrbitCorr:
         kicks = self.get_kicks()
         nch = len(chidx)
         ncv = len(cvidx)
-        kickch, kickcv, kickrf = kicks[:nch], kicks[nch:ncv], kicks[-1]
+        kickch, kickcv, kickrf = kicks[:nch], kicks[nch:nch+ncv], kicks[-1]
         cond = _np.any(_np.abs(kickch) >= par.maxkickch)
         cond &= _np.any(_np.abs(kickcv) >= par.maxkickcv)
         if par.userf:
@@ -160,7 +159,8 @@ class OrbitCorr:
         if cond:
             raise ValueError('Kicks above maximum allowed value')
 
-        dkickch, dkickcv, dkickrf = dkicks[:nch], dkicks[nch:ncv], dkicks[-1]
+        dkickch, dkickcv = dkicks[:nch], dkicks[nch:nch+ncv]
+        dkickrf = dkicks[-1]
 
         # apply factor to dkicks in case they are larger than maximum delta:
         dkickch *= min(1, par.maxdeltakickch / _np.abs(dkickch).max())
@@ -186,12 +186,13 @@ class OrbitCorr:
         que = _np.max(que, axis=0)
         dkickcv *= min(_np.min(que), 1.0)
 
-        que = [(-par.maxkickrf - kickrf) / dkickrf, ]
-        que.append((par.maxkickrf - kickrf) / dkickrf)
-        que = _np.max(que, axis=0)
-        dkickrf *= min(_np.min(que), 1.0)
+        if self.params.userf and dkickrf != 0:
+            que = [(-par.maxkickrf - kickrf) / dkickrf, ]
+            que.append((par.maxkickrf - kickrf) / dkickrf)
+            que = _np.max(que, axis=0)
+            dkickrf *= min(_np.min(que), 1.0)
 
         kicks[:nch] += dkickch
-        kicks[nch:ncv] += dkickcv
+        kicks[nch:nch+ncv] += dkickcv
         kicks[-1] += dkickrf
         return kicks
