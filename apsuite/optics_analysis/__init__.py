@@ -6,7 +6,7 @@ from .optics_correction import OpticsCorr
 from .tune_correction import TuneCorr
 
 del chromaticity_correction, coupling_correction, optics_correction
-del orbit_correction, tune_correction
+del tune_correction
 
 __all__ = (
     'chromaticity_correction', 'coupling_correction', 'optics_correction',
