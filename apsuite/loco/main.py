@@ -225,19 +225,28 @@ class LOCO:
                 magstofit = self.config.dipoles_to_fit
             else:
                 magstofit = self.config.famname_dipset
-            index = self.config.dip_indices
+            if is_normal:
+                index = self.config.dip_indices
+            else:
+                index = self.config.dip_indices_ks
         elif magtype == 'quadrupole':
             if self.config.quadrupoles_to_fit is not None:
                 magstofit = self.config.quadrupoles_to_fit
             else:
                 magstofit = self.config.famname_quadset
-            index = self.config.quad_indices
+            if is_normal:
+                index = self.config.quad_indices
+            else:
+                index = self.config.quad_indices_ks
         elif magtype == 'sextupole':
             if self.config.sextupoles_to_fit is not None:
                 magstofit = self.config.sextupoles_to_fit
             else:
                 magstofit = self.config.famname_sextset
-            index = self.config.sext_indices
+            if is_normal:
+                index = self.config.quad_indices
+            else:
+                index = self.config.quad_indices_ks
         elif magtype == 'skew_quadrupole':
             if self.config.skew_quadrupoles_to_fit is not None:
                 magstofit = self.config.skew_quadrupoles_to_fit
