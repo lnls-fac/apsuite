@@ -23,7 +23,10 @@ class CorrParams:
         self.maxdeltakickrf = 1000  # Hz
         self.maxnriters = 10
         self.tolerance = 0.5e-6  # m
-        self.userf = True
+        self.enblrf = True
+        self.enbllistbpm = None
+        self.enbllistch = None
+        self.enbllistcv = None
 
 
 class OrbitCorr:
@@ -37,6 +40,12 @@ class OrbitCorr:
         self.params = CorrParams()
         self.respm = OrbRespmat(model=model, acc=self.acc, dim='6d')
         self.respm.model.cavity_on = True
+        self.params.enbllistbpm = _np.ones(
+            self.respm.bpm_idx.size*2, dtype=bool)
+        self.params.enbllistch = _np.ones(
+            self.respm.ch_idx.size, dtype=bool)
+        self.params.enbllistcv = _np.ones(
+            self.respm.cv_idx.size, dtype=bool)
 
     def get_jacobian_matrix(self):
         """."""
@@ -51,7 +60,7 @@ class OrbitCorr:
         kickch = pyaccel.lattice.get_attribute(model, 'hkick_polynom', chidx)
         kickcv = pyaccel.lattice.get_attribute(model, 'vkick_polynom', cvidx)
         kickrf = pyaccel.lattice.get_attribute(model, 'frequency', rfidx)
-        return _np.array(kickch + kickcv + kickrf)
+        return _np.r_[kickch, kickcv, kickrf]
 
     @staticmethod
     def get_figm(res):
@@ -61,15 +70,16 @@ class OrbitCorr:
     def get_inverse_matrix(self, jacobian_matrix, full=False):
         """."""
         jmat = _dcopy(jacobian_matrix)
-        if not self.params.userf:
-            jmat[:, -1] *= 0
+        jmat[_np.logical_not(self.params.enbllistbpm), :] = 0
+        enblcorrs = _np.r_[
+            self.params.enbllistch, self.params.enbllistcv, self.params.enblrf]
+        jmat[:, ~enblcorrs] = 0
 
         umat, smat, vmat = _np.linalg.svd(jmat, full_matrices=False)
         idx = smat > self.params.minsingval
         ismat = _np.zeros(smat.shape, dtype=float)
         ismat[idx] = 1/smat[idx]
 
-        ismat = _np.diag(ismat)
         ismat = _np.dot(vmat.T*ismat, umat.T)
         if full:
             return ismat, umat, smat, vmat
@@ -118,7 +128,7 @@ class OrbitCorr:
         cod = pyaccel.tracking.find_orbit6(self.respm.model, indices='open')
         codx = cod[0, self.respm.bpm_idx].ravel()
         cody = cod[2, self.respm.bpm_idx].ravel()
-        res = _np.hstack((codx, cody))
+        res = _np.r_[codx, cody]
         return res
 
     def set_delta_kicks(self, dkicks):
@@ -133,14 +143,14 @@ class OrbitCorr:
         nch = len(self.respm.ch_idx)
         ncv = len(self.respm.cv_idx)
 
-        kickch, kickcv = kicks[:nch], kicks[nch:ncv]
+        kickch, kickcv, kickrf = kicks[:nch], kicks[nch:nch+ncv], kicks[-1]
 
         for i, idx in enumerate(self.respm.ch_idx):
             model[idx].hkick_polynom = kickch[i]
         for i, idx in enumerate(self.respm.cv_idx):
             model[idx].vkick_polynom = kickcv[i]
-        if self.params.userf:
-            model[self.respm.rf_idx[0]].frequency = kicks[-1]
+        if self.params.enblrf:
+            model[self.respm.rf_idx[0]].frequency = kickrf
 
     def _process_kicks(self, dkicks):
         chidx = self.respm.ch_idx
@@ -152,20 +162,21 @@ class OrbitCorr:
         kicks = self.get_kicks()
         nch = len(chidx)
         ncv = len(cvidx)
-        kickch, kickcv, kickrf = kicks[:nch], kicks[nch:ncv], kicks[-1]
+        kickch, kickcv, kickrf = kicks[:nch], kicks[nch:nch+ncv], kicks[-1]
         cond = _np.any(_np.abs(kickch) >= par.maxkickch)
         cond &= _np.any(_np.abs(kickcv) >= par.maxkickcv)
-        if par.userf:
+        if par.enblrf:
             cond &= kickrf >= par.maxkickrf
         if cond:
             raise ValueError('Kicks above maximum allowed value')
 
-        dkickch, dkickcv, dkickrf = dkicks[:nch], dkicks[nch:ncv], dkicks[-1]
+        dkickch, dkickcv = dkicks[:nch], dkicks[nch:nch+ncv]
+        dkickrf = dkicks[-1]
 
         # apply factor to dkicks in case they are larger than maximum delta:
         dkickch *= min(1, par.maxdeltakickch / _np.abs(dkickch).max())
         dkickcv *= min(1, par.maxdeltakickcv / _np.abs(dkickcv).max())
-        if par.userf and dkickrf != 0:
+        if par.enblrf and dkickrf != 0:
             dkickrf *= min(1, par.maxdeltakickrf / _np.abs(dkickrf))
 
         # Do not allow kicks to be larger than maximum after application
@@ -186,12 +197,13 @@ class OrbitCorr:
         que = _np.max(que, axis=0)
         dkickcv *= min(_np.min(que), 1.0)
 
-        que = [(-par.maxkickrf - kickrf) / dkickrf, ]
-        que.append((par.maxkickrf - kickrf) / dkickrf)
-        que = _np.max(que, axis=0)
-        dkickrf *= min(_np.min(que), 1.0)
+        if self.params.enblrf and dkickrf != 0:
+            que = [(-par.maxkickrf - kickrf) / dkickrf, ]
+            que.append((par.maxkickrf - kickrf) / dkickrf)
+            que = _np.max(que, axis=0)
+            dkickrf *= min(_np.min(que), 1.0)
 
         kicks[:nch] += dkickch
-        kicks[nch:ncv] += dkickcv
+        kicks[nch:nch+ncv] += dkickcv
         kicks[-1] += dkickrf
         return kicks
