@@ -15,8 +15,10 @@ from pymodels import ts as pyts, si as pysi
 
 
 class Params:
+    """."""
 
     def __init__(self):
+        """."""
         self.optics_mode = 'M1'
         self.coupling = 0.1  # fractional number
         self.emit0 = 3.5e-9  # m.rad
@@ -27,6 +29,7 @@ class Params:
 
 
 class BeamShapeTS(MeasBaseClass):
+    """."""
 
     def __init__(self):
         """."""
@@ -53,6 +56,7 @@ class BeamShapeTS(MeasBaseClass):
         self.data['timestamp'] = _time.time()
 
     def plot_data(self):
+        """."""
         optics_mode = self.params.optics_mode
 
         ts_mod, ts_twi0 = pyts.create_accelerator(optics_mode=optics_mode)
@@ -64,12 +68,16 @@ class BeamShapeTS(MeasBaseClass):
         idx = pyaccel.lattice.find_indices(ts_mod, 'fam_name', 'InjNLKckr')
         idcs = np.r_[scrn_idx + idx]
 
-        fig  = plt.figure(figsize=(18, 7))
+        fig = plt.figure(figsize=(18, 7))
         gs = mpl_gs.GridSpec(2, len(idcs), height_ratios=[2, 1])
-        gs.update(left=0.07, right=0.98, top=0.92, bottom=0.1, hspace=0.25, wspace=0.05)
+        gs.update(
+            left=0.07, right=0.98, top=0.92, bottom=0.1,
+            hspace=0.25, wspace=0.05)
         ax1 = fig.add_subplot(gs[0, :])
 
-        axs = [fig.add_subplot(gs[1, i], aspect='equal') for i in range(len(idcs))]
+        axs = [
+            fig.add_subplot(gs[1, i], aspect='equal')
+            for i in range(len(idcs))]
 
         ax1.plot(tstwi.spos[idcs], tstwi.betax[idcs], 'bo', linewidth=3)
         ax1.plot(tstwi.spos[idcs], tstwi.betay[idcs], 'ro', linewidth=3)
@@ -90,7 +98,7 @@ class BeamShapeTS(MeasBaseClass):
 
         emity = emit0*coup/(1+coup)
         emitx = emit0/(1+coup)
-        etax =  tstwi.etax[idcs]
+        etax = tstwi.etax[idcs]
         betax = tstwi.betax[idcs]
         betay = tstwi.betay[idcs]
         sx = 1e3*np.sqrt(betax * emitx + (etax * sigmae)**2)

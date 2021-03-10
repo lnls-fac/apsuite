@@ -23,11 +23,13 @@ class Params:
 
 
 class MeasDispTS(_MeasBaseClass):
-    """Class to measure the joined dispersion of BO, TS and SI.
+    """
+    Class to measure the joined dispersion of BO, TS and SI.
 
     This class assumes BO, TS and SI SOFB are properly configured.
     All of them must be with the SyncWithInjection selected.
-    BO must be in Monit1 Rate with the index at the end of the ramp."""
+    BO must be in Monit1 Rate with the index at the end of the ramp.
+    """
 
     def __init__(self):
         """."""
@@ -60,7 +62,6 @@ class MeasDispTS(_MeasBaseClass):
         tssofb = self.devices['ts_sofb']
         evg = self.devices['evg']
         rfgen = self.devices['rfgen']
-
 
         self.data['rffreq_ini'] = rfgen.frequency
 
@@ -117,7 +118,6 @@ class MeasDispTS(_MeasBaseClass):
 
         self.analysis = anl
 
-
     def plot_data(self):
         """."""
         anl = self.analysis
@@ -127,7 +127,7 @@ class MeasDispTS(_MeasBaseClass):
         dispx = _np.r_[bodispx, anl['tsdispx'], anl['sidispx']]
         dispy = _np.r_[bodispy, anl['tsdispy'], anl['sidispy']]
 
-        fig  = _mplt.figure(figsize=(18, 6))
+        fig = _mplt.figure(figsize=(18, 6))
         gs = _mgs.GridSpec(1, 1)
         gs.update(
             left=0.07, right=0.98, top=0.92, bottom=0.1, hspace=0.25,
