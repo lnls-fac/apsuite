@@ -14,8 +14,6 @@ from apsuite.utils import MeasBaseClass
 from pymodels import ts as pyts, si as pysi
 
 
-35146337
-
 class Params:
 
     def __init__(self):
