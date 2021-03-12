@@ -11,8 +11,8 @@ from siriuspy.devices import RFCav, SOFB, DCCT, EVG
 import pyaccel as _pyaccel
 from pymodels import si as _si, bo as _bo
 
-from ..utils import ThreadedMeasBaseClass as _BaseClass, ParamsBaseClass as \
-    _ParamsBaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
 class Params(_ParamsBaseClass):
