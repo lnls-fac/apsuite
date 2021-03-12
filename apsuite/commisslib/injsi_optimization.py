@@ -47,7 +47,7 @@ class TuneScanInjSI(SimulAnneal, _BaseClass):
         self.params = InjSIParams()
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self.devices['tunecorr'] = TuneCorr(TuneCorr.DEVICES.SI)
-        self.devices['currinfo'] = CurrInfoSI(CurrInfoSI.DEVICES.SI)
+        self.devices['currinfo'] = CurrInfoSI()
         self.devices['injection'] = PV(TuneScanInjSI.PV_INJECTION)
         self.devices['tunecorr'].cmd_update_reference()
         self.data['measure'] = dict()

@@ -89,7 +89,7 @@ class MeasIDIntegral(_BaseClass):
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
         self.devices['study_event'] = PV('AS-RaMO:TI-EVG:StudyExtTrig-Cmd')
-        self.devices['current_info'] = CurrInfoSI(CurrInfoSI.DEVICES.SI)
+        self.devices['current_info'] = CurrInfoSI()
         self.params = IDParams(phases, self.meas_type, self.devices['sofb'])
         self.id_idx = self._get_id_idx()
         self.bpm_idx = _np.array(self.famdata['BPM']['index']).ravel()
