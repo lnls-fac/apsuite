@@ -12,11 +12,13 @@ from matplotlib.collections import PolyCollection as _PolyCollection
 
 from siriuspy.devices import BunchbyBunch
 
-from ..utils import MeasBaseClass as _BaseClass
+from ..utils import MeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class BbBLParams:
+class BbBLParams(_ParamsBaseClass):
     """."""
+
     DAC_NBITS = 14
     SAT_THRES = 2**(DAC_NBITS-1) - 1
     CALIBRATION_FACTOR = 1000  # Counts/mA/degree
@@ -28,6 +30,7 @@ class BbBLParams:
 
     def __init__(self):
         """."""
+        super().__init__()
         self.center_frequency = 2090  # [Hz]
         self.bandwidth = 200  # [Hz]
 

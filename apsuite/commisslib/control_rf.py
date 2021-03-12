@@ -11,14 +11,16 @@ from siriuspy.devices import RFCav, SOFB, DCCT, EVG
 import pyaccel as _pyaccel
 from pymodels import si as _si, bo as _bo
 
-from ..utils import ThreadedMeasBaseClass as _BaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, ParamsBaseClass as \
+    _ParamsBaseClass
 
 
-class Params:
+class Params(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self._sweep_type = 'phase'
         self.phase_ini = -177.5
         self.phase_fin = 177.5

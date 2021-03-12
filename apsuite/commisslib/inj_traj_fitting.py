@@ -6,14 +6,16 @@ from siriuspy.devices import SOFB, DCCT, PowerSupplyPU
 import pyaccel
 from pymodels import si, bo
 
-from ..utils import MeasBaseClass as _BaseClass
+from ..utils import MeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class Params:
+class Params(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self.simul_emitx = 3.5e-9
         self.simul_emity = 3.5e-11
         self.simul_espread = 1e-3

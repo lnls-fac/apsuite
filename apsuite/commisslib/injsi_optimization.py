@@ -4,14 +4,16 @@ import numpy as _np
 from epics import PV
 from apsuite.optimization import SimulAnneal
 from siriuspy.devices import Tune, TuneCorr, CurrInfoSI
-from ..utils import MeasBaseClass as _BaseClass
+from ..utils import MeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class InjSIParams:
+class InjSIParams(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self.nr_iter = 10
         self.nr_pulses = 5
         self.max_delta_tunex = 1e-2

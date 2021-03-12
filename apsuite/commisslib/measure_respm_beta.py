@@ -2,17 +2,19 @@
 from pymodels import si
 from siriuspy.clientconfigdb import ConfigDBClient
 
-from ..utils import ThreadedMeasBaseClass as _BaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 from .measure_beta import MeasBeta as _MeasBeta
 from .measure_respmat import MeasureRespMat as _MeasureRespMat
 
 
-class RespMatBetaParams:
+class RespMatBetaParams(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self.nmeas_respmat = 10
         self.nmeas_beta = 10
         self.filename = 'variation'

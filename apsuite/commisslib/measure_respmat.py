@@ -6,14 +6,16 @@ import numpy as np
 from siriuspy.devices import SOFB, Tune, CurrInfo, RFGen
 from siriuspy.clientconfigdb import ConfigDBClient
 
-from ..utils import ThreadedMeasBaseClass as _BaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class RespMatParams:
+class RespMatParams(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self.nr_points_smooth = 50
         self.corr_nr_iters = 10
         self.delta_kickx = 15  # [urad]

@@ -6,14 +6,16 @@ from epics import PV
 
 from siriuspy.devices import EGBias, ICT, TranspEff, LLRF
 
-from ..utils import MeasBaseClass as _BaseClass
+from ..utils import MeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class ParamsBias:
+class ParamsBias(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self.bias_ini = -41
         self.bias_fin = -55
         self.bias_step = 1

@@ -12,14 +12,16 @@ import pyaccel
 from pymodels import si
 
 from ..optics_analysis import TuneCorr
-from ..utils import ThreadedMeasBaseClass as _BaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class IDParams:
+class IDParams(_ParamsBaseClass):
     """."""
 
     def __init__(self, phases, meas_type, sofb):
         """."""
+        super().__init__()
         self.phases = phases
         self.meas_type = meas_type
         if self.meas_type == MeasIDIntegral.MEAS_TYPE.Static:

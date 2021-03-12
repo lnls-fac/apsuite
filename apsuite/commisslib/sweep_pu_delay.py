@@ -9,14 +9,16 @@ import matplotlib.gridspec as _mgs
 from siriuspy.namesys import SiriusPVName as _PVName
 from siriuspy.devices import PowerSupplyPU, Screen, SOFB
 
-from ..utils import ThreadedMeasBaseClass as _BaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class Params:
+class Params(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self.delay_span = 2  # delay in [us]
         self.num_points = 10
         self.wait_for_pm = 3

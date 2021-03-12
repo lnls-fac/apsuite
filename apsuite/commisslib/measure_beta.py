@@ -13,10 +13,11 @@ from siriuspy.devices import PowerSupply, Tune, SOFB
 import pyaccel
 from pymodels import si
 
-from ..utils import ThreadedMeasBaseClass as _BaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class BetaParams:
+class BetaParams(_ParamsBaseClass):
     """."""
 
     # Currents used in measurements performed at IMA's lab.
@@ -57,6 +58,7 @@ class BetaParams:
 
     def __init__(self):
         """."""
+        super().__init__()
         self.nr_measures = 1
         self.quad_deltakl = 0.01  # [1/m]
         self.wait_quadrupole = 1  # [s]

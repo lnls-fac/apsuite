@@ -9,14 +9,15 @@ from siriuspy.devices import SOFB, LLRF
 
 from ..optimization import SimulAnneal
 from ..utils import MeasBaseClass as _BaseClass, \
-    ThreadedMeasBaseClass as _TBaseClass
+    ThreadedMeasBaseClass as _TBaseClass, ParamsBaseClass as _ParamsBaseClass
 
 
-class ParamsDisp:
+class ParamsDisp(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self.klystron_delta = -2
         self.wait_time = 40
         self.timeout_orb = 10
