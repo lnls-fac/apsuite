@@ -7,14 +7,16 @@ from siriuspy.namesys import SiriusPVName as _PVName
 from siriuspy.devices import SOFB
 
 from ..optimization import SimulAnneal
-from ..utils import ThreadedMeasBaseClass as _BaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class Params:
+class Params(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self.deltas = {
             'CH': 0.3e-3, 'CV': 0.15e-3, 'InjSept': 0.3e-3, 'InjKckr': 0.3e-3}
         self.wait_time = 2

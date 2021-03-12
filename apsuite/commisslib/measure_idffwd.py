@@ -8,14 +8,16 @@ from siriuspy.devices import APU as _APU
 from siriuspy.devices import IDCorrectors as _IDCorrectors
 from siriuspy.devices import APUFeedForward as _APUFeedForward
 
-from ..utils import MeasBaseClass as _BaseClass
+from ..utils import MeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class APUFFWDParams:
+class APUFFWDParams(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self.phase_parking = 11.0  # [mm]
         self.phases = _np.linspace(0, 11, 23)
         self.phase_speed = 1.5  # [mm/s]

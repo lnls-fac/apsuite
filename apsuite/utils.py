@@ -1,6 +1,8 @@
 """."""
 from threading import Thread as _Thread, Event as _Event
 import logging as _log
+import sys as _sys
+import apsuite.commisslib as _commisslib
 
 from mathphys.functions import save_pickle as _save_pickle, \
     load_pickle as _load_pickle
@@ -16,19 +18,39 @@ class DataBaseClass:
 
     def save_data(self, fname, overwrite=False):
         """."""
-        data = dict(params=self.params, data=self.data)
+        data = dict(params=self.params.to_dict(), data=self.data)
         _save_pickle(data, fname, overwrite=overwrite)
 
     def load_and_apply(self, fname):
         """."""
         data = self.load_data(fname)
         self.data = data['data']
-        self.params = data['params']
+        params = data['params']
+        if not isinstance(params, dict):
+            params = params.to_dict()
+        self.params.from_dict(params_dict=params)
 
     @staticmethod
     def load_data(fname):
         """."""
-        return _load_pickle(fname)
+        try:
+            data = _load_pickle(fname)
+        except ModuleNotFoundError:
+            _sys.modules['apsuite.commissioning_scripts'] = _commisslib
+            data = _load_pickle(fname)
+        return data
+
+
+class ParamsBaseClass:
+    """."""
+
+    def to_dict(self):
+        """."""
+        return self.__dict__
+
+    def from_dict(self, params_dict):
+        """."""
+        self.__dict__.update(params_dict)
 
 
 class MeasBaseClass(DataBaseClass):

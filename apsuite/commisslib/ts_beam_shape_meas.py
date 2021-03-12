@@ -10,15 +10,17 @@ from matplotlib.patches import Ellipse
 
 import pyaccel
 from siriuspy.devices import Screen
-from apsuite.utils import MeasBaseClass
+from apsuite.utils import MeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 from pymodels import ts as pyts, si as pysi
 
 
-class Params:
+class Params(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self.optics_mode = 'M1'
         self.coupling = 0.1  # fractional number
         self.emit0 = 3.5e-9  # m.rad
@@ -28,7 +30,7 @@ class Params:
         self.sig_gauss_screen = 0.03  # mm
 
 
-class BeamShapeTS(MeasBaseClass):
+class BeamShapeTS(_BaseClass):
     """."""
 
     def __init__(self):

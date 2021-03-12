@@ -8,15 +8,17 @@ import matplotlib.gridspec as _mgs
 
 import pyaccel
 from siriuspy.devices import SOFB as _SOFB, RFGen as _RFGen, EVG as _EVG
-from apsuite.utils import MeasBaseClass as _MeasBaseClass
+from apsuite.utils import MeasBaseClass as _MeasBaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 from pymodels import ts as _pyts, si as _pysi, bo as _pybo
 
 
-class Params:
+class Params(_ParamsBaseClass):
     """."""
 
     def __init__(self):
         """."""
+        super().__init__()
         self.deltarf = 100  # Hz
         self.bo_mom_compact = 7.2e-4
         self.ts_optics_mode = 'M1'

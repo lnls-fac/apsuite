@@ -18,10 +18,11 @@ from siriuspy.epics import PV as _PV
 
 import pyaccel as _pyacc
 
-from ..utils import ThreadedMeasBaseClass as _BaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class BBAParams:
+class BBAParams(_ParamsBaseClass):
     """."""
 
     BPMNAMES = (
@@ -194,6 +195,7 @@ class BBAParams:
 
     def __init__(self):
         """."""
+        super().__init__()
         self.deltaorbx = 100  # [um]
         self.deltaorby = 100  # [um]
         self.meas_nrsteps = 8

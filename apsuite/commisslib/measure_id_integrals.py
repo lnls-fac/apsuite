@@ -12,14 +12,16 @@ import pyaccel
 from pymodels import si
 
 from ..optics_analysis import TuneCorr
-from ..utils import ThreadedMeasBaseClass as _BaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class IDParams:
+class IDParams(_ParamsBaseClass):
     """."""
 
     def __init__(self, phases, meas_type, sofb):
         """."""
+        super().__init__()
         self.phases = phases
         self.meas_type = meas_type
         if self.meas_type == MeasIDIntegral.MEAS_TYPE.Static:
@@ -87,7 +89,7 @@ class MeasIDIntegral(_BaseClass):
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
         self.devices['study_event'] = PV('AS-RaMO:TI-EVG:StudyExtTrig-Cmd')
-        self.devices['current_info'] = CurrInfoSI(CurrInfoSI.DEVICES.SI)
+        self.devices['current_info'] = CurrInfoSI()
         self.params = IDParams(phases, self.meas_type, self.devices['sofb'])
         self.id_idx = self._get_id_idx()
         self.bpm_idx = _np.array(self.famdata['BPM']['index']).ravel()

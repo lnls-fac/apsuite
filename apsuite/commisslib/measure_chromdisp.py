@@ -10,16 +10,18 @@ from siriuspy.devices import SOFB, RFGen, Tune
 from pymodels import si
 import pyaccel
 
-from ..utils import ThreadedMeasBaseClass as _BaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
-class MeasParams:
+class MeasParams(_ParamsBaseClass):
     """."""
 
     MOM_COMPACT = 1.68e-4
 
     def __init__(self):
         """."""
+        super().__init__()
         self.delta_freq = 200  # [Hz]
         self.meas_nrsteps = 8
         self.npoints = 5

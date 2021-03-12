@@ -12,7 +12,8 @@ import matplotlib.gridspec as _mpl_gs
 
 from siriuspy.devices import PowerSupply, Tune
 
-from ..utils import ThreadedMeasBaseClass as _BaseClass
+from ..utils import ThreadedMeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 # _log.basicConfig(format=)
 root = _log.getLogger()
@@ -25,7 +26,7 @@ handler.setFormatter(formatter)
 root.addHandler(handler)
 
 
-class CouplingParams():
+class CouplingParams(_ParamsBaseClass):
     """."""
 
     QUADS = (
@@ -35,6 +36,7 @@ class CouplingParams():
 
     def __init__(self):
         """."""
+        super().__init__()
         self._quadfam_name = 'QFB'
         self.nr_points = 21
         self.time_wait = 5  # s
