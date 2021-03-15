@@ -3,7 +3,7 @@ import time as _time
 
 import numpy as np
 
-from siriuspy.devices import SOFB, Tune, CurrInfo, RFGen
+from siriuspy.devices import SOFB, Tune, CurrInfoSI, RFGen
 from siriuspy.clientconfigdb import ConfigDBClient
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
@@ -105,7 +105,7 @@ class MeasureRespMat(_BaseClass):
         self.data['rf_frequency'] = rfgen.frequency
         self.data['tunex'] = tune.tunex
         self.data['tuney'] = tune.tuney
-        self.data['stored_current'] = curr.si.current
+        self.data['stored_current'] = curr.current
         self.data['sofb_nr_points'] = sofb.nr_points
         self.data['bpm_variation'] = bpm_var
         self.data['orbmat_name'] = orbmat_name
@@ -147,6 +147,6 @@ class MeasureRespMat(_BaseClass):
         """."""
         sofb = SOFB(SOFB.DEVICES.SI)
         tune = Tune(Tune.DEVICES.SI)
-        curr = CurrInfo(CurrInfo.DEVICES.SI)
+        curr = CurrInfoSI()
         rfgen = RFGen(RFGen.DEVICES.AS)
         return sofb, tune, curr, rfgen
