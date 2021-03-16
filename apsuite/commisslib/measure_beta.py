@@ -540,20 +540,9 @@ class MeasBeta(_BaseClass):
             qnames.append(qname.strip('-'))
         return qnames, quads_idx
 
-    def plot_results(self, quads=None, title='', scale=1):
+    def get_betas(self, quads=None):
         """."""
-        fig = plt.figure(figsize=(9, 7))
-        grids = mpl_gs.GridSpec(ncols=1, nrows=2, figure=fig)
-        grids.update(
-            left=0.1, right=0.8, bottom=0.15, top=0.9,
-            hspace=0.0, wspace=0.35)
-
-        ax1 = fig.add_subplot(grids[0, 0])
-        ax2 = fig.add_subplot(grids[1, 0], sharex=ax1)
-
-        if title:
-            fig.suptitle(title)
-
+        beta_data = dict()
         quads = quads or self.data['quadnames']
         indcs, nom_bx, nom_by = [], [], []
         mes_bx, mes_by, bx_ave, by_ave = [], [], [], []
@@ -568,18 +557,99 @@ class MeasBeta(_BaseClass):
             bx_ave.append(self.analysis[quad]['betax_ave'])
             by_ave.append(self.analysis[quad]['betay_ave'])
 
-        ax1.plot(indcs, np.array(bx_ave)*scale, '--bx')
-        ax1.plot(indcs, nom_bx, '.-b')
-        ax1.plot(indcs, np.array(mes_bx)*scale, '.b')
-        ax2.plot(indcs, np.array(by_ave)*scale, '--rx')
-        ax2.plot(indcs, nom_by, '.-r')
-        ax2.plot(indcs, np.array(mes_by)*scale, '.r')
+        spos = pyaccel.lattice.find_spos(self.model)
+        qnidx = np.array(self.famdata['QN']['index']).ravel()
+
+        beta_data['indices'] = np.array(indcs)
+        beta_data['quad_spos'] = spos[qnidx[indcs]]
+        beta_data['betax_nom'] = np.array(nom_bx)
+        beta_data['betay_nom'] = np.array(nom_by)
+        beta_data['betax_meas'] = np.array(mes_bx)
+        beta_data['betay_meas'] = np.array(mes_by)
+        beta_data['betax_meas_ave'] = np.array(bx_ave)
+        beta_data['betay_meas_ave'] = np.array(by_ave)
+        return beta_data
+
+    def plot_betas(self, quads=None, title='', scale=1):
+        """."""
+        fig = plt.figure(figsize=(9, 7))
+        grids = mpl_gs.GridSpec(ncols=1, nrows=2, figure=fig)
+        grids.update(
+            left=0.1, right=0.95, bottom=0.15, top=0.9,
+            hspace=0.0, wspace=0.35)
+
+        ax1 = fig.add_subplot(grids[0, 0])
+        ax2 = fig.add_subplot(grids[1, 0], sharex=ax1)
+
+        if title:
+            fig.suptitle(title)
+
+        beta_data = self.get_betas(quads=quads)
+        quad_spos = beta_data['quad_spos']
+
+        ax1.plot(quad_spos, beta_data['betax_nom'], '-', color='C0')
+        ax1.plot(
+            quad_spos, beta_data['betax_meas_ave']*scale, '--', color='C1')
+        ax1.plot(quad_spos, beta_data['betax_meas']*scale, '.', color='C1')
+
+        ax2.plot(quad_spos, beta_data['betay_nom'], '-', color='C0')
+        ax2.plot(
+            quad_spos, beta_data['betay_meas_ave']*scale, '--', color='C1')
+        ax2.plot(quad_spos, beta_data['betay_meas']*scale, '.', color='C1')
 
         ax1.set_ylabel(r'$\beta_x$ [m]')
         ax2.set_ylabel(r'$\beta_y$ [m]')
+        ax2.set_xlabel('s [m]')
         ax1.legend(
-            ['measure', 'nominal'], loc='center left',
-            bbox_to_anchor=(1, 0), fontsize='x-small')
-        ax1.grid(True)
-        ax2.grid(True)
+            ['nominal', 'measurement'], loc='lower right',
+            bbox_to_anchor=(1, 1), fontsize='x-small', ncol=2)
+        ax1.grid(True, ls='--')
+        ax2.grid(True, ls='--')
+        fig.show()
+
+    def plot_beta_beating(self, quads=None, title='', scale=1):
+        """."""
+        fig = plt.figure(figsize=(9, 7))
+        grids = mpl_gs.GridSpec(ncols=1, nrows=1, figure=fig)
+        grids.update(
+            left=0.1, right=0.95, bottom=0.15, top=0.9,
+            hspace=0.0, wspace=0.35)
+
+        ax1 = fig.add_subplot(grids[0, 0])
+
+        if title:
+            fig.suptitle(title)
+
+        beta_data = self.get_betas(quads=quads)
+        quad_spos = beta_data['quad_spos']
+
+        bbeatx = beta_data['betax_meas_ave']*scale - beta_data['betax_nom']
+        bbeatx /= beta_data['betax_nom']
+
+        bbeaty = beta_data['betay_meas_ave']*scale - beta_data['betay_nom']
+        bbeaty /= beta_data['betay_nom']
+
+        ax1.plot(quad_spos, bbeatx * 100, '.-', color='tab:blue')
+        ax1.plot(quad_spos, bbeaty * 100, '.-', color='tab:red')
+
+        bbeatx_std = np.std(bbeatx) * 100
+        bbeaty_std = np.std(bbeaty) * 100
+
+        strx = r'$\Delta \beta_x/\beta_x$ ={:.2f}% (std)'
+        stry = r'$\Delta \beta_y/\beta_y$ ={:.2f}% (std)'
+        textstr = '\n'.join(
+            (strx.format(bbeatx_std), stry.format(bbeaty_std)))
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
+
+        # place a text box in upper left in axes coords
+        ax1.text(
+            0.35, 0.95, textstr, transform=ax1.transAxes,
+            fontsize=12, verticalalignment='top', bbox=props)
+
+        ax1.set_ylabel(r'$\Delta\beta/\beta$ [%]')
+        ax1.set_xlabel('s [m]')
+        ax1.legend(
+            ['horizontal', 'vertical'], loc='lower right',
+            bbox_to_anchor=(1, 1), fontsize='x-small', ncol=2)
+        ax1.grid(True, ls='--')
         fig.show()
