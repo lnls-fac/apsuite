@@ -1,6 +1,7 @@
 """."""
 
 from copy import deepcopy as _dcopy
+import multiprocessing as mp_
 
 import numpy as _np
 
@@ -243,26 +244,51 @@ class LOCOUtils:
         return dmdg_bpm, dmdalpha_bpm, dmdg_corr
 
     @staticmethod
-    def jloco_calc_k_quad(config, model):
+    def jloco_calc_k_quad(config, model, parallel=None):
         """."""
         if config.use_quad_families:
             kindices = []
             for fam_name in config.famname_quadset:
                 kindices.append(config.respm.fam_data[fam_name]['index'])
+        else:
+            kindices = config.respm.fam_data['QN']['index']
+
+        if parallel is not None:
+            nrproc = max(parallel, 1)
+            npart = len(kindices)
+            np_proc = (npart // nrproc)*_np.ones(nrproc, dtype=int)
+            np_proc[:(npart % nrproc)] += 1
+            parts = _np.r_[0, _np.cumsum(np_proc)]
+            slcs = [slice(parts[i], parts[i+1]) for i in range(nrproc)]
+
+            with mp_.Pool(processes=nrproc) as pool:
+                res = []
+                for slc in slcs:
+                    res.append(pool.apply_async(
+                        LOCOUtils._jloco_calc_k_matrix,
+                        (config, model, kindices[slc])))
+
+                kmatrix = [re.get() for re in res]
+            kmatrix = _np.concatenate(kmatrix, axis=1)
+        else:
+            kmatrix = LOCOUtils._jloco_calc_k_matrix(config, model, kindices)
+        return kmatrix
+
+    @staticmethod
+    def _jloco_calc_k_matrix(config, model, kindices):
+        matrix_nominal = LOCOUtils.respm_calc(
+            model, config.respm, config.use_dispersion)
+
+        if config.use_quad_families:
             kvalues = LOCOUtils.get_quads_strengths(
                 model, kindices)
             set_quad_kdelta = LOCOUtils.set_quadset_kdelta
         else:
-            kindices = config.respm.fam_data['QN']['index']
             kvalues = _np.array(
                 _pyaccel.lattice.get_attribute(model, 'KL', kindices))
             set_quad_kdelta = LOCOUtils.set_quadmag_kdelta
-        matrix_nominal = LOCOUtils.respm_calc(
-            model, config.respm, config.use_dispersion)
 
-        kmatrix = _np.zeros((
-            matrix_nominal.shape[0]*matrix_nominal.shape[1], len(kindices)))
-
+        kmatrix = _np.zeros((matrix_nominal.size, len(kindices)))
         model_this = _dcopy(model)
         for idx, idx_set in enumerate(kindices):
             set_quad_kdelta(
