@@ -69,6 +69,8 @@ class BetaParams(_ParamsBaseClass):
         self.recover_tune_maxiter = 3
         self.quad_nrcycles = 0
         self.time_wait_quad_cycle = 0.5  # [s]
+        self.sofb_nriters = 2
+        self.sofb_residue = 0.1  # [um]
 
     def __str__(self):
         """."""
@@ -86,6 +88,8 @@ class BetaParams(_ParamsBaseClass):
         stg += ftmp('quad_nrcycles', self.quad_nrcycles, '')
         stg += ftmp(
             'time_wait_quad_cycle [s]', self.time_wait_quad_cycle, '')
+        stg += dtmp('sofb_nriters', self.sofb_nriters, '')
+        stg += ftmp('sofb_residue [um]', self.sofb_residue, '')
         return stg
 
 
@@ -268,10 +272,10 @@ class MeasBeta(_BaseClass):
         self.data['tunex_ref'] = self.devices['tune'].tunex
         self.data['tuney_ref'] = self.devices['tune'].tuney
 
-        if sofb.autocorrsts and sofb.rfenbl:
-            loop_on_rf = True
-            print('RF is enable in SOFB feedback, disabling it...')
-            sofb.rfenbl = 0
+        autocorr = sofb.autocorrsts
+        if autocorr:
+            print('SOFB Loop is enable in SOFB, disabling it...')
+            sofb.cmd_turn_off_autocorr()
 
         self._cycle_quads()
 
@@ -281,10 +285,10 @@ class MeasBeta(_BaseClass):
             print('\n  measuring quad: ' + quadname, end=' ')
             self._meas_beta_single_quad(quadname)
 
-        if loop_on_rf:
-            print(
-                'RF was enable in SOFB feedback, restoring original state...')
-            sofb.rfenbl = 1
+        if autocorr:
+            print('SOFB Loop was enable, restoring original state...')
+            sofb.cmd_turn_on_autocorr()
+
         print('finished!')
         tif = _time.time()
         print('time elapsed: {:.2f} min'.format((tif-ti0)/60))
@@ -376,6 +380,13 @@ class MeasBeta(_BaseClass):
         """."""
         quad = self.devices[quadname]
         tune = self.devices['tune']
+        sofb = self.devices['sofb']
+
+        print('Correcting Orbit...')
+        sofb.correct_orbit_manually(
+            nr_iters=self.params.sofb_nriters,
+            residue=self.params.sofb_residue)
+        print('Done!')
 
         if not quad.pwrstate:
             print('turning quadrupole ' + quadname + ' On', end='')
