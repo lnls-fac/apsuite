@@ -283,12 +283,10 @@ class LOCOUtils:
 
         magtype = 'dipole'
         if config.parallel is not None:
-            print('paralelo')
             dip_matrix = LOCOUtils._parallel_base(
                 config, model, dip_indices,
                 LOCOUtils._jloco_calc_k_matrix, magtype)
         else:
-            print('serial')
             dip_matrix = LOCOUtils._jloco_calc_k_matrix(
                 config, model, dip_indices, magtype)
         return dip_matrix
