@@ -244,24 +244,54 @@ class LOCOUtils:
         return dmdg_bpm, dmdalpha_bpm, dmdg_corr
 
     @staticmethod
-    def _parallel_base(config, model, indices, func):
-        nrproc = max(config.parallel, 1)
-        npart = len(indices)
-        np_proc = (npart // nrproc)*_np.ones(nrproc, dtype=int)
-        np_proc[:(npart % nrproc)] += 1
-        parts = _np.r_[0, _np.cumsum(np_proc)]
-        slcs = [slice(parts[i], parts[i+1]) for i in range(nrproc)]
-
-        with mp_.Pool(processes=nrproc) as pool:
+    def _parallel_base(config, model, indices, func, magtype=None):
+        parallel = config.parallel if config.parallel is not None else True
+        slcs = LOCOUtils._get_slices_multiprocessing(parallel, len(indices))
+        with mp_.Pool(processes=len(slcs)) as pool:
             res = []
             for slc in slcs:
                 res.append(pool.apply_async(
                     func,
-                    (config, model, indices[slc])))
-
+                    (config, model, indices[slc], magtype)))
             mat = [re.get() for re in res]
-        mat = _np.concatenate(mat, axis=1)
-        return mat
+        return _np.concatenate(mat, axis=1)
+
+    @staticmethod
+    def _get_slices_multiprocessing(parallel, npart):
+        nrproc = mp_.cpu_count() - 3
+        nrproc = nrproc if parallel is True else parallel
+        nrproc = max(nrproc, 1)
+        nrproc = min(nrproc, npart)
+
+        np_proc = (npart // nrproc)*_np.ones(nrproc, dtype=int)
+        np_proc[:(npart % nrproc)] += 1
+        parts_proc = _np.r_[0, _np.cumsum(np_proc)]
+        return [slice(parts_proc[i], parts_proc[i+1]) for i in range(nrproc)]
+
+    @staticmethod
+    def jloco_calc_k_dip(config, model):
+        """."""
+        matrix_nominal = LOCOUtils.respm_calc(
+            model, config.respm, config.use_dispersion)
+
+        if config.use_dip_families:
+            dip_indices = []
+            for fam_name in config.famname_dipset:
+                dip_indices.append(config.respm.fam_data[fam_name]['index'])
+        else:
+            dip_indices = config.respm.fam_data['BN']['index']
+
+        magtype = 'dipole'
+        if config.parallel is not None:
+            print('paralelo')
+            dip_matrix = LOCOUtils._parallel_base(
+                config, model, dip_indices,
+                LOCOUtils._jloco_calc_k_matrix, magtype)
+        else:
+            print('serial')
+            dip_matrix = LOCOUtils._jloco_calc_k_matrix(
+                config, model, dip_indices, magtype)
+        return dip_matrix
 
     @staticmethod
     def jloco_calc_k_quad(config, model):
@@ -272,31 +302,66 @@ class LOCOUtils:
                 kindices.append(config.respm.fam_data[fam_name]['index'])
         else:
             kindices = config.respm.fam_data['QN']['index']
-
+        magtype = 'quadrupole'
         if config.parallel is not None:
-            kmatrix = LOCOUtils()._parallel_base(
-                config, model, kindices, LOCOUtils._jloco_calc_k_matrix)
+            kmatrix = LOCOUtils._parallel_base(
+                config, model, kindices,
+                LOCOUtils._jloco_calc_k_matrix, magtype)
         else:
-            kmatrix = LOCOUtils._jloco_calc_k_matrix(config, model, kindices)
+            kmatrix = LOCOUtils._jloco_calc_k_matrix(
+                config, model, kindices, magtype)
         return kmatrix
 
     @staticmethod
-    def _jloco_calc_k_matrix(config, model, kindices):
+    def jloco_calc_k_sext(config, model):
+        """."""
+        if config.use_sext_families:
+            sindices = []
+            for fam_name in config.famname_sextset:
+                sindices.append(config.respm.fam_data[fam_name]['index'])
+        else:
+            sindices = config.respm.fam_data['SN']['index']
+        magtype = 'sextupole'
+        if config.parallel is not None:
+            smatrix = LOCOUtils._parallel_base(
+                config, model, sindices,
+                LOCOUtils._jloco_calc_k_matrix, magtype)
+        else:
+            smatrix = LOCOUtils._jloco_calc_k_matrix(
+                config, model, sindices, magtype)
+        return smatrix
+
+    @staticmethod
+    def _jloco_calc_k_matrix(config, model, indices, magtype=None):
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        if config.use_quad_families:
+        famtype = None
+        if magtype == 'quadrupole':
+            famtype = config.use_quad_families
+        elif magtype == 'sextupole':
+            famtype = config.use_sext_families
+        elif magtype == 'dipole':
+            famtype = config.use_dip_families
+
+        if famtype:
             kvalues = LOCOUtils.get_quads_strengths(
-                model, kindices)
-            set_quad_kdelta = LOCOUtils.set_quadset_kdelta
+                model, indices)
+            if magtype == 'dipole':
+                set_quad_kdelta = LOCOUtils.set_dipset_kdelta
+            else:
+                set_quad_kdelta = LOCOUtils.set_quadset_kdelta
         else:
             kvalues = _np.array(
-                _pyaccel.lattice.get_attribute(model, 'KL', kindices))
-            set_quad_kdelta = LOCOUtils.set_quadmag_kdelta
+                _pyaccel.lattice.get_attribute(model, 'KL', indices))
+            if magtype == 'dipole':
+                set_quad_kdelta = LOCOUtils.set_dipmag_kdelta
+            else:
+                set_quad_kdelta = LOCOUtils.set_quadmag_kdelta
 
-        kmatrix = _np.zeros((matrix_nominal.size, len(kindices)))
+        kmatrix = _np.zeros((matrix_nominal.size, len(indices)))
         model_this = _dcopy(model)
-        for idx, idx_set in enumerate(kindices):
+        for idx, idx_set in enumerate(indices):
             set_quad_kdelta(
                 model_this, idx_set,
                 kvalues[idx], config.DEFAULT_DELTA_K)
@@ -308,77 +373,21 @@ class LOCOUtils:
         return kmatrix
 
     @staticmethod
-    def jloco_calc_k_dipoles(config, model):
-        """."""
-        if config.use_dip_families:
-            dip_indices = []
-            for fam_name in config.famname_dipset:
-                dip_indices.append(config.respm.fam_data[fam_name]['index'])
-            dip_kvalues = LOCOUtils.get_quads_strengths(
-                model, dip_indices)
-            set_quad_kdelta = LOCOUtils.set_dipset_kdelta
-        else:
-            dip_indices = config.respm.fam_data['BN']['index']
-            dip_kvalues = _np.array(
-                _pyaccel.lattice.get_attribute(model, 'KL', dip_indices))
-            set_quad_kdelta = LOCOUtils.set_dipmag_kdelta
+    def _jloco_calc_ks_matrix(config, model, indices, magtype=None):
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        dip_kmatrix = _np.zeros((
-            matrix_nominal.shape[0]*matrix_nominal.shape[1], len(dip_indices)))
-
-        model_this = _dcopy(model)
-        for idx, idx_set in enumerate(dip_indices):
-            set_quad_kdelta(
-                model_this, idx_set,
-                dip_kvalues[idx], config.DEFAULT_DELTA_K)
-            matrix_this = LOCOUtils.respm_calc(
-                model_this, config.respm, config.use_dispersion)
-            dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_K
-            dip_kmatrix[:, idx] = dmatrix.ravel()
-            set_quad_kdelta(model_this, idx_set, dip_kvalues[idx], 0)
-        return dip_kmatrix
-
-    @staticmethod
-    def jloco_calc_k_sextupoles(config, model):
-        """."""
-        sn_indices = config.respm.fam_data['SN']['index']
-        sn_kvalues = _np.array(
-            _pyaccel.lattice.get_attribute(model, 'KL', sn_indices))
-        set_quad_kdelta = LOCOUtils.set_quadmag_kdelta
-        matrix_nominal = LOCOUtils.respm_calc(
-            model, config.respm, config.use_dispersion)
-
-        sn_kmatrix = _np.zeros((
-            matrix_nominal.shape[0]*matrix_nominal.shape[1], len(sn_indices)))
-
-        model_this = _dcopy(model)
-        for idx, idx_set in enumerate(sn_indices):
-            set_quad_kdelta(
-                model_this, idx_set, sn_kvalues[idx], config.DEFAULT_DELTA_K)
-            matrix_this = LOCOUtils.respm_calc(
-                model_this, config.respm, config.use_dispersion)
-            dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_K
-            sn_kmatrix[:, idx] = dmatrix.ravel()
-            set_quad_kdelta(model_this, idx_set, sn_kvalues[idx], 0)
-        return sn_kmatrix
-
-    @staticmethod
-    def jloco_calc_ks_quad(config, model):
-        """."""
-        kindices = config.respm.fam_data['QN']['index']
         ksvalues = _np.array(
-            _pyaccel.lattice.get_attribute(model, 'KsL', kindices))
-        set_quad_ksdelta = LOCOUtils.set_quadmag_ksdelta
-        matrix_nominal = LOCOUtils.respm_calc(
-            model, config.respm, config.use_dispersion)
+            _pyaccel.lattice.get_attribute(model, 'KsL', indices))
 
-        ksmatrix = _np.zeros((
-            matrix_nominal.shape[0]*matrix_nominal.shape[1], len(kindices)))
+        if magtype == 'dipole':
+            set_quad_ksdelta = LOCOUtils.set_dipmag_ksdelta
+        else:
+            set_quad_ksdelta = LOCOUtils.set_quadmag_ksdelta
 
+        ksmatrix = _np.zeros((matrix_nominal.size, len(indices)))
         model_this = _dcopy(model)
-        for idx, idx_set in enumerate(kindices):
+        for idx, idx_set in enumerate(indices):
             set_quad_ksdelta(
                 model_this, idx_set, ksvalues[idx], config.DEFAULT_DELTA_KS)
             matrix_this = LOCOUtils.respm_calc(
@@ -391,65 +400,78 @@ class LOCOUtils:
     @staticmethod
     def jloco_calc_ks_dipoles(config, model):
         """."""
-        dip_indices = config.respm.fam_data['BN']['index']
-        dip_ksvalues = _np.array(
-            _pyaccel.lattice.get_attribute(model, 'KsL', dip_indices))
-        set_quad_ksdelta = LOCOUtils.set_dipmag_ksdelta
-        matrix_nominal = LOCOUtils.respm_calc(
-            model, config.respm, config.use_dispersion)
+        ksindices = config.respm.fam_data['BN']['index']
+        if config.parallel is not None:
+            ksmatrix = LOCOUtils._parallel_base(
+                config, model, ksindices,
+                LOCOUtils._jloco_calc_ks_matrix, magtype='dipole')
+        else:
+            ksmatrix = LOCOUtils._jloco_calc_ks_matrix(
+                config, model, ksindices, magtype='dipole')
+        return ksmatrix
 
-        dip_ksmatrix = _np.zeros((
-            matrix_nominal.shape[0]*matrix_nominal.shape[1], len(dip_indices)))
+    @staticmethod
+    def jloco_calc_ks_quad(config, model):
+        """."""
+        ksindices = config.respm.fam_data['QN']['index']
+        if config.parallel is not None:
+            ksmatrix = LOCOUtils._parallel_base(
+                config, model, ksindices,
+                LOCOUtils._jloco_calc_ks_matrix)
+        else:
+            ksmatrix = LOCOUtils._jloco_calc_ks_matrix(
+                config, model, ksindices)
+        return ksmatrix
 
-        model_this = _dcopy(model)
-        for idx, idx_set in enumerate(dip_indices):
-            set_quad_ksdelta(
-                model_this, idx_set, dip_ksvalues[idx],
-                config.DEFAULT_DELTA_KS)
-            matrix_this = LOCOUtils.respm_calc(
-                model_this, config.respm, config.use_dispersion)
-            dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_KS
-            dip_ksmatrix[:, idx] = dmatrix.ravel()
-            set_quad_ksdelta(model_this, idx_set, dip_ksvalues[idx], 0)
-        return dip_ksmatrix
+    @staticmethod
+    def jloco_calc_ks_skewquad(config, model):
+        """."""
+        config.update_skew_quad_knobs()
+        ksindices = config.skew_quad_indices
+        if config.parallel is not None:
+            ksmatrix = LOCOUtils._parallel_base(
+                config, model, ksindices,
+                LOCOUtils._jloco_calc_ks_matrix)
+        else:
+            ksmatrix = LOCOUtils._jloco_calc_ks_matrix(
+                config, model, ksindices)
+        return ksmatrix
 
     @staticmethod
     def jloco_calc_ks_sextupoles(config, model):
         """."""
-        sn_indices = config.respm.fam_data['SN']['index']
-        sn_ksvalues = _np.array(
-            _pyaccel.lattice.get_attribute(model, 'KsL', sn_indices))
-        set_quad_ksdelta = LOCOUtils.set_quadmag_ksdelta
-        matrix_nominal = LOCOUtils.respm_calc(
-            model, config.respm, config.use_dispersion)
-
-        sn_ksmatrix = _np.zeros((
-            matrix_nominal.shape[0]*matrix_nominal.shape[1], len(sn_indices)))
-
-        model_this = _dcopy(model)
-        for idx, idx_set in enumerate(sn_indices):
-            set_quad_ksdelta(
-                model_this, idx_set, sn_ksvalues[idx], config.DEFAULT_DELTA_KS)
-            matrix_this = LOCOUtils.respm_calc(
-                model_this, config.respm, config.use_dispersion)
-            dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_KS
-            sn_ksmatrix[:, idx] = dmatrix.ravel()
-            set_quad_ksdelta(model_this, idx_set, sn_ksvalues[idx], 0)
-        return sn_ksmatrix
+        ksindices = config.respm.fam_data['SN']['index']
+        if config.parallel is not None:
+            ksmatrix = LOCOUtils._parallel_base(
+                config, model, ksindices,
+                LOCOUtils._jloco_calc_ks_matrix)
+        else:
+            ksmatrix = LOCOUtils._jloco_calc_ks_matrix(
+                config, model, ksindices)
+        return ksmatrix
 
     @staticmethod
     def jloco_calc_kick_dipoles(config, model):
         """."""
         dip_indices = config.respm.fam_data['BN']['index']
+        if config.parallel is not None:
+            kick_matrix = LOCOUtils._parallel_base(
+                config, model, ksindices,
+                LOCOUtils._jloco_calc_kick_dip)
+        else:
+            kick_matrix = LOCOUtils._jloco_calc_kick_dip(
+                config, model, dip_indices)
+        return kick_matrix
+
+    @staticmethod
+    def _jloco_calc_kick_dip(config, model, dip_indices, magtype=None):
         dip_kick_values = _np.array(_pyaccel.lattice.get_attribute(
             model, 'hkick_polynom', dip_indices))
         set_dip_kick = LOCOUtils.set_dipmag_kick
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        dip_kick_matrix = _np.zeros((
-            matrix_nominal.shape[0]*matrix_nominal.shape[1], 1))
-
+        dip_kick_matrix = _np.zeros((matrix_nominal.size, 1))
         delta_kick = config.DEFAULT_DELTA_DIP_KICK
 
         model_this = _dcopy(model)
@@ -483,38 +505,23 @@ class LOCOUtils:
         return dm_energy_shift
 
     @staticmethod
-    def jloco_calc_ks_skewquad(config, model):
-        """."""
-        config.update_skew_quad_knobs()
-        qsindices = config.skew_quad_indices
-        ksvalues = _np.array(
-            _pyaccel.lattice.get_attribute(model, 'KsL', qsindices))
-        set_quad_ksdelta = LOCOUtils.set_quadmag_ksdelta
-        matrix_nominal = LOCOUtils.respm_calc(
-            model, config.respm, config.use_dispersion)
-
-        ksmatrix = _np.zeros((
-            matrix_nominal.shape[0]*matrix_nominal.shape[1], len(qsindices)))
-
-        model_this = _dcopy(model)
-        for idx, idx_set in enumerate(qsindices):
-            set_quad_ksdelta(
-                model_this, idx_set, ksvalues[idx], config.DEFAULT_DELTA_KS)
-            matrix_this = LOCOUtils.respm_calc(
-                model_this, config.respm, config.use_dispersion)
-            dmatrix = (matrix_this - matrix_nominal)/config.DEFAULT_DELTA_KS
-            ksmatrix[:, idx] = dmatrix.ravel()
-            set_quad_ksdelta(model_this, idx_set, ksvalues[idx], 0)
-        return ksmatrix
-
-    @staticmethod
     def jloco_calc_girders(config, model):
         """."""
         gindices = config.gir_indices
+        if config.parallel is not None:
+            gir_matrix = LOCOUtils._parallel_base(
+                config, model, gindices,
+                LOCOUtils._jloco_girders_shift)
+        else:
+            gir_matrix = LOCOUtils._jloco_girders_shift(
+                config, model, gindices)
+        return gir_matrix
+
+    @staticmethod
+    def _jloco_girders_shift(config, model, gindices, magtype=None):
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
-        gmatrix = _np.zeros((
-            matrix_nominal.shape[0]*matrix_nominal.shape[1], len(gindices)))
+        gmatrix = _np.zeros((matrix_nominal.size, len(gindices)))
 
         model_this = _dcopy(model)
         ds_shift = _np.zeros(gindices.shape[0])
