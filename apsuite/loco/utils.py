@@ -244,7 +244,27 @@ class LOCOUtils:
         return dmdg_bpm, dmdalpha_bpm, dmdg_corr
 
     @staticmethod
-    def jloco_calc_k_quad(config, model, parallel=None):
+    def _parallel_base(config, model, indices, func):
+        nrproc = max(config.parallel, 1)
+        npart = len(indices)
+        np_proc = (npart // nrproc)*_np.ones(nrproc, dtype=int)
+        np_proc[:(npart % nrproc)] += 1
+        parts = _np.r_[0, _np.cumsum(np_proc)]
+        slcs = [slice(parts[i], parts[i+1]) for i in range(nrproc)]
+
+        with mp_.Pool(processes=nrproc) as pool:
+            res = []
+            for slc in slcs:
+                res.append(pool.apply_async(
+                    func,
+                    (config, model, indices[slc])))
+
+            mat = [re.get() for re in res]
+        mat = _np.concatenate(mat, axis=1)
+        return mat
+
+    @staticmethod
+    def jloco_calc_k_quad(config, model):
         """."""
         if config.use_quad_families:
             kindices = []
@@ -253,23 +273,11 @@ class LOCOUtils:
         else:
             kindices = config.respm.fam_data['QN']['index']
 
-        if parallel is not None:
-            nrproc = max(parallel, 1)
-            npart = len(kindices)
-            np_proc = (npart // nrproc)*_np.ones(nrproc, dtype=int)
-            np_proc[:(npart % nrproc)] += 1
-            parts = _np.r_[0, _np.cumsum(np_proc)]
-            slcs = [slice(parts[i], parts[i+1]) for i in range(nrproc)]
-
-            with mp_.Pool(processes=nrproc) as pool:
-                res = []
-                for slc in slcs:
-                    res.append(pool.apply_async(
-                        LOCOUtils._jloco_calc_k_matrix,
-                        (config, model, kindices[slc])))
-
-                kmatrix = [re.get() for re in res]
-            kmatrix = _np.concatenate(kmatrix, axis=1)
+        if config.parallel is not None:
+            print('paralelizando....')
+            print('ncores {}'.format(config.parallel))
+            kmatrix = LOCOUtils()._parallel_base(
+                config, model, kindices, LOCOUtils._jloco_calc_k_matrix)
         else:
             kmatrix = LOCOUtils._jloco_calc_k_matrix(config, model, kindices)
         return kmatrix

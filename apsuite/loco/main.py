@@ -204,7 +204,7 @@ class LOCO:
                 print('calculating quadrupoles kmatrix...')
                 time0 = _time.time()
                 self._jloco_k_quad = _LOCOUtils.jloco_calc_k_quad(
-                    self.config, self._model, parallel=None)
+                    self.config, self._model)
                 dtime = _time.time() - time0
                 print('it took {:.2f} min to calculate'.format(dtime/60))
             else:
