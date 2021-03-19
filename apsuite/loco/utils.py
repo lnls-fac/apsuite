@@ -274,8 +274,6 @@ class LOCOUtils:
             kindices = config.respm.fam_data['QN']['index']
 
         if config.parallel is not None:
-            print('paralelizando....')
-            print('ncores {}'.format(config.parallel))
             kmatrix = LOCOUtils()._parallel_base(
                 config, model, kindices, LOCOUtils._jloco_calc_k_matrix)
         else:
@@ -487,18 +485,8 @@ class LOCOUtils:
     @staticmethod
     def jloco_calc_ks_skewquad(config, model):
         """."""
-        # qsindices = []
-        # if config.skew_quadrupoles_to_fit is not None:
-        #     for qsname in config.skew_quadrupoles_to_fit:
-        #         qsindices += config.respm.fam_data[qsname]['index']
-        #     qsindices = _np.array(qsindices).ravel()
-        #     qsindices = sorted(qsindices)
-        #     qsindices = [[val] for val in qsindices]
-        # else:
-        #     qsindices = config.respm.fam_data['QS']['index']
         config.update_skew_quad_knobs()
         qsindices = config.skew_quad_indices
-        # qsindices = [[val] for val in qsindices]
         ksvalues = _np.array(
             _pyaccel.lattice.get_attribute(model, 'KsL', qsindices))
         set_quad_ksdelta = LOCOUtils.set_quadmag_ksdelta
