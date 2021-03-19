@@ -45,6 +45,7 @@ class LOCOConfig:
         self.delta_kicky_meas = None
         self.delta_frequency_meas = None
         self.fitting_method = None
+        self.parallel = None
         self.lambda_lm = None
         self.fixed_lambda = None
         self.use_dispersion = None
@@ -116,6 +117,7 @@ class LOCOConfig:
         stg += stmp('Minimization method', self.min_method_str, '')
         stg += etmp('Lambda LM', self.lambda_lm, '')
         stg += etmp('Fixed lambda LM', self.fixed_lambda, '')
+        stg += dtmp('Cores in parallelization:', self.parallel, '')
         stg += stmp('Jacobian manipulation', self.inv_method_str, '')
         stg += stmp(
             'Constraint delta KL total', self.constraint_deltak_total, '')
