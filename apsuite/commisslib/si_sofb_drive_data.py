@@ -8,7 +8,6 @@ import matplotlib.pyplot as _mplt
 import matplotlib.gridspec as _mgs
 
 from siriuspy.devices import SOFB
-from siriuspy.sofb.csdev import SOFBFactory
 
 from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
