@@ -2,10 +2,12 @@
 
 from collections import namedtuple as _namedtuple
 from copy import deepcopy as _dcopy
+
 import numpy as _np
+
 import pyaccel as _pyaccel
 
-from ..commissioning_scripts.calc_orbcorr_mat import OrbRespmat as _OrbRespmat
+from ..orbcorr import OrbRespmat as _OrbRespmat
 from .utils import LOCOUtils as _LOCOUtils
 
 
@@ -43,16 +45,19 @@ class LOCOConfig:
         self.delta_kicky_meas = None
         self.delta_frequency_meas = None
         self.fitting_method = None
+        self.parallel = True  # must be False, True or an integer (nr of cores)
         self.lambda_lm = None
+        self.fixed_lambda = None
         self.use_dispersion = None
         self.use_offdiagonal = None
         self.use_diagonal = None
+        self.use_dip_families = None
         self.use_quad_families = None
+        self.use_sext_families = None
         self.dipoles_to_fit = None
         self.quadrupoles_to_fit = None
         self.skew_quadrupoles_to_fit = None
         self.sextupoles_to_fit = None
-        self.use_dip_families = None
         self.svd_sel = None
         self.svd_thre = None
         self.fit_quadrupoles = None
@@ -112,6 +117,7 @@ class LOCOConfig:
         stg += stmp('Include off-diagonal', self.use_offdiagonal, '')
         stg += stmp('Minimization method', self.min_method_str, '')
         stg += etmp('Lambda LM', self.lambda_lm, '')
+        stg += etmp('Fixed lambda LM', self.fixed_lambda, '')
         stg += stmp('Jacobian manipulation', self.inv_method_str, '')
         stg += stmp(
             'Constraint delta KL total', self.constraint_deltak_total, '')
@@ -371,7 +377,7 @@ class LOCOConfig:
             gain_bpm=self.gain_bpm,
             roll_bpm=self.roll_bpm,
             gain_corr=self.gain_corr)
-        self.vector = self.matrix.flatten()
+        self.vector = self.matrix.ravel()
 
     def update_weight(self):
         """."""
@@ -461,8 +467,8 @@ class LOCOConfig:
                     self.skew_quad_indices += self.respm.fam_data[
                         fam_name]['index']
                 idx_all = _np.array(
-                    self.respm.fam_data['QS']['index']).flatten()
-                idx_sub = _np.array(self.skew_quad_indices).flatten()
+                    self.respm.fam_data['QS']['index']).ravel()
+                idx_sub = _np.array(self.skew_quad_indices).ravel()
                 self.skew_quad_indices = list(set(idx_sub) & set(idx_all))
                 self.skew_quad_indices.sort()
 

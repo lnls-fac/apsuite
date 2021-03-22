@@ -1,9 +1,7 @@
-#!/usr/bin/env python-sirius
+'''Particle Swarm Optimization Algorithm for Minimization'''
 
 from threading import Thread, Event
 import numpy as _np
-
-'''Particle Swarm Optimization Algorithm for Minimization'''
 
 
 class PSO:
@@ -37,7 +35,7 @@ class PSO:
         self._best_global = _np.array([])
 
         self._thread = Thread(target=self._optimize, daemon=True)
-        self._stopped = Event()
+        self._stopevt = Event()
         self.hist_best_positions = _np.array([])
         self.hist_best_objfun = _np.array([])
 
@@ -244,12 +242,12 @@ class PSO:
         """."""
         if not self._thread.is_alive():
             self._thread = Thread(target=self._optimize, daemon=True)
-            self._stopped.clear()
+            self._stopevt.clear()
             self._thread.start()
 
     def stop(self):
         """."""
-        self._stopped.set()
+        self._stopevt.set()
 
     def join(self):
         """."""
@@ -309,7 +307,7 @@ class PSO:
             best_fig_hstry[niter] = _np.min(f_old)
             if self._flag_save:
                 self._save_data(k=niter, f=f_new, fbest=best_fig_hstry[niter])
-            if self._stopped.is_set():
+            if self._stopevt.is_set():
                 print('Stopped!')
                 break
 

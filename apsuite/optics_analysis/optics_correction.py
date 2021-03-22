@@ -189,7 +189,7 @@ class OpticsCorr():
 
         nominal_stren = self._get_kl(model)
         if self.method == OpticsCorr.METHODS.Proportional:
-            jmat *= nominal_stren.flatten()
+            jmat *= nominal_stren.ravel()
 
         umat, smat, vmat = np.linalg.svd(jmat, full_matrices=False)
         ismat = 1/smat

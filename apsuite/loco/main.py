@@ -188,8 +188,11 @@ class LOCO:
         if self.config.fit_dipoles:
             if fname_jloco_k_dip is None:
                 print('calculating dipoles kmatrix...')
-                self._jloco_k_dip = _LOCOUtils.jloco_calc_k_dipoles(
+                time0 = _time.time()
+                self._jloco_k_dip = _LOCOUtils.jloco_calc_k_dip(
                     self.config, self._model)
+                dtime = _time.time() - time0
+                print('it took {:.2f} min to calculate'.format(dtime/60))
             else:
                 print('loading dipole kmatrix...')
                 jloco_k_dip_dict = _LOCOUtils.load_data(
@@ -277,7 +280,7 @@ class LOCO:
             if fname_jloco_k_sext is None:
                 print('calculating sextupoles kmatrix...')
                 time0 = _time.time()
-                self._jloco_k_sext = _LOCOUtils.jloco_calc_k_sextupoles(
+                self._jloco_k_sext = _LOCOUtils.jloco_calc_k_sext(
                     self.config, self._model)
                 dtime = _time.time() - time0
                 print('it took {:.2f} min to calculate'.format(dtime/60))
@@ -293,8 +296,11 @@ class LOCO:
         if self.config.fit_dipoles_coupling:
             if fname_jloco_ks_dip is None:
                 print('calculating dipoles ksmatrix...')
+                time0 = _time.time()
                 self._jloco_ks_dip = _LOCOUtils.jloco_calc_ks_dipoles(
                     self.config, self._model)
+                dtime = _time.time() - time0
+                print('it took {:.2f} min to calculate'.format(dtime/60))
             else:
                 print('loading dipole ksmatrix...')
                 jloco_ks_dip_dict = _LOCOUtils.load_data(
@@ -529,8 +535,6 @@ class LOCO:
                 self._jloco, (2*self.config.nr_bpm, self.config.nr_corr+1, -1))
             jloco_temp[:, -1, :] *= 0
 
-       #  _np.savetxt('jloco_calc.txt', self._jloco)
-
         if self.config.constraint_deltak_total:
             self.calc_jloco_deltak_constraint()
             self._jloco = _np.vstack((self._jloco, self._deltak_mat))
@@ -735,7 +739,7 @@ class LOCO:
                         self._jloco.T, res))
             elif self.config.inv_method == _LOCOConfig.INVERSION.Normal:
                 param_new = _np.dot(self._jloco_inv, res)
-            param_new = param_new.flatten()
+            param_new = param_new.ravel()
             model_new, matrix_new = self._calc_model_matrix(param_new)
             chi_new = self.calc_chi(matrix_new)
             print('chi: {0:.6f} um'.format(chi_new))
@@ -759,7 +763,7 @@ class LOCO:
                     if self.config.min_method == \
                             _LOCOConfig.MINIMIZATION.LevenbergMarquardt:
                         if not self.config.fixed_lambda:
-                           self._recalculate_inv_jloco(case='good')
+                            self._recalculate_inv_jloco(case='good')
             else:
                 # print('recalculating jloco...')
                 # self.update_jloco()
@@ -1008,7 +1012,7 @@ class LOCO:
             self._recalculate_inv_jloco(case='bad')
             res = self._calc_residue()
             param_new = _np.dot(self._jloco_inv, _np.dot(self._jloco.T, res))
-            param_new = param_new.flatten()
+            param_new = param_new.ravel()
             model_new, matrix_new = self._calc_model_matrix(param_new)
             chi_new = self.calc_chi(matrix_new)
             print('chi: {0:.6f} um'.format(chi_new))

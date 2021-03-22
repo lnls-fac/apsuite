@@ -4,7 +4,7 @@ import numpy as _np
 
 import pyaccel.naff as _pynaff
 
-from ..commissioning_scripts import BaseClass as _BaseClass
+from ..utils import DataBaseClass as _BaseClass
 
 
 class BaseClass(_BaseClass):

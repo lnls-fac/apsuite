@@ -1,9 +1,6 @@
-#!/usr/bin/env python-sirius
 """Simulated Annealing Algorithm for Minimization."""
+from threading import Thread as _Thread, Event as _Event
 
-
-from threading import Thread as _Thread
-from threading import Event as _Event
 import numpy as _np
 
 
@@ -29,7 +26,7 @@ class SimulAnneal:
 
         if self._use_thread:
             self._thread = None
-            self._stopped = _Event()
+            self._stopevt = _Event()
         self.hist_best_positions = _np.array([])
         self.hist_best_objfunc = _np.array([])
 
@@ -122,7 +119,7 @@ class SimulAnneal:
             if not self._thread.is_alive():
                 self._thread = _Thread(
                     target=self._optimize, args=(print_flag, ), daemon=True)
-                self._stopped.clear()
+                self._stopevt.clear()
                 self._thread.start()
         else:
             self._optimize(print_flag=print_flag)
@@ -130,7 +127,7 @@ class SimulAnneal:
     def stop(self):
         """."""
         if self._use_thread:
-            self._stopped.set()
+            self._stopevt.set()
 
     def join(self):
         """."""
@@ -222,7 +219,7 @@ class SimulAnneal:
                 phi = 1 / (1 + 1 / _np.sqrt((k+1) * (nr_unacc + 1) + nr_unacc))
                 self._temperature = phi * self._temperature
 
-            if self._use_thread and self._stopped.is_set():
+            if self._use_thread and self._stopevt.is_set():
                 if print_flag:
                     print('Stopped!')
                 break
