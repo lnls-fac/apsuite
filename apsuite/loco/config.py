@@ -45,7 +45,7 @@ class LOCOConfig:
         self.delta_kicky_meas = None
         self.delta_frequency_meas = None
         self.fitting_method = None
-        self.parallel = None
+        self.parallel = True  # must be False, True or an integer (nr of cores)
         self.lambda_lm = None
         self.fixed_lambda = None
         self.use_dispersion = None
