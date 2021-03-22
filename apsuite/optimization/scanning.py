@@ -1,4 +1,3 @@
-#!/usr/bin/env python-sirius
 """Multidimensional Simple Scan method for Minimization."""
 
 
@@ -79,9 +78,7 @@ class SimpleScan:
 
         for i in range(self._ndim):
             self._delta = _np.linspace(
-                                self._lower_limits[i],
-                                self._upper_limits[i],
-                                npoints)
+                self._lower_limits[i], self._upper_limits[i], npoints)
             self._curr_dim = i
             func[i], best[i] = self.calc_obj_fun()
             self._position[i] = best[i]
