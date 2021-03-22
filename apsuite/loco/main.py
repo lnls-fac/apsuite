@@ -188,8 +188,11 @@ class LOCO:
         if self.config.fit_dipoles:
             if fname_jloco_k_dip is None:
                 print('calculating dipoles kmatrix...')
-                self._jloco_k_dip = _LOCOUtils.jloco_calc_k_dipoles(
+                time0 = _time.time()
+                self._jloco_k_dip = _LOCOUtils.jloco_calc_k_dip(
                     self.config, self._model)
+                dtime = _time.time() - time0
+                print('it took {:.2f} min to calculate'.format(dtime/60))
             else:
                 print('loading dipole kmatrix...')
                 jloco_k_dip_dict = _LOCOUtils.load_data(
@@ -277,7 +280,7 @@ class LOCO:
             if fname_jloco_k_sext is None:
                 print('calculating sextupoles kmatrix...')
                 time0 = _time.time()
-                self._jloco_k_sext = _LOCOUtils.jloco_calc_k_sextupoles(
+                self._jloco_k_sext = _LOCOUtils.jloco_calc_k_sext(
                     self.config, self._model)
                 dtime = _time.time() - time0
                 print('it took {:.2f} min to calculate'.format(dtime/60))
@@ -293,8 +296,11 @@ class LOCO:
         if self.config.fit_dipoles_coupling:
             if fname_jloco_ks_dip is None:
                 print('calculating dipoles ksmatrix...')
+                time0 = _time.time()
                 self._jloco_ks_dip = _LOCOUtils.jloco_calc_ks_dipoles(
                     self.config, self._model)
+                dtime = _time.time() - time0
+                print('it took {:.2f} min to calculate'.format(dtime/60))
             else:
                 print('loading dipole ksmatrix...')
                 jloco_ks_dip_dict = _LOCOUtils.load_data(
