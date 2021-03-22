@@ -245,16 +245,20 @@ class LOCOUtils:
 
     @staticmethod
     def _parallel_base(config, model, indices, func, magtype=None):
-        parallel = config.parallel if config.parallel is not None else True
-        slcs = LOCOUtils._get_slices_multiprocessing(parallel, len(indices))
-        with mp_.Pool(processes=len(slcs)) as pool:
-            res = []
-            for slc in slcs:
-                res.append(pool.apply_async(
-                    func,
-                    (config, model, indices[slc], magtype)))
-            mat = [re.get() for re in res]
-        return _np.concatenate(mat, axis=1)
+        if not config.parallel:
+            mat = func(config, model, indices)
+        else:
+            slcs = LOCOUtils._get_slices_multiprocessing(
+                config.parallel, len(indices))
+            with mp_.Pool(processes=len(slcs)) as pool:
+                res = []
+                for slc in slcs:
+                    res.append(pool.apply_async(
+                        func,
+                        (config, model, indices[slc], magtype)))
+                mat = [re.get() for re in res]
+            mat = _np.concatenate(mat, axis=1)
+        return mat
 
     @staticmethod
     def _get_slices_multiprocessing(parallel, npart):
@@ -280,15 +284,10 @@ class LOCOUtils:
                 dip_indices.append(config.respm.fam_data[fam_name]['index'])
         else:
             dip_indices = config.respm.fam_data['BN']['index']
-
         magtype = 'dipole'
-        if config.parallel is not None:
-            dip_matrix = LOCOUtils._parallel_base(
-                config, model, dip_indices,
-                LOCOUtils._jloco_calc_k_matrix, magtype)
-        else:
-            dip_matrix = LOCOUtils._jloco_calc_k_matrix(
-                config, model, dip_indices, magtype)
+        dip_matrix = LOCOUtils._parallel_base(
+            config, model, dip_indices,
+            LOCOUtils._jloco_calc_k_matrix, magtype)
         return dip_matrix
 
     @staticmethod
@@ -301,13 +300,9 @@ class LOCOUtils:
         else:
             kindices = config.respm.fam_data['QN']['index']
         magtype = 'quadrupole'
-        if config.parallel is not None:
-            kmatrix = LOCOUtils._parallel_base(
-                config, model, kindices,
-                LOCOUtils._jloco_calc_k_matrix, magtype)
-        else:
-            kmatrix = LOCOUtils._jloco_calc_k_matrix(
-                config, model, kindices, magtype)
+        kmatrix = LOCOUtils._parallel_base(
+            config, model, kindices,
+            LOCOUtils._jloco_calc_k_matrix, magtype)
         return kmatrix
 
     @staticmethod
@@ -320,13 +315,9 @@ class LOCOUtils:
         else:
             sindices = config.respm.fam_data['SN']['index']
         magtype = 'sextupole'
-        if config.parallel is not None:
-            smatrix = LOCOUtils._parallel_base(
-                config, model, sindices,
-                LOCOUtils._jloco_calc_k_matrix, magtype)
-        else:
-            smatrix = LOCOUtils._jloco_calc_k_matrix(
-                config, model, sindices, magtype)
+        smatrix = LOCOUtils._parallel_base(
+            config, model, sindices,
+            LOCOUtils._jloco_calc_k_matrix, magtype)
         return smatrix
 
     @staticmethod
@@ -399,26 +390,20 @@ class LOCOUtils:
     def jloco_calc_ks_dipoles(config, model):
         """."""
         ksindices = config.respm.fam_data['BN']['index']
-        if config.parallel is not None:
-            ksmatrix = LOCOUtils._parallel_base(
-                config, model, ksindices,
-                LOCOUtils._jloco_calc_ks_matrix, magtype='dipole')
-        else:
-            ksmatrix = LOCOUtils._jloco_calc_ks_matrix(
-                config, model, ksindices, magtype='dipole')
+
+        ksmatrix = LOCOUtils._parallel_base(
+            config, model, ksindices,
+            LOCOUtils._jloco_calc_ks_matrix, magtype='dipole')
         return ksmatrix
 
     @staticmethod
     def jloco_calc_ks_quad(config, model):
         """."""
         ksindices = config.respm.fam_data['QN']['index']
-        if config.parallel is not None:
-            ksmatrix = LOCOUtils._parallel_base(
-                config, model, ksindices,
-                LOCOUtils._jloco_calc_ks_matrix)
-        else:
-            ksmatrix = LOCOUtils._jloco_calc_ks_matrix(
-                config, model, ksindices)
+
+        ksmatrix = LOCOUtils._parallel_base(
+            config, model, ksindices,
+            LOCOUtils._jloco_calc_ks_matrix)
         return ksmatrix
 
     @staticmethod
@@ -426,39 +411,27 @@ class LOCOUtils:
         """."""
         config.update_skew_quad_knobs()
         ksindices = config.skew_quad_indices
-        if config.parallel is not None:
-            ksmatrix = LOCOUtils._parallel_base(
-                config, model, ksindices,
-                LOCOUtils._jloco_calc_ks_matrix)
-        else:
-            ksmatrix = LOCOUtils._jloco_calc_ks_matrix(
-                config, model, ksindices)
+        ksmatrix = LOCOUtils._parallel_base(
+            config, model, ksindices,
+            LOCOUtils._jloco_calc_ks_matrix)
         return ksmatrix
 
     @staticmethod
     def jloco_calc_ks_sextupoles(config, model):
         """."""
         ksindices = config.respm.fam_data['SN']['index']
-        if config.parallel is not None:
-            ksmatrix = LOCOUtils._parallel_base(
-                config, model, ksindices,
-                LOCOUtils._jloco_calc_ks_matrix)
-        else:
-            ksmatrix = LOCOUtils._jloco_calc_ks_matrix(
-                config, model, ksindices)
+        ksmatrix = LOCOUtils._parallel_base(
+            config, model, ksindices,
+            LOCOUtils._jloco_calc_ks_matrix)
         return ksmatrix
 
     @staticmethod
     def jloco_calc_kick_dipoles(config, model):
         """."""
         dip_indices = config.respm.fam_data['BN']['index']
-        if config.parallel is not None:
-            kick_matrix = LOCOUtils._parallel_base(
-                config, model, ksindices,
-                LOCOUtils._jloco_calc_kick_dip)
-        else:
-            kick_matrix = LOCOUtils._jloco_calc_kick_dip(
-                config, model, dip_indices)
+        kick_matrix = LOCOUtils._parallel_base(
+            config, model, ksindices,
+            LOCOUtils._jloco_calc_kick_dip)
         return kick_matrix
 
     @staticmethod
@@ -506,13 +479,10 @@ class LOCOUtils:
     def jloco_calc_girders(config, model):
         """."""
         gindices = config.gir_indices
-        if config.parallel is not None:
-            gir_matrix = LOCOUtils._parallel_base(
-                config, model, gindices,
-                LOCOUtils._jloco_girders_shift)
-        else:
-            gir_matrix = LOCOUtils._jloco_girders_shift(
-                config, model, gindices)
+
+        gir_matrix = LOCOUtils._parallel_base(
+            config, model, gindices,
+            LOCOUtils._jloco_girders_shift)
         return gir_matrix
 
     @staticmethod
