@@ -5,11 +5,15 @@ import pickle as _pickle
 import numpy as _np
 import matplotlib.pyplot as _plt
 
+from scipy.optimize import least_squares
 from .tbtsimann import TbTSimulAnneal as _TbTSimulAnneal
 
 
 class TbTAnalysis:
     """."""
+
+    NOM_CHROMX = 2.5
+    NOM_ESPREAD = 8.515e-4
 
     def __init__(self, data=None, data_fname=None):
         """."""
@@ -17,14 +21,22 @@ class TbTAnalysis:
         self._data_fname = data_fname
         self._idx_bpm = 0
         self._idx_kick = 0
-        self._idx_turn_start = None
-        self._idx_turn_stop = None
+        self._idx_turn_start = 0
+        self._idx_turn_stop = 500
         self._rx_offset = None
         self._tunes_frac = 0.0
         self._tunex_frac = 0.0
+        self._chromx = 0.0
+        self._espread = 0.0
         self._chromx_decoh = 0.0
         self._rx0 = 0.0
         self._mux = 0.0
+        self._tunes_frac_err = 0.0
+        self._tunex_frac_err = 0.0
+        self._chromx_err = 0.0
+        self._espread_err = 0.0
+        self._rx0_err = 0.0
+        self._mux_err = 0.0
         self._simann = None
         self._analysis = None
 
@@ -215,6 +227,86 @@ class TbTAnalysis:
         self._chromx_decoh = value
 
     @property
+    def chromx(self):
+        """."""
+        return self._chromx
+
+    @chromx.setter
+    def chromx(self, value):
+        """."""
+        self._chromx = value
+
+    @property
+    def espread(self):
+        """."""
+        return self._espread
+
+    @espread.setter
+    def espread(self, value):
+        """."""
+        self._espread = value
+
+    @property
+    def rx0_err(self):
+        """."""
+        return self._rx0_err
+
+    @rx0_err.setter
+    def rx0_err(self, value):
+        """."""
+        self._rx0_err = value
+
+    @property
+    def mux_err(self):
+        """."""
+        return self._mux_err
+
+    @mux_err.setter
+    def mux_err(self, value):
+        """."""
+        self._mux_err = value
+
+    @property
+    def tunes_frac_err(self):
+        """Return fitting parameter tunes_frac_err."""
+        return self._tunes_frac_err
+
+    @tunes_frac_err.setter
+    def tunes_frac_err(self, value):
+        """Set fitting parameter tunes_frac_err."""
+        self._tunes_frac_err = value
+
+    @property
+    def tunex_frac_err(self):
+        """Return fitting parameter tunex_frac_err."""
+        return self._tunex_frac_err
+
+    @tunex_frac_err.setter
+    def tunex_frac_err(self, value):
+        """Set fitting parameter tunex_frac_err."""
+        self._tunex_frac_err = value
+
+    @property
+    def chromx_err(self):
+        """."""
+        return self._chromx_err
+
+    @chromx_err.setter
+    def chromx_err(self, value):
+        """."""
+        self._chromx_err = value
+
+    @property
+    def espread_err(self):
+        """."""
+        return self._espread_err
+
+    @espread_err.setter
+    def espread_err(self, value):
+        """."""
+        self._espread_err = value
+
+    @property
     def rx0(self):
         """."""
         return self._rx0
@@ -375,6 +467,9 @@ class TbTAnalysis:
         #     idx_kick=idx_kick, idx_bpm=idx_bpm,
         #     idx_turn_start=idx_turn_start, idx_turn_stop=idx_turn_stop)
 
+        self.chromx = TbTAnalysis.NOM_CHROMX
+        self.espread = TbTAnalysis.NOM_ESPREAD
+
     # --- fitting methods ---
 
     @property
@@ -446,17 +541,119 @@ class TbTAnalysis:
         label_residue = 'Residue (rms: {:.2f} um)'.format(self.fit_residue)
         ind = _np.arange(idx_turn_start, idx_turn_stop)
         trajx_res = trajx_mea - trajx_fit
-        _plt.plot(ind, trajx_mea, color='red', label='TbT raw data')
-        _plt.plot(ind, trajx_mea, 'o', color='red')
-        _plt.plot(ind, trajx_fit, color='orange', label='Fitting')
-        _plt.plot(ind, trajx_fit, 'o', color='orange')
-        _plt.plot(ind, trajx_res, label=label_residue)
+        _plt.plot(ind, trajx_mea, color='C0', label='TbT raw data')
+        _plt.plot(ind, trajx_mea, 'o', color='C0')
+        _plt.plot(ind, trajx_fit, color='C1', label='Fitting')
+        _plt.plot(ind, trajx_fit, 'o', color='C1')
+        _plt.plot(ind, trajx_res, label=label_residue, color='C2')
         _plt.legend()
         _plt.xlabel('turn')
         _plt.ylabel('BPM Average [um]')
         _plt.title(title)
         _plt.grid()
         _plt.show()
+
+    def fit_least_squares(self):
+        """."""
+        init_params = [
+            self.tunes_frac,
+            self.tunex_frac,
+            self.chromx,
+            self.espread,
+            self.rx0,
+            self.mux]
+
+        trajx_mea = self.sel_trajx(
+            idx_kick=self.idx_kick,
+            idx_bpm=self.idx_bpm,
+            idx_turn_start=self.idx_turn_start,
+            idx_turn_stop=self.idx_turn_stop)
+
+        fit_params = least_squares(
+            fun=self.err_function,
+            x0=init_params,
+            args=(
+                trajx_mea,
+                self.idx_turn_start,
+                self.idx_turn_stop,
+                self.rx_offset),
+            method='lm')
+
+        self.tunes_frac = fit_params['x'][0]
+        self.tunex_frac = fit_params['x'][1]
+        self.chromx = fit_params['x'][2]
+        self.espread = fit_params['x'][3]
+        self.chromx_decoh = 2*self.chromx*self.espread/self.tunes_frac
+        self.rx0 = fit_params['x'][4]
+        self.mux = fit_params['x'][5]
+
+        fit_errors = TbTAnalysis.calc_fitting_error(fit_params)
+
+        self.tunes_frac_err = fit_errors[0]
+        self.tunex_frac_err = fit_errors[1]
+        self.chromx_err = fit_errors[2]
+        self.espread_err = fit_errors[3]
+        self.rx0_err = fit_errors[4]
+        self.mux_err = fit_errors[5]
+
+    @staticmethod
+    def err_function(
+            params, trajx_mea,
+            idx_turn_start, idx_turn_stop, rx_offset):
+        """."""
+        args = [idx_turn_start, idx_turn_stop, rx_offset]
+        trajx_fit = TbTAnalysis.calc_trajx_chromx(params, *args)
+        trajx_res = trajx_mea - trajx_fit
+        return _np.sqrt(trajx_res * trajx_res)
+
+    @staticmethod
+    def calc_trajx_chromx(params, *args):
+        """BPM averaging due to longitudinal dynamics decoherence.
+
+        nux ~ nux0 + chromx * delta_energy
+        See Laurent Nadolski Thesis, Chapter 4, pg. 121, Eq. 4.15
+        """
+        tunes_frac = params[0]
+        tunex_frac = params[1]
+        chromx = params[2]
+        espread = params[3]
+        rx0 = params[4]
+        mux = params[5]
+
+        idx_turn_start, idx_turn_stop, rx_offset = args
+        turn = _np.arange(idx_turn_start, idx_turn_stop)
+        cos = _np.cos(2 * _np.pi * tunex_frac * turn + mux)
+        chromx_decoh = 2 * chromx * espread / tunes_frac
+        alp = chromx_decoh * _np.sin(_np.pi * tunes_frac * turn)
+        exp = _np.exp(-alp**2/2.0)
+        trajx = rx0 * exp * cos + rx_offset
+        return trajx
+
+    @staticmethod
+    def calc_fitting_error(fit_params):
+        """."""
+        # based on fitting error calculation of scipy.optimization.curve_fit
+        # do Moore-Penrose inverse discarding zero singular values.
+        _, smat, vhmat = _np.linalg.svd(
+            fit_params['jac'], full_matrices=False)
+        thre = _np.finfo(float).eps * max(fit_params['jac'].shape)
+        thre *= smat[0]
+        smat = smat[smat > thre]
+        vhmat = vhmat[:smat.size]
+        pcov = _np.dot(vhmat.T / (smat*smat), vhmat)
+
+        # multiply covariance matrix by residue 2-norm
+        ysize = len(fit_params['fun'])
+        cost = 2 * fit_params['cost']  # res.cost is half sum of squares!
+        popt = fit_params['x']
+        if ysize > popt.size:
+            # normalized by degrees of freedom
+            s_sq = cost / (ysize - popt.size)
+            pcov = pcov * s_sq
+        else:
+            pcov.fill(_np.nan)
+            print('# of fitting parameters larger than # of data points!')
+        return _np.sqrt(_np.diag(pcov))
 
     def fit_run(self, niter=None, idx_bpm=None, idx_kick=None, log_flag=True):
         """."""
