@@ -6,18 +6,20 @@ import pyaccel
 from pymodels import si
 from apsuite.optics_analysis.tune_correction import TuneCorr
 
+
 class IDParams():
     """."""
 
-    ID_MODELS_FOLDER = '/home/facs/repos/MatlabMiddleLayer/Release' + \
-        '/lnls/fac_scripts/sirius/insertion_devices/id_modelling/'
+    BASE_DIR = '/home/facs/repos/apsuite/apsuite/insertion_devices/kickmaps/'
 
-    BEAMLINES_NAMES = [
-        'CARNAUBA',
-        'CATERETE',
-        'EMA',
-        'IPE',
-        'MANACA']
+    class Beamlines:
+        """."""
+
+        CARNAUBA = 'CARNAUBA'
+        CATERETE = 'CATERETE'
+        EMA = 'EMA'
+        IPE = 'IPE'
+        MANACA = 'MANACA'
 
     def __init__(self, id_name=None, phase=0):
         """."""
@@ -27,15 +29,15 @@ class IDParams():
         self.section_nr = None
         self.straight_label = None
         self.seg_nr = None
-        if id_name == 'MANACA':
+        if id_name == IDParams.Beamlines.MANACA:
             self.params_manaca(phase)
-        elif id_name == 'CARNAUBA':
+        elif id_name == IDParams.Beamlines.CARNAUBA:
             self.params_carnauba(phase)
-        elif id_name == 'CATERETE':
+        elif id_name == IDParams.Beamlines.CATERETE:
             self.params_caterete(phase)
-        elif id_name == 'EMA':
+        elif id_name == IDParams.Beamlines.EMA:
             self.params_ema(phase)
-        elif id_name == 'IPE':
+        elif id_name == IDParams.Beamlines.IPE:
             self.params_ipe(phase)
 
     def __str__(self):
@@ -51,48 +53,53 @@ class IDParams():
 
     def params_carnauba(self, phase=0):
         """."""
-        self.id_name = 'CARNAUBA'
-        self.kicktable_fname = IDParams.ID_MODELS_FOLDER + \
-            'APU22/APUKyma22mm_kickmap_shift_' + str(phase) + '.txt'
+        self.id_name = IDParams.Beamlines.CARNAUBA
+        str_phase = str(phase).replace('.', 'p')
+        self.kicktable_fname = IDParams.BASE_DIR + \
+            'APU22/APUKyma22mm_kickmap_shift_' + str_phase + '.txt'
         self.section_nr = 6
         self.straight_label = 'B'
-        self.seg_nr = 20
+        self.seg_nr = 40
 
     def params_caterete(self, phase=0):
         """."""
-        self.id_name = 'CATERETE'
-        self.kicktable_fname = IDParams.ID_MODELS_FOLDER + \
-            'APU22/APUKyma22mm_kickmap_shift_' + str(phase) + '.txt'
+        self.id_name = IDParams.Beamlines.CATERETE
+        str_phase = str(phase).replace('.', 'p')
+        self.kicktable_fname = IDParams.BASE_DIR + \
+            'APU22/APUKyma22mm_kickmap_shift_' + str_phase + '.txt'
         self.section_nr = 7
         self.straight_label = 'P'
-        self.seg_nr = 20
+        self.seg_nr = 40
 
     def params_ema(self, phase=0):
         """."""
-        self.id_name = 'EMA'
-        self.kicktable_fname = IDParams.ID_MODELS_FOLDER + \
-            'APU22/APUKyma22mm_kickmap_shift_' + str(phase) + '.txt'
+        self.id_name = IDParams.Beamlines.EMA
+        str_phase = str(phase).replace('.', 'p')
+        self.kicktable_fname = IDParams.BASE_DIR + \
+            'APU22/APUKyma22mm_kickmap_shift_' + str_phase + '.txt'
         self.section_nr = 8
         self.straight_label = 'B'
-        self.seg_nr = 20
+        self.seg_nr = 40
 
     def params_manaca(self, phase=0):
         """."""
-        self.id_name = 'MANACA'
-        self.kicktable_fname = IDParams.ID_MODELS_FOLDER + \
-            'APU22/APUKyma22mm_kickmap_shift_' + str(phase) + '.txt'
+        self.id_name = IDParams.Beamlines.MANACA
+        str_phase = str(phase).replace('.', 'p')
+        self.kicktable_fname = IDParams.BASE_DIR + \
+            'APU22/APUKyma22mm_kickmap_shift_' + str_phase + '.txt'
         self.section_nr = 9
         self.straight_label = 'A'
-        self.seg_nr = 20
+        self.seg_nr = 40
 
     def params_ipe(self, phase=0):
         """."""
-        self.id_name = 'IPE'
-        self.kicktable_fname = IDParams.ID_MODELS_FOLDER + \
-            'APU58/APUKyma58mm_kickmap_shift_' + str(phase) + '.txt'
+        self.id_name = IDParams.Beamlines.IPE
+        str_phase = str(phase).replace('.', 'p')
+        self.kicktable_fname = IDParams.BASE_DIR + \
+            'APU58/APUKyma58mm_kickmap_shift_' + str_phase + '.txt'
         self.section_nr = 11
         self.straight_label = 'P'
-        self.seg_nr = 20
+        self.seg_nr = 40
 
 
 class ID():
@@ -169,7 +176,7 @@ class ID():
         return model
 
     def symmetrize_straight_section(
-            self, model, factor=1, max_niter=20, tol=1e-6):
+            self, model, factor=1, max_niter=20, tol=1e-12):
         """."""
         mcidx = pyaccel.lattice.find_indices(model, 'fam_name', 'mc')
         model = pyaccel.lattice.shift(model, mcidx[-1])
@@ -314,76 +321,3 @@ class ID():
         ismat = np.diag(ismat)
         ijmat = np.dot(np.dot(vhmat.T, ismat), umat.T)
         return ijmat
-
-
-# def insert_ids(self):
-    #     """."""
-    #     mod = self.bare_model[:]
-    #     mcidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'mc')
-    #     mod = pyaccel.lattice.shift(mod, mcidx[-1])
-
-    #     ssidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'id_enda')
-    #     ssidx += pyaccel.lattice.find_indices(mod, 'fam_name', 'id_endb')
-    #     ssidx += pyaccel.lattice.find_indices(mod, 'fam_name', 'id_endp')
-    #     # del mod[ssidx]
-    #     for ssi in sorted(ssidx, reverse=True):
-    #         del mod[ssi]
-
-    #     mcidx = pyaccel.lattice.find_indices(mod, 'fam_name', 'mc')
-    #     section_nr = self.id_data.section_nr
-
-    #     mc = np.unique([0] + mcidx + [len(mod)])
-    #     elem = list(range(mc[section_nr-1], mc[section_nr]+1))
-    #     center_idx = pyaccel.lattice.find_indices(
-    #         mod[elem[0]:elem[-1]], 'fam_name', self.id_data.straight_center)
-    #     center_idx = elem[center_idx[0]]
-    #     mod = self.insert_kicktable(mod, center_idx)
-    #     return mod
-
-    # def insert_kicktable(self, model, center_idx):
-    #     """."""
-    #     id_kickmap = pyaccel.elements.kickmap(
-    #         fam_name=self.id_data.id_name,
-    #         kicktable_fname=self.id_data.kicktable_filename,
-    #         nr_steps=40)
-
-    #     print(id_kickmap.length)
-    #     idx_dws = center_idx + 1
-    #     while model[idx_dws].pass_method == 'drift_pass':
-    #         idx_dws += 1
-    #     idx_dws -= 1
-
-    #     idx_ups = center_idx - 1
-    #     while model[idx_ups].pass_method == 'drift_pass':
-    #         idx_ups -= 1
-    #     idx_ups += 1
-
-    #     range_ups = np.arange(idx_ups, center_idx+1)
-    #     range_dws = np.arange(center_idx, idx_dws+1)
-
-    #     lens_ups = pyaccel.lattice.get_attribute(model, 'length', range_ups)
-    #     lens_dws = pyaccel.lattice.get_attribute(model, 'length', range_dws)
-
-    #     ups_drift = model[idx_ups]
-    #     dws_drift = model[idx_dws]
-    #     ups_drift.pass_method = 'drift_pass'
-    #     dws_drift.pass_method = 'drift_pass'
-
-    #     ups_drift.length = sum(lens_ups) - id_kickmap.length/2
-    #     dws_drift.length = sum(lens_dws) - id_kickmap.length/2
-
-    #     id_kickmap.length /= 2
-    #     if ups_drift.length < 0 or dws_drift.length < 0:
-    #         raise Exception(
-    #             'there is no space to insert id within the defined location!')
-
-    #     model_id = model[:idx_ups]
-    #     model_id.append(ups_drift)
-    #     model_id.append(id_kickmap)
-    #     model_id += model[center_idx]
-    #     model_id.append(id_kickmap)
-    #     model_id.append(dws_drift)
-    #     model_id += model[idx_dws+1:]
-    #     idx = pyaccel.lattice.find_indices(model_id, 'fam_name', 'start')
-    #     model_id = pyaccel.lattice.shift(model_id, idx[0])
-    #     return model_id
