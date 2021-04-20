@@ -144,7 +144,7 @@ class ID():
         id_kickmap = pyaccel.elements.kickmap(
             fam_name=self.id_data.id_name,
             kicktable_fname=self.id_data.kicktable_fname,
-            nr_steps=40)
+            nr_steps=self.id_data.seg_nr)
 
         kickmap_half_len = id_kickmap.length/2
         rescale = id_half.length/kickmap_half_len
@@ -152,7 +152,7 @@ class ID():
         id_half_kickmap = pyaccel.elements.kickmap(
             fam_name=self.id_data.id_name,
             kicktable_fname=self.id_data.kicktable_fname,
-            nr_steps=40,
+            nr_steps=self.id_data.seg_nr,
             rescale_length=0.5*rescale,
             rescale_kicks=0.5*rescale)
 
