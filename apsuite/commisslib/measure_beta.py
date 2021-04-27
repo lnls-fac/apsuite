@@ -20,6 +20,9 @@ from ..utils import ThreadedMeasBaseClass as _BaseClass, \
 class BetaParams(_ParamsBaseClass):
     """."""
 
+    # Measurements data can be found in Lucas I. Balthazar's e-mail
+    # sent in 10/30/2020.
+
     # Currents used in measurements performed at IMA's lab.
     DELTA_CURRENT = {
         'QDA': 1.37,
@@ -38,22 +41,22 @@ class BetaParams(_ParamsBaseClass):
         'QFP': 0.59,
         }
 
-    # Integrated field relative variations measured at IMA's lab.
-    RELATIVE_DELTA_KL = {
-        'QDA': 3.07487/100,
-        'QDB1': 2.05806/100,
-        'QDP1': 2.05806/100,
-        'QDB2': 1.49222/100,
-        'QDP2': 1.49222/100,
+    # Integrated quadrupole field variations measured at IMA's lab.
+    DELTA_GL = {
+        'QDA': -6.9e-2,
+        'QDB1': -7.0e-2,
+        'QDP1': -7.0e-2,
+        'QDB2': -7.1e-2,
+        'QDP2': -7.1e-2,
 
-        'QFA': 0.506614/100,
-        'Q1': 0.69606/100,
-        'Q2': 0.461894/100,
-        'Q3': 0.60985/100,
-        'Q4': 0.53178/100,
+        'QFA': 3.6e-2,
+        'Q1':  3.9e-2,
+        'Q2':  4.0e-2,
+        'Q3':  3.9e-2,
+        'Q4':  4.2e-2,
 
-        'QFB': 0.326264/100,
-        'QFP': 0.326264/100,
+        'QFB': 4.0e-2,
+        'QFP': 4.0e-2,
         }
 
     def __init__(self):
@@ -265,7 +268,6 @@ class MeasBeta(_BaseClass):
     def _meas_beta(self):
         """."""
         sofb = self.devices['sofb']
-        loop_on_rf = False
         ti0 = _time.time()
 
         _time.sleep(self.params.wait_tune)
@@ -403,7 +405,7 @@ class MeasBeta(_BaseClass):
         kl_orig = quad.strength
         quadname = _PVName(quadname)
         dcurr = self.params.DELTA_CURRENT[quadname.dev]
-        dkl_ima = self.params.RELATIVE_DELTA_KL[quadname.dev] * kl_orig
+        dkl_ima = self.params.DELTA_GL[quadname.dev] / self.model.brho
 
         cycling_curve = MeasBeta.get_cycling_curve()
 
