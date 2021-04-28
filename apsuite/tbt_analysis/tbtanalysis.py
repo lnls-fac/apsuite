@@ -623,8 +623,6 @@ class TbTAnalysis(_FrozenClass):
         else:
             self.chromy = TbTAnalysis.NOM_CHROMY
 
-        
-
     # --- fitting methods ---
 
     @property
@@ -768,32 +766,32 @@ class TbTAnalysis(_FrozenClass):
             select_idx_turn_start, select_idx_turn_stop, offset):
         """."""
         args = [select_idx_turn_start, select_idx_turn_stop, offset]
-        traj_fit = TbTAnalysis.calc_trajx_chromx(params, *args)
+        traj_fit = TbTAnalysis.calc_traj_chrom(params, *args)
         traj_res = traj_mea - traj_fit
         return _np.sqrt(traj_res * traj_res)
 
     @staticmethod
-    def calc_trajx_chromx(params, *args):
+    def calc_traj_chrom(params, *args):
         """BPM averaging due to longitudinal dynamics decoherence.
 
-        nux ~ nux0 + chromx * delta_energy
+        nu ~ nu0 + chrom * delta_energy
         See Laurent Nadolski Thesis, Chapter 4, pg. 121, Eq. 4.15
         """
         tunes_frac = params[0]
-        tunex_frac = params[1]
-        chromx = params[2]
+        tune_frac = params[1]
+        chrom = params[2]
         espread = params[3]
-        rx0 = params[4]
-        mux = params[5]
+        r0 = params[4]
+        mu = params[5]
 
-        select_idx_turn_start, select_idx_turn_stop, rx_offset = args
+        select_idx_turn_start, select_idx_turn_stop, offset = args
         turn = _np.arange(select_idx_turn_start, select_idx_turn_stop)
-        cos = _np.cos(2 * _np.pi * tunex_frac * turn + mux)
-        chromx_decoh = 2 * chromx * espread / tunes_frac
+        cos = _np.cos(2 * _np.pi * tune_frac * turn + mu)
+        chromx_decoh = 2 * chrom * espread / tunes_frac
         alp = chromx_decoh * _np.sin(_np.pi * tunes_frac * turn)
         exp = _np.exp(-alp**2/2.0)
-        trajx = rx0 * exp * cos + rx_offset
-        return trajx
+        traj = r0 * exp * cos + offset
+        return traj
 
     @staticmethod
     def calc_fitting_error(fit_params):
