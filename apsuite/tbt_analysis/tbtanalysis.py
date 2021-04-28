@@ -631,13 +631,23 @@ class TbTAnalysis:
 
     def fit_least_squares(self):
         """."""
+
+        if self._select_kicktype == 'X':
+            tune_frac = self.tunex_frac
+            chrom = self.chromx
+            r0 = self.rx0
+            mu = self.mux
+            offset = self.rx_offset
+        else:
+            tune_frac = self.tuney_frac
+            chrom = self.chromy
+            r0 = self.ry0
+            mu = self.muy
+            offset = self.ry_offset
+
         init_params = [
-            self.tunes_frac,
-            self.tunex_frac,
-            self.chromx,
-            self.espread,
-            self.rx0,
-            self.mux]
+            self.tunes_frac, tune_frac,
+            chrom, self.espread, r0, mu]
 
         traj_mea = self.select_get_traj(
             select_idx_kick=self.select_idx_kick,
@@ -652,25 +662,26 @@ class TbTAnalysis:
                 traj_mea,
                 self.select_idx_turn_start,
                 self.select_idx_turn_stop,
-                self.rx_offset),
+                offset),
             method='lm')
-
-        self.tunes_frac = fit_params['x'][0]
-        self.tunex_frac = fit_params['x'][1]
-        self.chromx = fit_params['x'][2]
-        self.espread = fit_params['x'][3]
-        self.chromx_decoh = 2*self.chromx*self.espread/self.tunes_frac
-        self.rx0 = fit_params['x'][4]
-        self.mux = fit_params['x'][5]
 
         fit_errors = TbTAnalysis.calc_fitting_error(fit_params)
 
-        self.tunes_frac_err = fit_errors[0]
-        self.tunex_frac_err = fit_errors[1]
-        self.chromx_err = fit_errors[2]
-        self.espread_err = fit_errors[3]
-        self.rx0_err = fit_errors[4]
-        self.mux_err = fit_errors[5]
+        if self._select_kicktype == 'X':
+            self.tunes_frac = fit_params['x'][0]
+            self.tunex_frac = fit_params['x'][1]
+            self.chromx = fit_params['x'][2]
+            self.espread = fit_params['x'][3]
+            self.chromx_decoh = 2*self.chromx*self.espread/self.tunes_frac
+            self.rx0 = fit_params['x'][4]
+            self.mux = fit_params['x'][5]
+        else:
+            self.tunes_frac_err = fit_errors[0]
+            self.tunex_frac_err = fit_errors[1]
+            self.chromx_err = fit_errors[2]
+            self.espread_err = fit_errors[3]
+            self.rx0_err = fit_errors[4]
+            self.mux_err = fit_errors[5]
 
     @staticmethod
     def err_function(
