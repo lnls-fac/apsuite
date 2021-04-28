@@ -4,14 +4,18 @@
 import pickle as _pickle
 import numpy as _np
 import matplotlib.pyplot as _plt
+from scipy.optimize import least_squares as least_squares
 
-from scipy.optimize import least_squares
+from ..utils import FrozenClass as _FrozenClass
 from .tbtsimann import TbTSimulAnneal as _TbTSimulAnneal
 
 
-class TbTAnalysis:
+class TbTAnalysis(_FrozenClass):
     """."""
 
+    KICKTYPE_X = 'X'
+    KICKTYPE_Y = 'Y'
+    KICKTYPE_XY = 'XY'
     NOM_CHROMX = 2.5
     NOM_CHROMY = 2.5
     NOM_ESPREAD = 8.515e-4
@@ -23,7 +27,7 @@ class TbTAnalysis:
         self._data_fname = data_fname
 
         # --- select type of tbtanalysis: 'X' or 'Y'
-        self._select_kicktype = 'X' if kicktype is None else kicktype
+        self._select_kicktype = TbTAnalysis.KICKTYPE_X if kicktype is None else kicktype
         
         # --- data selection attributes ---
         self._select_idx_bpm = 0
@@ -31,53 +35,49 @@ class TbTAnalysis:
         self._select_idx_turn_start = 0
         self._select_idx_turn_stop = 500
         
-        self._rx_offset = None
-        self._tunes_frac = 0.0
-        self._tunex_frac = 0.0
-        self._tuney_frac = 0.0
-        self._chromx = 0.0
-        self._chromy = 0.0
-        self._espread = 0.0
-        self._chromx_decoh = 0.0
-        self._chromy_decoh = 0.0
-        self._rx0 = 0.0
-        self._mux = 0.0
-        self._muy = 0.0
-        self._tunes_frac_err = 0.0
-        self._tunex_frac_err = 0.0
-        self._tuney_frac_err = 0.0
-        self._chromx_err = 0.0
-        self._chromy_err = 0.0
-        self._espread_err = 0.0
-        self._rx0_err = 0.0
-        self._mux_err = 0.0
         self._simann = None
         self._analysis = None
+
+        self._tunes_frac = 0.0
+        self._espread = 0.0
+        self._tunes_frac_err = 0.0
+        self._espread_err = 0.0
+        
+        self._rx_offset = None
+        self._rx0 = 0.0
+        self._tunex_frac = 0.0
+        self._chromx_decoh = 0.0
+        self._chromx = 0.0
+        self._mux = 0.0
+        self._rx0_err = 0.0
+        self._tunex_frac_err = 0.0
+        self._chromx_err = 0.0
+        self._mux_err = 0.0
+
+        self._ry_offset = None
+        self._ry0 = 0.0
+        self._tuney_frac = 0.0
+        self._chromy_decoh = 0.0
+        self._chromy = 0.0
+        self._muy = 0.0
+        self._ry0_err = 0.0
+        self._tuney_frac_err = 0.0
+        self._chromy_err = 0.0
+        self._muy_err = 0.0
 
         if not self._data and self._data_fname:
             self.data_load_raw()
 
         self.fit_reset()
 
-        # loads parameters of 2020-05-05 data (idx_bpm 0, idx_kick 0)
+        # load parameters of 2020-05-05 data (idx_bpm 0, idx_kick 0)
         self.load_parameters_20200505()
         self._init_analysis()
 
+        # freeze class attributes, as to alert class users of wrong settler names used by mistake
+        self._freeze()
+
     # --- data methods ---
-
-    @property
-    def data_trajx(self):
-        """Return trajx data."""
-        if 'trajx' in self._data:
-            return self._data['trajx']
-        return None
-
-    @property
-    def data_trajy(self):
-        """Return trajy data."""
-        if 'trajy' in self._data:
-            return self._data['trajy']
-        return None
 
     @property
     def data_trajsum(self):
@@ -137,6 +137,20 @@ class TbTAnalysis:
         self._rx_offset = _np.mean(trajx)
         trajy = self.select_get_trajy()
         self._ry_offset = _np.mean(trajy)
+
+    @property
+    def data_trajx(self):
+        """Return trajx data."""
+        if 'trajx' in self._data:
+            return self._data['trajx']
+        return None
+
+    @property
+    def data_trajy(self):
+        """Return trajy data."""
+        if 'trajy' in self._data:
+            return self._data['trajy']
+        return None
 
     # --- data selection methods for analysis ---
 
@@ -202,14 +216,13 @@ class TbTAnalysis:
             self._get_sel_args(
                 select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop)
         turns_sel = _np.arange(select_idx_turn_start, select_idx_turn_stop)
-        if self.select_kicktype == 'X':
+        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
             traj_mea = self.data_trajx[select_idx_kick, turns_sel, select_idx_bpm]
         else:
             traj_mea = self.data_trajy[select_idx_kick, turns_sel, select_idx_bpm]
         return traj_mea
 
-
-    # --- fitting parameters methods ---
+    # --- objects ---
 
     @property
     def simann(self):
@@ -217,16 +230,8 @@ class TbTAnalysis:
         self._self2simann()
         return self._simann
 
-    @property
-    def rx_offset(self):
-        """Return offset value of trajx selected data."""
-        return self._rx_offset
-
-    @property
-    def ry_offset(self):
-        """Return offset value of trajy selected data."""
-        return self._ry_offset
-
+    # --- beam parameters ---
+      
     @property
     def tunes_frac(self):
         """Return fitting parameter tunes_frac."""
@@ -238,24 +243,64 @@ class TbTAnalysis:
         self._tunes_frac = value
 
     @property
+    def espread(self):
+        """."""
+        return self._espread
+
+    @espread.setter
+    def espread(self, value):
+        """."""
+        self._espread = value
+
+    # --- beam parameter errors ---
+
+    @property
+    def tunes_frac_err(self):
+        """Return fitting parameter tunes_frac_err."""
+        return self._tunes_frac_err
+
+    @tunes_frac_err.setter
+    def tunes_frac_err(self, value):
+        """Set fitting parameter tunes_frac_err."""
+        self._tunes_frac_err = value
+
+    @property
+    def espread_err(self):
+        """."""
+        return self._espread_err
+
+    @espread_err.setter
+    def espread_err(self, value):
+        """."""
+        self._espread_err = value
+
+    # --- horizontal beam parameters ---
+
+    @property
+    def rx_offset(self):
+        """Return offset value of trajx selected data."""
+        return self._rx_offset
+
+    @property
+    def rx0(self):
+        """."""
+        return self._rx0
+
+    @rx0.setter
+    def rx0(self, value):
+        """."""
+        self._rx0 = value
+
+    @property
     def tunex_frac(self):
         """Return fitting parameter tunex_frac."""
+        """Return offset value of trajy selected data."""
         return self._tunex_frac
 
     @tunex_frac.setter
     def tunex_frac(self, value):
         """Set fitting parameter tunex_frac."""
         self._tunex_frac = value
-
-    @property
-    def tuney_frac(self):
-        """Return fitting parameter tuney_frac."""
-        return self._tuney_frac
-
-    @tuney_frac.setter
-    def tuney_frac(self, value):
-        """Set fitting parameter tuney_frac."""
-        self._tuney_frac = value
 
     @property
     def chromx_decoh(self):
@@ -278,34 +323,16 @@ class TbTAnalysis:
         self._chromx = value
 
     @property
-    def chromy_decoh(self):
+    def mux(self):
         """."""
-        return self._chromy_decoh
+        return self._mux
 
-    @chromy_decoh.setter
-    def chromy_decoh(self, value):
+    @mux.setter
+    def mux(self, value):
         """."""
-        self._chromy_decoh = value
+        self._mux = value
 
-    @property
-    def chromy(self):
-        """."""
-        return self._chromy
-
-    @chromy.setter
-    def chromy(self, value):
-        """."""
-        self._chromy = value
-
-    @property
-    def espread(self):
-        """."""
-        return self._espread
-
-    @espread.setter
-    def espread(self, value):
-        """."""
-        self._espread = value
+    # --- horizontal beam parameter errors ---
 
     @property
     def rx0_err(self):
@@ -316,26 +343,6 @@ class TbTAnalysis:
     def rx0_err(self, value):
         """."""
         self._rx0_err = value
-
-    @property
-    def mux_err(self):
-        """."""
-        return self._mux_err
-
-    @mux_err.setter
-    def mux_err(self, value):
-        """."""
-        self._mux_err = value
-
-    @property
-    def tunes_frac_err(self):
-        """Return fitting parameter tunes_frac_err."""
-        return self._tunes_frac_err
-
-    @tunes_frac_err.setter
-    def tunes_frac_err(self, value):
-        """Set fitting parameter tunes_frac_err."""
-        self._tunes_frac_err = value
 
     @property
     def tunex_frac_err(self):
@@ -358,34 +365,112 @@ class TbTAnalysis:
         self._chromx_err = value
 
     @property
-    def espread_err(self):
+    def mux_err(self):
         """."""
-        return self._espread_err
+        return self._mux_err
 
-    @espread_err.setter
-    def espread_err(self, value):
+    @mux_err.setter
+    def mux_err(self, value):
         """."""
-        self._espread_err = value
+        self._mux_err = value
 
-    @property
-    def rx0(self):
-        """."""
-        return self._rx0
-
-    @rx0.setter
-    def rx0(self, value):
-        """."""
-        self._rx0 = value
+    # --- vertical beam parameters ---
 
     @property
-    def mux(self):
+    def ry_offset(self):
+        return self._ry_offset
+   
+    @property
+    def ry0(self):
         """."""
-        return self._mux
+        return self._ry0
 
-    @mux.setter
-    def mux(self, value):
+    @ry0.setter
+    def ry0(self, value):
         """."""
-        self._mux = value
+        self._ry0 = value
+
+    @property
+    def tuney_frac(self):
+        """Return fitting parameter tuney_frac."""
+        return self._tuney_frac
+
+    @tuney_frac.setter
+    def tuney_frac(self, value):
+        """Set fitting parameter tuney_frac."""
+        self._tuney_frac = value
+
+    @property
+    def chromy_decoh(self):
+        """."""
+        return self._chromy_decoh
+
+    @chromy_decoh.setter
+    def chromy_decoh(self, value):
+        """."""
+        self._chromy_decoh = value
+
+    @property
+    def chromy(self):
+        """."""
+        return self._chromy
+
+    @chromy.setter
+    def chromy(self, value):
+        """."""
+        self._chromy = value
+
+    @property
+    def muy(self):
+        """."""
+        return self._muy
+
+    @muy.setter
+    def muy(self, value):
+        """."""
+        self._muy = value
+
+    # --- vertical beam parameter errors ---
+
+    @property
+    def ry0_err(self):
+        """."""
+        return self._ry0_err
+
+    @ry0_err.setter
+    def ry0_err(self, value):
+        """."""
+        self._ry0_err = value
+
+    @property
+    def tuney_frac_err(self):
+        """Return fitting parameter tuney_frac_err."""
+        return self._tuney_frac_err
+
+    @tuney_frac_err.setter
+    def tuney_frac_err(self, value):
+        """Set fitting parameter tuney_frac_err."""
+        self._tuney_frac_err = value
+
+    @property
+    def chromy_err(self):
+        """."""
+        return self._chromy_err
+
+    @chromy_err.setter
+    def chromy_err(self, value):
+        """."""
+        self._chromy_err = value
+
+    @property
+    def muy_err(self):
+        """."""
+        return self._muy_err
+
+    @muy_err.setter
+    def muy_err(self, value):
+        """."""
+        self._muy_err = value
 
     # --- search methods ---
 
@@ -417,7 +502,7 @@ class TbTAnalysis:
 
         # set tunes
         self.tunes_frac = tunes
-        if self.select_kicktype == 'X':
+        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
             self.tunex_frac = tune
         else:
             self.tuney_frac = tune
@@ -441,7 +526,7 @@ class TbTAnalysis:
             select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
         traj_mea = traj_mea - _np.mean(traj_mea)
 
-        if self._select_kicktype == 'X':
+        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
             tune_frac = self.tunex_frac
         else:
             tune_frac = self.tuney_frac
@@ -458,7 +543,7 @@ class TbTAnalysis:
         rx = _np.sqrt(c0_**2 + s0_**2)
         mu = _np.arcsin(s0_ / rx)
 
-        if self._select_kicktype == 'X':
+        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
             self.rx0 = rx
             self.mux = mu
         else:
@@ -524,27 +609,21 @@ class TbTAnalysis:
             select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop,
             plot_flag=plot_flag)
         
-        if self.select_kicktype == 'X':
-            self.search_r0_mu(
-                select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
-                select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
-            self.chromx = TbTAnalysis.NOM_CHROMX
-        else:
-            self.search_rx0_muy(
-                select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
-                select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
-            self.chromy = TbTAnalysis.NOM_CHROMY
+        self.search_r0_mu(
+            select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
+            select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
 
         # self.search_chromx_decoh(
         #     select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
         #     select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
 
-        if self.select_kicktype == 'X':
+        self.espread = TbTAnalysis.NOM_ESPREAD
+        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
             self.chromx = TbTAnalysis.NOM_CHROMX
         else:
             self.chromy = TbTAnalysis.NOM_CHROMY
 
-        self.espread = TbTAnalysis.NOM_ESPREAD
+        
 
     # --- fitting methods ---
 
@@ -632,7 +711,7 @@ class TbTAnalysis:
     def fit_least_squares(self):
         """."""
 
-        if self._select_kicktype == 'X':
+        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
             tune_frac = self.tunex_frac
             chrom = self.chromx
             r0 = self.rx0
@@ -667,7 +746,7 @@ class TbTAnalysis:
 
         fit_errors = TbTAnalysis.calc_fitting_error(fit_params)
 
-        if self._select_kicktype == 'X':
+        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
             self.tunes_frac = fit_params['x'][0]
             self.tunex_frac = fit_params['x'][1]
             self.chromx = fit_params['x'][2]
@@ -677,21 +756,21 @@ class TbTAnalysis:
             self.mux = fit_params['x'][5]
         else:
             self.tunes_frac_err = fit_errors[0]
-            self.tunex_frac_err = fit_errors[1]
-            self.chromx_err = fit_errors[2]
+            self.tuney_frac_err = fit_errors[1]
+            self.chromy_err = fit_errors[2]
             self.espread_err = fit_errors[3]
-            self.rx0_err = fit_errors[4]
-            self.mux_err = fit_errors[5]
+            self.ry0_err = fit_errors[4]
+            self.muy_err = fit_errors[5]
 
     @staticmethod
     def err_function(
-            params, trajx_mea,
-            select_idx_turn_start, select_idx_turn_stop, rx_offset):
+            params, traj_mea,
+            select_idx_turn_start, select_idx_turn_stop, offset):
         """."""
-        args = [select_idx_turn_start, select_idx_turn_stop, rx_offset]
-        trajx_fit = TbTAnalysis.calc_trajx_chromx(params, *args)
-        trajx_res = trajx_mea - trajx_fit
-        return _np.sqrt(trajx_res * trajx_res)
+        args = [select_idx_turn_start, select_idx_turn_stop, offset]
+        traj_fit = TbTAnalysis.calc_trajx_chromx(params, *args)
+        traj_res = traj_mea - traj_fit
+        return _np.sqrt(traj_res * traj_res)
 
     @staticmethod
     def calc_trajx_chromx(params, *args):
@@ -910,10 +989,10 @@ class TbTAnalysis:
     def _select_update_offsets(self):
         """."""
         kicktype = self.select_kicktype
-        self.select_kicktype = 'X'
+        self.select_kicktype = TbTAnalysis.KICKTYPE_X
         trajx = self.select_get_traj()
         self._rx_offset = _np.mean(trajx)
-        self.select_kicktype = 'Y'
+        self.select_kicktype = TbTAnalysis.KICKTYPE_Y
         trajy = self.select_get_traj()
         self._ry_offset = _np.mean(trajy)
         self.select_kicktype = kicktype

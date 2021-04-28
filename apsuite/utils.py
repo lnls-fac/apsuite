@@ -122,3 +122,17 @@ class ThreadedMeasBaseClass(MeasBaseClass):
         if self._target is not None:
             self._target()
         self._finished.set()
+
+
+class FrozenClass(object):
+    """Class to be derived when creation of new attributes is not to be allowed."""
+
+    __isfrozen = False
+    def __setattr__(self, key, value):
+        if self.__isfrozen and not hasattr(self, key):
+            raise TypeError( "%r is a frozen class" % self )
+        object.__setattr__(self, key, value)
+
+    def _freeze(self):
+        """This method should be called at the end ofsubclass initialization."""
+        self.__isfrozen = True
