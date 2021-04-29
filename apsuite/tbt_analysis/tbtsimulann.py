@@ -12,6 +12,7 @@ class TbTSimulAnneal(_SimulAnneal):
         """."""
 
         CHROMX = 'chromx'
+        CHROMY = 'chromy'
         KXX = 'kxx'  # NOTE: implementation not finished
 
     def __init__(self, tbtfit, fit_type=TYPES.CHROMX, use_thread=False):
@@ -35,8 +36,8 @@ class TbTSimulAnneal(_SimulAnneal):
         if self._fit_type == TbTSimulAnneal.TYPES.CHROMX:
             parms = {
                 'rx_offset': tbt.rx_offset,
-                'idx_turn_start': tbt.idx_turn_start,
-                'idx_turn_stop': tbt.idx_turn_stop,
+                'select_idx_turn_start': tbt.select_idx_turn_start,
+                'select_idx_turn_stop': tbt.select_idx_turn_stop,
                 'tunes_frac': self.position[0],
                 'tunex_frac': self.position[1],
                 'chromx_decoh': self.position[2],
@@ -55,10 +56,11 @@ class TbTSimulAnneal(_SimulAnneal):
                 'kxx_ratio': self.position[3],
             }
             trajx_fit = TbTSimulAnneal._calc_trajx_kxx(**parms)
-        trajx_mea = tbt.sel_trajx(
-            idx_kick=tbt.idx_kick, idx_bpm=tbt.idx_bpm,
-            idx_turn_start=tbt.idx_turn_start,
-            idx_turn_stop=tbt.idx_turn_stop)
+        trajx_mea = tbt.select_get_traj(
+            select_idx_kick=tbt.select_idx_kick,
+            select_idx_bpm=tbt.select_idx_bpm,
+            select_idx_turn_start=tbt.select_idx_turn_start,
+            select_idx_turn_stop=tbt.select_idx_turn_stop)
         trajx_res = trajx_mea - trajx_fit
         residue = _np.sqrt(_np.sum(trajx_res**2)/len(trajx_res))
         return residue
@@ -67,6 +69,13 @@ class TbTSimulAnneal(_SimulAnneal):
         """."""
         if self._fit_type == TbTSimulAnneal.TYPES.CHROMX:
             return TbTSimulAnneal._calc_trajx_chromx(**parms)
+        elif self._fit_type == TbTSimulAnneal.TYPES.KXX:
+            return TbTSimulAnneal._calc_trajx_kxx(**parms)
+
+    def calc_trajy(self, **parms):
+        """."""
+        if self._fit_type == TbTSimulAnneal.TYPES.CHROMX:
+            return TbTSimulAnneal._calc_trajy_chromy(**parms)
         elif self._fit_type == TbTSimulAnneal.TYPES.KXX:
             return TbTSimulAnneal._calc_trajx_kxx(**parms)
 
@@ -82,8 +91,8 @@ class TbTSimulAnneal(_SimulAnneal):
         See Laurent Nadolski Thesis, Chapter 4, pg. 121, Eq. 4.15
         """
         rx_offset = parms['rx_offset']
-        idx_turn_start = parms['idx_turn_start']
-        idx_turn_stop = parms['idx_turn_stop']
+        idx_turn_start = parms['select_idx_turn_start']
+        idx_turn_stop = parms['select_idx_turn_stop']
         tunes_frac = parms['tunes_frac']
         tunex_frac = parms['tunex_frac']
         chromx_decoh = parms['chromx_decoh']
@@ -96,6 +105,29 @@ class TbTSimulAnneal(_SimulAnneal):
         exp = _np.exp(-alp**2/2.0)
         trajx = rx0 * exp * cos + rx_offset
         return trajx
+
+    @staticmethod
+    def _calc_trajy_chromy(**parms):
+        """BPM averaging due to longitudinal dynamics decoherence.
+
+        nuy ~ nuy0 + chromy * delta_energy
+        See Laurent Nadolski Thesis, Chapter 4, pg. 121, Eq. 4.15
+        """
+        ry_offset = parms['ry_offset']
+        idx_turn_start = parms['select_idx_turn_start']
+        idx_turn_stop = parms['select_idx_turn_stop']
+        tunes_frac = parms['tunes_frac']
+        tuney_frac = parms['tuney_frac']
+        chromy_decoh = parms['chromy_decoh']
+        ry0 = parms['ry0']
+        muy = parms['muy']
+
+        turn = _np.arange(idx_turn_start, idx_turn_stop)
+        cos = _np.cos(2 * _np.pi * tuney_frac * turn + muy)
+        alp = chromy_decoh * _np.sin(_np.pi * tunes_frac * turn)
+        exp = _np.exp(-alp**2/2.0)
+        trajy = ry0 * exp * cos + ry_offset
+        return trajy
 
     @staticmethod
     def _calc_trajx_kxx(**parms):
