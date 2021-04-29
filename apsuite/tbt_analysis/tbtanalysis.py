@@ -7,18 +7,19 @@ import matplotlib.pyplot as _plt
 from scipy.optimize import least_squares as _least_squares
 
 from ..utils import FrozenClass as _FrozenClass
+from .calctraj import calc_traj_chrom as _calc_traj_chrom
 from .tbtsimulann import TbTSimulAnneal as _TbTSimulAnneal
-
 
 class TbTAnalysis(_FrozenClass):
     """."""
 
     KICKTYPE_X = 'X'
     KICKTYPE_Y = 'Y'
-    KICKTYPE_XY = 'XY'
     NOM_CHROMX = 2.5
     NOM_CHROMY = 2.5
-    NOM_ESPREAD = 8.515e-4
+
+    # https://wiki-sirius.lnls.br/mediawiki/index.php/Parameter:SI_optics_natural_energy_spread
+    NOM_ESPREAD = 0.08436/100
 
     def __init__(self, kicktype=None, data=None, data_fname=None):
         """."""
@@ -533,7 +534,8 @@ class TbTAnalysis(_FrozenClass):
         traj_mea = self.select_get_traj(
             select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
             select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
-        traj_mea = traj_mea - _np.mean(traj_mea)
+        traj_avg = _np.mean(traj_mea)
+        traj_mea = traj_mea - traj_avg
 
         if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
             tune_frac = self.tunex_frac
@@ -549,14 +551,21 @@ class TbTAnalysis(_FrozenClass):
         mata = _np.array([[a11, a12], [a21, a22]])
         matb = _np.array([b11, b21])
         c0_, s0_ = _np.linalg.solve(mata, matb)
-        rx = _np.sqrt(c0_**2 + s0_**2)
-        mu = _np.arcsin(s0_ / rx)
+        r0 = _np.sqrt(c0_**2 + s0_**2)
+        # mu = _np.arcsin(s0_ / r0)
+        mu = _np.arctan(s0_ / c0_)
+
+        # check if inversion is necessary
+        vec1 = r0 * _np.cos(2 * _np.pi * tune_frac * turn + mu) - traj_mea
+        vec2 = r0 * _np.cos(2 * _np.pi * tune_frac * turn + mu + _np.pi) - traj_mea
+        if _np.sum(vec2**2) < _np.sum(vec1**2):
+            mu += _np.pi
 
         if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
-            self.rx0 = rx
+            self.rx0 = r0
             self.mux = mu
         else:
-            self.ry0 = rx
+            self.ry0 = r0
             self.muy = mu
 
     def search_chromx_decoh(
@@ -634,6 +643,16 @@ class TbTAnalysis(_FrozenClass):
         else:
             self.chromy = TbTAnalysis.NOM_CHROMY
 
+
+    # --- fitting methods: common ---
+
+    def fit_trajs(self):
+        """."""
+        params, offset, traj_mea = self._get_leastsqr_inputs()
+        args = [self.select_idx_turn_start, self.select_idx_turn_stop, offset]
+        traj_fit = _calc_traj_chrom(params, *args)
+        return traj_mea, traj_fit
+
     # --- fitting methods: simulated annealing ---
 
     @property
@@ -648,10 +667,14 @@ class TbTAnalysis(_FrozenClass):
 
     def fit_simulann_reset(self):
         """."""
-        simulann = _TbTSimulAnneal(
-            self, _TbTSimulAnneal.TYPES.CHROMX)
+        if self._select_kicktype != TbTAnalysis.KICKTYPE_Y:
+            simultype = _TbTSimulAnneal.TYPES.CHROMX
+            value_max = 1.1 * _np.amax(self.data_trajx)
+        else:
+            simultype = _TbTSimulAnneal.TYPES.CHROMY
+            value_max = 1.1 * _np.amax(self.data_trajy)
+        simulann = _TbTSimulAnneal(self, simultype)
         self._simulann = simulann
-        value_max = 1.1 * _np.amax(self.data_trajx)
         lower = _np.array([0.0, 0.0, 0.0, 0.0, -_np.pi])
         upper = _np.array([0.05, 0.5, 100.0, value_max, +_np.pi])
         delta = _np.array(
@@ -749,7 +772,7 @@ class TbTAnalysis(_FrozenClass):
         init_params, offset, traj_mea = self._get_leastsqr_inputs()
         
         fit_params = _least_squares(
-            fun=self._calc_leastsqr_residue,
+            fun=self._calc_residue_vector,
             x0=init_params,
             args=(
                 traj_mea,
@@ -780,15 +803,10 @@ class TbTAnalysis(_FrozenClass):
         """."""
         params, offset, traj_mea = self._get_leastsqr_inputs()
 
-        return self._calc_leastsqr_residue(
+        residue_vec = self._calc_residue_vector(
             params, traj_mea, self.select_idx_turn_start, self.select_idx_turn_stop, offset)
 
-    def fit_leastsqr_traj(self):
-        """."""
-        params, offset, traj_mea = self._get_leastsqr_inputs()
-        args = [self.select_idx_turn_start, self.select_idx_turn_stop, offset]
-        traj_fit = TbTAnalysis._calc_traj_chrom(params, *args)
-        return traj_mea, traj_fit
+        return _np.sqrt(_np.sum(residue_vec**2)/len(residue_vec))
 
     # --- analysis methods ---
 
@@ -1071,34 +1089,12 @@ class TbTAnalysis(_FrozenClass):
         return _np.sqrt(_np.diag(pcov))
 
     @staticmethod
-    def _calc_traj_chrom(params, *args):
-        """BPM averaging due to longitudinal dynamics decoherence.
-
-        nu ~ nu0 + chrom * delta_energy
-        See Laurent Nadolski Thesis, Chapter 4, pg. 121, Eq. 4.15
-        """
-        tunes_frac = params[0]
-        tune_frac = params[1]
-        chrom = params[2]
-        espread = params[3]
-        r0 = params[4]
-        mu = params[5]
-
-        select_idx_turn_start, select_idx_turn_stop, offset = args
-        turn = _np.arange(select_idx_turn_start, select_idx_turn_stop)
-        cos = _np.cos(2 * _np.pi * tune_frac * turn + mu)
-        chromx_decoh = 2 * chrom * espread / tunes_frac
-        alp = chromx_decoh * _np.sin(_np.pi * tunes_frac * turn)
-        exp = _np.exp(-alp**2/2.0)
-        traj = r0 * exp * cos + offset
-        return traj
-
-    @staticmethod
-    def _calc_leastsqr_residue(
+    def _calc_residue_vector(
             params, traj_mea,
             select_idx_turn_start, select_idx_turn_stop, offset):
         """."""
         args = [select_idx_turn_start, select_idx_turn_stop, offset]
-        traj_fit = TbTAnalysis._calc_traj_chrom(params, *args)
+        traj_fit = _calc_traj_chrom(params, *args)
         traj_res = traj_mea - traj_fit
-        return _np.sqrt(traj_res * traj_res / len(traj_res))
+        # return _np.sqrt(traj_res * traj_res)
+        return traj_res
