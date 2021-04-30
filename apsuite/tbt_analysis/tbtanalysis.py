@@ -568,12 +568,11 @@ class TbTAnalysis(_FrozenClass):
             self.ry0 = r0
             self.muy = mu
 
-    def search_chromx_decoh(
+    def search_espread(
             self,
             select_idx_kick=None, select_idx_bpm=None,
             select_idx_turn_start=None, select_idx_turn_stop=None):
         """."""
-        select_idx_turn_stop = 500 if select_idx_turn_stop is None else select_idx_turn_stop
 
         select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop = \
             self._get_sel_args(
@@ -584,40 +583,26 @@ class TbTAnalysis(_FrozenClass):
         if select_idx_bpm != self.select_idx_bpm:
             self.select_idx_bpm = select_idx_bpm
 
-        # print(select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop)
+        # generate tbt envelope [exp(-alf**2/2)], alf = a * sin(pi * tune_s * n)
+        self.espread = 0
+        traj_mea, traj_fit = self.fit_trajs()
+        turns = _np.arange(len(traj_mea))
 
-        self.chromx_decoh = 0
-        obj1 = self.fit_simulann_residue
-        self.chromx_decoh = 0.1
-        obj2 = self.fit_simulann_residue
-        factor = 2.0 if obj2 < obj1 else 0.5
+        # filter out negative and outlier points
+        env = traj_mea / traj_fit
+        sel = (abs(traj_fit) > 0.10 * max(abs(traj_fit))) & (env > 0)
 
-        # first find a parameter interval
-        niter = 0
-        while niter < 16:
-            self.chromx_decoh *= factor
-            obj1 = self.fit_simulann_residue
-            print(self._chromx_decoh, obj1)
-            if obj1 < obj2:
-                obj2 = obj1
-            else:
-                break
-            niter += 1
-        par2 = self.chromx_decoh
-        par1 = self.chromx_decoh / factor / factor
-        pars = _np.linspace(par1, par2, 30)
-
-        # get best value in interval
-        best_par, best_obj = par2, self.fit_simulann_residue
-        for par in pars:
-            self.chromx_decoh = par
-            obj = self.simulann.calc_obj_fun()
-            # print(par, obj)
-            if obj < best_obj:
-                best_par = par
-                best_obj = obj
-        print(best_par)
-        self.chromx_decoh = best_par
+        # find best a^2 that fits envelope-converted data, a = 2 * crom * espread / tune_s
+        nvec = turns[sel]
+        sinn = _np.sin(_np.pi * self.tunes_frac * nvec)
+        logx = _np.log(env[sel])
+        sin2n = sinn**2
+        sin4n = sin2n**2
+        par2 = - _np.sum(sinn**2 * logx) / _np.sum(sin4n / 2)
+        if par2 < 0:
+            self.espread = TbTAnalysis.NOM_ESPREAD
+        else:
+            self.espread = _np.sqrt(par2) * self.tunes_frac / self.chromx / 2
 
     def search_init(self,
         select_idx_kick=None, select_idx_bpm=None,
@@ -633,16 +618,15 @@ class TbTAnalysis(_FrozenClass):
             select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
             select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
 
-        # self.search_chromx_decoh(
-        #     select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
-        #     select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
-
-        self.espread = TbTAnalysis.NOM_ESPREAD
         if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
             self.chromx = TbTAnalysis.NOM_CHROMX
         else:
             self.chromy = TbTAnalysis.NOM_CHROMY
 
+        # self.espread = TbTAnalysis.NOM_ESPREAD
+        self.search_espread(
+            select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
+            select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
 
     # --- fitting methods: common ---
 
