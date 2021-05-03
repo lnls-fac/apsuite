@@ -11,15 +11,13 @@ def calc_traj_chrom(params, *args):
     """
     tunes_frac = params[0]
     tune_frac = params[1]
-    chrom = params[2]
-    espread = params[3]
-    r0 = params[4]
-    mu = params[5]
+    chromx_decoh = params[2]
+    r0 = params[3]
+    mu = params[4]
 
     select_idx_turn_start, select_idx_turn_stop, offset = args
     turn = _np.arange(select_idx_turn_start, select_idx_turn_stop)
     cos = _np.cos(2 * _np.pi * tune_frac * turn + mu)
-    chromx_decoh = 2 * chrom * espread / tunes_frac
     alp = chromx_decoh * _np.sin(_np.pi * tunes_frac * turn)
     exp = _np.exp(-alp**2/2.0)
     traj = r0 * exp * cos + offset
