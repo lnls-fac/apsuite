@@ -572,8 +572,9 @@ class TbTAnalysis(_FrozenClass):
             select_idx_kick, select_idx_bpm,
             select_idx_turn_start, select_idx_turn_stop)
 
-        traj_mea = traj_mea - _np.mean(traj_mea)
+        traj_mea = traj_mea - offset
         args = [select_idx_turn_start, select_idx_turn_stop, offset]
+
         _, cn_, sn_, *_ = TbTAnalysis.calc_traj_chrom(params, *args)
         # linear algebra to solve for mu and r0
         a11, a12 = + _np.sum(cn_ * cn_), - _np.sum(cn_ * sn_)
@@ -600,27 +601,16 @@ class TbTAnalysis(_FrozenClass):
             self.ry0 = r0
             self.muy = mu
 
-    def search_init(self,
-        select_idx_kick=None, select_idx_bpm=None,
-        select_idx_turn_start=None, select_idx_turn_stop=None,
-        plot_flag=False):
+    def search_init(self, plot_flag=False):
         """."""
-        # process args
-        select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop = \
-            self._get_sel_args(
-                select_idx_kick, select_idx_bpm,
-                select_idx_turn_start, select_idx_turn_stop)
-        
         # search tunes with all data
-        select_idx_turn_stop = self.data_nr_turns
-        self.search_tunes(select_idx_turn_stop=select_idx_turn_stop, peak_frac = 0.999, plot_flag=False)
+        self.select_idx_turn_stop = self.data_nr_turns
+        self.search_tunes(peak_frac = 0.999, plot_flag=False)
 
         # search beta and mu with 3 periods of betatron oscillations
         self.espread = TbTAnalysis.NOM_ESPREAD * 1.0
-        select_idx_turn_stop = int(3 / self.tunex_frac)
-        self.search_r0_mu(
-            select_idx_kick, select_idx_bpm,
-            select_idx_turn_start, select_idx_turn_stop)
+        self.select_idx_turn_stop = int(3 / self.tunex_frac)
+        self.search_r0_mu()
 
     # --- fitting methods: common ---
 
@@ -681,15 +671,10 @@ class TbTAnalysis(_FrozenClass):
         traj_fit, *_ = TbTAnalysis.calc_traj_chrom(params, *args)
         return traj_mea, traj_fit
 
-    def fit_run(self,
-        select_idx_kick=None, select_idx_bpm=None,
-        select_idx_turn_start=None, select_idx_turn_stop=None,
-        plot_flag=False):
+    def fit_run(self, plot_flag=False):
         """."""
         # initial search for tunes, r0 and mu
-        self.search_init(
-            select_idx_kick, select_idx_bpm,
-            select_idx_turn_start, select_idx_turn_stop, plot_flag)
+        self.search_init(plot_flag)
 
         # search all parameters with 1 period of synchrotron oscillations
         self.select_idx_turn_stop = int(1 / self.tunes_frac)
@@ -703,8 +688,10 @@ class TbTAnalysis(_FrozenClass):
             bpm_indices = _np.arange(self.data_nr_bpms)
         vec = _np.zeros(len(bpm_indices))
         rx0, mux, tunex_frac, tunes_frac, espread, residue = 0*vec, 0*vec, 0*vec, 0*vec, 0*vec, 0*vec
+        self.select_idx_kick = select_idx_kick
         for idx, idx_bpm in enumerate(bpm_indices):
-            self.fit_run(select_idx_kick=0, select_idx_bpm=idx_bpm)
+            self.select_idx_bpm = idx_bpm
+            self.fit_run()
             # store params
             rx0[idx] = self.rx0
             mux[idx] = self.mux
@@ -723,7 +710,7 @@ class TbTAnalysis(_FrozenClass):
                     changed = True
                     mux[i:] += 0.5
 
-        return rx0, mux, tunex_frac, tunes_frac, espread, residue
+        return bpm_indices, rx0, mux, tunex_frac, tunes_frac, espread, residue
 
 
     # --- aux. public methods ---
@@ -786,7 +773,6 @@ class TbTAnalysis(_FrozenClass):
         exp = _np.exp(-alp**2/2.0)
         traj = r0 * exp * cos + offset
         return traj, cn, sn, alp, exp, cos
-
 
     def __str__(self):
         """."""
@@ -875,25 +861,23 @@ class TbTAnalysis(_FrozenClass):
             chrom_decoh = self.chromx_decoh
             r0 = self.rx0
             mu = self.mux
-            offset = self.rx_offset
         else:
             tune_frac = self.tuney_frac
             chrom_decoh = self.chromy_decoh
             r0 = self.ry0
             mu = self.muy
-            offset = self.ry_offset
 
         params = [
             self.tunes_frac, tune_frac,
             chrom_decoh, r0, mu]
 
-        return params, offset
+        return params
 
     def _get_fit_inputs(self,
         select_idx_kick=None, select_idx_bpm=None,
         select_idx_turn_start=None, select_idx_turn_stop=None):
         """."""
-        params, offset = self._get_fit_params()
+        params = self._get_fit_params()
         select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop = \
             self._get_sel_args(
                 select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop)
@@ -902,7 +886,7 @@ class TbTAnalysis(_FrozenClass):
             select_idx_bpm=select_idx_bpm,
             select_idx_turn_start=select_idx_turn_start,
             select_idx_turn_stop=select_idx_turn_stop)
-
+        offset = _np.mean(traj_mea)
         return params, offset, traj_mea
 
     @staticmethod
