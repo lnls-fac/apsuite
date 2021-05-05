@@ -1,5 +1,7 @@
 """TbT Simulation Annealing."""
 
+# DEPRECATED!
+
 import numpy as _np
 
 from ..optimization import SimulAnneal as _SimulAnneal
@@ -45,7 +47,7 @@ class TbTSimulAnneal(_SimulAnneal):
                 tbt.mux
             ]
             args = (tbt.idx_turn_start, tbt.idx_turn_stop, tbt.rx_offset)
-            traj_fit = _calc_traj_chrom(params, *args)
+            traj_fit, *_ = _calc_traj_chrom(params, *args)
         elif self._fit_type == types.CHROMY:
             params = [
                 tbt.tunes_frac,
@@ -56,7 +58,7 @@ class TbTSimulAnneal(_SimulAnneal):
                 tbt.muy
             ]
             args = (tbt.idx_turn_start, tbt.idx_turn_stop, tbt.ry_offset)
-            traj_fit = _calc_traj_chrom(params, *args)
+            traj_fit, *_ = _calc_traj_chrom(params, *args)
         elif self._fit_type == TbTSimulAnneal.TYPES.KXX:
             parms = {
                 'offset': tbt.rx_offset,

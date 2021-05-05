@@ -4,11 +4,11 @@
 import pickle as _pickle
 import numpy as _np
 import matplotlib.pyplot as _plt
-from scipy.optimize import least_squares as _least_squares
+import scipy.optimize as _opt
 
+from pyaccel.naff import naff_general as _naff_general
 from ..utils import FrozenClass as _FrozenClass
-from .calctraj import calc_traj_chrom as _calc_traj_chrom
-from .tbtsimulann import TbTSimulAnneal as _TbTSimulAnneal
+
 
 class TbTAnalysis(_FrozenClass):
     """."""
@@ -17,6 +17,8 @@ class TbTAnalysis(_FrozenClass):
     KICKTYPE_Y = 'Y'
     NOM_CHROMX = 2.5
     NOM_CHROMY = 2.5
+    NOM_CHROMX_ERR = 0.0
+    NOM_CHROMY_ERR = 0.0
 
     # https://wiki-sirius.lnls.br/mediawiki/index.php/Parameter:SI_optics_natural_energy_spread
     NOM_ESPREAD = 0.08436/100
@@ -34,11 +36,8 @@ class TbTAnalysis(_FrozenClass):
         self._select_idx_bpm = 0
         self._select_idx_kick = 0
         self._select_idx_turn_start = 0
-        self._select_idx_turn_stop = 500
+        self._select_idx_turn_stop = None
         
-        self._simulann = None
-        self._analysis = None
-
         self._tunes_frac = 0.0
         self._tunes_frac_err = 0.0
         
@@ -68,19 +67,24 @@ class TbTAnalysis(_FrozenClass):
 
         if not self._data and self._data_fname:
             self.data_load_raw()
-        else:
-            if self._select_kicktype is None:
-                self._select_kicktype = self._data.get('kicktype', TbTAnalysis.KICKTYPE_X)
-            self._select_update_offsets()
 
-        self.fit_simulann_reset()
+        if self._select_kicktype is None:
+            self._select_kicktype = self._data.get('kicktype', TbTAnalysis.KICKTYPE_X)
+        self.chromx = self._data.get('chromx', TbTAnalysis.NOM_CHROMX)
+        self.chromy = self._data.get('chromy', TbTAnalysis.NOM_CHROMY)
+        self.chromx_err = self._data.get('chromx_err', TbTAnalysis.NOM_CHROMX_ERR)
+        self.chromy_err = self._data.get('chromy_err', TbTAnalysis.NOM_CHROMY_ERR)
+        self.select_idx_turn_stop = self.data_nr_turns
+        self._select_update_offsets()
+
+        # self.fit_simulann_reset()
 
         # load parameters of 2020-05-05 data (idx_bpm 0, idx_kick 0)
-        self.load_parameters_20200505()
-        self._init_analysis()
+        # self.load_parameters_20200505()
+        # self._init_analysis()
 
         # nominal energy spread
-        self.espread = TbTAnalysis.NOM_ESPREAD
+        # self.espread = TbTAnalysis.NOM_ESPREAD
 
         # freeze class attributes, as to alert class users of wrong settler names used by mistake
         self._freeze()
@@ -145,8 +149,6 @@ class TbTAnalysis(_FrozenClass):
         if self._select_kicktype is None:
             self._select_kicktype = self._data.get('kicktype', TbTAnalysis.KICKTYPE_X)
         self._select_update_offsets()
-        self.chromx = self._data.get('chromx', TbTAnalysis.NOM_CHROMX)
-        self.chromy = self._data.get('chromy', TbTAnalysis.NOM_CHROMY)
 
     @property
     def data_trajx(self):
@@ -231,14 +233,6 @@ class TbTAnalysis(_FrozenClass):
         else:
             traj_mea = self.data_trajy[select_idx_kick, turns_sel, select_idx_bpm]
         return traj_mea
-
-    # --- objects ---
-
-    @property
-    def simulann(self):
-        """Return TbTSimuAnnel object."""
-        self._self2simulann()
-        return self._simulann
 
     # --- beam parameters ---
       
@@ -518,6 +512,7 @@ class TbTAnalysis(_FrozenClass):
             self,
             select_idx_kick=None, select_idx_bpm=None,
             select_idx_turn_start=None, select_idx_turn_stop=None,
+            peak_frac=0.999,
             plot_flag=False):
         """."""
         # selection of data to analyse
@@ -540,8 +535,15 @@ class TbTAnalysis(_FrozenClass):
         # search tunes using FFT on selected data
         title = 'FFT, nr_turns: {}, idx_kick: {}, idx_bpm: {}'.format(
             select_idx_turn_stop, select_idx_kick, select_idx_bpm)
-        fft, tune, tunes = TbTAnalysis.calc_fft(traj_mea, plot_flag, title)
+        fft, tune, tunes = TbTAnalysis.calc_fft(traj_mea, peak_frac, plot_flag, title)
         _ = fft
+
+        # naff
+        # intv = select_idx_turn_start + int((self.data_nr_turns - 1 ) // 6)
+        # size = intv*6 + 1
+        # signal = traj_mea[:size] - _np.mean(traj_mea[:size])
+        # freqs, fourier = _naff_general(signal=signal, is_real=True, nr_ff=1, window=1)
+        # tune = freqs
 
         # set tunes
         self.tunes_frac = tunes
@@ -555,7 +557,7 @@ class TbTAnalysis(_FrozenClass):
             select_idx_kick=None, select_idx_bpm=None,
             select_idx_turn_start=None, select_idx_turn_stop=None):
         """."""
-        select_idx_turn_stop = 20 if select_idx_turn_stop is None else select_idx_turn_stop
+        select_idx_turn_stop = 40 if select_idx_turn_stop is None else select_idx_turn_stop
 
         select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop = \
             self._get_sel_args(
@@ -566,20 +568,14 @@ class TbTAnalysis(_FrozenClass):
         if select_idx_bpm != self.select_idx_bpm:
             self.select_idx_bpm = select_idx_bpm
 
-        traj_mea = self.select_get_traj(
-            select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
-            select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
-        traj_avg = _np.mean(traj_mea)
-        traj_mea = traj_mea - traj_avg
+        params, offset, traj_mea = self._get_fit_inputs(
+            select_idx_kick, select_idx_bpm,
+            select_idx_turn_start, select_idx_turn_stop)
 
-        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
-            tune_frac = self.tunex_frac
-        else:
-            tune_frac = self.tuney_frac
-
-        turn = _np.arange(select_idx_turn_start, select_idx_turn_stop)
-        cn_ = _np.cos(2 * _np.pi * tune_frac * turn)
-        sn_ = _np.sin(2 * _np.pi * tune_frac * turn)
+        traj_mea = traj_mea - _np.mean(traj_mea)
+        args = [select_idx_turn_start, select_idx_turn_stop, offset]
+        _, cn_, sn_, *_ = TbTAnalysis.calc_traj_chrom(params, *args)
+        # linear algebra to solve for mu and r0
         a11, a12 = + _np.sum(cn_ * cn_), - _np.sum(cn_ * sn_)
         a21, a22 = - a12, - _np.sum(sn_ * sn_)
         b11, b21 = _np.sum(traj_mea * cn_), _np.sum(traj_mea * sn_)
@@ -587,12 +583,13 @@ class TbTAnalysis(_FrozenClass):
         matb = _np.array([b11, b21])
         c0_, s0_ = _np.linalg.solve(mata, matb)
         r0 = _np.sqrt(c0_**2 + s0_**2)
-        # mu = _np.arcsin(s0_ / r0)
         mu = _np.arctan(s0_ / c0_)
 
         # check if inversion is necessary
-        vec1 = r0 * _np.cos(2 * _np.pi * tune_frac * turn + mu) - traj_mea
-        vec2 = r0 * _np.cos(2 * _np.pi * tune_frac * turn + mu + _np.pi) - traj_mea
+        cos1 = cn_ * _np.cos(mu) - sn_ * _np.sin(mu)  # cos(2 * pi * tune_frac * turn + mu)
+        cos2 = cn_ * _np.cos(mu + _np.pi) - sn_ * _np.sin(mu + _np.pi)  # cos(2 * pi * tune_frac * turn + mu + pi)
+        vec1 = r0 * cos1 - traj_mea
+        vec2 = r0 * cos2 - traj_mea
         if _np.sum(vec2**2) < _np.sum(vec1**2):
             mu += _np.pi
 
@@ -603,194 +600,35 @@ class TbTAnalysis(_FrozenClass):
             self.ry0 = r0
             self.muy = mu
 
-    def search_espread(
-            self,
-            select_idx_kick=None, select_idx_bpm=None,
-            select_idx_turn_start=None, select_idx_turn_stop=None):
-        """."""
-
-        select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop = \
-            self._get_sel_args(
-                select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop)
-
-        if select_idx_kick != self.select_idx_kick:
-            self.select_idx_kick = select_idx_kick
-        if select_idx_bpm != self.select_idx_bpm:
-            self.select_idx_bpm = select_idx_bpm
-
-        # generate tbt envelope [exp(-alf**2/2)], alf = a * sin(pi * tune_s * n)
-        self.espread = 0
-        traj_mea, traj_fit = self.fit_trajs()
-        turns = _np.arange(len(traj_mea))
-
-        # filter out negative and outlier points
-        env = traj_mea / traj_fit
-        sel = (abs(traj_fit) > 0.10 * max(abs(traj_fit))) & (env > 0)
-
-        # find best a^2 that fits envelope-converted data, a = 2 * crom * espread / tune_s
-        nvec = turns[sel]
-        sinn = _np.sin(_np.pi * self.tunes_frac * nvec)
-        logx = _np.log(env[sel])
-        sin2n = sinn**2
-        sin4n = sin2n**2
-        par2 = - _np.sum(sinn**2 * logx) / _np.sum(sin4n / 2)
-        if par2 < 0:
-            self.espread = TbTAnalysis.NOM_ESPREAD
-        else:
-            self.espread = _np.sqrt(par2) * self.tunes_frac / self.chromx / 2
-
     def search_init(self,
         select_idx_kick=None, select_idx_bpm=None,
         select_idx_turn_start=None, select_idx_turn_stop=None,
         plot_flag=False):
         """."""
-        self.search_tunes(
-            select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
-            select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop,
-            plot_flag=plot_flag)
+        # process args
+        select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop = \
+            self._get_sel_args(
+                select_idx_kick, select_idx_bpm,
+                select_idx_turn_start, select_idx_turn_stop)
         
+        # search tunes with all data
+        select_idx_turn_stop = self.data_nr_turns
+        self.search_tunes(select_idx_turn_stop=select_idx_turn_stop, peak_frac = 0.999, plot_flag=False)
+
+        # search beta and mu with 3 periods of betatron oscillations
+        self.espread = TbTAnalysis.NOM_ESPREAD * 1.0
+        select_idx_turn_stop = int(3 / self.tunex_frac)
         self.search_r0_mu(
-            select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
-            select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
-
-        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
-            self.chromx = TbTAnalysis.NOM_CHROMX
-        else:
-            self.chromy = TbTAnalysis.NOM_CHROMY
-
-        # self.espread = TbTAnalysis.NOM_ESPREAD
-        self.search_espread(
-            select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
-            select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
+            select_idx_kick, select_idx_bpm,
+            select_idx_turn_start, select_idx_turn_stop)
 
     # --- fitting methods: common ---
 
-    def fit_trajs(self):
+    def fit_leastsqr(self):
         """."""
-        params, offset, traj_mea = self._get_leastsqr_inputs()
-        args = [self.select_idx_turn_start, self.select_idx_turn_stop, offset]
-        traj_fit = _calc_traj_chrom(params, *args)
-        return traj_mea, traj_fit
-
-    # --- fitting methods: simulated annealing ---
-
-    @property
-    def fit_simulann_niter(self):
-        """Return number of iterations for fitting."""
-        return self._simulann.niter
-
-    @fit_simulann_niter.setter
-    def fit_simulann_niter(self, value):
-        """Set number of iterations for fitting."""
-        self._simulann.niter = value
-
-    def fit_simulann_reset(self):
-        """."""
-        if self._select_kicktype != TbTAnalysis.KICKTYPE_Y:
-            simultype = _TbTSimulAnneal.TYPES.CHROMX
-            value_max = 1.1 * _np.amax(self.data_trajx)
-        else:
-            simultype = _TbTSimulAnneal.TYPES.CHROMY
-            value_max = 1.1 * _np.amax(self.data_trajy)
-        simulann = _TbTSimulAnneal(self, simultype)
-        self._simulann = simulann
-        lower = _np.array([0.0, 0.0, 0.0, 0.0, -_np.pi])
-        upper = _np.array([0.05, 0.5, 100.0, value_max, +_np.pi])
-        delta = _np.array(
-            [0.00003, 0.001, 0.01, 0.01*value_max, 2*_np.pi*0.01])
-        self._self2simulann()
-        simulann.niter = 1 if simulann.niter == 0 else simulann.niter
-        simulann.limits_upper = upper
-        simulann.limits_lower = lower
-        simulann.deltas = delta
-
-    def fit_simulann_start(self, niter=1, print_flag=True):
-        """."""
-        self.simulann.niter = niter
-        self.simulann.start(print_flag=print_flag)
-        self._simulann2self()
-
-    def fit_simulann_run(self, niter=None, select_idx_bpm=None, select_idx_kick=None, log_flag=True):
-        """."""
-        niter = 30000 if niter is None else niter
-        self.fit_simulann_reset()
-        if select_idx_bpm:
-            self.select_idx_bpm = select_idx_bpm
-        if select_idx_kick:
-            self.select_idx_kick = select_idx_kick
-        simulann = self.simulann
-
-        # search parameters
-        niter_, nrpts = 0, 20
-        factor = _np.exp(_np.log(0.1)/nrpts)
-        simulann.niter = int(round(niter / nrpts))
-        if log_flag:
-            sfmt = '#{:02d}/{:02d} iter {:06d} : obj_func = {:7.2f} um'
-            print(sfmt.format(0, nrpts, 0, simulann.calc_obj_fun()))
-        for k in range(nrpts):
-            simulann.start(print_flag=False)
-            niter_ += simulann.niter
-            if log_flag:
-                print(sfmt.format(k, nrpts, niter_, simulann.calc_obj_fun()))
-            simulann.deltas *= factor
-        self._simulann2self()
-
-    @property
-    def fit_simulann_residue(self):
-        """Return fit residue."""
-        return self.simulann.calc_obj_fun()
-
-    def fit_simulann_plot(
-            self,
-            select_idx_kick=None, select_idx_bpm=None,
-            select_idx_turn_start=None, select_idx_turn_stop=None,
-            title=None):
-        """."""
-        select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop = \
-            self._get_sel_args(
-                select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop)
-
-        trajx_mea = self.select_get_trajx(
-            select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
-            select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
-
-        parms = {
-            'select_idx_turn_start': select_idx_turn_start,
-            'select_idx_turn_stop': select_idx_turn_stop,
-            'rx_offset': self.rx_offset,
-            'tunes_frac': self.tunes_frac,
-            'tunex_frac': self.tunex_frac,
-            'chromx_decoh': self.chromx_decoh,
-            'rx0': self.rx0,
-            'mux': self.mux,
-        }
-        trajx_fit = self.simulann.calc_trajx(**parms)
-        if title is None:
-            title = \
-                'kick idx: {:03d}, '.format(select_idx_kick) + \
-                'bpm idx: {:03d}, '.format(select_idx_bpm)
-        label_residue = 'Residue (rms: {:.2f} um)'.format(self.fit_simulann_residue)
-        ind = _np.arange(select_idx_turn_start, select_idx_turn_stop)
-        trajx_res = trajx_mea - trajx_fit
-        _plt.plot(ind, trajx_mea, color='C0', label='TbT raw data')
-        _plt.plot(ind, trajx_mea, 'o', color='C0')
-        _plt.plot(ind, trajx_fit, color='C1', label='Fitting')
-        _plt.plot(ind, trajx_fit, 'o', color='C1')
-        _plt.plot(ind, trajx_res, label=label_residue, color='C2')
-        _plt.legend()
-        _plt.xlabel('turn')
-        _plt.ylabel('BPM Average [um]')
-        _plt.title(title)
-        _plt.grid()
-        _plt.show()
-
-    # --- fitting methods: least squared ---
-
-    def fit_leastsqr_start(self):
-        """."""
-        init_params, offset, traj_mea = self._get_leastsqr_inputs()
+        init_params, offset, traj_mea = self._get_fit_inputs()
         
-        fit_params = _least_squares(
+        fit_params = _opt.least_squares(
             fun=self._calc_residue_vector,
             x0=init_params,
             args=(
@@ -827,41 +665,73 @@ class TbTAnalysis(_FrozenClass):
             self.ry0_err = fit_errors[3]
             self.muy_err = fit_errors[4]
 
-    def fit_leastsqr_residue(self):
+    def fit_residue(self):
         """."""
-        params, offset, traj_mea = self._get_leastsqr_inputs()
+        params, offset, traj_mea = self._get_fit_inputs()
 
         residue_vec = self._calc_residue_vector(
             params, traj_mea, self.select_idx_turn_start, self.select_idx_turn_stop, offset)
 
         return _np.sqrt(_np.sum(residue_vec**2)/len(residue_vec))
 
+    def fit_trajs(self):
+        """."""
+        params, offset, traj_mea = self._get_fit_inputs()
+        args = [self.select_idx_turn_start, self.select_idx_turn_stop, offset]
+        traj_fit, *_ = TbTAnalysis.calc_traj_chrom(params, *args)
+        return traj_mea, traj_fit
+
+    def fit_run(self,
+        select_idx_kick=None, select_idx_bpm=None,
+        select_idx_turn_start=None, select_idx_turn_stop=None,
+        plot_flag=False):
+        """."""
+        # initial search for tunes, r0 and mu
+        self.search_init(
+            select_idx_kick, select_idx_bpm,
+            select_idx_turn_start, select_idx_turn_stop, plot_flag)
+
+        # search all parameters with 1 period of synchrotron oscillations
+        self.select_idx_turn_stop = int(1 / self.tunes_frac)
+        self.fit_leastsqr()
+
     # --- analysis methods ---
 
-    def analysis_all_bpms(self, niter=30000, fname=None, plot_flag=False):
+    def analysis_run(self, select_idx_kick=0, bpm_indices=None):
         """."""
-        self.load_parameters_20200505()
-        self._init_analysis()
-        for select_idx_bpm in range(0, self.data_nr_bpms):
-            if select_idx_bpm > 0:
-                self.select_idx_bpm = select_idx_bpm
-                self.search_r0_mu()
-                self.fit_simulann_run(niter=niter, log_flag=False)
+        if bpm_indices is None:
+            bpm_indices = _np.arange(self.data_nr_bpms)
+        vec = _np.zeros(len(bpm_indices))
+        rx0, mux, tunex_frac, tunes_frac, espread, residue = 0*vec, 0*vec, 0*vec, 0*vec, 0*vec, 0*vec
+        for idx, idx_bpm in enumerate(bpm_indices):
+            self.fit_run(select_idx_kick=0, select_idx_bpm=idx_bpm)
+            # store params
+            rx0[idx] = self.rx0
+            mux[idx] = self.mux
+            tunex_frac[idx] = self.tunex_frac
+            tunes_frac[idx] = self.tunes_frac - int(self.tunes_frac)
+            espread[idx] = self.espread
+            residue[idx] = self.fit_residue()
 
-            print('bpm idx: {:03d}, residue = {:.2f} um'.format(
-                self.select_idx_bpm, self.fit_simulann_residue))
-            print(self)
-            if plot_flag:
-                self.fit_simulann_plot()
+        # unwrap phase
+        mux = _np.unwrap(mux)
+        changed = True
+        while changed:
+            changed = False
+            for i in range(1,len(mux)):
+                if mux[i] < mux[i-1]:
+                    changed = True
+                    mux[i:] += 0.5
 
-            if fname is not None:
-                self.analysis_save(fname)
+        return rx0, mux, tunex_frac, tunes_frac, espread, residue
+
 
     # --- aux. public methods ---
 
     @staticmethod
-    def calc_fft(data, plot_flag=False, title=None):
+    def calc_fft(data, peak_frac=0.7, plot_flag=False, title=None):
         """."""
+        # print()
         data = data - _np.mean(data)
         fft = _np.abs(_np.fft.rfft(data))
         idx = _np.argmax(fft)
@@ -869,15 +739,17 @@ class TbTAnalysis(_FrozenClass):
         tunes1, tunes2 = 0.003, 0.003
         for i in range(idx+1, len(fft)):
             val1n, val0, val1p = fft[i-1:i+2]
-            if val1n/val0 < 0.7 and val1p/val0 < 0.7:
+            # print(val1n, val0, val1p)
+            if val1n/val0 < peak_frac and val1p/val0 < peak_frac:
                 tunes1 = i / len(data) - tunex
                 break
         for i in range(idx-1, len(fft), -1):
             val1n, val0, val1p = fft[i-1:i+2]
-            if val1n/val0 < 0.7 and val1p/val0 < 0.7:
+            if val1n/val0 < peak_frac and val1p/val0 < peak_frac:
                 tunes2 = tunex - i / len(data)
                 break
         tunes = 0.5 * (tunes1 + tunes2)
+        # print(tunex - tunes2, tunex + tunes1)
         if plot_flag:
             ind = _np.arange(len(fft)) / len(data)
             _plt.plot(ind, fft, '-b')
@@ -891,17 +763,42 @@ class TbTAnalysis(_FrozenClass):
             _plt.show()
         return fft, tunex, tunes
 
+    @staticmethod
+    def calc_traj_chrom(params, *args):
+        """BPM averaging due to longitudinal dynamics decoherence.
+
+        nu ~ nu0 + chrom * delta_energy
+        See Laurent Nadolski Thesis, Chapter 4, pg. 121, Eq. 4.15
+        """
+        tunes_frac = params[0]
+        tune_frac = params[1]
+        chromx_decoh = params[2]
+        r0 = params[3]
+        mu = params[4]
+
+        select_idx_turn_start, select_idx_turn_stop, offset = args
+        turn = _np.arange(select_idx_turn_start, select_idx_turn_stop)
+        # cos = _np.cos(2 * _np.pi * tune_frac * turn + mu)
+        cn = _np.cos(2 * _np.pi * tune_frac * turn)
+        sn = _np.sin(2 * _np.pi * tune_frac * turn)
+        cos = cn * _np.cos(mu) - sn * _np.sin(mu)
+        alp = chromx_decoh * _np.sin(_np.pi * tunes_frac * turn)
+        exp = _np.exp(-alp**2/2.0)
+        traj = r0 * exp * cos + offset
+        return traj, cn, sn, alp, exp, cos
+
+
     def __str__(self):
         """."""
-        self._self2simulann()
+        # self._self2simulann()
         sel_nr_turns = self.select_idx_turn_stop - self.select_idx_turn_start
         rst = ''
-        rst += '.--- TBT --------\n'
+        rst += '.--- Data -------\n'
         rst += '| nr_kicks       : {}\n'.format(self.data_nr_kicks)
         rst += '| nr_turns       : {}\n'.format(self.data_nr_turns)
         rst += '| nr_bpms        : {}\n'.format(self.data_nr_bpms)
         rst += '| rx_offset      : {:.5f} um\n'.format(self.rx_offset)
-        rst += '|--- FIT Sel ---- \n'
+        rst += '|--- Selection -- \n'
         rst += '| idx_kick       : {}\n'.format(self.select_idx_kick)
         rst += '| idx_bpm        : {}\n'.format(self.select_idx_bpm)
         rst += '| idx_turn_start : {}\n'.format(self.select_idx_turn_start)
@@ -909,70 +806,27 @@ class TbTAnalysis(_FrozenClass):
         rst += '| sel_nr_turns   : {}\n'.format(sel_nr_turns)
         rst += '| kick           : {:+.1f} urad\n'.format(
             self.data_kicks[self.select_idx_kick]*1e3)
-        rst += '| niter          : {}\n'.format(self.fit_simulann_niter)
-        rst += '|-- FIR  Parms -- \n'
+        # rst += '| niter          : {}\n'.format(self.fit_simulann_niter)
+        rst += '|-- Fit Params -- \n'
+        rst += '| espread        : {:.5f} %\n'.format(100*self.espread)
         rst += '| tunes_frac     : {:.6f}\n'.format(self.tunes_frac)
+        rst += '| ----- X ------ \n'
+        rst += '| chromx         : {:+.3f} ± {:.3f}\n'.format(self.chromx, self.chromx_err)
         rst += '| tunex_frac     : {:.6f}\n'.format(self.tunex_frac)
         rst += '| rx0            : {:.5f} um\n'.format(self.rx0)
         rst += '| mux            : {:.5f} rad\n'.format(self.mux)
         rst += '| chromx_decoh   : {:.5f}\n'.format(self.chromx_decoh)
-        # rst += '|--- KXX ------- \n'
-        # rst += '| tunex0_frac    : {:.6f}\n'.format(self.tunex0_frac)
-        # rst += '| rxk            : {:.5f} um\n'.format(self.rxk)
-        # rst += '| kxx_decoh      : {:.2f}\n'.format(self.kxx_decoh)
-        # rst += '| kxx_ratio      : {:.2f}\n'.format(self.kxx_ratio)
-        rst += '|--- OBJ --------\n'
-        rst += '| obj_func       : {:.5f} um\n'.format(self.fit_simulann_residue)
+        rst += '| ----- Y ------ \n'
+        rst += '| chromy         : {:+.3f} ± {:.3f}\n'.format(self.chromy, self.chromy_err)
+        rst += '| tuney_frac     : {:.6f}\n'.format(self.tuney_frac)
+        rst += '| ry0            : {:.5f} um\n'.format(self.ry0)
+        rst += '| muy            : {:.5f} rad\n'.format(self.muy)
+        rst += '| chromy_decoh   : {:.5f}\n'.format(self.chromy_decoh)
+        rst += '|--------------- \n'
+        rst += '| residue        : {:.5f} um\n'.format(self.fit_residue())
         rst += ' ---------------- \n'
 
         return rst
-
-    def load_parameters_20200505(self):
-        """."""
-        # fname = './2020-05/2020-05-05/tune_shift_with_amplitude.pickle'
-        self.select_idx_kick = 0
-        self.select_idx_bpm = 0
-        self.select_idx_turn_stop = 500
-        self.tunes_frac = 0.003156
-        self.tunex_frac = 0.131403
-        self.rx0 = 454.10347
-        self.mux = 1.65361
-        self.chromx_decoh = 1.39313
-
-    def analysis_save(self, fname):
-        """."""
-        self._analysis['select_idx_kick'].append(self.select_idx_kick)
-        self._analysis['idx_bpm'].append(self.select_idx_bpm)
-        self._analysis['select_idx_turn_start'].append(self.select_idx_turn_start)
-        self._analysis['select_idx_turn_stop'].append(self.select_idx_turn_stop)
-        self._analysis['tunes_frac'].append(self.tunes_frac)
-        self._analysis['tunex_frac'].append(self.tunex_frac)
-        self._analysis['chromx_decoh'].append(self.chromx_decoh)
-        self._analysis['rx0'].append(self.rx0)
-        self._analysis['mux'].append(self.mux)
-        self._analysis['rx_offset'].append(self.rx_offset)
-        self._analysis['trajx_std'].append(_np.std(self.select_get_trajx()))
-        self._analysis['residue'].append(self.fit_simulann_residue)
-        with open(fname, 'wb') as fil:
-            _pickle.dump(self._analysis, fil)
-
-    def analysis_load(self, fname):
-        """."""
-        with open(fname, 'rb') as fil:
-            self._analysis = _pickle.dump(self._analysis, fil)
-
-    def analysis_set(self, index):
-        """."""
-        data = self._analysis
-        self.select_idx_kick = data['select_idx_kick'][index]
-        self.select_idx_bpm = data['select_idx_bpm'][index]
-        self.select_idx_turn_start = data['select_idx_turn_start'][index]
-        self.select_idx_turn_stop = data['select_idx_turn_stop'][index]
-        self.tunes_frac = data['tunes_frac'][index]
-        self.tunex_frac = data['tunex_frac'][index]
-        self.chromx_decoh = data['chromx_decoh'][index]
-        self.rx0 = data['rx0'][index]
-        self.mux = data['mux'][index]
 
     # --- private methods ---
 
@@ -1002,38 +856,6 @@ class TbTAnalysis(_FrozenClass):
             traj_mea = self.data_trajy[select_idx_kick, turns_sel, select_idx_bpm]
         return traj_mea
 
-    def _self2simulann(self):
-        """."""
-        if self._simulann.fit_type == _TbTSimulAnneal.TYPES.CHROMX:
-            pos = _np.array([
-                self.tunes_frac,
-                self.tunex_frac,
-                self.chromx_decoh,
-                self.rx0,
-                self.mux])
-        elif self._simulann.fit_type == _TbTSimulAnneal.TYPES.KXX:
-            pos = _np.array([
-                self.tunex0_frac,
-                self.rxk,
-                self.kxx_decoh,
-                self.kxx_ratio])
-        self._simulann.position = pos
-
-    def _simulann2self(self):
-        """."""
-        pos = self._simulann.position
-        if self._simulann.fit_type == _TbTSimulAnneal.TYPES.CHROMX:
-            self.tunes_frac = pos[0]
-            self.tunex_frac = pos[1]
-            self.chromx_decoh = pos[2]
-            self.rx0 = pos[3]
-            self.mux = pos[4]
-        else:
-            self.tunex0_frac = pos[0]
-            self.rxk = pos[1]
-            self.kxx_decoh = pos[2]
-            self.kxx_ratio = pos[3]
-
     def _get_sel_args(
             self,
             select_idx_kick=None, select_idx_bpm=None,
@@ -1046,24 +868,7 @@ class TbTAnalysis(_FrozenClass):
         select_idx_bpm = self.select_idx_bpm if select_idx_bpm is None else select_idx_bpm
         return select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop
 
-    def _init_analysis(self):
-        """."""
-        self._analysis = {
-            'select_idx_kick': [],
-            'select_idx_bpm': [],
-            'select_idx_turn_start': [],
-            'select_idx_turn_stop': [],
-            'tunes_frac': [],
-            'tunex_frac': [],
-            'chromx_decoh': [],
-            'rx0': [],
-            'mux': [],
-            'rx_offset': [],
-            'trajx_std': [],
-            'residue': [],
-        }
-
-    def _get_leastsqr_inputs(self):
+    def _get_fit_params(self):
         """."""
         if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
             tune_frac = self.tunex_frac
@@ -1082,11 +887,21 @@ class TbTAnalysis(_FrozenClass):
             self.tunes_frac, tune_frac,
             chrom_decoh, r0, mu]
 
+        return params, offset
+
+    def _get_fit_inputs(self,
+        select_idx_kick=None, select_idx_bpm=None,
+        select_idx_turn_start=None, select_idx_turn_stop=None):
+        """."""
+        params, offset = self._get_fit_params()
+        select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop = \
+            self._get_sel_args(
+                select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop)
         traj_mea = self.select_get_traj(
-            select_idx_kick=self.select_idx_kick,
-            select_idx_bpm=self.select_idx_bpm,
-            select_idx_turn_start=self.select_idx_turn_start,
-            select_idx_turn_stop=self.select_idx_turn_stop)
+            select_idx_kick=select_idx_kick,
+            select_idx_bpm=select_idx_bpm,
+            select_idx_turn_start=select_idx_turn_start,
+            select_idx_turn_stop=select_idx_turn_stop)
 
         return params, offset, traj_mea
 
@@ -1122,7 +937,6 @@ class TbTAnalysis(_FrozenClass):
             select_idx_turn_start, select_idx_turn_stop, offset):
         """."""
         args = [select_idx_turn_start, select_idx_turn_stop, offset]
-        traj_fit = _calc_traj_chrom(params, *args)
+        traj_fit, *_ = TbTAnalysis.calc_traj_chrom(params, *args)
         traj_res = traj_mea - traj_fit
-        # return _np.sqrt(traj_res * traj_res)
         return traj_res
