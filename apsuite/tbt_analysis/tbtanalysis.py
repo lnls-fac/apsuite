@@ -12,9 +12,10 @@ from ..utils import FrozenClass as _FrozenClass
 
 class TbTAnalysis(_FrozenClass):
     """."""
-
-    KICKTYPE_X = 'X'
-    KICKTYPE_Y = 'Y'
+    ATYPE_CHROMX = 'CHROMX'
+    ATYPE_CHROMY = 'CHROMY'
+    ATYPE_KXX = 'KXX'
+    ATYPE_KYY = 'KYY'
     NOM_CHROMX = 2.5
     NOM_CHROMY = 2.5
     NOM_CHROMX_ERR = 0.0
@@ -29,7 +30,7 @@ class TbTAnalysis(_FrozenClass):
         self._data = data
         self._data_fname = data_fname
 
-        # --- select type of tbtanalysis: 'X' or 'Y'
+        # --- select type of tbtanalysis: 'CHROMX' or 'CHROMY'
         self._select_kicktype = kicktype # This will be updated with data
         
         # --- data selection attributes ---
@@ -39,52 +40,58 @@ class TbTAnalysis(_FrozenClass):
         self._select_idx_turn_stop = None
         
         self._tunes_frac = 0.0
-        self._tunes_frac_err = 0.0
-        
+
         self._rx_offset = None
-        self._rx0 = 0.0
+        self._chromx = TbTAnalysis.NOM_CHROMX
         self._tunex_frac = 0.0
         self._chromx_decoh = 0.0
-        self._chromx = TbTAnalysis.NOM_CHROMX
+        self._rx0 = 0.0
         self._mux = 0.0
-        self._rx0_err = 0.0
-        self._tunex_frac_err = 0.0
-        self._chromx_decoh_err = 0.0
-        self._chromx_err = 0.0
-        self._mux_err = 0.0
+        self._tunex0_frac = 0.0
+        self._sigmax = 0.0
+        self._kxx_decoh = 0.0
 
         self._ry_offset = None
-        self._ry0 = 0.0
+        self._chromy = TbTAnalysis.NOM_CHROMY
         self._tuney_frac = 0.0
         self._chromy_decoh = 0.0
-        self._chromy = TbTAnalysis.NOM_CHROMY
+        self._ry0 = 0.0
         self._muy = 0.0
-        self._ry0_err = 0.0
+        self._tuney0_frac = 0.0
+        self._sigmay = 0.0
+        self._kyy_decoh = 0.0
+
+        self._tunes_frac_err = 0.0
+
+        self._chromx_err = 0.0
+        self._tunex_frac_err = 0.0
+        self._chromx_decoh_err = 0.0
+        self._rx0_err = 0.0
+        self._mux_err = 0.0
+        self._tunex0_frac_err = 0.0
+        self._sigmax_err = 0.0
+        self._kxx_decoh_err = 0.0
+
+        self._chromy_err = 0.0
         self._tuney_frac_err = 0.0
         self._chromy_decoh_err = 0.0
-        self._chromy_err = 0.0
+        self._ry0_err = 0.0
         self._muy_err = 0.0
+        self._tuney0_frac_err = 0.0
+        self._sigmay_err = 0.0
+        self._kyy_decoh_err = 0.0
 
         if not self._data and self._data_fname:
             self.data_load_raw()
 
         if self._select_kicktype is None:
-            self._select_kicktype = self._data.get('kicktype', TbTAnalysis.KICKTYPE_X)
+            self._select_kicktype = self._data.get('kicktype', TbTAnalysis.ATYPE_CHROMX)
         self.chromx = self._data.get('chromx', TbTAnalysis.NOM_CHROMX)
         self.chromy = self._data.get('chromy', TbTAnalysis.NOM_CHROMY)
         self.chromx_err = self._data.get('chromx_err', TbTAnalysis.NOM_CHROMX_ERR)
         self.chromy_err = self._data.get('chromy_err', TbTAnalysis.NOM_CHROMY_ERR)
         self.select_idx_turn_stop = self.data_nr_turns
         self._select_update_offsets()
-
-        # self.fit_simulann_reset()
-
-        # load parameters of 2020-05-05 data (idx_bpm 0, idx_kick 0)
-        # self.load_parameters_20200505()
-        # self._init_analysis()
-
-        # nominal energy spread
-        # self.espread = TbTAnalysis.NOM_ESPREAD
 
         # freeze class attributes, as to alert class users of wrong settler names used by mistake
         self._freeze()
@@ -147,7 +154,7 @@ class TbTAnalysis(_FrozenClass):
                 self._select_idx_bpm = min(self._select_idx_bpm, self.data_nr_bpms)
 
         if self._select_kicktype is None:
-            self._select_kicktype = self._data.get('kicktype', TbTAnalysis.KICKTYPE_X)
+            self._select_kicktype = self._data.get('kicktype', TbTAnalysis.ATYPE_CHROMX)
         self._select_update_offsets()
 
     @property
@@ -168,7 +175,7 @@ class TbTAnalysis(_FrozenClass):
 
     @property
     def select_kicktype(self):
-        """Return selected kick type for analysis, either 'X' or 'Y'."""
+        """Return selected kick type for analysis."""
         return self._select_kicktype
 
     @select_kicktype.setter
@@ -228,7 +235,7 @@ class TbTAnalysis(_FrozenClass):
             self._get_sel_args(
                 select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop)
         turns_sel = _np.arange(select_idx_turn_start, select_idx_turn_stop)
-        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
+        if self.select_kicktype != TbTAnalysis.ATYPE_CHROMY:
             traj_mea = self.data_trajx[select_idx_kick, turns_sel, select_idx_bpm]
         else:
             traj_mea = self.data_trajy[select_idx_kick, turns_sel, select_idx_bpm]
@@ -250,7 +257,7 @@ class TbTAnalysis(_FrozenClass):
     def espread(self):
         """."""
         # chrom_decoh = 2 * chrom * espread / tunes_frac
-        if self._select_kicktype != TbTAnalysis.KICKTYPE_Y:
+        if self._select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
             return self.chromx_decoh * self.tunes_frac / 2 / self.chromx
         else:
             return self.chromy_decoh * self.tunes_frac / 2 / self.chromy
@@ -258,7 +265,7 @@ class TbTAnalysis(_FrozenClass):
     @espread.setter
     def espread(self, value):
         """."""
-        if self._select_kicktype != TbTAnalysis.KICKTYPE_Y:
+        if self._select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
             self._chromx_decoh = 2 * self.chromx * value / self.tunes_frac
         else:
             self._chromy_decoh = 2 * self.chromy * value / self.tunes_frac
@@ -278,7 +285,7 @@ class TbTAnalysis(_FrozenClass):
     @property
     def espread_err(self):
         """."""
-        if self._select_kicktype != TbTAnalysis.KICKTYPE_Y:
+        if self._select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
             el1 = (self.chromx_decoh_err * self.tunes_frac/2/self.chromx)**2
             el2 = (self.tunes_frac_err * self.chromx_decoh/2/self.chromx)**2
             el3 = (self.chromx_err * self.chromx_decoh*self.tunes_frac/2/self.chromx**2)**2
@@ -308,7 +315,6 @@ class TbTAnalysis(_FrozenClass):
     @property
     def tunex_frac(self):
         """Return fitting parameter tunex_frac."""
-        """Return offset value of trajy selected data."""
         return self._tunex_frac
 
     @tunex_frac.setter
@@ -345,6 +351,36 @@ class TbTAnalysis(_FrozenClass):
     def mux(self, value):
         """."""
         self._mux = value
+
+    @property
+    def tunex0_frac(self):
+        """Return fitting parameter tunex0_frac."""
+        return self._tunex0_frac
+
+    @tunex0_frac.setter
+    def tunex0_frac(self, value):
+        """Set fitting parameter tunex0_frac."""
+        self._tunex0_frac = value
+
+    @property
+    def sigmax(self):
+        """Return fitting parameter sigmax."""
+        return self._sigmax
+
+    @sigmax.setter
+    def sigmax(self, value):
+        """Set fitting parameter sigmax."""
+        self._sigmax = value
+
+    @property
+    def kxx_decoh(self):
+        """Return fitting parameter kxx_decoh."""
+        return self._kxx_decoh
+
+    @kxx_decoh.setter
+    def kxx_decoh(self, value):
+        """Set fitting parameter kxx_decoh."""
+        self._kxx_decoh = value
 
     # --- horizontal beam parameter errors ---
 
@@ -397,6 +433,36 @@ class TbTAnalysis(_FrozenClass):
     def mux_err(self, value):
         """."""
         self._mux_err = value
+
+    @property
+    def tunex0_frac_err(self):
+        """Return fitting parameter tunex0_frac_err."""
+        return self._tunex0_frac_err
+
+    @tunex0_frac_err.setter
+    def tunex0_frac_err(self, value):
+        """Set fitting parameter tunex0_frac_err."""
+        self._tunex0_frac_err = value
+
+    @property
+    def sigmax_err(self):
+        """Return fitting parameter sigmax_err."""
+        return self._sigmax_err
+
+    @sigmax_err.setter
+    def sigmax_err(self, value):
+        """Set fitting parameter sigmax_err."""
+        self._sigmax_err = value
+
+    @property
+    def kxx_decoh_err(self):
+        """Return fitting parameter kxx_decoh_err."""
+        return self._kxx_decoh_err
+
+    @kxx_decoh_err.setter
+    def kxx_decoh_err(self, value):
+        """Set fitting parameter kxx_decoh_err."""
+        self._kxx_decoh_err = value
 
     # --- vertical beam parameters ---
 
@@ -454,6 +520,36 @@ class TbTAnalysis(_FrozenClass):
         """."""
         self._muy = value
 
+    @property
+    def tuney0_frac(self):
+        """Return fitting parameter tuney0_frac."""
+        return self._tuney0_frac
+
+    @tuney0_frac.setter
+    def tuney0_frac(self, value):
+        """Set fitting parameter tuney0_frac."""
+        self._tuney0_frac = value
+
+    @property
+    def sigmay(self):
+        """Return fitting parameter sigmay."""
+        return self._sigmay
+
+    @sigmay.setter
+    def sigmay(self, value):
+        """Set fitting parameter sigmay."""
+        self._sigmay = value
+
+    @property
+    def kyy_decoh(self):
+        """Return fitting parameter kyy_decoh."""
+        return self._kyy_decoh
+
+    @kyy_decoh.setter
+    def kyy_decoh(self, value):
+        """Set fitting parameter kyy_decoh."""
+        self._kyy_decoh = value
+
     # --- vertical beam parameter errors ---
 
     @property
@@ -506,6 +602,36 @@ class TbTAnalysis(_FrozenClass):
         """."""
         self._muy_err = value
 
+    @property
+    def tuney0_frac_err(self):
+        """Return fitting parameter tuney0_frac_err."""
+        return self._tuney0_frac_err
+
+    @tuney0_frac_err.setter
+    def tuney0_frac_err(self, value):
+        """Set fitting parameter tuney0_frac_err."""
+        self._tuney0_frac_err = value
+
+    @property
+    def sigmay_err(self):
+        """Return fitting parameter sigmay_err."""
+        return self._sigmay_err
+
+    @sigmay_err.setter
+    def sigmay_err(self, value):
+        """Set fitting parameter sigmay_err."""
+        self._sigmay_err = value
+
+    @property
+    def kyy_decoh_err(self):
+        """Return fitting parameter kyy_decoh_err."""
+        return self._kyy_decoh_err
+
+    @kyy_decoh_err.setter
+    def kyy_decoh_err(self, value):
+        """Set fitting parameter kyy_decoh_err."""
+        self._kyy_decoh_err = value
+
     # --- search methods ---
 
     def search_tunes(
@@ -547,7 +673,7 @@ class TbTAnalysis(_FrozenClass):
 
         # set tunes
         self.tunes_frac = tunes
-        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
+        if self.select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
             self.tunex_frac = tune
         else:
             self.tuney_frac = tune
@@ -594,7 +720,7 @@ class TbTAnalysis(_FrozenClass):
         if _np.sum(vec2**2) < _np.sum(vec1**2):
             mu += _np.pi
 
-        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
+        if self._select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
             self.rx0 = r0
             self.mux = mu
         else:
@@ -622,6 +748,7 @@ class TbTAnalysis(_FrozenClass):
             fun=self._calc_residue_vector,
             x0=init_params,
             args=(
+                self._select_kicktype,
                 traj_mea,
                 self.select_idx_turn_start,
                 self.select_idx_turn_stop,
@@ -630,37 +757,15 @@ class TbTAnalysis(_FrozenClass):
 
         fit_errors = TbTAnalysis._calc_leastsqr_fitting_error(fit_params)
 
-        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
-            self.tunes_frac = fit_params['x'][0]
-            self.tunex_frac = fit_params['x'][1]
-            self.chromx_decoh = fit_params['x'][2]
-            self.rx0 = fit_params['x'][3]
-            self.mux = fit_params['x'][4]
-            # errors
-            self.tunes_frac_err = fit_errors[0]
-            self.tunex_frac_err = fit_errors[1]
-            self.chromx_decoh_err = fit_errors[2]
-            self.rx0_err = fit_errors[3]
-            self.mux_err = fit_errors[4]
-        else:
-            self.tunes_frac = fit_params['x'][0]
-            self.tuney_frac = fit_params['x'][1]
-            self.chromy_decoh = fit_params['x'][2]
-            self.ry0 = fit_params['x'][3]
-            self.muy = fit_params['x'][4]
-            # errors
-            self.tunes_frac_err = fit_errors[0]
-            self.tuney_frac_err = fit_errors[1]
-            self.chromy_decoh_err = fit_errors[2]
-            self.ry0_err = fit_errors[3]
-            self.muy_err = fit_errors[4]
+        self._set_from_params(fit_params, fit_errors)
 
     def fit_residue(self):
         """."""
         params, offset, traj_mea = self._get_fit_inputs()
 
         residue_vec = self._calc_residue_vector(
-            params, traj_mea, self.select_idx_turn_start, self.select_idx_turn_stop, offset)
+            params, self._select_kicktype, traj_mea,
+            self.select_idx_turn_start, self.select_idx_turn_stop, offset)
 
         return _np.sqrt(_np.sum(residue_vec**2)/len(residue_vec))
 
@@ -668,7 +773,7 @@ class TbTAnalysis(_FrozenClass):
         """."""
         params, offset, traj_mea = self._get_fit_inputs()
         args = [self.select_idx_turn_start, self.select_idx_turn_stop, offset]
-        traj_fit, *_ = TbTAnalysis.calc_traj_chrom(params, *args)
+        traj_fit, *_ = TbTAnalysis.calc_traj(self.select_kicktype, params, *args)
         return traj_mea, traj_fit
 
     def fit_run(self, plot_flag=False):
@@ -751,6 +856,14 @@ class TbTAnalysis(_FrozenClass):
         return fft, tunex, tunes
 
     @staticmethod
+    def calc_traj(kicktype, params, *args):
+        """."""
+        if kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_CHROMY):
+            return TbTAnalysis.calc_traj_chrom(params, *args)
+        elif kicktype in (TbTAnalysis.ATYPE_KXX, TbTAnalysis.ATYPE_KYY):
+            return TbTAnalysis.calc_traj_tuneshift(params, *args)
+
+    @staticmethod
     def calc_traj_chrom(params, *args):
         """BPM averaging due to longitudinal dynamics decoherence.
 
@@ -759,20 +872,54 @@ class TbTAnalysis(_FrozenClass):
         """
         tunes_frac = params[0]
         tune_frac = params[1]
-        chromx_decoh = params[2]
+        chrom_decoh = params[2]
         r0 = params[3]
         mu = params[4]
 
         select_idx_turn_start, select_idx_turn_stop, offset = args
-        turn = _np.arange(select_idx_turn_start, select_idx_turn_stop)
-        # cos = _np.cos(2 * _np.pi * tune_frac * turn + mu)
-        cn = _np.cos(2 * _np.pi * tune_frac * turn)
-        sn = _np.sin(2 * _np.pi * tune_frac * turn)
+        n = _np.arange(select_idx_turn_start, select_idx_turn_stop)
+        # cos = _np.cos(2 * _np.pi * tune_frac * n + mu)
+        cn = _np.cos(2 * _np.pi * tune_frac * n)
+        sn = _np.sin(2 * _np.pi * tune_frac * n)
         cos = cn * _np.cos(mu) - sn * _np.sin(mu)
-        alp = chromx_decoh * _np.sin(_np.pi * tunes_frac * turn)
+        alp = chrom_decoh * _np.sin(_np.pi * tunes_frac * n)
         exp = _np.exp(-alp**2/2.0)
         traj = r0 * exp * cos + offset
         return traj, cn, sn, alp, exp, cos
+
+    @staticmethod
+    def calc_traj_tuneshift(params, *args):
+        """BPM averaging due to tune-shift decoherence.
+
+        nu ~ nu0 + k_decoh * a**2
+        See Laurent Nadolski Thesis, Chapter 4, pg. 123, Eq. 4.28
+        """
+        tunes_frac = params[0]
+        tune0_frac = params[1]
+        chrom_decoh = params[2]
+        r0 = params[3]
+        mu = params[4]
+        sigma = params[5]
+        k_decoh = params[6]
+
+        select_idx_turn_start, select_idx_turn_stop, offset = args
+
+        b = (r0**2/sigma**2/2)
+        a = 4*_np.pi*k_decoh*sigma**2
+        n = _np.arange(select_idx_turn_start, select_idx_turn_stop)
+        theta = a*n
+        fa0 = 1/(1+theta**2)
+        fp0 = 2*_np.pi*tune0_frac*n + mu
+        fp1 = 2*_np.arctan(theta)
+        fp2 = b*theta*fa0
+        fa1 = _np.exp(-b*theta**2*fa0)
+
+        alp = chrom_decoh * _np.sin(_np.pi * tunes_frac * n)
+        exp = _np.exp(-alp**2/2.0)
+
+        traj = r0 * fa0 * fa1 * exp * _np.cos(fp0 + fp1 + fp2) + offset
+        return traj, alp, exp
+
 
     def __str__(self):
         """."""
@@ -819,10 +966,10 @@ class TbTAnalysis(_FrozenClass):
     def _select_update_offsets(self):
         """."""
         kicktype = self.select_kicktype
-        self.select_kicktype = TbTAnalysis.KICKTYPE_X
+        self.select_kicktype = TbTAnalysis.ATYPE_CHROMX
         trajx = self.select_get_traj()
         self._rx_offset = _np.mean(trajx)
-        self.select_kicktype = TbTAnalysis.KICKTYPE_Y
+        self.select_kicktype = TbTAnalysis.ATYPE_CHROMY
         trajy = self.select_get_traj()
         self._ry_offset = _np.mean(trajy)
         self.select_kicktype = kicktype
@@ -831,12 +978,12 @@ class TbTAnalysis(_FrozenClass):
                   select_idx_kick=None, select_idx_bpm=None,
                   select_idx_turn_start=None, select_idx_turn_stop=None):
         """Get selected traj data."""
-        select_type = 'X' if select_type is None else select_type
+        select_type = TbTAnalysis.ATYPE_CHROMX if select_type is None else select_type
         select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop = \
             self._get_sel_args(
                 select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop)
         turns_sel = _np.arange(select_idx_turn_start, select_idx_turn_stop)
-        if select_type == 'X':
+        if select_type in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
             traj_mea = self.data_trajx[select_idx_kick, turns_sel, select_idx_bpm]
         else:
             traj_mea = self.data_trajy[select_idx_kick, turns_sel, select_idx_bpm]
@@ -856,21 +1003,24 @@ class TbTAnalysis(_FrozenClass):
 
     def _get_fit_params(self):
         """."""
-        if self.select_kicktype != TbTAnalysis.KICKTYPE_Y:
-            tune_frac = self.tunex_frac
-            chrom_decoh = self.chromx_decoh
-            r0 = self.rx0
-            mu = self.mux
-        else:
-            tune_frac = self.tuney_frac
-            chrom_decoh = self.chromy_decoh
-            r0 = self.ry0
-            mu = self.muy
-
-        params = [
-            self.tunes_frac, tune_frac,
-            chrom_decoh, r0, mu]
-
+        if self.select_kicktype == TbTAnalysis.ATYPE_CHROMX:
+            params = [
+                self.tunes_frac, self.tunex_frac,
+                self.chromx_decoh, self.rx0, self.mux]
+        elif self.select_kicktype == TbTAnalysis.ATYPE_CHROMY:
+            params = [
+                self.tunes_frac, self.tuney_frac,
+                self.chromy_decoh, self.ry0, self.muy]
+        if self.select_kicktype == TbTAnalysis.ATYPE_KXX:
+            params = [
+                self.tunes_frac, self.tunex0_frac,
+                self.chromx_decoh, self.rx0, self.mux,
+                self.sigmax, self.kxx_decoh]
+        if self.select_kicktype == TbTAnalysis.ATYPE_KYY:
+            params = [
+                self.tunes_frac, self.tuney0_frac,
+                self.chromy_decoh, self.ry0, self.muy,
+                self.sigmay, self.kyy_decoh]
         return params
 
     def _get_fit_inputs(self,
@@ -917,10 +1067,68 @@ class TbTAnalysis(_FrozenClass):
 
     @staticmethod
     def _calc_residue_vector(
-            params, traj_mea,
+            params, kicktype, traj_mea,
             select_idx_turn_start, select_idx_turn_stop, offset):
         """."""
         args = [select_idx_turn_start, select_idx_turn_stop, offset]
-        traj_fit, *_ = TbTAnalysis.calc_traj_chrom(params, *args)
+        traj_fit, *_ = TbTAnalysis.calc_traj(kicktype, params, *args)
         traj_res = traj_mea - traj_fit
         return traj_res
+
+    def _set_from_params(self, fit_params, fit_errors):
+        if self._select_kicktype == TbTAnalysis.ATYPE_CHROMX:
+            self.tunes_frac = fit_params['x'][0]
+            self.tunex_frac = fit_params['x'][1]
+            self.chromx_decoh = fit_params['x'][2]
+            self.rx0 = fit_params['x'][3]
+            self.mux = fit_params['x'][4]
+            # errors
+            self.tunes_frac_err = fit_errors[0]
+            self.tunex_frac_err = fit_errors[1]
+            self.chromx_decoh_err = fit_errors[2]
+            self.rx0_err = fit_errors[3]
+            self.mux_err = fit_errors[4]
+        elif self._select_kicktype == TbTAnalysis.ATYPE_CHROMY:
+            self.tunes_frac = fit_params['x'][0]
+            self.tuney_frac = fit_params['x'][1]
+            self.chromy_decoh = fit_params['x'][2]
+            self.ry0 = fit_params['x'][3]
+            self.muy = fit_params['x'][4]
+            # errors
+            self.tunes_frac_err = fit_errors[0]
+            self.tuney_frac_err = fit_errors[1]
+            self.chromy_decoh_err = fit_errors[2]
+            self.ry0_err = fit_errors[3]
+            self.muy_err = fit_errors[4]
+        elif self._select_kicktype == TbTAnalysis.ATYPE_KXX:
+            self.tunes_frac = fit_params['x'][0]
+            self.tunex0_frac = fit_params['x'][1]
+            self.chromx_decoh = fit_params['x'][2]
+            self.rx0 = fit_params['x'][3]
+            self.mux = fit_params['x'][4]
+            self.sigmax = fit_params['x'][5]
+            self.kxx_decoh = fit_params['x'][6]
+            # errors
+            self.tunes_frac_err = fit_errors[0]
+            self.tunex0_frac_err = fit_errors[1]
+            self.chromx_decoh_err = fit_errors[2]
+            self.rx0_err = fit_errors[3]
+            self.mux_err = fit_errors[4]
+            self.sigmax_err = fit_params['x'][5]
+            self.kxx_decoh_err = fit_params['x'][6]
+        elif self._select_kicktype == TbTAnalysis.ATYPE_KYY:
+            self.tunes_frac = fit_params['x'][0]
+            self.tuney0_frac = fit_params['x'][1]
+            self.chromy_decoh = fit_params['x'][2]
+            self.ry0 = fit_params['x'][3]
+            self.muy = fit_params['x'][4]
+            self.sigmay = fit_params['x'][5]
+            self.kyy_decoh = fit_params['x'][6]
+            # errors
+            self.tunes_frac_err = fit_errors[0]
+            self.tuney0_frac_err = fit_errors[1]
+            self.chromy_decoh_err = fit_errors[2]
+            self.ry0_err = fit_errors[3]
+            self.muy_err = fit_errors[4]
+            self.sigmax_err = fit_params['x'][5]
+            self.kyy_decoh_err = fit_params['x'][6]

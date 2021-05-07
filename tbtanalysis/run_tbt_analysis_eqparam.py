@@ -2,18 +2,17 @@
 
 """."""
 
-import numpy as np
+import apsuite.optics_analysis
 import matplotlib.pyplot as plt
-
-from mathphys.functions import load_pickle
-
-from siriuspy.search import BPMSearch
+import numpy as np
+import numpy as _np
 import pyaccel
 import pymodels
-import apsuite.optics_analysis
-from apsuite.tbt_analysis import TbTAnalysis
 import scipy.signal as _scysig
-import numpy as _np
+from apsuite.tbt_analysis import TbTAnalysis
+from mathphys.functions import load_pickle
+from siriuspy.search import BPMSearch
+
 
 def convert_data(fname):
     data = load_pickle(fname)
@@ -204,102 +203,128 @@ def plot_fitted_params(bpm_indices=None, cutoff=3):
 
 def calc_sigmax(bpm_index):
     """."""
-    sigmas = {0: 67, }  # [um]
+    sigmas = {
+        # sigmax, betax
+        0: (66.92446418691087, 17915535.626820464)
+    }
     if bpm_index in sigmas:
-        sigmax = sigmas[bpm_index]
+        sigmax, betax = sigmas[bpm_index]
     else:
         twiss, bpms_idx = get_model_twiss()
         emitx = 0.25e-9  # [m.rad] nominal emittance
-        sigmax = 1e6 * np.sqrt(emitx * twiss.betax[bpms_idx[bpm_index]])
-        print('bpm_index {} -> sigmax -> {}'.format(bpm_index, sigmax))
-    return sigmax
+        betax = 1e6 * twiss.betax[bpms_idx[bpm_index]]
+        sigmax = 1e3 * np.sqrt(emitx * betax)
+        print('bpm_index: {} -> sigmax: {}, betax: {}'.format(bpm_index, sigmax, betax))
+    return sigmax, betax
 
 
 def study_nonlinear():
 
-    idx_kick = 0
-
-    # select bpm
-    idx_bpm = 0
-
     # get TbT data and fit chrom decoherence parameters
     tbt = create_tbt()
-    tbt.select_idx_kick = idx_kick
-    tbt.select_idx_bpm = idx_bpm
+    tbt.select_idx_kick = 0
+    tbt.select_idx_bpm = 0
     tbt.fit_run()
-    print(tbt)
 
-    trajx_mea, trajx_fit = tbt.fit_trajs()
-    # trajx_mea = trajx_mea - np.mean(trajx_mea)
-    plt.plot(trajx_mea, label='mea')
-    plt.plot(trajx_fit, label='fit')
-    plt.legend()
-    plt.show()
-
-    return
-
-    sigmax = calc_sigmax(idx_bpm)
-
-
-    # --- hilbert ---
-    data_anal = _np.array(_scysig.hilbert(trajx))
-    # calculate DFT:
-    data_dft = _np.fft.fft(data_anal)
-    freq = _np.fft.fftfreq(data_anal.shape[0])
-
-    center_freq = 0.0688
-    sigma_freq = 0.01
-    # Apply Gaussian filter to get only the synchrotron frequency
-    H = _np.exp(-(freq - center_freq)**2/2/sigma_freq**2)
-    H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
-    H /= H.max()
-    data_dft *= H
-    # get the processed data by inverse DFT
-    data_anal = _np.fft.ifft(data_dft)
-
-    phase_hil = _np.unwrap(_np.angle(data_anal))
-    instant_freq = _np.gradient(phase_hil)/(2*_np.pi)
-    amplitude = np.abs(data_anal)
-
-
-    # plt.plot(trajx, label='trajx')
-    # plt.plot(trajy, label='trajy')
-    # plt.xlabel('pos [um]')
-    # plt.ylabel('bpm index')
+    # Chrom decoh fitting
+    #
+    # print(tbt)
+    # trajx_mea, trajx_fit = tbt.fit_trajs()
+    # plt.plot(trajx_mea, label='mea')
+    # plt.plot(trajx_fit, label='fit')
     # plt.legend()
     # plt.show()
 
-    rx0 = abs(max(trajx))
+    # Sum signal has freq components?
+    #
+    # data = tbt.data_trajsum[0][:, 0]
+    # fft = np.abs(np.fft.rfft(data))
+    # plt.plot(fft, 'o')
+    # plt.show()
 
-    n = np.arange(tbt.data_nr_turns)
 
-    # tune shift of 0.5 in 5 mm
-    kxx = 0.125 * 0.5 / (5000)**2  # [1/um**2]
+    # take BPM raw data
+    trajx_mea = tbt.data_trajx[tbt.select_idx_kick][:, tbt.select_idx_bpm]
+    trajx_mea -= np.mean(trajx_mea)
+    # plt.plot(trajx_mea)
 
-    # tune = tune0 + kxx * x0**2
+    # --- hilbert ---
+    tbt.select_idx_turn_stop = tbt.data_nr_turns
+    params, offset, traj_mea = tbt._get_fit_inputs()
+    traj_mea = traj_mea - offset
+    args = [tbt.select_idx_turn_start, tbt.select_idx_turn_stop, offset]
+    _, _, _, _, exp, *_ = tbt.calc_traj_chrom(params, *args)
+
+    # plt.plot(traj_mea/exp)
+    # plt.show()
+
+    # signal = trajx_mea / exp
+    # data_anal = _np.array(_scysig.hilbert(signal))
+    # # calculate DFT:
+    # data_dft = _np.fft.fft(data_anal)
+    # freq = _np.fft.fftfreq(data_anal.shape[0])
+
+    # center_freq = tbt.tunex_frac  # 0.0688
+    # sigma_freq = 0.01
+    # # Apply Gaussian filter to get only the synchrotron frequency
+    # H = _np.exp(-(freq - center_freq)**2/2/sigma_freq**2)
+    # H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
+    # H /= H.max()
+    # data_dft *= H
+    # # get the processed data by inverse DFT
+    # data_anal = _np.fft.ifft(data_dft)
+
+    # phase_hil = _np.unwrap(_np.angle(data_anal))
+    # instant_freq = _np.gradient(phase_hil)/(2*_np.pi)
+    # amplitude = np.abs(data_anal)
+
+    # plt.plot(amplitude, 'o')
+    # plt.show()
+
+    xk = abs(max(trajx_mea))
+    phi0 = 0*np.pi/2
+    # xk = -tbt.rx0
+    # phi = tbt.mux + np.pi/2
+
+    sigmax = calc_sigmax(tbt.select_idx_bpm)
+    kxx = 0.125 * 0.5 / (5000)**2  # [1/um**2] - tune shift of 0.5 in 5 mm
+    tunex0_frac = tbt.tunex_frac - kxx*(4*sigmax**2+xk**2)
 
     a = 2*kxx*sigmax**2
-    b = rx0**2/2/sigmax**2
+    b = xk**2/sigmax**2/2
 
+    n = np.arange(tbt.data_nr_turns)
     theta = 2*np.pi*a*n
-
-    f0 = 2*np.pi*tbt.tunex_frac*n
+    f0 = 2*np.pi*tunex0_frac*n + phi0
     f1 = 1/(1+theta**2)
     f2 = b*theta*f1
     f3 = np.exp(-f2*theta)
     f4 = 2*np.arctan(theta)
+    # f2 -= f2[1]*n
+    # f4 -= f4[1]*n
 
-    f2 -= f2[1]*n
-    f4 -= f4[1]*n
+    # plt.plot(f0, label='f0')
+    # plt.plot(f2, label='f2')
+    # plt.plot(f4, label='f4')
 
     phase = f0+f2+f4
-    dphase = (phase[1:] - phase[:-1])/2/np.pi
+    fa = -xk*f1*f3*np.sin(phase)
+
+    print(tunex0_frac)
+    print(sigmax)
+    print(kxx)
+    print(xk)
+
+    # dphase0 = (f0[1:] - f0[:-1])/2/np.pi
+    # dphase = (phase[1:] - phase[:-1])/2/np.pi
+    # plt.plot(dphase0, label='dphase0')
+    # plt.plot(dphase, label='dphase')
 
     # plt.plot(rx0*f1, label='f1')
     # plt.plot(rx0*f1*f3, label='f1*f3')
     # plt.plot(f0+f2+f4), label='all')
-    plt.plot(-rx0*f1*f3*np.sin(f0+f2+f4), label='fit')
-    plt.plot(trajx, label='trajx')
+    plt.plot(trajx_mea, label='trajx')
+    plt.plot(fa, label='fit')
 
     # plt.plot(np.sin(f0), label='f0')
     # plt.plot(np.sin(f0+f2+f4), label='f0+f2+f4')
@@ -318,9 +343,66 @@ def study_nonlinear():
     plt.show()
 
 
+def test_kxx():
+
+    tbt = create_tbt()
+    tbt.select_kicktype = tbt.ATYPE_CHROMX
+    tbt.select_idx_kick = 0
+    tbt.select_idx_bpm = 0
+    tbt.fit_run()
+
+    # sigmax, betax = calc_sigmax(tbt.select_idx_bpm)
+    # # print(sigmax, betax)
+    # k_decoh_norm = 0.04658039262973321  # dtune/action [1/(rad.um)]
+    # k_decoh = k_decoh_norm / betax
+    # # print(k_decoh)
+    # # k_decoh = 2.6e-9
+    # r0 = tbt.rx0
+    # # tune0_frac = 0.06819424070644278
+    # tune0_frac = tbt.tunex_frac - k_decoh*(4*sigmax**2+r0**2)
+    # mu0 = tbt.mux
+
+    # params = [
+    #     tbt.tunes_frac*1.04, tune0_frac,
+    #     tbt.chromx_decoh, r0, mu0,
+    #     sigmax, k_decoh]
+
+    # tbt.select_idx_turn_stop = tbt.data_nr_turns
+    # args = [tbt.select_idx_turn_start, tbt.select_idx_turn_stop, tbt.rx_offset]
+
+    # traj_mea = tbt.select_get_traj()
+    # traj_fit = tbt.calc_traj_tuneshift(params, *args)
+    # plt.plot(traj_mea)
+    # plt.plot(traj_fit)
+    # plt.show()
+
+    tbt.select_kicktype = tbt.ATYPE_KXX
+    tbt.select_idx_turn_stop = tbt.data_nr_turns
+    tbt.sigmax, betax = calc_sigmax(tbt.select_idx_bpm)
+    k_decoh_norm = 0.04658039262973321  # dtune/action [1/(rad.um)]
+    tbt.kxx_decoh = k_decoh_norm / betax
+    tbt.tunex0_frac = tbt.tunex_frac - tbt.kxx_decoh*(4*tbt.sigmax**2+tbt.rx0**2)
+
+    fm, f1 = tbt.fit_trajs()
+    r1 = tbt.fit_residue()
+    # plt.plot(fm)
+    # plt.plot(f1)
+    # plt.show()
+
+    tbt.fit_leastsqr()
+    _, f2 = tbt.fit_trajs()
+    r2 = tbt.fit_residue()
+
+    plt.plot(fm, label='mea')
+    # plt.plot(f1, label='fit1 ({} um)'.format(r1))
+    plt.plot(f2 - fm, label='fit2 ({} um)'.format(r2))
+    plt.legend()
+    plt.show()
+
 # folder = '2021-03-23-SI_commissioning-dynap_meas/'
 # fname = 'dynap_data_kick_m050urad_chromcorr_coupiter3_loco_corr.pickle'
-# study_nonlinear()
+# # study_nonlinear()
+# test_kxx()
 
 folder = '2021-03-23-SI_commissioning-dynap_meas/'
 fname = 'dynap_data_kick_m050urad_chromcorr_coupiter3_loco_corr.pickle'
