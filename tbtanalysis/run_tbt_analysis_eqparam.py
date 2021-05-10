@@ -16,6 +16,10 @@ from siriuspy.search import BPMSearch
 def convert_data(fname):
     data = load_pickle(fname)
     if 'trajx' in data:
+        if isinstance(data['chromx_err'], (list, tuple)):
+            data['chromx_err'] = max(data['chromx_err'])
+        if isinstance(data['chromy_err'], (list, tuple)):
+            data['chromx_err'] = max(data['chromy_err'])
         data['kicktype'] = 'CHROMX' if data['kicktype'] == 'X' else data['kicktype']
         data['kicktype'] = 'CHROMY' if data['kicktype'] == 'Y' else data['kicktype']
         return data
@@ -69,7 +73,6 @@ def plot_fitted_global_param(param, param_err, cutoff, ylabel, rtitle, factor):
     if param_err is not None:
         param_err_fin = param_err[filtered].ravel() * factor
         param_err_fout = param_err[filtered_out].ravel() * factor
-        print(param_err_fin.shape)
     else:
         param_err_fin = None
         param_err_fout = None
@@ -87,9 +90,7 @@ def plot_fitted_global_param(param, param_err, cutoff, ylabel, rtitle, factor):
     return param_mean, param_std
 
 
-def plot_fitted_params(bpm_indices=None, cutoff=3):
-
-    tbt = create_tbt()
+def plot_fitted_params_chrom(tbt, bpm_indices=None, cutoff=3):
 
     # --- tbt fitting ---
     bpm_indices, residue, params, params_err = \
@@ -196,19 +197,127 @@ def plot_fitted_params(bpm_indices=None, cutoff=3):
     return tbt
 
 
+def plot_fitted_params_tuneshift(tbt, bpm_indices=None, cutoff=3):
+
+    # --- tbt fitting ---
+    
+    bpm_indices, residue, params, params_err = \
+        tbt.analysis_run_tuneshift(0, bpm_indices)
+
+    rx0, mux, dtunex_frac, tunes_frac, espread, kxx_decoh, sigmax = params
+    rx0_err, mux_err, dtunex_frac_err, tunes_frac_err, espread_err, kxx_decoh_err, sigmax_err = params_err
+
+    # --- plot residue ---
+    maxtraj = np.max(np.abs(tbt.data_trajx[tbt.select_idx_kick]), axis=0)
+    param, param_err = 100*residue/maxtraj, None
+    ylabel = r'$R / X_{max}$ [%]'
+    rtitle = ('Fitted residue: '
+        r'({:.3f} $\pm$ {:.3f}) %'
+        '\n{:.1f} x sigma cutoff')
+    plot_fitted_global_param(param, param_err, cutoff, ylabel, rtitle, 1)
+
+    # --- plot espread ---
+    param, param_err = espread, espread_err    
+    ylabel = 'energy spread [%]'
+    rtitle = ('Fitted energy spread: '
+        r'$\sigma_{{\delta}}$ = ({:.3f} $\pm$ {:.3f}) %'
+        '\n{:.1f} x sigma cutoff')
+    plot_fitted_global_param(param, param_err, cutoff, ylabel, rtitle, 100)
+
+    # --- plot tunes_frac ---
+    param, param_err = tunes_frac, tunes_frac_err
+    ylabel = 'tunes_frac [%]'
+    rtitle = ('Fitted TuneS: '
+        r'$\nu_{{s}}$ = ({:.4f} $\pm$ {:.4f}) [%]'
+        '\n{:.1f} x sigma cutoff')
+    plot_fitted_global_param(param, param_err, cutoff, ylabel, rtitle, 100)
+
+    # --- plot dtunex_frac ---
+    param, param_err = dtunex_frac, dtunex_frac_err
+    ylabel = 'dtunes_frac'
+    rtitle = ('Fitted dtuneX: '
+        r'$\delta\nu_{{x}}$ = ({:.6f} $\pm$ {:.6f})'
+        '\n{:.1f} x sigma cutoff')
+    plot_fitted_global_param(param, param_err, cutoff, ylabel, rtitle, 1)
+    
+    # --- sigmax ---
+    twiss, bpms_idx = tbt.calc_model_twiss()
+    k = tbt.NOM_COUPLING
+    emit0 = tbt.NOM_EMITTANCE
+    emitx = emit0 * 1 / (1 + k)
+    betax = 1e6 * twiss.betax[bpms_idx[bpm_indices]]
+    etax = 1e6 * twiss.etax[bpms_idx[bpm_indices]]
+    sigmax_nom = _np.sqrt(emitx * betax + (etax * tbt.NOM_ESPREAD)**2)
+    plt.plot(twiss.spos[bpms_idx[bpm_indices]], sigmax_nom, 'o-', label='model')
+    plt.errorbar(twiss.spos[bpms_idx[bpm_indices]], sigmax, sigmax_err, fmt='o', label='fitted')
+    plt.xlabel('pos [m]')
+    plt.ylabel('sigmax [um]')
+    plt.grid()
+    plt.legend()
+    plt.title('TbT SigmaX')
+    plt.show()
+    return
+
+    # --- plot betax beating ---
+    beta_beat = 100 * (betax * scaling - twiss.betax[bpms_idx]) / twiss.betax[bpms_idx]
+    beta_beat_err = 100 * scaling * betax_err / twiss.betax[bpms_idx]
+    # beta_beat_err = 100 * betax_err * scaling
+    calc_param_stats_print(beta_beat, 2.0, 'betax_beat')
+    plt.errorbar(twiss.spos[bpms_idx], beta_beat, beta_beat_err, fmt='o', label='w.r.t. nominal')
+    plt.xlabel('pos [m]')
+    plt.ylabel('betax beating [%]')
+    plt.grid()
+    plt.legend()
+    plt.title('TbT BetaX Beating')
+    plt.show()
+
+    # --- plot mux ---
+    shift = (np.sum(twiss.mux[bpms_idx]) - np.sum(mux)) / len(mux)
+    mux2 = (mux + shift)
+    muxt = twiss.mux[bpms_idx]
+    # for i in range(len(mux2)):
+    #     # n = int((muxt[i] - mux2[i]) // np.pi)
+    #     delta = np.pi * ((muxt[i] - mux2[i]) // np.pi)
+    #     if abs(mux2[i] + delta - muxt[i]) < abs(mux2[i] - muxt[i]):
+    #         mux2[i:] += delta
+    #     elif abs(mux2[i] - delta - muxt[i]) < abs(mux2[i] - muxt[i]):
+    #         mux2[i:] -= delta
+    plt.plot(twiss.spos[bpms_idx], muxt / 2 / np.pi, 'o-', label='model')
+    plt.errorbar(twiss.spos[bpms_idx], mux2 / 2 / np.pi, mux_err / 2 / np.pi, fmt='o', label='tbt (shift matched)')
+    plt.legend()
+    plt.xlabel('pos [m]')
+    plt.ylabel('mux / 2 / pi')
+    plt.title('TbT BetaX Phase')
+    plt.show()
+
+    # --- plot mux error ---
+    mux_error = (mux2 - muxt) / 2 / np.pi
+    calc_param_stats_print(mux_error, 2.0, 'mux_error')
+    plt.errorbar(twiss.spos[bpms_idx], mux_error, mux_err / 2 / np.pi, fmt='o', label='w.r.t. nominal')
+    plt.xlabel('bpm index')
+    plt.ylabel('mux error / (2*pi)')
+    plt.grid()
+    plt.legend()
+    plt.title('TbT BetaX Phase Error')
+    plt.show()
+
+    return tbt
+
+
 def calc_sigmax(tbt, bpm_index):
     """."""
     sigmas = {
         # sigmax, betax
-        0: (66.92446418691087, 17915535.626820464)
+        # 0: (66.92446418692471, 17915535.626820464)
     }
     if bpm_index in sigmas:
         sigmax, betax = sigmas[bpm_index]
     else:
         twiss, bpms_idx = tbt.calc_model_twiss()
-        emitx = 0.25e-9  # [m.rad] nominal emittance
+        emitx = 0.25e-9 * 1e6  # [um.rad] nominal emittance
         betax = 1e6 * twiss.betax[bpms_idx[bpm_index]]
-        sigmax = 1e3 * np.sqrt(emitx * betax)
+        etax = 1e6 * twiss.etax[bpms_idx[bpm_index]]
+        sigmax = np.sqrt(emitx * betax + (etax * tbt.espread)**2)
         print('bpm_index: {} -> sigmax: {}, betax: {}'.format(bpm_index, sigmax, betax))
     return sigmax, betax
 
@@ -338,99 +447,77 @@ def study_nonlinear():
     plt.show()
 
 
-def test_kxx():
+def test_kxx(tbt):
 
-    tbt = create_tbt()
+    # fit chrom decoh
     tbt.select_kicktype = tbt.ATYPE_CHROMX
     tbt.select_idx_kick = 0
-    tbt.select_idx_bpm = 0
+    tbt.select_idx_bpm = 1
     tbt.fit_run_chrom()
-
-    tbt.select_kicktype = tbt.ATYPE_KXX
-    tbt.select_idx_turn_stop = tbt.data_nr_turns
-    tbt.sigmax, betax = calc_sigmax(tbt, tbt.select_idx_bpm)
-    k_decoh_norm = 0.04658039262973321  # dtune/action [1/(rad.um)]
-    tbt.kxx_decoh = k_decoh_norm / betax
-    tbt.tunex0_frac = tbt.tunex_frac - tbt.kxx_decoh*(4*tbt.sigmax**2+tbt.rx0**2)
-    
-
-    fm, f1 = tbt.fit_trajs()
-    fr1 = f1 - fm
-    r1 = tbt.fit_residue()
-    # plt.plot(fm)
-    # plt.plot(f1)
-    # plt.show()
-
-    # return
-    tbt.fit_leastsqr()
-
-    print(tbt)
+    tbt.fit_run_tuneshift()
 
     fm, f2 = tbt.fit_trajs()
     fr2 = f2 - fm
     r2 = tbt.fit_residue()
-
-    print(tbt.tunex_frac)
-    print(tbt.tunex0_frac)
-    dtune = tbt.kxx_decoh*(4*tbt.sigmax**2+tbt.rx0**2)
-    print(dtune)
-    print(tbt)
-
     plt.plot(fm, label='mea')
-    # plt.plot(f1, label='fit1 ({} um)'.format(r1))
-    plt.plot(fr1, label='fit1 - mea ({} um)'.format(r1))
     plt.plot(fr2, label='fit2 - mea ({} um)'.format(r2))
     plt.legend()
     plt.show()
 
-    # sigmax, betax = tbt.calc_model_twiss()
-    # print(sigmax, betax)
-    # k_decoh_norm = 0.04658039262973321  # dtune/action [1/(rad.um)]
-    # k_decoh = k_decoh_norm / betax
-    # # print(k_decoh)
-    # # k_decoh = 2.6e-9
-    # r0 = tbt.rx0
-    # # tune0_frac = 0.06819424070644278
-    # tune0_frac = tbt.tunex_frac - k_decoh*(4*sigmax**2+r0**2)
-    # mu0 = tbt.mux
-
-    # params = [
-    #     tbt.tunes_frac*1.04, tune0_frac,
-    #     tbt.chromx_decoh, r0, mu0,
-    #     sigmax, k_decoh]
-
-    # tbt.select_idx_turn_stop = tbt.data_nr_turns
-    # args = [tbt.select_idx_turn_start, tbt.select_idx_turn_stop, tbt.rx_offset]
-
-    # traj_mea = tbt.select_get_traj()
-    # traj_fit = tbt.calc_traj_tuneshift(params, *args)
-    # plt.plot(traj_mea)
-    # plt.plot(traj_fit)
-    # plt.show()
-
-    
-
-folder = '2021-03-23-SI_commissioning-dynap_meas/'
-fname = 'dynap_data_kick_m050urad_chromcorr_coupiter3_loco_corr.pickle'
-# # study_nonlinear()
-test_kxx()
 
 # folder = '2021-03-23-SI_commissioning-dynap_meas/'
 # fname = 'dynap_data_kick_m050urad_chromcorr_coupiter3_loco_corr.pickle'
-# tbt = plot_fitted_params()
+# # # study_nonlinear()
+# test_kxx2()
+
+# tunex0_frac = 0.068183
+# rx0 = 466.27962
+# sigmax = 66.92
+# kxx_decoh = 2.60000e-09
+# n = np.arange(2000)
+# psi1 = tunex0_frac * n
+# theta = 4*np.pi*kxx_decoh*sigmax**2*n
+# psi2 = kxx_decoh * (4*sigmax**2 + rx0**2 * (1-theta**2)/(1+theta**2)**2)
+# plt.plot(psi1)
+# plt.plot(psi2)
+# plt.show()
+
+folder = '2021-03-23-SI_commissioning-dynap_meas/'
+fname = 'dynap_data_kick_m050urad_chromcorr_coupiter3_loco_corr.pickle'
+# folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+# folder = '2021-05-04-SI_commissioning-equilibrium_parameters_tbt_single_bunch/'
+# fname = 'tbt_data_horizontal_m050urad_single_bunch.pickle'
+# fname = 'tbt_data_horizontal_m200urad_single_bunch.pickle'
+tbt = create_tbt()
+# plot_fitted_params_chrom(tbt)
+# test_kxx(tbt)
+# print(tbt)
+plot_fitted_params_tuneshift(tbt)
+tm, tf = tbt.fit_trajs()
+plt.plot(tm, label='mea')
+plt.plot(tf, label='fit')
+plt.legend()
+plt.show()
+print(tbt)
+
 
 # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
 # fname = 'tbt_data_horizontal_m050urad.pickle'
-# plot_fitted_params()
+# plot_fitted_params_chrom()
+
+# folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+# fname = 'tbt_data_horizontal_m005urad_chrom=2p5.pickle'
+# # plot_fitted_params_chrom()
+# test_kxx2()
 
 # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
 # fname = 'tbt_data_horizontal_m050urad_chrom=1p25'
-# plot_fitted_params()
+# plot_fitted_params_chrom()
 
 # folder = '2021-04-26-SI_commissioning_pinger_vertical/'
 # fname = 'dynap_data_pingerv_150volts_injsys_off.pickle'
 # tbt = create_tbt(kicktype='Y')
-# plot_fitted_params()
+# plot_fitted_params_chrom()
 
 # nrpts = 6*300+1
 # signal = tbt.data_trajy[0][:nrpts, 0]
