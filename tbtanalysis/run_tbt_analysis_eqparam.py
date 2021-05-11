@@ -8,41 +8,11 @@ import numpy as np
 import numpy as _np
 import pyaccel
 import scipy.signal as _scysig
-from apsuite.tbt_analysis import TbTAnalysis
-from mathphys.functions import load_pickle
+from lib import create_tbt
 from siriuspy.search import BPMSearch
 
 
-def convert_data(fname):
-    data = load_pickle(fname)
-    if 'trajx' in data:
-        if isinstance(data['chromx_err'], (list, tuple)):
-            data['chromx_err'] = max(data['chromx_err'])
-        if isinstance(data['chromy_err'], (list, tuple)):
-            data['chromx_err'] = max(data['chromy_err'])
-        data['kicktype'] = 'CHROMX' if data['kicktype'] == 'X' else data['kicktype']
-        data['kicktype'] = 'CHROMY' if data['kicktype'] == 'Y' else data['kicktype']
-        return data
-    ndata = dict()
-    ndata['trajx'] = data['sofb_tbt']['x'].reshape((1, -1, 160))
-    ndata['trajy'] = data['sofb_tbt']['y'].reshape((1, -1, 160))
-    ndata['trajsum'] = data['sofb_tbt']['sum'].reshape((1, -1, 160))
-    ndata['kicks'] = [data['kick']]
-    ndata['tunex'] = data['tune']['x']
-    ndata['tuney'] = data['tune']['y']
-    return ndata
-
 bpms = BPMSearch.get_names({'sec':'SI', 'dev':'BPM'})
-
-
-def create_tbt(kicktype=None):
-    newdata = convert_data(folder+fname)
-    tbt = TbTAnalysis(data=newdata, kicktype=kicktype)
-    print('Meas. ChromX: {:+.4f} +/- {:.4f}'.format(tbt.chromx, 0))
-    print('Meas. ChromY: {:+.4f} +/- {:.4f}'.format(tbt.chromy, 0))
-    print()
-    return tbt
-
 
 def calc_param_stats(param, cutoff):
 
@@ -95,8 +65,8 @@ def plot_fitted_params_chrom(tbt, bpm_indices=None, cutoff=3):
     # --- tbt fitting ---
     bpm_indices, residue, params, params_err = \
         tbt.analysis_run_chrom(0, bpm_indices)
-    rx0, mux, tunex_frac, tunes_frac, espread = params
-    rx0_err, mux_err, tunex_frac_err, tunes_frac_err, espread_err = params_err
+    rx0, mux, tunex_frac, tunes_frac, espread, _ = params
+    rx0_err, mux_err, tunex_frac_err, tunes_frac_err, espread_err, _ = params_err
 
     # --- plot residue ---
     maxtraj = np.max(np.abs(tbt.data_trajx[tbt.select_idx_kick]), axis=0)
@@ -216,6 +186,14 @@ def plot_fitted_params_tuneshift(tbt, bpm_indices=None, cutoff=3):
         '\n{:.1f} x sigma cutoff')
     plot_fitted_global_param(param, param_err, cutoff, ylabel, rtitle, 1)
 
+    # --- plot kxx_decoh ---
+    param, param_err = kxx_decoh, kxx_decoh_err
+    ylabel = 'kxx_decoh'
+    rtitle = ('Fitted kxx_decoh: '
+        r'$k_{{xx}}$ = ({:.6f} $\pm$ {:.6f})'
+        '\n{:.1f} x sigma cutoff')
+    plot_fitted_global_param(param, param_err, cutoff, ylabel, rtitle, 1)
+    
     # --- plot espread ---
     param, param_err = espread, espread_err    
     ylabel = 'energy spread [%]'
@@ -465,68 +443,37 @@ def test_kxx(tbt):
     plt.show()
 
 
-# folder = '2021-03-23-SI_commissioning-dynap_meas/'
-# fname = 'dynap_data_kick_m050urad_chromcorr_coupiter3_loco_corr.pickle'
-# # # study_nonlinear()
-# test_kxx2()
+def multibunch_kick_spread():
+    """."""
+    rev = 1.7e-6
+    kickx_width = 2 * rev
+    kicky_width = 3 * rev
+    bunch_half_duration = 50e-9 / 2
+    percentx = 100*(np.cos((np.pi/2)*(bunch_half_duration)/kickx_width) - 1)
+    percenty = 100*(np.cos((np.pi/2)*(bunch_half_duration)/kicky_width) - 1)
+    print('kickx reduction: {} %'.format(percentx))
+    print('kicky reduction: {} %'.format(percenty))
 
-# tunex0_frac = 0.068183
-# rx0 = 466.27962
-# sigmax = 66.92
-# kxx_decoh = 2.60000e-09
-# n = np.arange(2000)
-# psi1 = tunex0_frac * n
-# theta = 4*np.pi*kxx_decoh*sigmax**2*n
-# psi2 = kxx_decoh * (4*sigmax**2 + rx0**2 * (1-theta**2)/(1+theta**2)**2)
-# plt.plot(psi1)
-# plt.plot(psi2)
-# plt.show()
+# multibunch_kick_spread()
 
 folder = '2021-03-23-SI_commissioning-dynap_meas/'
 fname = 'dynap_data_kick_m050urad_chromcorr_coupiter3_loco_corr.pickle'
+tbt = create_tbt(folder+fname)
+plot_fitted_params_tuneshift(tbt)
+
+# folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+# fname = 'tbt_data_horizontal_m005urad_chrom=2p5.pickle'
+
+# folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+# fname = 'tbt_data_horizontal_m050urad_chrom=1p25'
+
+# folder = '2021-04-26-SI_commissioning_pinger_vertical/'
+# fname = 'dynap_data_pingerv_150volts_injsys_off.pickle'
+
 # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
 # folder = '2021-05-04-SI_commissioning-equilibrium_parameters_tbt_single_bunch/'
 # fname = 'tbt_data_horizontal_m050urad_single_bunch.pickle'
 # fname = 'tbt_data_horizontal_m200urad_single_bunch.pickle'
-tbt = create_tbt()
-# plot_fitted_params_chrom(tbt)
-# test_kxx(tbt)
-# print(tbt)
-plot_fitted_params_tuneshift(tbt)
-tm, tf = tbt.fit_trajs()
-plt.plot(tm, label='mea')
-plt.plot(tf, label='fit')
-plt.legend()
-plt.show()
-print(tbt)
-
-
-# folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
-# fname = 'tbt_data_horizontal_m050urad.pickle'
-# plot_fitted_params_chrom()
-
-# folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
-# fname = 'tbt_data_horizontal_m005urad_chrom=2p5.pickle'
-# # plot_fitted_params_chrom()
-# test_kxx2()
-
-# folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
-# fname = 'tbt_data_horizontal_m050urad_chrom=1p25'
-# plot_fitted_params_chrom()
-
-# folder = '2021-04-26-SI_commissioning_pinger_vertical/'
-# fname = 'dynap_data_pingerv_150volts_injsys_off.pickle'
-# tbt = create_tbt(kicktype='Y')
-# plot_fitted_params_chrom()
-
-# nrpts = 6*300+1
-# signal = tbt.data_trajy[0][:nrpts, 0]
-# signal = signal - np.mean(signal)
-# freqs, fourier = pyaccel.naff.naff_general(signal=signal, is_real=True, nr_ff=10, window=1)
-# print(freqs)
-# print(abs(freqs[0] - freqs[1]))
-
-
 
 
 

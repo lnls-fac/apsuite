@@ -27,8 +27,8 @@ class TbTAnalysis(_FrozenClass):
     NOM_KYY_DECOH_NORM = None  # dtune/action [1/(rad.um)] for 2.5 chroms
     NOM_CHROMX = 2.5
     NOM_CHROMY = 2.5
-    NOM_CHROMX_ERR = 0.0
-    NOM_CHROMY_ERR = 0.0
+    NOM_CHROMX_ERR = 0.05
+    NOM_CHROMY_ERR = 0.05
 
     def __init__(self, kicktype=None, data=None, data_fname=None):
         """."""
@@ -875,7 +875,7 @@ class TbTAnalysis(_FrozenClass):
                 offset, tune_frac, beta, sigma),
             method='lm')
 
-        fit_errors = TbTAnalysis._calc_leastsqr_fitting_error(fit_params)
+        fit_errors = TbTAnalysis.calc_leastsqr_fitting_error(fit_params)
 
         self._set_from_params(fit_params, fit_errors)
 
@@ -946,10 +946,10 @@ class TbTAnalysis(_FrozenClass):
             bpm_indices = _np.arange(self.data_nr_bpms)
         vec = _np.zeros(len(bpm_indices))
         residue = 0*vec
-        rx0, mux, tunex_frac, tunes_frac, espread = \
-            0*vec, 0*vec, 0*vec, 0*vec, 0*vec
-        rx0_err, mux_err, tunex_frac_err, tunes_frac_err, espread_err = \
-            0*vec, 0*vec, 0*vec, 0*vec, 0*vec
+        rx0, mux, tunex_frac, tunes_frac, espread, chromx_decoh = \
+            0*vec, 0*vec, 0*vec, 0*vec, 0*vec, 0*vec
+        rx0_err, mux_err, tunex_frac_err, tunes_frac_err, espread_err, chromx_decoh_err = \
+            0*vec, 0*vec, 0*vec, 0*vec, 0*vec, 0*vec
         self.select_idx_kick = select_idx_kick
         for idx, idx_bpm in enumerate(bpm_indices):
             self.select_idx_bpm = idx_bpm
@@ -961,12 +961,14 @@ class TbTAnalysis(_FrozenClass):
             tunex_frac[idx] = self.tunex_frac
             tunes_frac[idx] = self.tunes_frac - int(self.tunes_frac)
             espread[idx] = self.espread
+            chromx_decoh[idx] = self.chromx_decoh
             # store params errors
             rx0_err[idx] = self.rx0_err
             mux_err[idx] = self.mux_err
             tunex_frac_err[idx] = self.tunex_frac_err
             tunes_frac_err[idx] = self.tunes_frac_err - int(self.tunes_frac_err)
             espread_err[idx] = self.espread_err
+            chromx_decoh_err[idx] = self.chromx_decoh_err
 
         # unwrap phase
         mux = _np.unwrap(mux)
@@ -978,8 +980,8 @@ class TbTAnalysis(_FrozenClass):
                     changed = True
                     mux[i:] += 0.5
 
-        params = [rx0, mux, tunex_frac, tunes_frac, espread]
-        params_err = [rx0_err, mux_err, tunex_frac_err, tunes_frac_err, espread_err]
+        params = [rx0, mux, tunex_frac, tunes_frac, espread, chromx_decoh]
+        params_err = [rx0_err, mux_err, tunex_frac_err, tunes_frac_err, espread_err, chromx_decoh_err]
         return bpm_indices, residue, params, params_err
 
     def analysis_run_tuneshift(self, select_idx_kick=0, bpm_indices=None):
@@ -1103,7 +1105,6 @@ class TbTAnalysis(_FrozenClass):
         r0 = params[2]
         mu = params[3]
         k_decoh = params[4]/beta
-        # sigma = params[5]
 
         b = (r0**2/(sigma**2)/2)
         a = 4*_np.pi*k_decoh*sigma**2
@@ -1249,12 +1250,12 @@ class TbTAnalysis(_FrozenClass):
             params = [
                 self.tunes_frac, 
                 self.chromx_decoh, self.rx0, 
-                self.mux, self.kxx_decoh] # , self.sigmax]
+                self.mux, self.kxx_decoh]
         elif self.select_kicktype == TbTAnalysis.ATYPE_KYY:
             params = [
                 self.tunes_frac, 
                 self.chromy_decoh, self.ry0, 
-                self.muy, self.kyy_decoh] # , self.sigmay]
+                self.muy, self.kyy_decoh]
         return params
 
     def _get_fit_inputs(self,
@@ -1274,7 +1275,7 @@ class TbTAnalysis(_FrozenClass):
         return params, offset, traj_mea
 
     @staticmethod
-    def _calc_leastsqr_fitting_error(fit_params):
+    def calc_leastsqr_fitting_error(fit_params):
         """."""
         # based on fitting error calculation of scipy.optimization.curve_fit
         # do Moore-Penrose inverse discarding zero singular values.
@@ -1340,25 +1341,21 @@ class TbTAnalysis(_FrozenClass):
             self.rx0 = fit_params['x'][2]
             self.mux = fit_params['x'][3]
             self.kxx_decoh = fit_params['x'][4]
-            # self.sigmax = fit_params['x'][5]
             # errors
             self.tunes_frac_err = fit_errors[0]
             self.chromx_decoh_err = fit_errors[1]
             self.rx0_err = fit_errors[2]
             self.mux_err = fit_errors[3]
             self.kxx_decoh_err = fit_errors[4]
-            # self.sigmax_err = fit_errors[5]
         elif self._select_kicktype == TbTAnalysis.ATYPE_KYY:
             self.tunes_frac = fit_params['x'][0]
             self.chromy_decoh = fit_params['x'][1]
             self.ry0 = fit_params['x'][2]
             self.muy = fit_params['x'][3]
             self.kyy_decoh = fit_params['x'][4]
-            # self.sigmay = fit_params['x'][5]
             # errors
             self.tunes_frac_err = fit_errors[0]
             self.chromy_decoh_err = fit_errors[1]
             self.ry0_err = fit_errors[2]
             self.muy_err = fit_errors[3]
             self.kyy_decoh_err = fit_errors[4]
-            # self.sigmay_err = fit_errors[5]
