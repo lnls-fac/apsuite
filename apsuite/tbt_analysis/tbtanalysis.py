@@ -20,15 +20,20 @@ class TbTAnalysis(_FrozenClass):
     ATYPE_KXX = 'KXX'
     ATYPE_KYY = 'KYY'
 
+    NOM_HARMONIC_NR = 864
+    NOM_ALPHA = 1.645e-4
     NOM_ESPREAD = 0.08436/100
     NOM_EMITTANCE = 0.25e-3  # [um.rad]
-    NOM_COUPLING = 1.0/100
-    NOM_KXX_DECOH_NORM = -0.04658039262973321  # dtune/action [1/(rad.um)] for 2.5 chroms
-    NOM_KYY_DECOH_NORM = None  # dtune/action [1/(rad.um)] for 2.5 chroms
-    NOM_CHROMX = 2.5
-    NOM_CHROMY = 2.5
-    NOM_CHROMX_ERR = 0.05
-    NOM_CHROMY_ERR = 0.05
+    NOM_COUPLING = 3.0/100
+    NOM_KXX_DECOH_NORM = -0.0145  # dtune/action [1/(rad.um)] for 2.4 chroms
+    NOM_KXY_DECOH_NORM = +0.0083  # dtune/action [1/(rad.um)] for 2.4 chroms
+    NOM_KYY_DECOH_NORM = +0.0377  # dtune/action [1/(rad.um)] for 2.4 chroms
+    NOM_KYX_DECOH_NORM = +0.0083  # dtune/action [1/(rad.um)] for 2.4 chroms
+
+    NOM_CHROMX = 2.4
+    NOM_CHROMY = 2.4
+    NOM_CHROM_ERR = 0.02
+    NOM_TUNE_ERR = 1e-4
 
     def __init__(self, kicktype=None, data=None, data_fname=None):
         """."""
@@ -94,8 +99,8 @@ class TbTAnalysis(_FrozenClass):
             self._select_kicktype = self._data.get('kicktype', TbTAnalysis.ATYPE_CHROMX)
         self.chromx = self._data.get('chromx', TbTAnalysis.NOM_CHROMX)
         self.chromy = self._data.get('chromy', TbTAnalysis.NOM_CHROMY)
-        self.chromx_err = self._data.get('chromx_err', TbTAnalysis.NOM_CHROMX_ERR)
-        self.chromy_err = self._data.get('chromy_err', TbTAnalysis.NOM_CHROMY_ERR)
+        self.chromx_err = self._data.get('chromx_err', TbTAnalysis.NOM_CHROM_ERR)
+        self.chromy_err = self._data.get('chromy_err', TbTAnalysis.NOM_CHROM_ERR)
         self.select_idx_turn_stop = self.data_nr_turns
         self._select_update_offsets()
 
@@ -108,6 +113,16 @@ class TbTAnalysis(_FrozenClass):
         self._freeze()
 
     # --- data methods ---
+
+    @property
+    def data_fname(self):
+        """."""
+        return self._data_fname
+
+    @property
+    def data(self):
+        """."""
+        return self._data
 
     @property
     def data_trajsum(self):
@@ -186,6 +201,14 @@ class TbTAnalysis(_FrozenClass):
     # --- data selection methods for analysis ---
 
     @property
+    def select_plane_x(self):
+        return self._select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX)
+
+    @property
+    def select_plane_y(self):
+        return self._select_kicktype in (TbTAnalysis.ATYPE_CHROMY, TbTAnalysis.ATYPE_KYY)
+
+    @property
     def select_kicktype(self):
         """Return selected kick type for analysis."""
         return self._select_kicktype
@@ -247,7 +270,7 @@ class TbTAnalysis(_FrozenClass):
             self._get_sel_args(
                 select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop)
         turns_sel = _np.arange(select_idx_turn_start, select_idx_turn_stop)
-        if self.select_kicktype != TbTAnalysis.ATYPE_CHROMY:
+        if self.select_plane_x:
             traj_mea = self.data_trajx[select_idx_kick, turns_sel, select_idx_bpm]
         else:
             traj_mea = self.data_trajy[select_idx_kick, turns_sel, select_idx_bpm]
@@ -269,7 +292,7 @@ class TbTAnalysis(_FrozenClass):
     def espread(self):
         """."""
         # chrom_decoh = 2 * chrom * espread / tunes_frac
-        if self._select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
+        if self.select_plane_x:
             return self.chromx_decoh * self.tunes_frac / 2 / self.chromx
         else:
             return self.chromy_decoh * self.tunes_frac / 2 / self.chromy
@@ -277,7 +300,7 @@ class TbTAnalysis(_FrozenClass):
     @espread.setter
     def espread(self, value):
         """."""
-        if self._select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
+        if self.select_plane_x:
             self._chromx_decoh = 2 * self.chromx * value / self.tunes_frac
         else:
             self._chromy_decoh = 2 * self.chromy * value / self.tunes_frac
@@ -297,7 +320,7 @@ class TbTAnalysis(_FrozenClass):
     @property
     def espread_err(self):
         """."""
-        if self._select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
+        if self.select_plane_x:
             el1 = (self.chromx_decoh_err * self.tunes_frac/2/self.chromx)**2
             el2 = (self.tunes_frac_err * self.chromx_decoh/2/self.chromx)**2
             el3 = (self.chromx_err * self.chromx_decoh*self.tunes_frac/2/self.chromx**2)**2
@@ -716,13 +739,9 @@ class TbTAnalysis(_FrozenClass):
 
     def init_k_decoh(self):
         """."""
-        if self.select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
-            # tuneshift with amplitude
-            # self.kxx_decoh = TbTAnalysis.NOM_KXX_DECOH_NORM / self.betax
+        if self.select_plane_x:
             self.kxx_decoh = TbTAnalysis.NOM_KXX_DECOH_NORM
         else:
-            # tuneshift with amplitude
-            # self.kyy_decoh = TbTAnalysis.NOM_KYY_DECOH_NORM / self.betay
             self.kyy_decoh = TbTAnalysis.NOM_KYY_DECOH_NORM
             
     def init_twiss_from_model(self, update=False, goal_tunes=None):
@@ -739,10 +758,10 @@ class TbTAnalysis(_FrozenClass):
         self.etax = 1e6 * self._model_twiss.etax[bpms_idx[self.select_idx_bpm]]
         self.betay = 1e6 * self._model_twiss.betay[bpms_idx[self.select_idx_bpm]]
         self.etay = 1e6 * self._model_twiss.etay[bpms_idx[self.select_idx_bpm]]
-        if self.select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):    
-            self.sigmax = _np.sqrt(emitx * self.betax + (self.etax * self.espread)**2)
+        if self.select_plane_x:
+            self.sigmax = _np.sqrt(emitx * self.betax + 0*(self.etax * self.espread)**2)
         else:
-            self.sigmay = _np.sqrt(emity * self.betay + (self.etay * self.espread)**2)
+            self.sigmay = _np.sqrt(emity * self.betay + 0*(self.etay * self.espread)**2)
         
     # --- search methods ---
 
@@ -785,7 +804,7 @@ class TbTAnalysis(_FrozenClass):
 
         # set tunes
         self.tunes_frac = tunes
-        if self.select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
+        if self.select_plane_x:
             self.tunex_frac = tune
         else:
             self.tuney_frac = tune
@@ -829,10 +848,10 @@ class TbTAnalysis(_FrozenClass):
         cos2 = cn_ * _np.cos(mu + _np.pi) - sn_ * _np.sin(mu + _np.pi)  # cos(2 * pi * tune_frac * turn + mu + pi)
         vec1 = r0 * cos1 - traj_mea
         vec2 = r0 * cos2 - traj_mea
-        if _np.sum(vec2**2) < _np.sum(vec1**2):
+        res1, res2 = _np.sum(vec1**2), _np.sum(vec2**2)
+        if res2 < res1:
             mu += _np.pi
-
-        if self._select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
+        if self.select_plane_x:
             self.rx0 = r0
             self.mux = mu
         else:
@@ -847,7 +866,12 @@ class TbTAnalysis(_FrozenClass):
 
         # search beta and mu with 3 periods of betatron oscillations
         self.espread = TbTAnalysis.NOM_ESPREAD * 1.0
-        self.select_idx_turn_stop = int(3 / self.tunex_frac)
+        
+        if self.select_plane_x:
+            self.select_idx_turn_stop = int(3 / self.tunex_frac)
+        else:
+            self.select_idx_turn_stop = int(3 / self.tuney_frac)
+
         self.search_r0_mu()
 
     # --- fitting methods: common ---
@@ -856,7 +880,7 @@ class TbTAnalysis(_FrozenClass):
         """."""
         init_params, offset, traj_mea = self._get_fit_inputs()
         
-        if self.select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
+        if self.select_plane_x:
             tune_frac = self.tunex_frac
             beta = self.betax
             sigma = self.sigmax
@@ -883,7 +907,7 @@ class TbTAnalysis(_FrozenClass):
         """."""
         params, offset, traj_mea = self._get_fit_inputs()
 
-        if self.select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
+        if self.select_plane_x:
             tune_frac = self.tunex_frac
             beta = self.betax
             sigma = self.sigmax
@@ -901,7 +925,7 @@ class TbTAnalysis(_FrozenClass):
     def fit_trajs(self):
         """."""
         params, offset, traj_mea = self._get_fit_inputs()
-        if self.select_kicktype in (TbTAnalysis.ATYPE_CHROMX, TbTAnalysis.ATYPE_KXX):
+        if self.select_plane_x:
             args = [
                 self.select_idx_turn_start, self.select_idx_turn_stop, offset, 
                 self.tunex_frac, self.betax, self.sigmax]
@@ -920,6 +944,8 @@ class TbTAnalysis(_FrozenClass):
 
         # search all parameters with 1 period of synchrotron oscillations
         self.select_idx_turn_stop = int(1 / self.tunes_frac)
+        # self.select_idx_turn_stop = 280
+
         self.fit_leastsqr()
 
     def fit_run_tuneshift(self):
@@ -940,7 +966,7 @@ class TbTAnalysis(_FrozenClass):
 
     # --- analysis methods ---
 
-    def analysis_run_chrom(self, select_idx_kick=0, bpm_indices=None):
+    def analysis_run_chrom(self, select_idx_kick=0, bpm_indices=None, unwrap=True):
         """."""
         if bpm_indices is None:
             bpm_indices = _np.arange(self.data_nr_bpms)
@@ -952,33 +978,44 @@ class TbTAnalysis(_FrozenClass):
             0*vec, 0*vec, 0*vec, 0*vec, 0*vec, 0*vec
         self.select_idx_kick = select_idx_kick
         for idx, idx_bpm in enumerate(bpm_indices):
+            # print(idx, self._select_kicktype)
             self.select_idx_bpm = idx_bpm
             self.fit_run_chrom()
             residue[idx] = self.fit_residue()
             # store params
-            rx0[idx] = self.rx0
-            mux[idx] = self.mux
-            tunex_frac[idx] = self.tunex_frac
             tunes_frac[idx] = self.tunes_frac - int(self.tunes_frac)
             espread[idx] = self.espread
-            chromx_decoh[idx] = self.chromx_decoh
-            # store params errors
-            rx0_err[idx] = self.rx0_err
-            mux_err[idx] = self.mux_err
-            tunex_frac_err[idx] = self.tunex_frac_err
             tunes_frac_err[idx] = self.tunes_frac_err - int(self.tunes_frac_err)
             espread_err[idx] = self.espread_err
-            chromx_decoh_err[idx] = self.chromx_decoh_err
-
-        # unwrap phase
-        mux = _np.unwrap(mux)
-        changed = True
-        while changed:
-            changed = False
-            for i in range(1,len(mux)):
-                if mux[i] < mux[i-1]:
-                    changed = True
-                    mux[i:] += 0.5
+            if self.select_plane_x:
+                rx0[idx] = self.rx0
+                mux[idx] = self.mux
+                tunex_frac[idx] = self.tunex_frac
+                chromx_decoh[idx] = self.chromx_decoh
+                rx0_err[idx] = self.rx0_err
+                mux_err[idx] = self.mux_err
+                tunex_frac_err[idx] = self.tunex_frac_err
+                chromx_decoh_err[idx] = self.chromx_decoh_err
+            else:
+                rx0[idx] = self.ry0
+                mux[idx] = self.muy
+                tunex_frac[idx] = self.tuney_frac
+                chromx_decoh[idx] = self.chromy_decoh
+                rx0_err[idx] = self.ry0_err
+                mux_err[idx] = self.muy_err
+                tunex_frac_err[idx] = self.tuney_frac_err
+                chromx_decoh_err[idx] = self.chromy_decoh_err
+            
+        # unwrap phase    
+        if unwrap:
+            mux = _np.unwrap(mux)
+            changed = True
+            while changed:
+                changed = False
+                for i in range(1,len(mux)):
+                    if mux[i] < mux[i-1]:
+                        changed = True
+                        mux[i:] += 0.5
 
         params = [rx0, mux, tunex_frac, tunes_frac, espread, chromx_decoh]
         params_err = [rx0_err, mux_err, tunex_frac_err, tunes_frac_err, espread_err, chromx_decoh_err]
@@ -986,6 +1023,10 @@ class TbTAnalysis(_FrozenClass):
 
     def analysis_run_tuneshift(self, select_idx_kick=0, bpm_indices=None):
         """."""
+        if self.select_plane_x:
+            ktype1, ktype2 = self.ATYPE_CHROMX, self.ATYPE_KXX
+        else:
+            ktype1, ktype2 = self.ATYPE_CHROMY, self.ATYPE_KYY
         if bpm_indices is None:
             bpm_indices = _np.arange(self.data_nr_bpms)
         vec = _np.zeros(len(bpm_indices))
@@ -996,29 +1037,48 @@ class TbTAnalysis(_FrozenClass):
             0*vec, 0*vec, 0*vec, 0*vec, 0*vec, 0*vec, 0*vec
         self.select_idx_kick = select_idx_kick
         for idx, idx_bpm in enumerate(bpm_indices):
-            print(idx)
-            self.select_kicktype = TbTAnalysis.ATYPE_CHROMX
+            print(idx, ktype1, ktype2)
+            self.select_kicktype = ktype1
             self.select_idx_bpm = idx_bpm
             self.fit_run_chrom()
-            self.select_kicktype = TbTAnalysis.ATYPE_KXX
+            self.select_kicktype = ktype2
             self.fit_run_tuneshift()
             residue[idx] = self.fit_residue()
             # store params
-            rx0[idx] = self.rx0
-            mux[idx] = self.mux
-            dtunex_frac[idx] = self.tunex_frac - self.tunex0_frac
             tunes_frac[idx] = self.tunes_frac - int(self.tunes_frac)
             espread[idx] = self.espread
-            kxx_decoh[idx] = self.kxx_decoh
-            sigmax[idx] = self.sigmax
-            # store params errors
-            rx0_err[idx] = self.rx0_err
-            mux_err[idx] = self.mux_err
-            dtunex_frac_err[idx] = self.dtunex_frac_err
             tunes_frac_err[idx] = self.tunes_frac_err
             espread_err[idx] = self.espread_err
-            kxx_decoh_err[idx] = self.kxx_decoh_err
-            sigmax_err[idx] = self.sigmax_err
+            if self.select_plane_x:
+                rx0[idx] = self.rx0
+                mux[idx] = self.mux
+                dtunex_frac[idx] = self.tunex_frac - self.tunex0_frac
+                kxx_decoh[idx] = self.kxx_decoh
+                sigmax[idx] = self.sigmax
+                # store params errors
+                rx0_err[idx] = self.rx0_err
+                mux_err[idx] = self.mux_err
+                dtunex_frac_err[idx] = self.dtunex_frac_err
+                kxx_decoh_err[idx] = self.kxx_decoh_err
+                sigmax_err[idx] = self.sigmax_err
+            else:
+                rx0[idx] = self.ry0
+                mux[idx] = self.muy
+                dtunex_frac[idx] = self.tuney_frac - self.tuney0_frac
+                kxx_decoh[idx] = self.kyy_decoh
+                sigmax[idx] = self.sigmay
+                # store params errors
+                rx0_err[idx] = self.ry0_err
+                mux_err[idx] = self.muy_err
+                dtunex_frac_err[idx] = self.dtuney_frac_err
+                kxx_decoh_err[idx] = self.kyy_decoh_err
+                sigmax_err[idx] = self.sigmay_err
+        
+            # traj_mea, traj_fit = self.fit_trajs()
+            # _plt.plot(traj_mea)
+            # _plt.plot(traj_fit)
+            # _plt.show()
+
         params = [rx0, mux, dtunex_frac, tunes_frac, espread, kxx_decoh, sigmax]
         params_err = [rx0_err, mux_err, dtunex_frac_err, tunes_frac_err, espread_err, kxx_decoh_err, sigmax_err]
         return bpm_indices, residue, params, params_err
@@ -1028,6 +1088,7 @@ class TbTAnalysis(_FrozenClass):
     @staticmethod
     def calc_fft(data, peak_frac=0.7, plot_flag=False, title=None):
         """."""
+        # plot_flag = True
         data = data - _np.mean(data)
         fft = _np.abs(_np.fft.rfft(data))
         idx = _np.argmax(fft)

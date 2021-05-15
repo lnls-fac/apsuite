@@ -1,12 +1,55 @@
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m050urad.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m100urad.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m150urad.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m200urad.pickle
+# === 2021-05-03 ===
 
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m005urad_chrom=2p5.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m010urad_chrom=2p5.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m025urad_chrom=2p5.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m035urad_chrom=2p5.pickle
+
+# ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m050urad.pickle
+# ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m100urad.pickle
+# ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m150urad.pickle
+# ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m200urad.pickle
+# ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m050urad_bad_bpm_14C1-2.pickle
+
+# ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m005urad_chrom=2p5.pickle
+# ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m010urad_chrom=2p5.pickle
+# ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m025urad_chrom=2p5.pickle
+# corrupted? ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m035urad_chrom=2p5.pickle
+
+# --- chrom 2.5, after cycle ---
+
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m050urad_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m100urad_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m150urad_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m200urad_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m250urad_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m300urad_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m350urad_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m400urad_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m450urad_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m500urad_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m550urad_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m600urad_after_cycle.pickle
+
+# ruido! ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_050volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_100volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_150volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_200volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_250volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_300volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_350volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_400volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_450volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_500volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_550volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_600volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_650volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_700volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_750volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_800volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_850volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_900volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_950volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_1000volts_after_cycle.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_1050volts_after_cycle.pickle
+
+# --- chrom 1.25 ----
 
 ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m050urad_chrom=1p25.pickle
 ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m100urad_chrom=1p25.pickle
@@ -17,30 +60,6 @@
 ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m350urad_chrom=1p25.pickle
 ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m400urad_chrom=1p25.pickle
 ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m050urad_chrom=1p25_excitation_on.pickle
-
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m050urad_chrom=0.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m300urad_chrom=0.pickle
-
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m050urad_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m100urad_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m200urad_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m350urad_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m450urad_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m500urad_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m600urad_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m150urad_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m400urad_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m250urad_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m300urad_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m550urad_after_cycle.pickle
-
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m050urad_bad_bpm_14C1-2.pickle
-
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_050volts_chrom=0.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_100volts_chrom=0.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_150volts_chrom=0.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_200volts_chrom=0.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_600volts_chrom=0.pickle
 
 ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_050volts_chrom=1p25.pickle
 ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_100volts_chrom=1p25.pickle
@@ -63,27 +82,22 @@
 ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_650volts_chrom=1p25.pickle
 ./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_1000volts_chrom=1p25.pickle
 
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_050volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_100volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_150volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_200volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_250volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_300volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_350volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_400volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_450volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_500volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_550volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_600volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_650volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_700volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_750volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_800volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_850volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_900volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_950volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_1000volts_after_cycle.pickle
-./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_1050volts_after_cycle.pickle
+# --- chrom 0.0 ---
+
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m050urad_chrom=0.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_horizontal_m300urad_chrom=0.pickle
+
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_050volts_chrom=0.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_100volts_chrom=0.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_150volts_chrom=0.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_200volts_chrom=0.pickle
+./2021-05-03-SI_commissioning-equilibrium_parameters_tbt/tbt_data_vertical_600volts_chrom=0.pickle
+
+
+# === 2021-05-04 ===
+
+
+# --- chrom 2.5 ---
 
 ./2021-05-04-SI_commissioning-equilibrium_parameters_tbt_single_bunch/tbt_data_horizontal_m025urad_single_bunch.pickle
 ./2021-05-04-SI_commissioning-equilibrium_parameters_tbt_single_bunch/tbt_data_horizontal_m050urad_single_bunch.pickle
@@ -110,6 +124,8 @@
 ./2021-05-04-SI_commissioning-equilibrium_parameters_tbt_single_bunch/tbt_data_vertical_450volts_single_bunch.pickle
 ./2021-05-04-SI_commissioning-equilibrium_parameters_tbt_single_bunch/tbt_data_vertical_500volts_single_bunch.pickle
 
+
+# === 2021-03-23 ===
 
 
 ./2021-03-23-SI_commissioning-dynap_meas/dynap_data_kick_m050urad_chromcorr_coupiter3_loco_corr.pickle
