@@ -134,7 +134,7 @@ def init_chrom_params(tbt, kickidx):
     
     # do bpm-by-bpm analysis and use average values for global parameters
     _, residues, params, params_err = \
-        tbt.analysis_run_chrom(0, None, unwrap=False)
+        tbt.analysis_run_chrom(kickidx, None, unwrap=False)
     # _plt.plot(residues); _plt.title('residue x BPM'); _plt.show()
 
     rx0, mux, tunex, tunes, espread, chromx_decoh = params

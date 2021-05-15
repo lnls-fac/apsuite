@@ -130,7 +130,7 @@ def call_all(fnametype='svg'):
 
     ax1.plot(J_fitxy*1e6, +1e4*(tune_fitxy - tune0xy), '--', color='C0', label=r'$\partial \nu_x / \partial J_y : k_{{xy}} = {:.1f} \; mm^{{-1}} $'.format(kxy/1e3))
     ax1.plot(J_fityy*1e6, +1e4*(tune_fityy - tune0yy), '--', color='C1', label=r'$\partial \nu_y / \partial J_y : k_{{yy}} = {:.1f} \; mm^{{-1}} $'.format(kyy/1e3))
-    ax1.set(xlabel=r'$J_y \, [\mu m]$', ylabel=r'$\partial \nu \; x \; 10^{{4}}$')
+    ax1.set(xlabel=r'$J_y \, [\mu m . rad]$', ylabel=r'$\partial \nu \; x \; 10^{{4}}$')
     ax1.set_xlim([0.5, 0])
     ax1.set_ylim(ylim)
     ax1.grid()
@@ -138,7 +138,7 @@ def call_all(fnametype='svg'):
     
     ax2.plot(J_fitxx*1e6, +1e4*(tune_fitxx - tune0xx), '--', color='C0', label=r'$\partial \nu_x / \partial J_x : k_{{xx}} = {:.1f} \; mm^{{-1}} $'.format(kxx/1e3))
     ax2.plot(J_fityx*1e6, +1e4*(tune_fityx - tune0yx), '--', color='C1', label=r'$\partial \nu_y / \partial J_x : k_{{yx}} = {:.1f} \; mm^{{-1}} $'.format(kyx/1e3))
-    ax2.set(xlabel=r'$J_x \, [\mu m]$', ylabel=r'$\partial \nu \; x \; 10^{{4}}$')
+    ax2.set(xlabel=r'$J_x \, [\mu m . rad]$', ylabel=r'$\partial \nu \; x \; 10^{{4}}$')
     ax2.set_xlim([0, 0.5])
     ax2.set_ylim(ylim)
     ax2.yaxis.tick_right()
