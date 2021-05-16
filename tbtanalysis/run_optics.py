@@ -19,7 +19,7 @@ def calc_traj(params, *args):
     
     data, nrturns, bpmidx = args
     tune, r0, mu = params
-
+    
     offset = _np.mean(data[:nrturns, bpmidx])
     n = _np.arange(0, nrturns)
     cn = _np.cos(2 * _np.pi * tune * n)
@@ -70,9 +70,8 @@ def calc_residue_norm(params, *args):
 def init_params(optics, bpmidx=None):
 
     tbt = optics.tbt
-    naff = optics.naff
     r0mu = optics.r0mu
-    tune_avg, tune_std, tune = naff.tune_avg, naff.tune_std, naff.tune
+    tune_best, tune = r0mu.tune_avg, r0mu.tune
     r0, mu, nrturns = r0mu.r0, r0mu.mu, r0mu.nrturns
 
     data = tbt.data_traj[tbt.select_idx_kick]
@@ -80,7 +79,7 @@ def init_params(optics, bpmidx=None):
     if bpmidx is not None:
         params = (tune[bpmidx], r0[bpmidx], mu[bpmidx])
     else:
-        params = (tune_avg, ) + tuple(r0) + tuple(mu)
+        params = (tune_best, ) + tuple(r0) + tuple(mu)
     return params, args
 
 
@@ -99,7 +98,7 @@ def get_params(params, *args):
 def optics_naff(optics, save_flag, print_flag, plot_flag=False):
     
     # NOTE: using NAFF sometimes a) leads to wrong tune.
-    # also, b) initial RMS is usually worse than FFT
+    # also, b) initial rms is usually worse than FFT
     # and yields c) more outliers. why?!
 
     use_naff = False
@@ -149,76 +148,59 @@ def optics_search_r0_mu(optics, save_flag, print_flag, plot_flag):
 
     tbt = optics.tbt
     naff = optics.naff
-    tune_avg, tune_std, tune = naff.tune_avg, naff.tune_std, naff.tune
+    
+    tune_avg, tune = naff.tune_avg, naff.tune
     r0, mu = _np.zeros(tune.shape), _np.zeros(tune.shape)
     res = _np.zeros(tune.shape)
+    tune_best = _np.zeros(tune.shape)
     nrturns = int(3/tune_avg)
+
     for bpmidx in range(len(tune)):
+        # print(bpmidx)
         tbt.select_idx_bpm = bpmidx
         tbt.tune_frac = tune[bpmidx]
         tbt.select_idx_turn_stop = nrturns
+        # search best solution varying tune around naff/fft and calculate r0 mu
+        tbest, tune_delta = tune[bpmidx], 0.01
+        while tune_delta > 1e-5:
+            tunes = tbest + _np.linspace(-tune_delta, +tune_delta, 5)
+            res_min, i_min = float('Inf'), 0
+            for i, ttune in enumerate(tunes):
+                tbt.tune_frac = ttune
+                tbt.search_r0_mu()
+                mea, fit = tbt.fit_trajs()
+                tres = _np.sqrt(_np.sum((fit - mea)**2)/len(mea))
+                if tres < res_min:
+                    res_min, i_min = tres, i
+            tbest = tunes[i_min]
+            # print(tune_best, res_min)
+            tune_delta /= 4
         tbt.search_r0_mu()
         mea, fit = tbt.fit_trajs()
+        tres = _np.sqrt(_np.sum((fit - mea)**2)/len(mea))
+
         # _plt.plot(mea)
         # _plt.plot(fit)
         # _plt.show()
+        tune_best[bpmidx] = tbest
         r0[bpmidx] = tbt.r0
         mu[bpmidx] = tbt.mu
-        res[bpmidx] = _np.sqrt(_np.sum((fit - mea)**2)/len(mea))
+        res[bpmidx] = tres
         # if print_flag:
         #     print('{:03d}, tune:{:6f}, nrturns:{:03d}'.format(
         #         bpmidx, tune[bpmidx], nrturns))
     
+    tune_avg, tune_std, outliers, insiders = _calc_stats(tune_best)
+
     r0mu = _Analysis()
     r0mu.r0 = r0
     r0mu.mu = mu
+    r0mu.tune = tune_best
+    r0mu.tune_avg = tune_avg
+    r0mu.tune_std = tune_std
     r0mu.res = res
     r0mu.nrturns = nrturns
     optics.r0mu = r0mu
-
-
-def optics_test_tune_fit(folder, fname, kicktype, kickidx, save_flag, print_flag, plot_flag):
-    
-    tbt = _create_newtbt(folder+fname, kicktype)
-
-    # NAFF tunes and initial r0 mu
-    params_tune = optics_naff(tbt, save_flag, print_flag, plot_flag)
-    tune_0 = params_tune[2]
-    params_r0_mu = optics_search_r0_mu(tbt, params_tune)
-    r0_0, mu_0, res, nrturns = params_r0_mu
-
-    # residue init
-    res_0 = _np.sqrt(_np.sum(nrturns * res**2)/(nrturns * tbt.data_nr_bpms))
-    print('initial residue individual tune : {:.2f}'.format(res_0))
-
-    # residue average tune, all BPMs
-    params_ini, args = init_params(tbt, params_tune, params_r0_mu, None)
-    params = params_ini
-    tune_1, r0_1, mu_1 = get_params(params, *args)
-    res_1, _ = calc_residue_norm(params, *args)
-    print('initial residue average tune    : {:.2f} tune:{:.6f}'.format(res_1, tune_1))
-    
-
-    # fit all bpms
-    params_fit, params_fit_err = _fit_leastsqr(tbt, args, params_ini, calc_residue_vector)
-    params = params_fit
-    tune_2, r0_2, mu_2 = get_params(params, *args)
-    res_2, _ = calc_residue_norm(params, *args)
-    print('fit all bpms with the same tune : {:.2f} tune:{:.6f}'.format(res_2, tune_2))
-
-    # individual bpms
-    res_3 = 0
-    tune_3, r0_3, mu_3 = 0*r0_1, 0*r0_1, 0*r0_1
-    for bpmidx in range(tbt.data_nr_bpms):
-        params_ini, args = init_params(tbt, params_tune, params_r0_mu, bpmidx)
-        params_fit, params_fit_err = _fit_leastsqr(tbt, args, params_ini, calc_residue_vector)
-        res, _ = calc_residue_norm(params_fit, *args)
-        # print(res)
-        res_3 += res**2 * nrturns
-        tune3, r03, mu3 = get_params(params_fit, *args)
-        tune_3[bpmidx], r0_3[bpmidx], mu_3[bpmidx] = tune3, r03, mu3
-    res_3 = _np.sqrt(res_3/tbt.data_nr_bpms/nrturns)
-    print('fit bpms with individual tunes  : {:.2f} tune:{:.6f}'.format(res_3, _np.mean(tune_3)))
 
 
 def optics_beta(optics):
@@ -253,8 +235,9 @@ def optics_beta(optics):
     betabeat_err = betabeat * _np.sqrt(_np.sum((beta_err/beta_)**2))
 
     beta = _Analysis()
-    beta.beta_model = beta_model
+    beta.spos = _np.array([v for v in spos])
     beta.bmpind = bpmind
+    beta.beta_model = beta_model
     beta.J = J
     beta.J_err = J_err
     beta.beta = beta_
@@ -316,18 +299,18 @@ def optics_fit(folder, fname, kicktype, kickidx, save_flag, print_flag, plot_fla
     tbt = _create_newtbt(folder+fname, kicktype)
     optics.tbt = tbt
 
-    # NAFF tunes and initial r0 mu
-    optics_naff(optics, save_flag, print_flag, plot_flag)
-    optics_search_r0_mu(optics, save_flag, print_flag, plot_flag)
+    # residue from separate BPMs
+    optics_naff(optics, save_flag=False, print_flag=False, plot_flag=False)
+    optics_search_r0_mu(optics, save_flag=False, print_flag=False, plot_flag=False)
     res, nrturns = optics.r0mu.res, optics.r0mu.nrturns
     res = _np.sqrt(_np.sum(nrturns * res**2)/(nrturns * tbt.data_nr_bpms))
     optics.residue_r0mu = res
     if print_flag:
         print('initial residue individual tune : {:.2f}'.format(res))
 
-    # residue average tune, all BPMs
+    # residue average of best tunes, all BPMs
     params, args = init_params(optics, None)
-    tune = optics.naff.tune_avg
+    tune = optics.r0mu.tune_avg
     res, _ = calc_residue_norm(params, *args)
     optics.params_ini = params
     optics.residue_r0mu_tune_avg = res
@@ -342,6 +325,7 @@ def optics_fit(folder, fname, kicktype, kickidx, save_flag, print_flag, plot_fla
     res, vec = calc_residue_norm(params, *args)
     if print_flag:
         print('fit all bpms with the same tune : {:.2f} tune:{:.6f}'.format(res, tune))
+
     optics.args = args
     optics.params_fit = params_fit
     optics.params_fit_err = params_fit_err
@@ -390,73 +374,95 @@ if __name__ == "__main__":
 
     # --- multibunch horizontal - after cycling ---
 
-    folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
-    fname = 'tbt_data_horizontal_m050urad_after_cycle.pickle'
-    optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    # fname = 'tbt_data_horizontal_m050urad_after_cycle.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
-    folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
-    fname = 'tbt_data_horizontal_m100urad_after_cycle.pickle'
-    optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    # fname = 'tbt_data_horizontal_m100urad_after_cycle.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
-    folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
-    fname = 'tbt_data_horizontal_m150urad_after_cycle.pickle'
-    optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    # fname = 'tbt_data_horizontal_m150urad_after_cycle.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
-    folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
-    fname = 'tbt_data_horizontal_m200urad_after_cycle.pickle'
-    optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    # fname = 'tbt_data_horizontal_m200urad_after_cycle.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
-    folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
-    fname = 'tbt_data_horizontal_m250urad_after_cycle.pickle'
-    optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    # fname = 'tbt_data_horizontal_m250urad_after_cycle.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
-    # # --- multibunch small amplitude kicks - before cycling ---
+    # --- multibunch small amplitude kicks - before cycling ---
     
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_horizontal_m005urad_chrom=2p5.pickle'
-    # parms = analysis_chrom(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
+    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_horizontal_m010urad_chrom=2p5.pickle'
-    # parms = analysis_chrom(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
+    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_horizontal_m025urad_chrom=2p5.pickle'
-    # parms = analysis_chrom(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
+    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # --- multibunch vertical - after cycling ---
 
-    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
-    # fname = 'tbt_data_vertical_100volts_after_cycle.pickle'
-    # parms = analysis_chrom(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
+    folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    fname = 'tbt_data_vertical_100volts_after_cycle.pickle'
+    optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_vertical_150volts_after_cycle.pickle'
-    # parms = analysis_chrom(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_vertical_200volts_after_cycle.pickle'
-    # parms = analysis_chrom(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_vertical_250volts_after_cycle.pickle'
-    # parms = analysis_chrom(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_vertical_300volts_after_cycle.pickle'
-    # parms = analysis_chrom(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_vertical_350volts_after_cycle.pickle'
-    # parms = analysis_chrom(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_vertical_400volts_after_cycle.pickle'
-    # parms = analysis_chrom(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_vertical_450volts_after_cycle.pickle'
-    # parms = analysis_chrom(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+
+    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    # fname = 'tbt_data_vertical_500volts_after_cycle.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+
+    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    # fname = 'tbt_data_vertical_550volts_after_cycle.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+
+    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    # fname = 'tbt_data_vertical_600volts_after_cycle.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+
+    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    # fname = 'tbt_data_vertical_650volts_after_cycle.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+
+    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    # fname = 'tbt_data_vertical_700volts_after_cycle.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+
+
 
     # --- single-bunch horizontal ---
 
@@ -483,7 +489,7 @@ if __name__ == "__main__":
     # folder = '2021-05-04-SI_commissioning-equilibrium_parameters_tbt_single_bunch/'
     # fname = 'tbt_data_horizontal_m250urad_single_bunch.pickle'
     # parms = analysis_chrom(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
-
+    
 
     # --- single-bunch vertical ---
 
@@ -491,5 +497,6 @@ if __name__ == "__main__":
     # !!! halted! fname = 'tbt_data_vertical_050volts_single_bunch.pickle'
     # parms = analysis_chrom(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=save_flag, print_flag, plot_flag=plot_flag)
     
+
 
 

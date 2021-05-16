@@ -4,6 +4,9 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+
+from mathphys.functions import save_pickle as _save_pickle
+
 from pymodels import si
 import pyaccel
 from pyaccel.naff import naff_general as _naff_general
@@ -148,7 +151,34 @@ def call_all(fnametype='svg'):
 
     plt.savefig('model-tuneshifts.' + fnametype)
     plt.show()
-    
+
+    data = dict()
+      
+    data['kxx'] = kxx
+    data['tunexx'] = tunexx
+    data['Jxx'] = Jxx
+    data['tune0xx'] = tune0xx
+    data['J_fitxx'] = J_fitxx
+    data['tune_fitxx'] = tune_fitxx
+    data['kxy'] = kxy
+    data['tunexy'] = tunexy
+    data['Jxy'] = Jxx
+    data['tune0xy'] = tune0xy
+    data['J_fitxy'] = J_fitxy
+    data['tune_fitxy'] = tune_fitxy
+    data['kyx'] = kyx
+    data['tuneyx'] = tuneyx
+    data['Jyx'] = Jxx
+    data['tune0yx'] = tune0yx
+    data['J_fityx'] = J_fityx
+    data['tune_fityx'] = tune_fityx
+    data['kyy'] = kyy
+    data['tuneyy'] = tuneyy
+    data['Jyy'] = Jxx
+    data['tune0yy'] = tune0yy
+    data['J_fityy'] = J_fityy
+    data['tune_fityy'] = tune_fityy
+    _save_pickle(data, 'model-tuneshifts.pickle', True)
 
 if __name__ == "__main__":
     # calc_kxx(plot_flag=True)
