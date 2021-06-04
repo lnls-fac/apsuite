@@ -5,6 +5,7 @@ import pickle as _pickle
 import numpy as _np
 import matplotlib.pyplot as _plt
 import scipy.optimize as _opt
+import scipy.signal as _scysig
 
 from pyaccel.optics import calc_twiss as _calc_twiss
 from pyaccel.naff import naff_general as _naff_general
@@ -162,7 +163,6 @@ class TbT(_FrozenClass):
 
         if self._select_kicktype is None:
             self._select_kicktype = self._data.get('kicktype', TbT.ATYPE_CHROMX)
-
 
     @property
     def data_traj(self):
@@ -613,6 +613,19 @@ class TbT(_FrozenClass):
     
         self.search_r0_mu()
 
+    def filter_data(self, tune=None, tune_sigma=0.01, real_flag=True):
+        """."""
+        if tune is None:
+            self.search_tunes()
+            tune = self.tune_frac
+        
+        key = 'trajx' if self.select_plane_x else 'trajy'
+        for idxkick in range(self.data_nr_kicks):
+            for idxbpm in range(self.data_nr_bpms):
+                data = self._data[key][idxkick][:, idxbpm]
+                data_f = TbT.calc_filter(data, tune, tune_sigma, real_flag)
+                self._data[key][idxkick][:, idxbpm] = data_f
+
     # --- fitting methods: common ---
 
     def fit_leastsqr(self):
@@ -691,7 +704,7 @@ class TbT(_FrozenClass):
 
     # --- analysis methods ---
 
-    def analysis_run_chrom(self, select_idx_kick=0, bpm_indices=None, unwrap=True):
+    def analysis_run_chrom(self, select_idx_kick=0, bpm_indices=None, unwrap=False):
         """."""
         if bpm_indices is None:
             bpm_indices = _np.arange(self.data_nr_bpms)
@@ -786,6 +799,35 @@ class TbT(_FrozenClass):
         return bpm_indices, residue, params, params_err
 
     # --- aux. public methods ---
+
+    @staticmethod
+    def calc_filter(data, tune, tune_sigma, real_flag=True):
+
+        offset = _np.mean(data)
+        signal = data - offset
+        # data_anal = _np.array(_scysig.hilbert(signal))
+        data_anal = signal
+        # # calculate DFT:
+        if real_flag:
+            data_dft = _np.fft.rfft(data_anal)
+            freq = _np.fft.rfftfreq(data_anal.shape[0])
+        else:
+            data_dft = _np.fft.fft(data_anal)
+            freq = _np.fft.fftfreq(data_anal.shape[0])
+        center_freq = tune
+        sigma_freq = tune_sigma
+
+        # Apply Gaussian filter to get only the synchrotron frequency
+        H = _np.exp(-(freq - center_freq)**2/2/sigma_freq**2)
+        H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
+        H /= H.max()
+        data_dft *= H
+        # get the processed data by inverse DFT
+        if real_flag:
+            data_anal = _np.real(_np.fft.irfft(data_dft))
+        else:
+            data_anal = _np.fft.ifft(data_dft)
+        return data_anal + offset
 
     @staticmethod
     def calc_fft(data, peak_frac=0.7, plot_flag=False, title=None):

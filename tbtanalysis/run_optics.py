@@ -33,11 +33,8 @@ def calc_residue(params, *args):
     """."""
     bpmidx, data, nrturns = args
     tune, r0, mu = get_params(params, *args)
-    # tune = params[0]
     if bpmidx is None:
         # all bpms    
-        # r0 = params[1+0*nrbpms:1+1*nrbpms]
-        # mu = params[1+1*nrbpms:1+2*nrbpms]
         nrbpms = data.shape[1]
         mea = data[:nrturns,:]
         fit = _np.zeros((nrturns, nrbpms))
@@ -46,7 +43,6 @@ def calc_residue(params, *args):
             bpm_params = (tune, r0[idx], mu[idx])
             fit[:,idx], *_ = calc_traj(bpm_params, *bpm_args)
     else:
-        # r0, mu = params[1:]
         mea = data[:nrturns, bpmidx]
         bpm_args = (data, nrturns, bpmidx)
         bpm_params = (tune, r0, mu)
@@ -105,6 +101,7 @@ def optics_naff(optics, save_flag, print_flag, plot_flag=False):
 
     tbt = optics.tbt
     tune = _np.zeros(tbt.data_nr_bpms)
+    tunes = _np.zeros(tbt.data_nr_bpms)
     tbt.select_idx_turn_stop = tbt.data_nr_turns
     for bpm in range(tbt.data_nr_bpms):
         tbt.select_idx_bpm = bpm
@@ -115,9 +112,10 @@ def optics_naff(optics, save_flag, print_flag, plot_flag=False):
             ffqs, _ = _naff_general(signal=data[:nrpts_naff], is_real=True, nr_ff=3, window=1)
             tune[bpm] = ffqs[0]
         else:
-            _, tune[bpm], _ = tbt.calc_fft(data, peak_frac=0.99)
+            _, tune[bpm], tunes[bpm] = tbt.calc_fft(data, peak_frac=0.99)
 
     tune_avg, tune_std, outliers, insiders = _calc_stats(tune)
+    tunes_avg, tunes_std, _, _ = _calc_stats(tunes)
     
     if print_flag:
         print('outliers : {:03d} / {:03d}'.format(len(outliers), len(data)))
@@ -141,6 +139,9 @@ def optics_naff(optics, save_flag, print_flag, plot_flag=False):
     naff.tune = tune
     naff.tune_avg = tune_avg
     naff.tune_std = tune_std
+    naff.tunes = tune
+    naff.tunes_avg = tunes_avg
+    naff.tunes_std = tunes_std
     optics.naff = naff
 
 
@@ -203,7 +204,7 @@ def optics_search_r0_mu(optics, save_flag, print_flag, plot_flag):
     optics.r0mu = r0mu
 
 
-def optics_beta(optics):
+def optics_beta(optics, save_flag, print_flag, plot_flag):
     tbt = optics.tbt
     r0, r0_err = optics.r0, optics.r0_err
     tune = optics.tune
@@ -242,8 +243,8 @@ def optics_beta(optics):
     beta.J_err = J_err
     beta.beta = beta_
     beta.beta_err = beta_err
-    beta.betabeta = betabeat
-    beta.betabeta_err = betabeat_err
+    beta.betabeat = betabeat
+    beta.betabeat_err = betabeat_err
 
     optics.beta = beta
 
@@ -252,19 +253,20 @@ def optics_beta(optics):
         alpha1, alpha2, alpha3 = 0.4, 0.6, 0.8
         if tbt.select_plane_x:
             color = (0.0,0.0,1.0)
-            title = r'TbT x Nominal $\beta_x$'
+            title = r'TbT x Nominal $\beta_x$' + '\n' + r'$J_x = {:.3f} \; \mu m.rad$'.format(J)
             ylabel = r'$\beta_x \; [m]$'
             ylabel_beat = r'$\delta\beta_x/\beta_{{x,model}} \; $ [%]'
         else:
-            title = r'TbT x Nominal $\beta_y$'
+            title = r'TbT x Nominal $\beta_y$' + '\n' + r'$J_y = {:.3f} \; \mu m.rad$'.format(J)
             color = (1.0,0.0,0.0)
             ylabel = r'$\beta_y \; [m]$'
             ylabel_beat = r'$\delta\beta_y/\beta_{{y,model}} \;$ [%]'
 
         # beta - beta_model
-        _plt.plot(spos, beta_model/1e6, color=color, alpha=alpha1, label='model')
+        _plt.figure(figsize=(19, 5))
+        _plt.plot(spos, beta_model/1e6, color=color, alpha=alpha1, label='Model')
         _plt.plot(spos[bpmind], beta_model[bpmind]/1e6, 'o', mfc='w', color=color, alpha=alpha2)
-        _plt.errorbar(spos[bpmind], beta_/1e6, beta_err/1e6, fmt='.', color=color, alpha=alpha3, label='fit')
+        _plt.errorbar(spos[bpmind], beta_/1e6, beta_err/1e6, fmt='.', color=color, alpha=alpha3, label='Fit')
         _plt.xlabel('pos [m]')
         _plt.ylabel(ylabel)
         _plt.legend()
@@ -276,6 +278,7 @@ def optics_beta(optics):
                 _plt.clf()
         if plot_flag:
             _plt.show()
+        _plt.figure(figsize=(6.4, 4.8))
 
         # betabeat
         _plt.errorbar(_np.arange(len(betabeat)), betabeat, betabeat_err, fmt='o', mfc='w', color=color, alpha=alpha3)
@@ -298,6 +301,8 @@ def optics_fit(folder, fname, kicktype, kickidx, save_flag, print_flag, plot_fla
 
     tbt = _create_newtbt(folder+fname, kicktype)
     optics.tbt = tbt
+
+    return tbt
 
     # residue from separate BPMs
     optics_naff(optics, save_flag=False, print_flag=False, plot_flag=False)
@@ -341,22 +346,62 @@ def optics_fit(folder, fname, kicktype, kickidx, save_flag, print_flag, plot_fla
     # _plt.plot(r0_err)
     # _plt.show()
 
+    # calculate beta
+    optics_beta(optics, save_flag, print_flag, plot_flag)
+    
     if save_flag or plot_flag:
+    
+        if tbt.select_plane_x:
+            plane = 'Horizontal' 
+            Jtxt = r'$J_x = {:.3f} \; \mu m.rad$'.format(optics.beta.J)
+        else:
+            plane = 'Vertical'
+            Jtxt = r'$J_y = {:.3f} \; \mu m.rad$'.format(optics.beta.J)
+
         res, mea, fit = calc_residue(params, *args)
-        _plt.plot(_np.reshape(mea, mea.size, 'F'), label='mea')
-        _plt.plot(_np.reshape(fit, fit.size, 'F'), label='fit')
-        _plt.plot(_np.reshape(res, res.size, 'F'), label='res')
+
+        # --- all data ---
+        # plottype = 'F' # (n,b): (0,0), (1,0), ... all turns, all bpms
+        plottype = 'C' # (n,b): (0,0), (0,1), ... all bpms, all turns
+        turn = _np.array(range(mea.shape[0]*mea.shape[1]), dtype=_np.float64)
+        turn /= mea.shape[1]
+
+        # title = 'TbT ' + plane + ' Linear Optics Fit - All BPMs\n' + Jtxt
+        title = Jtxt
+        _plt.plot(turn, _np.reshape(mea, mea.size, plottype), label='TbT')
+        _plt.plot(turn, _np.reshape(fit, fit.size, plottype), label='Fit')
+        _plt.plot(turn, _np.reshape(res, res.size, plottype), label='Res')
+        _plt.title(title, fontsize=20)
         _plt.xlabel('Turn number')
         _plt.ylabel('Pos [um]')
+        _plt.legend()
         if save_flag:
-            fname = 'results/' + tbt.data_fname.replace('/', '-').replace('.pickle', '-residue.' + save_flag)
+            fname = 'results/' + tbt.data_fname.replace('/', '-').replace('.pickle', '-optics-residue-allbpms.' + save_flag)
             _plt.savefig(fname)
             if not plot_flag:
                 _plt.clf()
         if plot_flag:
             _plt.show()
 
-    optics_beta(optics)
+        # --- one bpm ---
+        bpmidx = 0
+        # title = 'TbT ' + plane + ' Linear Optics Fit - BPM index {:03d}\n'.format(bpmidx) + Jtxt
+        title = Jtxt
+        _plt.plot(mea[:, bpmidx], label='TbT')
+        _plt.plot(fit[:, bpmidx], label='Fit')
+        _plt.plot(res[:, bpmidx], label='Res')
+        _plt.title(title, fontsize=20)
+        _plt.xlabel('Turn number')
+        _plt.ylabel('Pos [um]')
+        _plt.legend()
+
+        if save_flag:
+            fname = 'results/' + tbt.data_fname.replace('/', '-').replace('.pickle', '-optics-residue.' + save_flag)
+            _plt.savefig(fname)
+            if not plot_flag:
+                _plt.clf()
+            if plot_flag:
+                _plt.show()
 
     # save analysis
     if save_flag:
@@ -365,12 +410,25 @@ def optics_fit(folder, fname, kicktype, kickidx, save_flag, print_flag, plot_fla
         _save_pickle(optics, fname, True)
 
 
+
+def run():
+
+    folder = '2021-06-01-SI_commissioning-equilibrium_parameters_tbt_single_bunch/4000_turns/'
+    fname = 'tbt_single_bunch_pingh_m150urad_pingv_p0urad.pickle'
+    
+    folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    fname = 'tbt_data_horizontal_m150urad_after_cycle.pickle'
+
+    tbt = _create_newtbt(folder+fname, 'CHROMX')
+    return tbt
+
+
+
 if __name__ == "__main__":
     
     save_flag = 'svg'
     print_flag = True
-    plot_flag = False
-    allbpms = True
+    plot_flag = True
 
     # --- multibunch horizontal - after cycling ---
 
@@ -410,9 +468,9 @@ if __name__ == "__main__":
 
     # --- multibunch vertical - after cycling ---
 
-    folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
-    fname = 'tbt_data_vertical_100volts_after_cycle.pickle'
-    optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    # fname = 'tbt_data_vertical_100volts_after_cycle.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_vertical_150volts_after_cycle.pickle'
@@ -462,6 +520,19 @@ if __name__ == "__main__":
     # fname = 'tbt_data_vertical_700volts_after_cycle.pickle'
     # optics_fit(folder, fname, kicktype='CHROMY', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
+    # --- single-bunch horizontal ---
+
+    # folder = '2021-06-01-SI_commissioning-equilibrium_parameters_tbt_single_bunch/'
+    # fname = 'tbt_single_bunch_n01_pingh_m100urad_pingv_p0urad.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+
+    # folder = '2021-06-01-SI_commissioning-equilibrium_parameters_tbt_single_bunch/4000_turns/'
+    # fname = 'tbt_single_bunch_pingh_m100urad_pingv_p0urad.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+
+    folder = '2021-06-01-SI_commissioning-equilibrium_parameters_tbt_single_bunch/4000_turns/'
+    fname = 'tbt_single_bunch_pingh_m150urad_pingv_p0urad.pickle'
+    optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
 
     # --- single-bunch horizontal ---

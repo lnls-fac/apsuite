@@ -5,29 +5,20 @@ from mathphys.functions import load_pickle
 from apsuite.tbt_analysis import TbTAnalysis
 from apsuite.tbt_analysis import TbT
 
-def multibunch_kick_spread(kick):
-    """."""
-    rev = 1.7e-6
-    kickx_width = 2 * rev
-    kicky_width = 3 * rev
-    bunch_half_duration = 50e-9 / 2
-    time = bunch_half_duration
-    percentx = 100*(_np.cos((_np.pi/2)*time/(kickx_width/2)) - 1)
-    percenty = 100*(_np.cos((_np.pi/2)*time/(kicky_width/2)) - 1)
-    print('kickx spread: {} %'.format(percentx))
-    print('kicky spread: {} %'.format(percenty))
-    print('kickx spread: {} urad'.format(kick * percentx / 100))
-    print('kicky spread: {} urad'.format(kick * percenty / 100))
 
 def convert_data(fname, correct_chrom=True):
     data = load_pickle(fname)
+
     if 'trajx' in data:
         if isinstance(data['chromx_err'], (list, tuple)):
             data['chromx_err'] = max(data['chromx_err'])
         if isinstance(data['chromy_err'], (list, tuple)):
             data['chromy_err'] = max(data['chromy_err'])
-        data['kicktype'] = 'CHROMX' if data['kicktype'] == 'X' else data['kicktype']
-        data['kicktype'] = 'CHROMY' if data['kicktype'] == 'Y' else data['kicktype']
+        if 'kicktype' in data:
+            data['kicktype'] = 'CHROMX' if data['kicktype'] == 'X' else data['kicktype']
+            data['kicktype'] = 'CHROMY' if data['kicktype'] == 'Y' else data['kicktype']
+        else:
+            data['kicktype'] = 'CHROMX' if data['pingh_pulse_sts'] else 'CHROMY'
         ndata = data
     else:
         ndata = dict()
@@ -37,6 +28,10 @@ def convert_data(fname, correct_chrom=True):
         ndata['kicks'] = [data['kick']]
         ndata['tunex'] = data['tune']['x']
         ndata['tuney'] = data['tune']['y']
+    if len(ndata['trajx'].shape) < 3:
+        ndata['trajx'] = _np.array([ndata['trajx'], ])
+        ndata['trajy'] = _np.array([ndata['trajy'], ])
+        ndata['trajsum'] = _np.array([ndata['trajsum'], ])
     if correct_chrom:
         # discutir!
         tbt = TbTAnalysis
@@ -85,25 +80,23 @@ def create_tbt(fname, kicktype=None, correct_chrom=True):
     if 'tuney_excitation_sts' in tbt.data:
         print('exc. tuney   : {}'.format(tbt.data['tuney_excitation_sts']))
 
-    print()
     return tbt
     
 
-def create_newtbt(fname, kicktype=None, correct_chrom=True):
+def create_newtbt(fname, kicktype=None, correct_chrom=True, print_flag=True):
     newdata = convert_data(fname, correct_chrom)
     tbt = TbT(data_fname=fname, data=newdata, kicktype=kicktype)
-    print(fname)
-    print('meas. chrom  : {:+.4f} ± {:.4f}'.format(tbt.chrom, tbt.chrom_err))
-    if 'tunex' in tbt.data:
-        print('meas. tunex  : {:+.6f} ± {:.6f}'.format(tbt.data['tunex'], 0.0))
-    if 'tuney' in tbt.data:
-        print('meas. tuney  : {:+.6f} ± {:.6f}'.format(tbt.data['tuney'], 0.0))
-    if 'tunex_excitation_sts' in tbt.data:
-        print('exc. tunex   : {}'.format(tbt.data['tunex_excitation_sts']))
-    if 'tuney_excitation_sts' in tbt.data:
-        print('exc. tuney   : {}'.format(tbt.data['tuney_excitation_sts']))
-
-    print()
+    if print_flag:
+        print(fname)
+        print('meas. chrom  : {:+.4f} ± {:.4f}'.format(tbt.chrom, tbt.chrom_err))
+        if 'tunex' in tbt.data:
+            print('meas. tunex  : {:+.6f} ± {:.6f}'.format(tbt.data['tunex'], 0.0))
+        if 'tuney' in tbt.data:
+            print('meas. tuney  : {:+.6f} ± {:.6f}'.format(tbt.data['tuney'], 0.0))
+        if 'tunex_excitation_sts' in tbt.data:
+            print('exc. tunex   : {}'.format(tbt.data['tunex_excitation_sts']))
+        if 'tuney_excitation_sts' in tbt.data:
+            print('exc. tuney   : {}'.format(tbt.data['tuney_excitation_sts']))
     return tbt
 
 
@@ -143,7 +136,6 @@ def fit_leastsqr_error(fit_data):
             pcov.fill(_np.nan)
             print('# of fitting parameters larger than # of data points!')
         return _np.sqrt(_np.diag(pcov))
-
 
 
 class Analysis:
