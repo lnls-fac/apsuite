@@ -103,8 +103,8 @@ class BbBData(_BaseClass):
             detune_error=bbb.rfcav.dev_llrf.detune_error,
             )
         self.data = dict(
-            current=bbb.dcct.current,
-            time=_time.time(),
+            stored_current=bbb.dcct.current,
+            timestamp=_time.time(),
             cavity_data=cavity_data,
             acqtype=acqtype, downsample=acq.downsample,
             rawdata=_np.array(
