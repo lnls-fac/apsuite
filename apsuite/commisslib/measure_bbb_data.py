@@ -22,8 +22,8 @@ class BbBLParams(_ParamsBaseClass):
     DAC_NBITS = 14
     SAT_THRES = 2**(DAC_NBITS-1) - 1
     CALIBRATION_FACTOR = 1000  # Counts/mA/degree
-    ALPHAE = 77  # 1/s
-    FREQ_RF = 499664000
+    DAMPING_RATE = 1/13.0  # Hz
+    FREQ_RF = 499666000
     HARM_NUM = 864
     FREQ_REV = FREQ_RF / HARM_NUM
     PER_REV = 1 / FREQ_REV
@@ -43,13 +43,36 @@ class BbBLParams(_ParamsBaseClass):
         return st
 
 
-class BbBLData(_BaseClass):
+class BbBHParams(BbBLParams):
     """."""
 
-    def __init__(self):
+    DAMPING_RATE = 1/16.9e-3  # Hz
+    CALIBRATION_FACTOR = 1000  # Counts/mA/um
+
+
+class BbBVParams(BbBLParams):
+    """."""
+
+    DAMPING_RATE = 1/22.0e-3  # Hz
+    CALIBRATION_FACTOR = 1000  # Counts/mA/um
+
+
+class BbBData(_BaseClass):
+    """."""
+
+    DEVICES = BunchbyBunch.DEVICES
+
+    def __init__(self, devname):
         """."""
-        super().__init__(params=BbBLParams())
-        self.devices['bbb'] = BunchbyBunch(BunchbyBunch.DEVICES.L)
+        if devname.endswith('L'):
+            params = BbBLParams()
+        elif devname.endswith('H'):
+            params = BbBHParams()
+        elif devname.endswith('V'):
+            params = BbBHParams()
+
+        super().__init__(params=params)
+        self.devices['bbb'] = BunchbyBunch(devname)
 
     def get_data(self):
         """Get Raw data to file."""
