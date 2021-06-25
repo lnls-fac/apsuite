@@ -302,7 +302,7 @@ def optics_fit(folder, fname, kicktype, kickidx, save_flag, print_flag, plot_fla
     tbt = _create_newtbt(folder+fname, kicktype)
     optics.tbt = tbt
 
-    return tbt
+    # return tbt
 
     # residue from separate BPMs
     optics_naff(optics, save_flag=False, print_flag=False, plot_flag=False)
