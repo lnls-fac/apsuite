@@ -153,7 +153,9 @@ class BbBData(_BaseClass):
         calib = self.params.CALIBRATION_FACTOR
         harm_num = self.params.HARM_NUM
         downsample = self.data['downsample']
-        current = self.data['current']
+        current = self.data.get('stored_current', None)
+        if current is None:
+            current = self.data['current']
         dtime = per_rev*downsample
 
         if rawdata is None:
@@ -225,7 +227,9 @@ class BbBData(_BaseClass):
         """."""
         calib = self.params.CALIBRATION_FACTOR
         harm_num = self.params.HARM_NUM
-        current = self.data['current']
+        current = self.data.get('stored_current', None)
+        if current is None:
+            current = self.data['current']
 
         if rawdata is None:
             rawdata = self.data['rawdata'].copy()
