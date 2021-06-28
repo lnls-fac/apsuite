@@ -69,7 +69,7 @@ class BbBData(_BaseClass):
         elif devname.endswith('H'):
             params = BbBHParams()
         elif devname.endswith('V'):
-            params = BbBHParams()
+            params = BbBVParams()
 
         super().__init__(params=params)
         self.devices['bbb'] = BunchbyBunch(devname)
