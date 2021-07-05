@@ -670,6 +670,7 @@ class MeasTuneShift(_BaseClass):
                     print('3 unsucessful reset trials. Exiting...')
                     break
                 print('Problem with pingers voltage. Resetting...')
+                _time.sleep(5)
                 trial += 1
 
             _time.sleep(self.params.wait_bbb)
