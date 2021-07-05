@@ -566,6 +566,7 @@ class MeasTuneShift(_BaseClass):
         self.devices = dict()
         self.data = dict()
         self.params = TuneShiftParams()
+        self.pingers = list()
         if isonline:
             self.devices['bbbh'] = BunchbyBunch(BunchbyBunch.DEVICES.H)
             self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
