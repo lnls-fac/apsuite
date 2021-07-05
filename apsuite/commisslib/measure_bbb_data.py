@@ -535,7 +535,7 @@ class TuneShiftParams(_ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
-        self.plane = 'H'  # 'H' or 'V'
+        self.plane = 'HV'  # 'H', 'V' or 'HV'
         self.kickh = -25/1000  # mrad
         self.kickv = +20/1000  # mrad
         self.wait_bbb = 9  # s
@@ -547,14 +547,13 @@ class TuneShiftParams(_ParamsBaseClass):
         dtmp = '{0:10s} = {1:9d}  {2:s}\n'.format
         ftmp = '{0:10s} = {1:9.3f}  {2:s}\n'.format
         ltmp = '{0:6.3f},'.format
-        stg = f"{'plane':10s} = {self.plane:9s}\n"
+        stg = f"{'plane':10s} = {self.plane:4s} ('H', 'V' or 'HV')\n"
         stg += ftmp('kickh', self.kickh, '[mrad]')
         stg += ftmp('kickv', self.kickv, '[mrad]')
         stg += dtmp('wait_bbb', self.wait_bbb, '[s]')
-        stg += f"{'currents':10s} = "
-        for curr in self.currents:
-            stg += ltmp(curr)
-        stg += ' mA \n'
+        stg += f"{'currents':10s} = ("
+        stg += ''.join(map(ltmp, self.currents))
+        stg += ' ) mA \n'
         stg += f"{'filename':10s} = '{self.filename:s}'\n"
         return stg
 
