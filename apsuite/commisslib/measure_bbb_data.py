@@ -597,7 +597,7 @@ class MeasTuneShift(_BaseClass):
     def merge_data(data1, data2):
         """."""
         if data1.keys() != data2.keys():
-            raise Exception('Incompatible datas')
+            raise Exception('Incompatible data sets')
         merge = dict()
         for key in data1:
             merge[key] = data1[key] + data2[key]
@@ -693,23 +693,19 @@ class MeasTuneShift(_BaseClass):
             self, plane, freq_min=None, freq_max=None,
             title=None, fname=None):
         """plane: must be 'H' or 'V'."""
-        fig = _mplt.figure(figsize=(8, 6))
-        gs = _mgs.GridSpec(1, 1)
-        ax = fig.add_subplot(gs[0, 0])
-
-        curr = _np.array(self.data['stored_current'])
         if plane.upper() == 'H':
             data = self.data['horizontal']
             freq_min = freq_min or 38
             freq_max = freq_max or 52
-        if plane.upper() == 'V':
+        elif plane.upper() == 'V':
             data = self.data['vertical']
             freq_min = freq_min or 72
             freq_max = freq_max or 84
+        else:
+            raise Exception("plane input must be 'H' or 'V'.")
 
-        mag = list()
-        for idx, _ in enumerate(curr):
-            mag.append(data[idx]['spec_mag'])
+        curr = _np.array(self.data['stored_current'])
+        mag = [dta['spec_mag'] for dta in data]
         mag = _np.array(mag, dtype=float)
         freq = _np.array(data[-1]['spec_freq'])
 
@@ -721,10 +717,11 @@ class MeasTuneShift(_BaseClass):
         mag = mag[:, idcs]
 
         freq, curr = _np.meshgrid(freq, curr)
-        freq = freq.T
-        curr = curr.T
-        mag = mag.T
+        freq, curr, mag = freq.T, curr.T, mag.T
 
+        fig = _mplt.figure(figsize=(8, 6))
+        gs = _mgs.GridSpec(1, 1)
+        ax = fig.add_subplot(gs[0, 0])
         ax.pcolormesh(curr, freq, mag)
         ax.set_ylabel('Frequency [kHz]')
         ax.set_xlabel('Current [mA]')
@@ -736,19 +733,15 @@ class MeasTuneShift(_BaseClass):
     def plot_time_evolution(
             self, plane, title=None, fname=None):
         """plane: must be 'H' or 'V'."""
-        fig = _mplt.figure(figsize=(8, 6))
-        gs = _mgs.GridSpec(1, 1)
-        ax = fig.add_subplot(gs[0, 0])
-
-        curr = _np.array(self.data['stored_current'])
         if plane.upper() == 'H':
             data = self.data['horizontal']
-        if plane.upper() == 'V':
+        elif plane.upper() == 'V':
             data = self.data['vertical']
+        else:
+            raise Exception("plane input must be 'H' or 'V'.")
 
-        mag = list()
-        for idx, _ in enumerate(curr):
-            mag.append(data[idx]['spec_mag'])
+        curr = _np.array(self.data['stored_current'])
+        mag = [dta['spec_mag'] for dta in data]
         mag = _np.array(mag, dtype=float)
         mag -= _np.mean(mag, axis=1)[:, None]
         mag = _np.abs(mag)
@@ -759,9 +752,11 @@ class MeasTuneShift(_BaseClass):
         mag = mag[idx, :]
 
         dtime, curr = _np.meshgrid(dtime, curr)
-        dtime = dtime.T
-        curr = curr.T
-        mag = mag.T
+        dtime, curr, mag = dtime.T, curr.T, mag.T
+
+        fig = _mplt.figure(figsize=(8, 6))
+        gs = _mgs.GridSpec(1, 1)
+        ax = fig.add_subplot(gs[0, 0])
 
         ax.pcolormesh(curr, dtime * 1e3, mag)
         ax.set_ylabel('Time [ms]')
