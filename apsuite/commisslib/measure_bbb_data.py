@@ -693,7 +693,7 @@ class MeasTuneShift(_BaseClass):
             self, plane, freq_min=None, freq_max=None,
             title=None, fname=None):
         """plane: must be 'H' or 'V'."""
-        fig = _mplt.figure()
+        fig = _mplt.figure(figsize=(8, 6))
         gs = _mgs.GridSpec(1, 1)
         ax = fig.add_subplot(gs[0, 0])
 
@@ -736,7 +736,7 @@ class MeasTuneShift(_BaseClass):
     def plot_time_evolution(
             self, plane, title=None, fname=None):
         """plane: must be 'H' or 'V'."""
-        fig = _mplt.figure()
+        fig = _mplt.figure(figsize=(8, 6))
         gs = _mgs.GridSpec(1, 1)
         ax = fig.add_subplot(gs[0, 0])
 
