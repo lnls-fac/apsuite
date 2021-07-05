@@ -570,7 +570,7 @@ class MeasTuneShift(_BaseClass):
             self.devices['bbbh'] = BunchbyBunch(BunchbyBunch.DEVICES.H)
             self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
             self.devices['pingh'] = PowerSupplyPU(
-                    PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
+                PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
             self.devices['pingv'] = PowerSupplyPU(
                 PowerSupplyPU.DEVICES.SI_PING_V)
             self.devices['egun'] = EGTriggerPS()
