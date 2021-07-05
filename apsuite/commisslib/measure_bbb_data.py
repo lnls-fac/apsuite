@@ -740,16 +740,15 @@ class MeasTuneShift(_BaseClass):
         gs = _mgs.GridSpec(1, 1)
         ax = fig.add_subplot(gs[0, 0])
 
+        curr = _np.array(self.data['stored_current'])
         if plane.upper() == 'H':
             data = self.data['horizontal']
         if plane.upper() == 'V':
             data = self.data['vertical']
 
         mag = list()
-        curr = _np.array(data['stored_current'])
         for idx, _ in enumerate(curr):
             mag.append(data[idx]['spec_mag'])
-
         mag = _np.array(mag, dtype=float)
         mag -= _np.mean(mag, axis=1)[:, None]
         mag = _np.abs(mag)
