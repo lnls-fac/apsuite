@@ -323,10 +323,10 @@ class ControlRF(_BaseClass):
 
     def _vary(self, val, isphase=True):
         if isphase:
-            self.devices['rf'].cmd_set_phase(
+            self.devices['rf'].set_phase(
                 val, timeout=self.params.rf_timeout)
         else:
-            self.devices['rf'].cmd_set_voltage(
+            self.devices['rf'].set_voltage(
                 val, timeout=self.params.rf_timeout)
 
     @staticmethod
