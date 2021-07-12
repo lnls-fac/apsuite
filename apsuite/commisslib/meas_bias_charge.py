@@ -4,7 +4,7 @@ import time as _time
 import numpy as np
 from epics import PV
 
-from siriuspy.devices import EGBias, ICT, TranspEff, LLRF
+from siriuspy.devices import EGBias, ICT, TranspEff, LILLRF
 
 from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
@@ -145,7 +145,7 @@ class Kly2Energy(_BaseClass):
         """."""
         super().__init__(ParamsKly2())
         self.devices = {
-            'kly2': LLRF(LLRF.DEVICES.LI_KLY2),
+            'kly2': LILLRF(LILLRF.DEVICES.LI_KLY2),
             'ict': ICT(ICT.DEVICES.LI_1),
             'transpeff': TranspEff(TranspEff.DEVICES.LI),
             }
@@ -184,7 +184,7 @@ class Kly2Energy(_BaseClass):
         self.data['spread'] = []
 
         print('Setting Initial Value...')
-        self.devices['kly2'].cmd_set_amplitude(
+        self.devices['kly2'].set_amplitude(
             var_span[0], timeout=self.params.kly2_timeout)
         _time.sleep(self.params.wait_kly2)
         print('Starting Loop')
@@ -194,7 +194,7 @@ class Kly2Energy(_BaseClass):
             kly2_val = np.zeros(self.params.nrpulses)
             energy = np.zeros(self.params.nrpulses)
             spread = np.zeros(self.params.nrpulses)
-            self.devices['kly2'].cmd_set_amplitude(
+            self.devices['kly2'].set_amplitude(
                 val, timeout=self.params.kly2_timeout)
             _time.sleep(self.params.wait_kly2)
             for k in range(self.params.nrpulses):

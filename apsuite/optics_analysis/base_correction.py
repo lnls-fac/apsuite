@@ -2,7 +2,7 @@
 
 from collections import namedtuple as _namedtuple
 from copy import deepcopy as _dcopy
-import numpy as np
+import numpy as _np
 
 
 class KnobTypes:
@@ -99,8 +99,8 @@ class BaseCorr():
                     stren_seg.append(getattr(
                         model[seg], self._STRENGTH_TYPE))
                 stren_mag.append(sum(stren_seg))
-            stren.append(np.mean(stren_mag))
-        return np.array(stren)
+            stren.append(_np.mean(stren_mag))
+        return _np.array(stren)
 
     def correct_parameters(self, goal_parameters, model=None,
                            jacobian_matrix=None, tol=1e-6, nr_max=10,
@@ -110,6 +110,13 @@ class BaseCorr():
             model = self.model
         if self.method not in BaseCorr.METHODS:
             raise Exception('Invalid correction method!')
+
+        if None in goal_parameters:
+            # use current model values for missing goal parameters
+            goal_parameters = _np.array(goal_parameters)  # as not to modify input
+            param_now = self._get_parameter(model)
+            sel = (goal_parameters == None)
+            goal_parameters[sel] = param_now[sel]
 
         if jacobian_matrix is None:
             jmat = self.calc_jacobian_matrix(model)
@@ -122,25 +129,25 @@ class BaseCorr():
         if self._grouping == BaseCorr.GROUPING.TwoKnobs:
             jmat = self._group_2knobs_matrix(jmat)
 
-        umat, smat, vmat = np.linalg.svd(jmat, full_matrices=False)
+        umat, smat, vmat = _np.linalg.svd(jmat, full_matrices=False)
         ismat = 1/smat
-        ismat[np.isnan(ismat)] = 0
-        ismat[np.isinf(ismat)] = 0
+        ismat[_np.isnan(ismat)] = 0
+        ismat[_np.isinf(ismat)] = 0
         if nsv is not None:
             ismat[nsv:] = 0
-        ismat = np.diag(ismat)
-        invmat = -1 * np.dot(np.dot(vmat.T, ismat), umat.T)
+        ismat = _np.diag(ismat)
+        invmat = -1 * _np.dot(_np.dot(vmat.T, ismat), umat.T)
         param_new = self._get_parameter(model)
         dparam = param_new - goal_parameters
-        if np.sqrt(np.mean(dparam*dparam)) < tol:
+        if _np.sqrt(_np.mean(dparam*dparam)) < tol:
             return BaseCorr.CORR_STATUS.Sucess
 
         for _ in range(nr_max):
-            dstren = np.dot(invmat, dparam)
+            dstren = _np.dot(invmat, dparam)
             self._add_delta_stren(dstren, model=model)
             param_new = self._get_parameter(model)
             dparam = param_new - goal_parameters
-            if np.sqrt(np.mean(dparam*dparam)) < tol:
+            if _np.sqrt(_np.mean(dparam*dparam)) < tol:
                 break
         else:
             return BaseCorr.CORR_STATUS.Fail
@@ -173,7 +180,7 @@ class BaseCorr():
         if jacobian_matrix is None:
             jacobian_matrix = self.calc_jacobian_matrix(self.model)
 
-        jacobian_2knobs_matrix = np.zeros((2, 2))
+        jacobian_2knobs_matrix = _np.zeros((2, 2))
         nfocus = len(self.knobs.focusing)
 
         for nfoc, _ in enumerate(self.knobs.focusing):
