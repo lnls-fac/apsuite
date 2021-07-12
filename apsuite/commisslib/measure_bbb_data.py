@@ -10,7 +10,7 @@ import matplotlib.pyplot as _mplt
 import matplotlib.gridspec as _mgs
 from matplotlib.collections import PolyCollection as _PolyCollection
 
-from siriuspy.devices import BunchbyBunch
+from siriuspy.devices import BunchbyBunch, PowerSupplyPU, EGTriggerPS
 
 from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
@@ -22,8 +22,8 @@ class BbBLParams(_ParamsBaseClass):
     DAC_NBITS = 14
     SAT_THRES = 2**(DAC_NBITS-1) - 1
     CALIBRATION_FACTOR = 1000  # Counts/mA/degree
-    ALPHAE = 77  # 1/s
-    FREQ_RF = 499664000
+    DAMPING_RATE = 1/13.0  # Hz
+    FREQ_RF = 499666000
     HARM_NUM = 864
     FREQ_REV = FREQ_RF / HARM_NUM
     PER_REV = 1 / FREQ_REV
@@ -43,13 +43,36 @@ class BbBLParams(_ParamsBaseClass):
         return st
 
 
-class BbBLData(_BaseClass):
+class BbBHParams(BbBLParams):
     """."""
 
-    def __init__(self):
+    DAMPING_RATE = 1/16.9e-3  # Hz
+    CALIBRATION_FACTOR = 1000  # Counts/mA/um
+
+
+class BbBVParams(BbBLParams):
+    """."""
+
+    DAMPING_RATE = 1/22.0e-3  # Hz
+    CALIBRATION_FACTOR = 1000  # Counts/mA/um
+
+
+class BbBData(_BaseClass):
+    """."""
+
+    DEVICES = BunchbyBunch.DEVICES
+
+    def __init__(self, devname):
         """."""
-        super().__init__(params=BbBLParams())
-        self.devices['bbb'] = BunchbyBunch(BunchbyBunch.DEVICES.L)
+        if devname.endswith('L'):
+            params = BbBLParams()
+        elif devname.endswith('H'):
+            params = BbBHParams()
+        elif devname.endswith('V'):
+            params = BbBVParams()
+
+        super().__init__(params=params)
+        self.devices['bbb'] = BunchbyBunch(devname)
 
     def get_data(self):
         """Get Raw data to file."""
@@ -80,8 +103,8 @@ class BbBLData(_BaseClass):
             detune_error=bbb.rfcav.dev_llrf.detune_error,
             )
         self.data = dict(
-            current=bbb.dcct.current,
-            time=_time.time(),
+            stored_current=bbb.dcct.current,
+            timestamp=_time.time(),
             cavity_data=cavity_data,
             acqtype=acqtype, downsample=acq.downsample,
             rawdata=_np.array(
@@ -130,7 +153,9 @@ class BbBLData(_BaseClass):
         calib = self.params.CALIBRATION_FACTOR
         harm_num = self.params.HARM_NUM
         downsample = self.data['downsample']
-        current = self.data['current']
+        current = self.data.get('stored_current', None)
+        if current is None:
+            current = self.data['current']
         dtime = per_rev*downsample
 
         if rawdata is None:
@@ -202,7 +227,9 @@ class BbBLData(_BaseClass):
         """."""
         calib = self.params.CALIBRATION_FACTOR
         harm_num = self.params.HARM_NUM
-        current = self.data['current']
+        current = self.data.get('stored_current', None)
+        if current is None:
+            current = self.data['current']
 
         if rawdata is None:
             rawdata = self.data['rawdata'].copy()
@@ -496,3 +523,246 @@ class BbBLData(_BaseClass):
         axis.set_ylim3d(xs.min(), xs.max())
         axis.set_xlim3d(zs.min(), zs.max())
         axis.set_zlim3d(0, data.max())
+
+
+class TuneShiftParams(_ParamsBaseClass):
+    """."""
+
+    TIME_REV = 864 / 499666000  # s
+    WAIT_INJ = 0.2  # s
+    DEF_TOL_CURRENT = 0.01  # mA
+
+    def __init__(self):
+        """."""
+        super().__init__()
+        self.plane = 'HV'  # 'H', 'V' or 'HV'
+        self.kickh = -25/1000  # mrad
+        self.kickv = +20/1000  # mrad
+        self.wait_bbb = 9  # s
+        self.currents = list()
+        self.filename = ''
+
+    def __str__(self):
+        """."""
+        dtmp = '{0:10s} = {1:9d}  {2:s}\n'.format
+        ftmp = '{0:10s} = {1:9.3f}  {2:s}\n'.format
+        ltmp = '{0:6.3f},'.format
+        stg = f"{'plane':10s} = {self.plane:4s} ('H', 'V' or 'HV')\n"
+        stg += ftmp('kickh', self.kickh, '[mrad]')
+        stg += ftmp('kickv', self.kickv, '[mrad]')
+        stg += dtmp('wait_bbb', self.wait_bbb, '[s]')
+        stg += f"{'currents':10s} = ("
+        stg += ''.join(map(ltmp, self.currents))
+        stg += ' ) mA \n'
+        stg += f"{'filename':10s} = '{self.filename:s}'\n"
+        return stg
+
+
+class MeasTuneShift(_BaseClass):
+    """."""
+
+    def __init__(self, isonline=True):
+        """."""
+        self.devices = dict()
+        self.data = dict()
+        self.params = TuneShiftParams()
+        self.pingers = list()
+        if isonline:
+            self.devices['bbbh'] = BunchbyBunch(BunchbyBunch.DEVICES.H)
+            self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
+            self.devices['pingh'] = PowerSupplyPU(
+                PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
+            self.devices['pingv'] = PowerSupplyPU(
+                PowerSupplyPU.DEVICES.SI_PING_V)
+            self.devices['egun'] = EGTriggerPS()
+            self.pingers = [self.devices['pingh'], self.devices['pingv']]
+
+    def get_data(self, plane):
+        """."""
+        bbbtype = 'bbbh' if plane.upper() == 'H' else 'bbbv'
+        bbb = self.devices[bbbtype]
+        sb_tune = bbb.single_bunch
+        data = {
+            'timestamp': _time.time(),
+            'stored_current': bbb.dcct.current,
+            'data': sb_tune.data_raw,
+            'spec_mag': sb_tune.spec_mag, 'spec_freq': sb_tune.spec_freq,
+            'spec_phase': sb_tune.spec_phase,
+            'bunch_id': sb_tune.bunch_id, 'fft_size': sb_tune.fft_size,
+            'fft_overlap': sb_tune.fft_overlap,
+            'delay_calibration': sb_tune.delay_calibration,
+            'nr_averages': sb_tune.nr_averages}
+        return data
+
+    def merge_data(data1, data2):
+        """."""
+        if data1.keys() != data2.keys():
+            raise Exception('Incompatible data sets')
+        merge = dict()
+        for key in data1:
+            merge[key] = data1[key] + data2[key]
+        return merge
+
+    def turn_on_pingers_pulse(self):
+        """."""
+        for ping in self.pingers:
+            ping.cmd_turn_on_pulse()
+
+    def turn_off_pingers_pulse(self):
+        """."""
+        for ping in self.pingers:
+            ping.cmd_turn_off_pulse()
+
+    def turn_on_pingers(self):
+        """."""
+        for ping in self.pingers:
+            ping.cmd_turn_on()
+
+    def turn_off_pingers(self):
+        """."""
+        for ping in self.pingers:
+            ping.cmd_turn_off()
+
+    def prepare_pingers(self):
+        """."""
+        self.devices['pingh'].strength = self.params.kickh
+        self.devices['pingv'].strength = self.params.kickv
+        self.turn_on_pingers()
+        self.turn_on_pingers_pulse()
+
+    def inject_in_storage_ring(self, goal_curr):
+        """."""
+        self.devices['egun'].cmd_enable_trigger()
+        while not self._check_stored_current(goal_curr):
+            _time.sleep(TuneShiftParams.WAIT_INJ)
+        curr = self.devices['bbbh'].dcct.current
+        print(
+            f'Stored Current: {curr:.3f}/{goal_curr:.3f}mA.')
+        self.devices['egun'].cmd_disable_trigger()
+
+    def _check_stored_current(
+            self, goal_curr, tol=TuneShiftParams.DEF_TOL_CURRENT):
+        dcct_curr = self.devices['bbbh'].dcct.current
+        return dcct_curr > goal_curr or abs(dcct_curr - goal_curr) < tol
+
+    def _check_pingers_problem(self):
+        for ping in self.pingers:
+            if ping.voltage_mon < 0:
+                # reset pinger
+                ping.cmd_turn_off()
+                ping.cmd_turn_on()
+                return True
+        return False
+
+    def run_meas(self, save=True):
+        """."""
+        data = dict()
+        datah = list()
+        datav = list()
+        currs = list()
+        for curr in self.params.currents:
+            t0 = _time.time()
+            self.inject_in_storage_ring(curr)
+
+            trial = 0
+            while self._check_pingers_problem():
+                if trial > 2:
+                    print('3 unsucessful reset trials. Exiting...')
+                    break
+                print('Problem with pingers voltage. Resetting...')
+                _time.sleep(5)
+                trial += 1
+
+            _time.sleep(self.params.wait_bbb)
+            print('Acquiring data...')
+            currs.append(self.devices['bbbh'].dcct.current)
+            data['stored_current'] = currs
+            if 'H' in self.params.plane:
+                datah.append(self.get_data(plane='H'))
+                data['horizontal'] = datah
+            if 'V' in self.params.plane:
+                datav.append(self.get_data(plane='V'))
+                data['vertical'] = datav
+            self.data = data
+            if save:
+                self.save_data(fname=self.params.filename, overwrite=True)
+                print('Data saved!')
+            tf = _time.time()
+            print(f'Elapsed time: {tf-t0:.2f}s \n')
+
+    def plot_spectrum(
+            self, plane, freq_min=None, freq_max=None,
+            title=None, fname=None):
+        """plane: must be 'H' or 'V'."""
+        if plane.upper() == 'H':
+            data = self.data['horizontal']
+            freq_min = freq_min or 38
+            freq_max = freq_max or 52
+        elif plane.upper() == 'V':
+            data = self.data['vertical']
+            freq_min = freq_min or 72
+            freq_max = freq_max or 84
+        else:
+            raise Exception("plane input must be 'H' or 'V'.")
+
+        curr = _np.array(self.data['stored_current'])
+        mag = [dta['spec_mag'] for dta in data]
+        mag = _np.array(mag, dtype=float)
+        freq = _np.array(data[-1]['spec_freq'])
+
+        idcs = (freq > freq_min) & (freq < freq_max)
+        freq = freq[idcs]
+        idx = _np.argsort(curr)
+        curr = curr[idx]
+        mag = mag[idx, :]
+        mag = mag[:, idcs]
+
+        freq, curr = _np.meshgrid(freq, curr)
+        freq, curr, mag = freq.T, curr.T, mag.T
+
+        fig = _mplt.figure(figsize=(8, 6))
+        gs = _mgs.GridSpec(1, 1)
+        ax = fig.add_subplot(gs[0, 0])
+        ax.pcolormesh(curr, freq, mag)
+        ax.set_ylabel('Frequency [kHz]')
+        ax.set_xlabel('Current [mA]')
+        ax.set_title(title)
+        if fname:
+            fig.savefig(fname, format='png', dpi=300)
+        return fig
+
+    def plot_time_evolution(
+            self, plane, title=None, fname=None):
+        """plane: must be 'H' or 'V'."""
+        if plane.upper() == 'H':
+            data = self.data['horizontal']
+        elif plane.upper() == 'V':
+            data = self.data['vertical']
+        else:
+            raise Exception("plane input must be 'H' or 'V'.")
+
+        curr = _np.array(self.data['stored_current'])
+        mag = [dta['spec_mag'] for dta in data]
+        mag = _np.array(mag, dtype=float)
+        mag -= _np.mean(mag, axis=1)[:, None]
+        mag = _np.abs(mag)
+        dtime = _np.arange(0, mag.shape[1]) * TuneShiftParams.TIME_REV
+
+        idx = _np.argsort(curr)
+        curr = curr[idx]
+        mag = mag[idx, :]
+
+        dtime, curr = _np.meshgrid(dtime, curr)
+        dtime, curr, mag = dtime.T, curr.T, mag.T
+
+        fig = _mplt.figure(figsize=(8, 6))
+        gs = _mgs.GridSpec(1, 1)
+        ax = fig.add_subplot(gs[0, 0])
+
+        ax.pcolormesh(curr, dtime * 1e3, mag)
+        ax.set_ylabel('Time [ms]')
+        ax.set_xlabel('Current [mA]')
+        ax.set_title(title)
+        if fname:
+            fig.savefig(fname, format='png', dpi=300)
+        return fig

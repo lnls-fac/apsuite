@@ -89,7 +89,7 @@ class SOFBDriveData(_BaseClass):
         anl['corr_coefs'] = corr_coefs
         anl['bpm_coefs'] = bpm_coefs
         anl['latency'] = latency
-        if rawdata is not None:
+        if rawdata is None:
             self.analysis = anl
         return anl
 
