@@ -207,7 +207,7 @@ class BBAParams(_ParamsBaseClass):
         self.timeout_wait_sofb = 3  # [s]
         self.sofb_nrpoints = 10
         self.sofb_maxcorriter = 5
-        self.sofb_maxorberr = 10  # [um]
+        self.sofb_maxorberr = 5  # [um]
 
     def __str__(self):
         """."""
@@ -317,36 +317,22 @@ class DoBBA(_BaseClass):
         """."""
         sofb = self.devices['sofb']
         idxx = self.data['bpmnames'].index(bpmname)
-        idxy = idxx + len(self.data['bpmnames'])
         refx, refy = sofb.refx, sofb.refy
         refx[idxx], refy[idxx] = x0, y0
         sofb.refx = refx
         sofb.refy = refy
         _time.sleep(self.params.wait_sofb)
-        for i in range(self.params.sofb_maxcorriter+1):
-            orb = self.get_orbit()
-            fmet = max(abs(orb[idxx] - x0), abs(orb[idxy] - y0))
-            if fmet < self.params.sofb_maxorberr:
-                return i, fmet
-
-            if i < self.params.sofb_maxcorriter:
-                sofb.cmd_calccorr()
-                _time.sleep(self.params.wait_sofb)
-                sofb.cmd_applycorr_all()
-                _time.sleep(self.params.wait_correctors)
-        return -1, fmet
+        idx, resx, resy = sofb.correct_orbit_manually(
+            nr_iters=self.params.sofb_maxcorriter,
+            residue=self.params.sofb_maxorberr)
+        return idx, _np.linalg.norm([resx, resy])
 
     def correct_orbit(self):
         """."""
         sofb = self.devices['sofb']
-        for _ in range(self.params.sofb_maxcorriter):
-            sofb.cmd_calccorr()
-            _time.sleep(self.params.wait_sofb)
-            sofb.cmd_applycorr_all()
-            _time.sleep(self.params.wait_correctors)
-            sofb.cmd_reset()
-            _time.sleep(0.1)
-            sofb.wait_buffer()
+        sofb.correct_orbit_manually(
+            nr_iters=self.params.sofb_maxcorriter,
+            residue=self.params.sofb_maxorberr)
 
     def process_data(
             self, nbpms_linfit=None, thres=None, mode='symm',

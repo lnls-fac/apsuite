@@ -111,6 +111,13 @@ class BaseCorr():
         if self.method not in BaseCorr.METHODS:
             raise Exception('Invalid correction method!')
 
+        if None in goal_parameters:
+            # use current model values for missing goal parameters
+            goal_parameters = _np.array(goal_parameters)  # as not to modify input
+            param_now = self._get_parameter(model)
+            sel = (goal_parameters == None)
+            goal_parameters[sel] = param_now[sel]
+
         if jacobian_matrix is None:
             jmat = self.calc_jacobian_matrix(model)
         else:
