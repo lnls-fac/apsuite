@@ -20,6 +20,7 @@ class IDParams():
         EMA = 'EMA'
         IPE = 'IPE'
         MANACA = 'MANACA'
+        SABIA = 'SABIA'
 
     def __init__(self, id_name=None, phase=0):
         """."""
@@ -39,6 +40,8 @@ class IDParams():
             self.params_ema(phase)
         elif id_name == IDParams.Beamlines.IPE:
             self.params_ipe(phase)
+        elif id_name == IDParams.Beamlines.SABIA:
+            self.params_sabia(phase)
 
     def __str__(self):
         """."""
@@ -94,6 +97,16 @@ class IDParams():
     def params_ipe(self, phase=0):
         """."""
         self.id_name = IDParams.Beamlines.IPE
+        str_phase = str(phase).replace('.', 'p')
+        self.kicktable_fname = IDParams.BASE_DIR + \
+            'APU58/APUKyma58mm_kickmap_shift_' + str_phase + '.txt'
+        self.section_nr = 11
+        self.straight_label = 'P'
+        self.seg_nr = 40
+
+    def params_sabia(self, phase=0):
+        """."""
+        self.id_name = IDParams.Beamlines.SABIA
         str_phase = str(phase).replace('.', 'p')
         self.kicktable_fname = IDParams.BASE_DIR + \
             'APU58/APUKyma58mm_kickmap_shift_' + str_phase + '.txt'
