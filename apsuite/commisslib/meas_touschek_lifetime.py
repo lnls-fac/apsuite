@@ -39,6 +39,8 @@ class MeasTouschekParams(_ParamsBaseClass):
         stg += dtmp('mask_end_bunch_a', self.mask_end_bunch_a)
         stg += dtmp('mask_beg_bunch_b', self.mask_beg_bunch_b)
         stg += dtmp('mask_end_bunch_b', self.mask_end_bunch_b)
+        stg += dtmp('bucket_bunch_a', self.bucket_bunch_a)
+        stg += dtmp('bucket_bunch_b', self.bucket_bunch_b)
         stg += dtmp('acq_nrsamples_pre', self.acq_nrsamples_pre)
         stg += dtmp('acq_nrsamples_post', self.acq_nrsamples_post)
         stg += stmp('filename', self.filename)
@@ -196,8 +198,8 @@ class MeasTouschekLifetime(_BaseClass):
     def _remove_outliers(self, filter_outlier=None):
         self.calc_current_bunch()
         anly = self.data['analysis']
-        dt_a = (anly['tim_a'] - anly['tim_a'][0])/60/60
-        dt_b = (anly['tim_b'] - anly['tim_b'][0])/60/60
+        dt_a = (anly['tim_a'] - anly['tim_a'][0])/3600
+        dt_b = (anly['tim_b'] - anly['tim_b'][0])/3600
         curr_a = anly['current_a']
         curr_b = anly['current_b']
         func = MeasTouschekLifetime._exp_fun
