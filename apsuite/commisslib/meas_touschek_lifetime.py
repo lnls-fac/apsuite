@@ -224,11 +224,12 @@ class MeasTouschekLifetime(_BaseClass):
         anly['current_b'] = curr_b
         self.data['analysis'] = anly
 
-    def calc_touschek(self, window_a, window_b):
+    def calc_touschek(self):
         """."""
         anly = self.data['analysis']
         curr_a, curr_b = anly['current_a'], anly['current_b']
         ltme_a, ltme_b = anly['total_lifetime_a'], anly['total_lifetime_b']
+        window_a, window_b = anly['window_a'], anly['window_b']
         curr_a = curr_a[:-window_a]
         curr_b = curr_b[:-window_b]
         num = 1-curr_b/curr_a
@@ -253,9 +254,38 @@ class MeasTouschekLifetime(_BaseClass):
         anly = self.data['analysis']
         tim_a, tim_b = anly['tim_a'], anly['tim_b']
         curr_a, curr_b = anly['current_a'], anly['current_b']
+        anly['window_a'], anly['window_b'] = window_a, window_b
         lifetime_a = self.fit_lifetime(tim_a, curr_a, window=window_a)
         lifetime_b = self.fit_lifetime(tim_b, curr_b, window=window_b)
         anly['total_lifetime_a'] = lifetime_a
         anly['total_lifetime_b'] = lifetime_b
-        self.calc_touschek(window_a=window_a, window_b=window_b)
+        self.data['analysis'] = anly
+        self.calc_touschek()
         self.calc_gas_lifetime()
+
+    def plot_results(self, fname=None, title=None):
+        """."""
+        anly = self.data['analysis']
+        curr_a, curr_b = anly['current_a'], anly['current_b']
+        window_a, window_b = anly['window_a'], anly['window_b']
+        tsck_a, tsck_b = anly['touschek_b'], anly['touschek_b']
+        curr_a, curr_b = curr_a[:-window_a], curr_b[:-window_b]
+
+        fig = _mplt.figure(figsize=(12, 8))
+        gs = _mgs.GridSpec(1, 1)
+        ax1 = _mplt.subplot(gs[0, 0])
+        ax1.plot(curr_a, tsck_a, '.', color='C0', label='Bunch A')
+        ax1.plot(curr_b, tsck_b, '.', color='C1', label='Bunch B')
+        ax1.set_xlabel('current single bunch [mA]')
+        ax1.set_ylabel('Touschek lifetime [h]')
+        window_time = (anly['tim_a'][window_a]-anly['tim_a'][0])/60
+        stg0 = f'Fitting with window = {window_a:d} '
+        stg0 += f'points ({window_time:.1f} min)'
+        stg = title or stg0
+        ax1.set_title(stg)
+        ax1.legend()
+        ax1.grid(ls='--', alpha=0.5)
+        fig.tight_layout(True)
+        if fname:
+            fig.savefig(
+                fname, dpi=300, format='png')
