@@ -49,7 +49,9 @@ class MeasTouschekLifetime(_BaseClass):
     """."""
 
     BPMNAME = 'SI-01M2:DI-BPM'
-    RFFEAttSB = 30  # [dB]
+    RFFEAttMB = 0  # [dB]  Multibunch Attenuation
+    RFFEAttSB = 30  # [dB] Singlebunch Attenuation
+    FILTER_OUTLIER = 20  # [%] Relative error data/fitting
 
     def __init__(self, isonline=True):
         """."""
@@ -165,3 +167,95 @@ class MeasTouschekLifetime(_BaseClass):
                 MeasTouschekLifetime._linear_fun, dtm, dcurr, p0=(1, 1))
             lifetimes.append(coeff[-1])
         return _np.array(lifetimes)
+
+    def _remove_nans(self):
+        sum_a = self.data['sum_a']
+        sum_b = self.data['sum_b']
+        tim_a = self.data['tim_a']
+        tim_b = self.data['tim_b']
+        currt = self.data['current']
+
+        vec = sum_a
+        for _ in range(1):
+            nanidx = _np.logical_not(_np.isnan(vec)).ravel()
+            sum_a = _np.array(sum_a)[nanidx]
+            sum_b = _np.array(sum_b)[nanidx]
+            tim_a = _np.array(tim_a)[nanidx]
+            tim_b = _np.array(tim_b)[nanidx]
+            currt = _np.array(currt)[nanidx]
+            vec = sum_b
+
+        anly = dict()
+        anly['sum_a'] = sum_a
+        anly['sum_b'] = sum_b
+        anly['tim_a'] = tim_a
+        anly['tim_b'] = tim_b
+        anly['current'] = currt
+        self.data['analysis'] = anly
+
+    def _remove_outliers(self, filter_outlier=None):
+        self.calc_current_bunch()
+        anly = self.data['analysis']
+        dt_a = (anly['tim_a'] - anly['tim_a'][0])/60/60
+        dt_b = (anly['tim_b'] - anly['tim_b'][0])/60/60
+        curr_a = anly['current_a']
+        curr_b = anly['current_b']
+        func = MeasTouschekLifetime._exp_fun
+        p0_ = (1, 1, 1)
+        coeff_a, *_ = _opt.curve_fit(func, dt_a, curr_a, p0=p0_)
+        coeff_b, *_ = _opt.curve_fit(func, dt_b, curr_b, p0=p0_)
+        fit_a = func(dt_a, *coeff_a)
+        fit_b = func(dt_b, *coeff_b)
+        diff_a = (curr_a - fit_a)/curr_a
+        diff_b = (curr_a - fit_b)/curr_b
+        out = filter_outlier or MeasTouschekLifetime.FILTER_OUTLIER
+        idx_keep = (abs(diff_a) < out) & (abs(diff_b) < out)
+        for key in anly.keys():
+            anly[key] = _np.array(anly[key])[idx_keep]
+        self.data['analysis'] = anly
+
+    def calc_current_bunch(self):
+        """."""
+        anly = self.data['analysis']
+        total_sum = anly['sum_a'] + anly['sum_b']
+        curr_a = anly['current'] * anly['sum_a']/total_sum
+        curr_b = anly['current'] * anly['sum_b']/total_sum
+        anly['current_a'] = curr_a
+        anly['current_b'] = curr_b
+        self.data['analysis'] = anly
+
+    def calc_touschek(self, window_a, window_b):
+        """."""
+        anly = self.data['analysis']
+        curr_a, curr_b = anly['current_a'], anly['current_b']
+        ltme_a, ltme_b = anly['total_lifetime_a'], anly['total_lifetime_b']
+        curr_a = curr_a[:-window_a]
+        curr_b = curr_b[:-window_b]
+        num = 1-curr_b/curr_a
+        den = 1/ltme_a - 1/ltme_b
+        tsck_a = num/den
+        tsck_b = tsck_a * curr_a / curr_b
+        anly['touschek_a'] = tsck_a
+        anly['touschek_b'] = tsck_b
+        self.data['analysis'] = anly
+
+    def calc_gas_lifetime(self):
+        """."""
+        anly = self.data['analysis']
+        glifetime = 1/anly['total_lifetime_a'] - 1/anly['touschek_a']
+        anly['gas_lifetime'] = 1/glifetime
+        self.data['analysis'] = anly
+
+    def process_data(self, window_a, window_b):
+        """."""
+        self._remove_nans()
+        self._remove_outliers()
+        anly = self.data['analysis']
+        tim_a, tim_b = anly['tim_a'], anly['tim_b']
+        curr_a, curr_b = anly['current_a'], anly['current_b']
+        lifetime_a = self.fit_lifetime(tim_a, curr_a, window=window_a)
+        lifetime_b = self.fit_lifetime(tim_b, curr_b, window=window_b)
+        anly['total_lifetime_a'] = lifetime_a
+        anly['total_lifetime_b'] = lifetime_b
+        self.calc_touschek(window_a=window_a, window_b=window_b)
+        self.calc_gas_lifetime()
