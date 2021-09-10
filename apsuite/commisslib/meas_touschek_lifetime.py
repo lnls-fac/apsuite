@@ -242,8 +242,8 @@ class MeasTouschekLifetime(_BaseClass):
     def calc_gas_lifetime(self):
         """."""
         anly = self.data['analysis']
-        glifetime = 1/anly['total_lifetime_a'] - 1/anly['touschek_a']
-        anly['gas_lifetime'] = 1/glifetime
+        gas_rate = 1/anly['total_lifetime_a'] - 1/anly['touschek_a']
+        anly['gas_lifetime'] = 1/gas_rate
         self.data['analysis'] = anly
 
     def process_data(self, window_a, window_b):
@@ -262,7 +262,7 @@ class MeasTouschekLifetime(_BaseClass):
         self.calc_touschek()
         self.calc_gas_lifetime()
 
-    def plot_touschek_lifetime(self, fname=None, title=None):
+    def plot_touschek_lifetime(self, fname=None, title=None, fitting=False):
         """."""
         anly = self.data['analysis']
         curr_a, curr_b = anly['current_a'], anly['current_b']
@@ -270,11 +270,23 @@ class MeasTouschekLifetime(_BaseClass):
         tsck_a, tsck_b = anly['touschek_a'], anly['touschek_b']
         curr_a, curr_b = curr_a[:-window_a], curr_b[:-window_b]
 
-        fig = _mplt.figure(figsize=(12, 8))
+        fig = _mplt.figure(figsize=(8, 6))
         gs = _mgs.GridSpec(1, 1)
         ax1 = _mplt.subplot(gs[0, 0])
         ax1.plot(curr_a, tsck_a, '.', color='C0', label='Bunch A')
         ax1.plot(curr_b, tsck_b, '.', color='C1', label='Bunch B')
+
+        if fitting:
+            pfit = _np.polynomial.polynomial
+            currs = _np.hstack((curr_a, curr_b))
+            tscks = _np.hstack((tsck_a, tsck_b))
+            poly = pfit.polyfit(currs, 1/tscks, deg=1)
+            currs_fit = _np.linspace(currs.min(), currs.max(), 2*currs.size)
+            rate_fit = pfit.polyval(currs_fit, poly)
+            tsck_fit = 1/rate_fit
+            label = r"Fitting, $\tau \times I_b$={:.4f} C".format(3.6*poly[1])
+            ax1.plot(currs_fit, tsck_fit, '--', color='k', lw=3, label=label)
+
         ax1.set_xlabel('current single bunch [mA]')
         ax1.set_ylabel('Touschek lifetime [h]')
         window_time = (anly['tim_a'][window_a]-anly['tim_a'][0])/60
@@ -297,7 +309,7 @@ class MeasTouschekLifetime(_BaseClass):
         curr_a, curr_b = curr_a[:-window_a], curr_b[:-window_b]
         total_curr = curr_a + curr_b
 
-        fig = _mplt.figure(figsize=(12, 8))
+        fig = _mplt.figure(figsize=(8, 6))
         gs = _mgs.GridSpec(1, 1)
         ax1 = _mplt.subplot(gs[0, 0])
         ax1.plot(total_curr, anly['gas_lifetime'], '.', color='C0')
@@ -315,19 +327,31 @@ class MeasTouschekLifetime(_BaseClass):
             fig.savefig(
                 fname, dpi=300, format='png')
 
-    def plot_total_lifetime(self, fname=None, title=None):
+    def plot_total_lifetime(self, fname=None, title=None, fitting=False):
         """."""
         anly = self.data['analysis']
         curr_a, curr_b = anly['current_a'], anly['current_b']
         window_a, window_b = anly['window_a'], anly['window_b']
-        total_a, total_b = anly['total_lifetime_a'], anly['total_lifetime_a']
+        total_a, total_b = anly['total_lifetime_a'], anly['total_lifetime_b']
         curr_a, curr_b = curr_a[:-window_a], curr_b[:-window_b]
 
-        fig = _mplt.figure(figsize=(12, 8))
+        fig = _mplt.figure(figsize=(8, 6))
         gs = _mgs.GridSpec(1, 1)
         ax1 = _mplt.subplot(gs[0, 0])
         ax1.plot(curr_a, total_a, '.', color='C0', label='Bunch A')
         ax1.plot(curr_b, total_b, '.', color='C1', label='Bunch B')
+
+        if fitting:
+            pfit = _np.polynomial.polynomial
+            currs = _np.hstack((curr_a, curr_b))
+            totls = _np.hstack((total_a, total_b))
+            poly = pfit.polyfit(currs, 1/totls, deg=1)
+            currs_fit = _np.linspace(currs.min(), currs.max(), 2*currs.size)
+            rate_fit = pfit.polyval(currs_fit, poly)
+            totls = 1/rate_fit
+            label = 'Fitting'
+            ax1.plot(currs_fit, totls, ls='--', color='k', lw=3, label=label)
+
         ax1.set_xlabel('current single bunch [mA]')
         ax1.set_ylabel('Total lifetime [h]')
         window_time = (anly['tim_a'][window_a]-anly['tim_a'][0])/60
@@ -349,7 +373,7 @@ class MeasTouschekLifetime(_BaseClass):
         dt_a = (anly['tim_a'] - anly['tim_a'][0])/3600
         dt_b = (anly['tim_b'] - anly['tim_b'][0])/3600
 
-        fig = _mplt.figure(figsize=(12, 8))
+        fig = _mplt.figure(figsize=(8, 6))
         gs = _mgs.GridSpec(1, 1)
         ax1 = _mplt.subplot(gs[0, 0])
         ax1.plot(dt_a, curr_a, '.', color='C0', label='Bunch A')
