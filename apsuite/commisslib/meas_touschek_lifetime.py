@@ -53,7 +53,7 @@ class MeasTouschekLifetime(_BaseClass):
     BPMNAME = 'SI-01M2:DI-BPM'
     RFFEAttMB = 0  # [dB]  Multibunch Attenuation
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
-    FILTER_OUTLIER = 20  # [%] Relative error data/fitting
+    FILTER_OUTLIER = 0.2  # Relative error data/fitting
 
     def __init__(self, isonline=True):
         """."""
@@ -123,7 +123,7 @@ class MeasTouschekLifetime(_BaseClass):
 
         idx = 0
         while True:
-            if not idx % 2:
+            if not idx % 2 and idx:
                 bpm.tbt_mask_beg = parms.mask_beg_bunch_a
                 bpm.tbt_mask_end = parms.mask_end_bunch_a
                 _time.sleep(parms.wait_mask)
@@ -171,19 +171,16 @@ class MeasTouschekLifetime(_BaseClass):
         return _np.array(lifetimes)
 
     def _remove_nans(self):
-        sum_a = self.data['sum_a']
-        sum_b = self.data['sum_b']
-        tim_a = self.data['tim_a']
-        tim_b = self.data['tim_b']
-        currt = self.data['current']
+        meas = self.data['measure']
+        sum_a, sum_b = meas['sum_a'], meas['sum_b']
+        tim_a, tim_b = meas['tim_a'], meas['tim_b']
+        currt = meas['current']
 
         vec = sum_a
         for _ in range(1):
             nanidx = _np.logical_not(_np.isnan(vec)).ravel()
-            sum_a = _np.array(sum_a)[nanidx]
-            sum_b = _np.array(sum_b)[nanidx]
-            tim_a = _np.array(tim_a)[nanidx]
-            tim_b = _np.array(tim_b)[nanidx]
+            sum_a, sum_b = _np.array(sum_a)[nanidx], _np.array(sum_b)[nanidx]
+            tim_a, tim_b = _np.array(tim_a)[nanidx], _np.array(tim_b)[nanidx]
             currt = _np.array(currt)[nanidx]
             vec = sum_b
 
@@ -209,7 +206,7 @@ class MeasTouschekLifetime(_BaseClass):
         fit_a = func(dt_a, *coeff_a)
         fit_b = func(dt_b, *coeff_b)
         diff_a = (curr_a - fit_a)/curr_a
-        diff_b = (curr_a - fit_b)/curr_b
+        diff_b = (curr_b - fit_b)/curr_b
         out = filter_outlier or MeasTouschekLifetime.FILTER_OUTLIER
         idx_keep = (abs(diff_a) < out) & (abs(diff_b) < out)
         for key in anly.keys():
@@ -270,7 +267,7 @@ class MeasTouschekLifetime(_BaseClass):
         anly = self.data['analysis']
         curr_a, curr_b = anly['current_a'], anly['current_b']
         window_a, window_b = anly['window_a'], anly['window_b']
-        tsck_a, tsck_b = anly['touschek_b'], anly['touschek_b']
+        tsck_a, tsck_b = anly['touschek_a'], anly['touschek_b']
         curr_a, curr_b = curr_a[:-window_a], curr_b[:-window_b]
 
         fig = _mplt.figure(figsize=(12, 8))
@@ -287,7 +284,60 @@ class MeasTouschekLifetime(_BaseClass):
         ax1.set_title(stg)
         ax1.legend()
         ax1.grid(ls='--', alpha=0.5)
-        fig.tight_layout(True)
+        _mplt.tight_layout(True)
+        if fname:
+            fig.savefig(
+                fname, dpi=300, format='png')
+
+    def plot_gas_lifetime(self, fname=None, title=None):
+        """."""
+        anly = self.data['analysis']
+        curr_a, curr_b = anly['current_a'], anly['current_b']
+        window_a, window_b = anly['window_a'], anly['window_b']
+        curr_a, curr_b = curr_a[:-window_a], curr_b[:-window_b]
+        total_curr = curr_a + curr_b
+
+        fig = _mplt.figure(figsize=(12, 8))
+        gs = _mgs.GridSpec(1, 1)
+        ax1 = _mplt.subplot(gs[0, 0])
+        ax1.plot(total_curr, anly['gas_lifetime'], '.', color='C0')
+        ax1.set_xlabel('Total current [mA]')
+        ax1.set_ylabel('Gas lifetime [h]')
+        window_time = (anly['tim_a'][window_a]-anly['tim_a'][0])/60
+        stg0 = f'Fitting with window = {window_a:d} '
+        stg0 += f'points ({window_time:.1f} min)'
+        stg = title or stg0
+        ax1.set_title(stg)
+        ax1.legend()
+        ax1.grid(ls='--', alpha=0.5)
+        _mplt.tight_layout(True)
+        if fname:
+            fig.savefig(
+                fname, dpi=300, format='png')
+
+    def plot_total_lifetime(self, fname=None, title=None):
+        """."""
+        anly = self.data['analysis']
+        curr_a, curr_b = anly['current_a'], anly['current_b']
+        window_a, window_b = anly['window_a'], anly['window_b']
+        total_a, total_b = anly['total_lifetime_a'], anly['total_lifetime_a']
+        curr_a, curr_b = curr_a[:-window_a], curr_b[:-window_b]
+
+        fig = _mplt.figure(figsize=(12, 8))
+        gs = _mgs.GridSpec(1, 1)
+        ax1 = _mplt.subplot(gs[0, 0])
+        ax1.plot(curr_a, total_a, '.', color='C0', label='Bunch A')
+        ax1.plot(curr_b, total_b, '.', color='C1', label='Bunch B')
+        ax1.set_xlabel('current single bunch [mA]')
+        ax1.set_ylabel('Total lifetime [h]')
+        window_time = (anly['tim_a'][window_a]-anly['tim_a'][0])/60
+        stg0 = f'Fitting with window = {window_a:d} '
+        stg0 += f'points ({window_time:.1f} min)'
+        stg = title or stg0
+        ax1.set_title(stg)
+        ax1.legend()
+        ax1.grid(ls='--', alpha=0.5)
+        _mplt.tight_layout(True)
         if fname:
             fig.savefig(
                 fname, dpi=300, format='png')
@@ -309,7 +359,7 @@ class MeasTouschekLifetime(_BaseClass):
         ax1.set_title(title)
         ax1.legend()
         ax1.grid(ls='--', alpha=0.5)
-        fig.tight_layout(True)
+        _mplt.tight_layout(True)
         if fname:
             fig.savefig(
                 fname, dpi=300, format='png')
