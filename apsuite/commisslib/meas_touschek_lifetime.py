@@ -116,8 +116,8 @@ class MeasTouschekLifetime(_BaseClass):
         curr = self.devices['currinfo']
         parms = self.params
 
-        bpm.acq_nrsamples_pre = 10000
-        bpm.acq_nrsamples_post = 10000
+        bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
+        bpm.acq_nrsamples_post = parms.acq_nrsamples_post
         bpm.tbt_mask_enbl = 1
         _time.sleep(parms.wait_mask)
 
@@ -265,7 +265,7 @@ class MeasTouschekLifetime(_BaseClass):
         self.calc_touschek()
         self.calc_gas_lifetime()
 
-    def plot_results(self, fname=None, title=None):
+    def plot_touschek_lifetime(self, fname=None, title=None):
         """."""
         anly = self.data['analysis']
         curr_a, curr_b = anly['current_a'], anly['current_b']
@@ -285,6 +285,28 @@ class MeasTouschekLifetime(_BaseClass):
         stg0 += f'points ({window_time:.1f} min)'
         stg = title or stg0
         ax1.set_title(stg)
+        ax1.legend()
+        ax1.grid(ls='--', alpha=0.5)
+        fig.tight_layout(True)
+        if fname:
+            fig.savefig(
+                fname, dpi=300, format='png')
+
+    def plot_current_decay(self, fname=None, title=None):
+        """."""
+        anly = self.data['analysis']
+        curr_a, curr_b = anly['current_a'], anly['current_b']
+        dt_a = (anly['tim_a'] - anly['tim_a'][0])/3600
+        dt_b = (anly['tim_b'] - anly['tim_b'][0])/3600
+
+        fig = _mplt.figure(figsize=(12, 8))
+        gs = _mgs.GridSpec(1, 1)
+        ax1 = _mplt.subplot(gs[0, 0])
+        ax1.plot(dt_a, curr_a, '.', color='C0', label='Bunch A')
+        ax1.plot(dt_b, curr_b, '.', color='C1', label='Bunch B')
+        ax1.set_xlabel('time [h]')
+        ax1.set_ylabel('bunch current [mA]')
+        ax1.set_title(title)
         ax1.legend()
         ax1.grid(ls='--', alpha=0.5)
         fig.tight_layout(True)
