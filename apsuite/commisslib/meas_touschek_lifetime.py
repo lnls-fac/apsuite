@@ -151,8 +151,8 @@ class MeasTouschekLifetime(_BaseClass):
 
     @staticmethod
     def _linear_fun(tim, *coeff):
-        off, tau = coeff
-        return off - tim/tau
+        amp, tau = coeff
+        return amp*(1 - tim/tau)
 
     @staticmethod
     def fit_lifetime(dtime, current, window):
@@ -170,11 +170,28 @@ class MeasTouschekLifetime(_BaseClass):
             lifetimes.append(coeff[-1])
         return _np.array(lifetimes)
 
-    def _remove_nans(self):
+    def _handle_data_lens(self):
         meas = self.data['measure']
-        sum_a, sum_b = meas['sum_a'], meas['sum_b']
-        tim_a, tim_b = meas['tim_a'], meas['tim_b']
-        currt = meas['current']
+        len_a, len_b = len(meas['sum_a']), len(meas['sum_b'])
+        len_min = len_a
+        if len_a != len_b:
+            len_min = _np.min((len_a, len_b))
+
+        sum_a, sum_b = meas['sum_a'][:len_min], meas['sum_b'][:len_min]
+        tim_a, tim_b = meas['tim_a'][:len_min], meas['tim_b'][:len_min]
+        currt = meas['current'][:len_min]
+
+        anly = dict()
+        anly['sum_a'], anly['sum_b'] = sum_a, sum_b
+        anly['tim_a'], anly['tim_b'] = tim_a, tim_b
+        anly['current'] = currt
+        self.data['analysis'] = anly
+
+    def _remove_nans(self):
+        anly = self.data['analysis']
+        sum_a, sum_b = anly['sum_a'], anly['sum_b']
+        tim_a, tim_b = anly['tim_a'], anly['tim_b']
+        currt = anly['current']
 
         vec = sum_a
         for _ in range(1):
@@ -185,15 +202,12 @@ class MeasTouschekLifetime(_BaseClass):
             vec = sum_b
 
         anly = dict()
-        anly['sum_a'] = sum_a
-        anly['sum_b'] = sum_b
-        anly['tim_a'] = tim_a
-        anly['tim_b'] = tim_b
+        anly['sum_a'], anly['sum_b'] = sum_a, sum_b
+        anly['tim_a'], anly['tim_b'] = tim_a, tim_b
         anly['current'] = currt
         self.data['analysis'] = anly
 
     def _remove_outliers(self, filter_outlier=None):
-        self.calc_current_bunch()
         anly = self.data['analysis']
         dt_a = (anly['tim_a'] - anly['tim_a'][0])/3600
         dt_b = (anly['tim_b'] - anly['tim_b'][0])/3600
@@ -213,14 +227,14 @@ class MeasTouschekLifetime(_BaseClass):
             anly[key] = _np.array(anly[key])[idx_keep]
         self.data['analysis'] = anly
 
-    def calc_current_bunch(self):
+    def _calc_current_bunch(self, factor):
         """."""
         anly = self.data['analysis']
         total_sum = anly['sum_a'] + anly['sum_b']
         curr_a = anly['current'] * anly['sum_a']/total_sum
         curr_b = anly['current'] * anly['sum_b']/total_sum
-        anly['current_a'] = curr_a
-        anly['current_b'] = curr_b
+        anly['current_a'] = curr_a*factor
+        anly['current_b'] = curr_b*factor
         self.data['analysis'] = anly
 
     def calc_touschek(self):
@@ -246,9 +260,11 @@ class MeasTouschekLifetime(_BaseClass):
         anly['gas_lifetime'] = 1/gas_rate
         self.data['analysis'] = anly
 
-    def process_data(self, window_a, window_b):
+    def process_data(self, window_a, window_b, current_factor):
         """."""
+        self._handle_data_lens()
         self._remove_nans()
+        self._calc_current_bunch(factor=current_factor)
         self._remove_outliers()
         anly = self.data['analysis']
         tim_a, tim_b = anly['tim_a'], anly['tim_b']
@@ -300,6 +316,7 @@ class MeasTouschekLifetime(_BaseClass):
         if fname:
             fig.savefig(
                 fname, dpi=300, format='png')
+        return fig, ax1
 
     def plot_gas_lifetime(self, fname=None, title=None):
         """."""
@@ -326,6 +343,7 @@ class MeasTouschekLifetime(_BaseClass):
         if fname:
             fig.savefig(
                 fname, dpi=300, format='png')
+        return fig, ax1
 
     def plot_total_lifetime(self, fname=None, title=None, fitting=False):
         """."""
@@ -365,6 +383,7 @@ class MeasTouschekLifetime(_BaseClass):
         if fname:
             fig.savefig(
                 fname, dpi=300, format='png')
+        return fig, ax1
 
     def plot_current_decay(self, fname=None, title=None):
         """."""
@@ -387,3 +406,4 @@ class MeasTouschekLifetime(_BaseClass):
         if fname:
             fig.savefig(
                 fname, dpi=300, format='png')
+        return fig, ax1
