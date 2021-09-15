@@ -158,6 +158,7 @@ class MeasTouschekLifetime(_BaseClass):
     def fit_lifetime(dtime, current, window):
         """."""
         lifetimes = []
+        fiterrors = []
 
         for idx in range(len(dtime)-window):
             beg = idx
@@ -165,10 +166,12 @@ class MeasTouschekLifetime(_BaseClass):
             dtm = _np.array(dtime[beg:end]) - dtime[beg]
             dtm /= 3600
             dcurr = current[beg:end]/current[beg]
-            coeff, *_ = _opt.curve_fit(
+            coeff, pconv = _opt.curve_fit(
                 MeasTouschekLifetime._linear_fun, dtm, dcurr, p0=(1, 1))
+            errs = _np.sqrt(_np.diag(pconv))
             lifetimes.append(coeff[-1])
-        return _np.array(lifetimes)
+            fiterrors.append(errs[-1])
+        return _np.array(lifetimes), _np.array(fiterrors)
 
     def _handle_data_lens(self):
         meas = self.data['measure']
@@ -227,17 +230,17 @@ class MeasTouschekLifetime(_BaseClass):
             anly[key] = _np.array(anly[key])[idx_keep]
         self.data['analysis'] = anly
 
-    def _calc_current_bunch(self, factor):
+    def _calc_current_per_bunch(self, nr_bunches):
         """."""
         anly = self.data['analysis']
         total_sum = anly['sum_a'] + anly['sum_b']
         curr_a = anly['current'] * anly['sum_a']/total_sum
         curr_b = anly['current'] * anly['sum_b']/total_sum
-        anly['current_a'] = curr_a*factor
-        anly['current_b'] = curr_b*factor
+        anly['current_a'] = curr_a/nr_bunches
+        anly['current_b'] = curr_b/nr_bunches
         self.data['analysis'] = anly
 
-    def calc_touschek(self):
+    def calc_touschek_lifetime(self):
         """."""
         anly = self.data['analysis']
         curr_a, curr_b = anly['current_a'], anly['current_b']
@@ -260,25 +263,31 @@ class MeasTouschekLifetime(_BaseClass):
         anly['gas_lifetime'] = 1/gas_rate
         self.data['analysis'] = anly
 
-    def process_data(self, window_a, window_b, current_factor):
+    def process_data(self, window_a, window_b, nr_bunches):
         """."""
         self._handle_data_lens()
         self._remove_nans()
-        self._calc_current_bunch(factor=current_factor)
+        self._calc_current_per_bunch(nr_bunches=nr_bunches)
         self._remove_outliers()
         anly = self.data['analysis']
         tim_a, tim_b = anly['tim_a'], anly['tim_b']
         curr_a, curr_b = anly['current_a'], anly['current_b']
         anly['window_a'], anly['window_b'] = window_a, window_b
-        lifetime_a = self.fit_lifetime(tim_a, curr_a, window=window_a)
-        lifetime_b = self.fit_lifetime(tim_b, curr_b, window=window_b)
+        lifetime_a, fiterror_a = self.fit_lifetime(
+            tim_a, curr_a, window=window_a)
+        lifetime_b, fiterror_b = self.fit_lifetime(
+            tim_b, curr_b, window=window_b)
         anly['total_lifetime_a'] = lifetime_a
         anly['total_lifetime_b'] = lifetime_b
+        anly['fiterror_a'] = fiterror_a
+        anly['fiterror_b'] = fiterror_b
+
         self.data['analysis'] = anly
-        self.calc_touschek()
+        self.calc_touschek_lifetime()
         self.calc_gas_lifetime()
 
-    def plot_touschek_lifetime(self, fname=None, title=None, fitting=False):
+    def plot_touschek_lifetime(
+            self, fname=None, title=None, fitting=False, rate=True):
         """."""
         anly = self.data['analysis']
         curr_a, curr_b = anly['current_a'], anly['current_b']
@@ -289,8 +298,9 @@ class MeasTouschekLifetime(_BaseClass):
         fig = _mplt.figure(figsize=(8, 6))
         gs = _mgs.GridSpec(1, 1)
         ax1 = _mplt.subplot(gs[0, 0])
-        ax1.plot(curr_a, tsck_a, '.', color='C0', label='Bunch A')
-        ax1.plot(curr_b, tsck_b, '.', color='C1', label='Bunch B')
+        pwr = -1 if rate else 1
+        ax1.plot(curr_a, tsck_a**pwr, '.', color='C0', label='Bunch A')
+        ax1.plot(curr_b, tsck_b**pwr, '.', color='C1', label='Bunch B')
 
         if fitting:
             pfit = _np.polynomial.polynomial
@@ -301,10 +311,12 @@ class MeasTouschekLifetime(_BaseClass):
             rate_fit = pfit.polyval(currs_fit, poly)
             tsck_fit = 1/rate_fit
             label = r"Fitting, $\tau \times I_b$={:.4f} C".format(3.6*poly[1])
-            ax1.plot(currs_fit, tsck_fit, '--', color='k', lw=3, label=label)
+            ax1.plot(
+                currs_fit, tsck_fit**pwr, '--', color='k', lw=3, label=label)
 
         ax1.set_xlabel('current single bunch [mA]')
-        ax1.set_ylabel('Touschek lifetime [h]')
+        ylabel = 'rate [1/h]' if rate else 'lifetime [h]'
+        ax1.set_ylabel('Touschek ' + ylabel)
         window_time = (anly['tim_a'][window_a]-anly['tim_a'][0])/60
         stg0 = f'Fitting with window = {window_a:d} '
         stg0 += f'points ({window_time:.1f} min)'
@@ -318,7 +330,7 @@ class MeasTouschekLifetime(_BaseClass):
                 fname, dpi=300, format='png')
         return fig, ax1
 
-    def plot_gas_lifetime(self, fname=None, title=None):
+    def plot_gas_lifetime(self, fname=None, title=None, rate=True):
         """."""
         anly = self.data['analysis']
         curr_a, curr_b = anly['current_a'], anly['current_b']
@@ -329,9 +341,69 @@ class MeasTouschekLifetime(_BaseClass):
         fig = _mplt.figure(figsize=(8, 6))
         gs = _mgs.GridSpec(1, 1)
         ax1 = _mplt.subplot(gs[0, 0])
-        ax1.plot(total_curr, anly['gas_lifetime'], '.', color='C0')
+        pwr = -1 if rate else 1
+        ax1.plot(total_curr, anly['gas_lifetime']**pwr, '.', color='C0')
         ax1.set_xlabel('Total current [mA]')
-        ax1.set_ylabel('Gas lifetime [h]')
+        ylabel = 'rate [1/h]' if rate else 'lifetime [h]'
+        ax1.set_ylabel('Gas ' + ylabel)
+        window_time = (anly['tim_a'][window_a]-anly['tim_a'][0])/60
+        stg0 = f'Fitting with window = {window_a:d} '
+        stg0 += f'points ({window_time:.1f} min)'
+        stg = title or stg0
+        ax1.set_title(stg)
+        ax1.grid(ls='--', alpha=0.5)
+        _mplt.tight_layout(True)
+        if fname:
+            fig.savefig(
+                fname, dpi=300, format='png')
+        return fig, ax1
+
+    def plot_total_lifetime(
+            self, fname=None, title=None, fitting=False,
+            rate=True, errors=True):
+        """."""
+        anly = self.data['analysis']
+        curr_a, curr_b = anly['current_a'], anly['current_b']
+        window_a, window_b = anly['window_a'], anly['window_b']
+        total_a, total_b = anly['total_lifetime_a'], anly['total_lifetime_b']
+        err_a, err_b = anly['fiterror_a'], anly['fiterror_b']
+        curr_a, curr_b = curr_a[:-window_a], curr_b[:-window_b]
+
+        fig = _mplt.figure(figsize=(8, 6))
+        gs = _mgs.GridSpec(1, 1)
+        ax1 = _mplt.subplot(gs[0, 0])
+        pwr = -1 if rate else 1
+
+        if errors:
+            errbar_a = err_a/total_a**2 if rate else err_a
+            ax1.errorbar(
+                curr_a, total_a**pwr, yerr=errbar_a,
+                marker='.', ls='', color='C0',
+                label=f'Bunch A - Max. Error: {_np.max(errbar_a):.2e}')
+            errbar_b = err_b/total_b**2 if rate else err_b
+            ax1.errorbar(
+                curr_b, total_b**pwr, yerr=errbar_b,
+                marker='.', ls='', color='C1',
+                label=f'Bunch B - Max. Error: {_np.max(errbar_b):.2e}')
+        else:
+            ax1.plot(curr_a, total_a**pwr, '-', color='C0', label='Bunch A')
+            ax1.plot(curr_b, total_b**pwr, '-', color='C1', label='Bunch B')
+
+        if fitting:
+            pfit = _np.polynomial.polynomial
+            currs = _np.hstack((curr_a, curr_b))
+            totls = _np.hstack((total_a, total_b))
+            poly = pfit.polyfit(currs, 1/totls, deg=1)
+            currs_fit = _np.linspace(currs.min(), currs.max(), 2*currs.size)
+            rate_fit = pfit.polyval(currs_fit, poly)
+            totls = 1/rate_fit
+            label = 'Fitting'
+            ax1.plot(
+                currs_fit, totls**pwr, ls='--', color='k', lw=3, label=label)
+
+        ax1.set_xlabel('current single bunch [mA]')
+        ylabel = 'rate [1/h]' if rate else 'lifetime [h]'
+        ax1.set_ylabel('Total ' + ylabel)
         window_time = (anly['tim_a'][window_a]-anly['tim_a'][0])/60
         stg0 = f'Fitting with window = {window_a:d} '
         stg0 += f'points ({window_time:.1f} min)'
@@ -345,33 +417,22 @@ class MeasTouschekLifetime(_BaseClass):
                 fname, dpi=300, format='png')
         return fig, ax1
 
-    def plot_total_lifetime(self, fname=None, title=None, fitting=False):
+    def plot_fitting_error(self, fname=None, title=None):
         """."""
         anly = self.data['analysis']
         curr_a, curr_b = anly['current_a'], anly['current_b']
         window_a, window_b = anly['window_a'], anly['window_b']
-        total_a, total_b = anly['total_lifetime_a'], anly['total_lifetime_b']
+        fiterror_a, fiterror_b = anly['fiterror_a'], anly['fiterror_b']
         curr_a, curr_b = curr_a[:-window_a], curr_b[:-window_b]
 
         fig = _mplt.figure(figsize=(8, 6))
         gs = _mgs.GridSpec(1, 1)
         ax1 = _mplt.subplot(gs[0, 0])
-        ax1.plot(curr_a, total_a, '.', color='C0', label='Bunch A')
-        ax1.plot(curr_b, total_b, '.', color='C1', label='Bunch B')
-
-        if fitting:
-            pfit = _np.polynomial.polynomial
-            currs = _np.hstack((curr_a, curr_b))
-            totls = _np.hstack((total_a, total_b))
-            poly = pfit.polyfit(currs, 1/totls, deg=1)
-            currs_fit = _np.linspace(currs.min(), currs.max(), 2*currs.size)
-            rate_fit = pfit.polyval(currs_fit, poly)
-            totls = 1/rate_fit
-            label = 'Fitting'
-            ax1.plot(currs_fit, totls, ls='--', color='k', lw=3, label=label)
+        ax1.plot(curr_a, fiterror_a, '.', color='C0', label='Bunch A')
+        ax1.plot(curr_b, fiterror_b, '.', color='C1', label='Bunch B')
 
         ax1.set_xlabel('current single bunch [mA]')
-        ax1.set_ylabel('Total lifetime [h]')
+        ax1.set_ylabel('Fitting Error')
         window_time = (anly['tim_a'][window_a]-anly['tim_a'][0])/60
         stg0 = f'Fitting with window = {window_a:d} '
         stg0 += f'points ({window_time:.1f} min)'
