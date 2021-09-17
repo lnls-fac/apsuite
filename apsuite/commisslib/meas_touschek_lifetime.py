@@ -5,7 +5,7 @@ import matplotlib.pyplot as _mplt
 import matplotlib.gridspec as _mgs
 import scipy.optimize as _opt
 
-from siriuspy.devices import BPM, CurrInfoSI, EGun, SOFB
+from siriuspy.devices import BPM, CurrInfoSI, EGun, SOFB, RFCav
 from siriuspy.search.bpms_search import BPMSearch
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
@@ -66,6 +66,7 @@ class MeasTouschekLifetime(_BaseClass):
             self.devices['currinfo'] = CurrInfoSI()
             self.devices['egun'] = EGun()
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+            self.devices['rfcav'] = RFCav()
 
     def _create_si_bpms(self):
         si_bpm_filter = {'sec': 'SI', 'sub': '[0-9][0-9](M|C).*'}
@@ -114,6 +115,7 @@ class MeasTouschekLifetime(_BaseClass):
         meas = dict(sum_a=[], sum_b=[], tim_a=[], tim_b=[], current=[])
         bpm = self.devices['bpm']
         curr = self.devices['currinfo']
+        rfcav = self.devices['rfcav']
         parms = self.params
 
         bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
@@ -130,6 +132,7 @@ class MeasTouschekLifetime(_BaseClass):
                 meas['sum_a'].append(bpm.mt_possum.mean())
                 meas['tim_a'].append(_time.time())
                 meas['current'].append(curr.current)
+                meas['rf_voltage'].append(rfcav.dev_cavmon.gap_voltage)
             else:
                 bpm.tbt_mask_beg = parms.mask_beg_bunch_b
                 bpm.tbt_mask_end = parms.mask_end_bunch_b
