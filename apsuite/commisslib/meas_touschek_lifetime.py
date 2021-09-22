@@ -6,7 +6,7 @@ import matplotlib.pyplot as _mplt
 import matplotlib.gridspec as _mgs
 import scipy.optimize as _opt
 
-from siriuspy.devices import BPM, CurrInfoSI, EGun, SOFB, RFCav
+from siriuspy.devices import BPM, CurrInfoSI, EGun, RFCav
 from siriuspy.search.bpms_search import BPMSearch
 from siriuspy.epics import PV
 
@@ -16,6 +16,7 @@ from ..utils import ThreadedMeasBaseClass as _BaseClass, \
 
 class MeasTouschekParams(_ParamsBaseClass):
     """."""
+
     DEFAULT_BPMNAME = 'SI-01M2:DI-BPM'
 
     def __init__(self):
@@ -82,7 +83,7 @@ class MeasTouschekLifetime(_BaseClass):
 
         if isonline:
             self._bpms = self._create_si_bpms()
-            self.devices.update(bpms)
+            self.devices.update(self._bpms)
             self.devices['currinfo'] = CurrInfoSI()
             self.devices['egun'] = EGun()
             self.devices['rfcav'] = RFCav(RFCav.DEVICES.SI)
