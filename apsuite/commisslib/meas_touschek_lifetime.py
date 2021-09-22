@@ -1,12 +1,14 @@
 """."""
 import time as _time
 import numpy as _np
+import numpy.polynomial.polynomial as pfit
 import matplotlib.pyplot as _mplt
 import matplotlib.gridspec as _mgs
 import scipy.optimize as _opt
 
 from siriuspy.devices import BPM, CurrInfoSI, EGun, SOFB, RFCav
 from siriuspy.search.bpms_search import BPMSearch
+from siriuspy.epics import PV
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
@@ -54,6 +56,10 @@ class MeasTouschekLifetime(_BaseClass):
     RFFEAttMB = 0  # [dB]  Multibunch Attenuation
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
     FILTER_OUTLIER = 0.2  # Relative error data/fitting
+    EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
+    EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
+    OFFSET_DCCT = 8.4e-3  # [mA]
+    AVG_PRESSURE_PV = 'Calc:VA-CCG-SI-Avg:Pressure-Mon'
 
     def __init__(self, isonline=True):
         """."""
@@ -66,7 +72,9 @@ class MeasTouschekLifetime(_BaseClass):
             self.devices['currinfo'] = CurrInfoSI()
             self.devices['egun'] = EGun()
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
-            self.devices['rfcav'] = RFCav()
+            self.devices['rfcav'] = RFCav(RFCav.DEVICES.SI)
+            self.devices['avg_pressure'] = PV(
+                MeasTouschekLifetime.AVG_PRESSURE_PV)
 
     def _create_si_bpms(self):
         si_bpm_filter = {'sec': 'SI', 'sub': '[0-9][0-9](M|C).*'}
@@ -112,10 +120,13 @@ class MeasTouschekLifetime(_BaseClass):
         # Change SOFB Trigger Source to Study Event and Mode to Continuous
 
     def _run(self, save=True):
-        meas = dict(sum_a=[], sum_b=[], tim_a=[], tim_b=[], current=[])
+        meas = dict(
+            sum_a=[], sum_b=[], tim_a=[], tim_b=[], current=[],
+            rf_voltage=[], avg_pressure=[])
         bpm = self.devices['bpm']
         curr = self.devices['currinfo']
         rfcav = self.devices['rfcav']
+        press = self.devices['avg_pressure']
         parms = self.params
 
         bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
@@ -133,6 +144,7 @@ class MeasTouschekLifetime(_BaseClass):
                 meas['tim_a'].append(_time.time())
                 meas['current'].append(curr.current)
                 meas['rf_voltage'].append(rfcav.dev_cavmon.gap_voltage)
+                meas['avg_pressure'].append(press.value)
             else:
                 bpm.tbt_mask_beg = parms.mask_beg_bunch_b
                 bpm.tbt_mask_end = parms.mask_end_bunch_b
@@ -158,6 +170,21 @@ class MeasTouschekLifetime(_BaseClass):
         return amp*(1 - tim/tau)
 
     @staticmethod
+    def _exp_model(timcurrs, *coeff):
+        # curra0, currb0, gas_rate, gamma, delta = coeff
+        curra0, currb0, gamma, delta = coeff
+        tim, curra, currb = timcurrs
+        tsck_rate_a = gamma*curra/(1+delta*curra)
+        tsck_rate_b = gamma*currb/(1+delta*currb)
+        # arga = -(gas_rate + tsck_rate_a)*tim
+        # argb = -(gas_rate + tsck_rate_b)*tim
+        arga = -tsck_rate_a*tim
+        argb = -tsck_rate_b*tim
+        # return _np.r_[curra0*_np.exp(arga), currb0*_np.exp(argb)]
+        # return curra0*_np.exp(arga) + currb0*_np.exp(argb)
+        return currb0/curra0*_np.exp(argb-arga)
+
+    @staticmethod
     def fit_lifetime(dtime, current, window):
         """."""
         lifetimes = []
@@ -175,6 +202,20 @@ class MeasTouschekLifetime(_BaseClass):
             lifetimes.append(coeff[-1])
             fiterrors.append(errs[-1])
         return _np.array(lifetimes), _np.array(fiterrors)
+
+    @staticmethod
+    def fit_lifetime_alt(dtime, current_a, current_b):
+        """."""
+        p0_ = (current_a[0], current_b[0], 1, 0.5)
+        # goal = current_a + current_b
+        # goal = _np.r_[current_a, current_b]
+        goal = current_b/current_a
+        coeffs, pconv = _opt.curve_fit(
+            MeasTouschekLifetime._exp_model,
+            (dtime, current_a, current_b),
+            goal, p0=p0_)
+        errs = _np.sqrt(_np.diag(pconv))
+        return coeffs, errs
 
     def _handle_data_lens(self):
         meas = self.data['measure']
@@ -236,11 +277,11 @@ class MeasTouschekLifetime(_BaseClass):
     def _calc_current_per_bunch(self, nr_bunches):
         """."""
         anly = self.data['analysis']
-        total_sum = anly['sum_a'] + anly['sum_b']
-        curr_a = anly['current'] * anly['sum_a']/total_sum
-        curr_b = anly['current'] * anly['sum_b']/total_sum
-        anly['current_a'] = curr_a/nr_bunches
-        anly['current_b'] = curr_b/nr_bunches
+        anly['current'] -= self.OFFSET_DCCT
+        curr_a = pfit.polyval(anly['sum_a']/nr_bunches, self.EXCCURVE_SUMA)
+        curr_b = pfit.polyval(anly['sum_b']/nr_bunches, self.EXCCURVE_SUMB)
+        anly['current_a'] = curr_a
+        anly['current_b'] = curr_b
         self.data['analysis'] = anly
 
     def calc_touschek_lifetime(self):
@@ -251,19 +292,48 @@ class MeasTouschekLifetime(_BaseClass):
         window_a, window_b = anly['window_a'], anly['window_b']
         curr_a = curr_a[:-window_a]
         curr_b = curr_b[:-window_b]
-        num = 1-curr_b/curr_a
-        den = 1/ltme_a - 1/ltme_b
-        tsck_a = num/den
-        tsck_b = tsck_a * curr_a / curr_b
-        anly['touschek_a'] = tsck_a
-        anly['touschek_b'] = tsck_b
+        # num = 1-curr_b/curr_a
+        # den = 1/ltme_a - 1/ltme_b
+        # tsck_a = num/den
+        # tsck_b = tsck_a * curr_a / curr_b
+
+        def model(curr, gamma, delta):
+            curr_a, curr_b = curr
+            # alpha_a = gamma*curr_a/(1+delta*curr_a+beta*curr_a**2)
+            # alpha_b = gamma*curr_b/(1+delta*curr_b+beta*curr_a**2)
+            alpha_a = gamma*curr_a/(1+delta*curr_a)
+            alpha_b = gamma*curr_b/(1+delta*curr_b)
+            return alpha_a - alpha_b
+        p0_ = (1, 1)
+        alpha_total = 1/ltme_a - 1/ltme_b
+        coeffs, pcov = _opt.curve_fit(
+            model, (curr_a, curr_b), alpha_total, p0=p0_)
+        errs = _np.sqrt(_np.diag(pcov))
+        # gamma, delta, beta = coeffs
+        gamma, delta = coeffs
+        # alpha_a = gamma*curr_a/(1+delta*curr_a+beta*curr_a**2)
+        # alpha_b = gamma*curr_b/(1+delta*curr_b+beta*curr_b**2)
+        alpha_a = gamma*curr_a/(1+delta*curr_a)
+        alpha_b = gamma*curr_b/(1+delta*curr_b)
+        anly['touschek_a'] = 1/alpha_a
+        anly['touschek_b'] = 1/alpha_b
+        anly['gamma'] = gamma
+        anly['delta'] = delta
+        # anly['beta'] = beta
+        anly['gamma_error'] = errs[0]
+        anly['delta_error'] = errs[1]
+        # anly['beta_error'] = errs[2]
+        anly['alpha_total'] = alpha_total
         self.data['analysis'] = anly
 
     def calc_gas_lifetime(self):
         """."""
         anly = self.data['analysis']
-        gas_rate = 1/anly['total_lifetime_a'] - 1/anly['touschek_a']
-        anly['gas_lifetime'] = 1/gas_rate
+        gas_rate_a = 1/anly['total_lifetime_a'] - 1/anly['touschek_a']
+        gas_rate_b = 1/anly['total_lifetime_b'] - 1/anly['touschek_b']
+        anly['gas_lifetime_a'] = 1/gas_rate_a
+        anly['gas_lifetime_b'] = 1/gas_rate_b
+        anly['gas_lifetime'] = (1/gas_rate_a + 1/gas_rate_b)/2
         self.data['analysis'] = anly
 
     def process_data(self, window_a, window_b, nr_bunches):
@@ -284,7 +354,13 @@ class MeasTouschekLifetime(_BaseClass):
         anly['total_lifetime_b'] = lifetime_b
         anly['fiterror_a'] = fiterror_a
         anly['fiterror_b'] = fiterror_b
-
+        # dtime = (tim_a - tim_a[0])/3600
+        # coeffs, errs = self.fit_lifetime_alt(dtime, curr_a, curr_b)
+        # anly['initial_curr_a'] = coeffs[0]
+        # anly['initial_curr_b'] = coeffs[1]
+        # # anly['gas_rate'] = coeffs[2]
+        # anly['gamma'] = coeffs[2]
+        # anly['delta'] = coeffs[3]
         self.data['analysis'] = anly
         self.calc_touschek_lifetime()
         self.calc_gas_lifetime()
@@ -306,7 +382,6 @@ class MeasTouschekLifetime(_BaseClass):
         ax1.plot(curr_b, tsck_b**pwr, '.', color='C1', label='Bunch B')
 
         if fitting:
-            pfit = _np.polynomial.polynomial
             currs = _np.hstack((curr_a, curr_b))
             tscks = _np.hstack((tsck_a, tsck_b))
             poly = pfit.polyfit(currs, 1/tscks, deg=1)
@@ -393,7 +468,6 @@ class MeasTouschekLifetime(_BaseClass):
             ax1.plot(curr_b, total_b**pwr, '-', color='C1', label='Bunch B')
 
         if fitting:
-            pfit = _np.polynomial.polynomial
             currs = _np.hstack((curr_a, curr_b))
             totls = _np.hstack((total_a, total_b))
             poly = pfit.polyfit(currs, 1/totls, deg=1)
