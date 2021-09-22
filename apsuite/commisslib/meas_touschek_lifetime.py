@@ -16,10 +16,15 @@ from ..utils import ThreadedMeasBaseClass as _BaseClass, \
 
 class MeasTouschekParams(_ParamsBaseClass):
     """."""
+    DEFAULT_BPMNAME = 'SI-01M2:DI-BPM'
 
     def __init__(self):
         """."""
         _ParamsBaseClass().__init__()
+        self.total_duration = 0  # [s] 0 means infinity
+        self.save_partial = True
+        self.bpm_name = self.DEFAULT_BPMNAME
+        self.bpm_attenuation = 14  # [dB]
         self.wait_mask = 2  # [s]
         self.mask_beg_bunch_a = 180
         self.mask_end_bunch_a = 0
@@ -36,7 +41,14 @@ class MeasTouschekParams(_ParamsBaseClass):
         dtmp = '{0:20s} = {1:9d}\n'.format
         ftmp = '{0:20s} = {1:9.4f}  {2:s}\n'.format
         stmp = '{0:20s} = {1:}\n'.format
-        stg = ftmp('wait_mask', self.wait_mask, '[s]')
+
+        stg = ''
+        stg += ftmp(
+            'total_duration', self.total_duration, '[s] (0) means forever')
+        stg += f'save_partial = {str(bool(self.save_partial)):s}'
+        stg += stmp('bpm_name', self.bpm_name)
+        stg += ftmp('bpm_attenuation', self.bpm_attenuation, '[dB]')
+        stg += ftmp('wait_mask', self.wait_mask, '[s]')
         stg += dtmp('mask_beg_bunch_a', self.mask_beg_bunch_a)
         stg += dtmp('mask_end_bunch_a', self.mask_end_bunch_a)
         stg += dtmp('mask_beg_bunch_b', self.mask_beg_bunch_b)
@@ -52,112 +64,103 @@ class MeasTouschekParams(_ParamsBaseClass):
 class MeasTouschekLifetime(_BaseClass):
     """."""
 
-    BPMNAME = 'SI-01M2:DI-BPM'
+    AVG_PRESSURE_PV = 'Calc:VA-CCG-SI-Avg:Pressure-Mon'
     RFFEAttMB = 0  # [dB]  Multibunch Attenuation
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
     FILTER_OUTLIER = 0.2  # Relative error data/fitting
+
+    # calibration curves measured during machine shift in 2021/09/21:
     EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
     EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
     OFFSET_DCCT = 8.4e-3  # [mA]
-    AVG_PRESSURE_PV = 'Calc:VA-CCG-SI-Avg:Pressure-Mon'
 
     def __init__(self, isonline=True):
         """."""
-        _BaseClass.__init__(self)
-        self.data = dict(measure=dict(), analysis=dict())
-        self.params = MeasTouschekParams()
+        _BaseClass.__init__(
+            self, params=MeasTouschekParams(), target=self._do_measure,
+            isonline=isonline)
 
         if isonline:
-            self.devices['bpm'] = BPM(MeasTouschekLifetime.BPMNAME)
+            self._bpms = self._create_si_bpms()
+            self.devices.update(bpms)
             self.devices['currinfo'] = CurrInfoSI()
             self.devices['egun'] = EGun()
-            self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
             self.devices['rfcav'] = RFCav(RFCav.DEVICES.SI)
             self.devices['avg_pressure'] = PV(
                 MeasTouschekLifetime.AVG_PRESSURE_PV)
 
     def _create_si_bpms(self):
-        si_bpm_filter = {'sec': 'SI', 'sub': '[0-9][0-9](M|C).*'}
-        bpmsnames = BPMSearch.get_names(si_bpm_filter)
-        bpms = {name: BPM(name) for name in bpmsnames}
-        _ = [bpm.wait_for_connection() for bpm in bpms.values()]
-        return bpms
+        bpmsnames = BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
+        return {name: BPM(name) for name in bpmsnames}
 
-    def set_si_bpms_attenuation(self, bpms=None, value_att=RFFEAttSB):
+    def set_si_bpms_attenuation(self, value_att=RFFEAttSB):
         """."""
-        if bpms is None:
-            bpms = self._create_si_bpms()
+        if not self.isonline:
+            raise ConnectionError('Cannot do that in offline mode.')
 
-        val_old = dict()
-        for name, bpm in bpms.items():
-            val_old[name] = bpm.rffe_att
+        val_old = {name: bpm.rffe_att for name, bpm in self._bpms.items()}
 
-        for name, bpm in bpms.items():
+        for bpm in self._bpms.values():
             bpm.rffe_att = value_att
         _time.sleep(1.0)
 
-        val_new = dict()
-        for name, bpm in bpms.items():
-            val_new[name] = bpm.rffe_att
+        for name, bpm in self._bpms.items():
+            print(f'{name:<20s}: {val_old[name]:.0f} -> {bpm.rffe_att:.0f}')
 
-        for name in bpms:
-            print('{:<20s}: {} -> {}'.format(
-                    name, val_old[name], val_new[name]))
-
-    def switch_to_single_bunch(self):
+    def cmd_switch_to_single_bunch(self):
         """."""
-        self.devices['egun'].cmd_switch_to_single_bunch()
+        return self.devices['egun'].cmd_switch_to_single_bunch()
 
-    def switch_to_multi_bunch(self):
+    def cmd_switch_to_multi_bunch(self):
         """."""
-        self.devices['egun'].cmd_switch_to_multi_bunch()
+        return self.devices['egun'].cmd_switch_to_multi_bunch()
 
-    def prepare_sofb(self):
-        """."""
-        sofb = self.devices['sofb']
-        sofb.opmode = 'MultiTurn'
-        sofb.nr_points = 1
-        # Change SOFB Trigger Source to Study Event and Mode to Continuous
-
-    def _run(self, save=True):
+    def _do_measure(self):
         meas = dict(
             sum_a=[], sum_b=[], tim_a=[], tim_b=[], current=[],
             rf_voltage=[], avg_pressure=[])
-        bpm = self.devices['bpm']
+        parms = self.params
+
         curr = self.devices['currinfo']
         rfcav = self.devices['rfcav']
         press = self.devices['avg_pressure']
-        parms = self.params
+        bpm = self.devices[parms.bpm_name]
 
         bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
         bpm.acq_nrsamples_post = parms.acq_nrsamples_post
+        bpm.rffe_att = parms.bpm_attenuation
         bpm.tbt_mask_enbl = 1
         _time.sleep(parms.wait_mask)
 
+        maxidx = parms.total_duration / (2*parms.wait_mask)
+        maxidx = float('inf') if maxidx < 1 else maxidx
         idx = 0
-        while True:
-            if not idx % 2 and idx:
-                bpm.tbt_mask_beg = parms.mask_beg_bunch_a
-                bpm.tbt_mask_end = parms.mask_end_bunch_a
-                _time.sleep(parms.wait_mask)
-                meas['sum_a'].append(bpm.mt_possum.mean())
-                meas['tim_a'].append(_time.time())
-                meas['current'].append(curr.current)
-                meas['rf_voltage'].append(rfcav.dev_cavmon.gap_voltage)
-                meas['avg_pressure'].append(press.value)
-            else:
-                bpm.tbt_mask_beg = parms.mask_beg_bunch_b
-                bpm.tbt_mask_end = parms.mask_end_bunch_b
-                _time.sleep(parms.wait_mask)
-                meas['sum_b'].append(bpm.mt_possum.mean())
-                meas['tim_b'].append(_time.time())
-            if not idx % 100:
-                if save:
-                    self.data['measure'] = meas
-                    self.save_data(
-                        fname=parms.filename, overwrite=True)
-                    print(f'{idx:04d}: data saved to file.')
+        while idx < maxidx and not self._stopevt.is_set():
+            bpm.tbt_mask_beg = parms.mask_beg_bunch_a
+            bpm.tbt_mask_end = parms.mask_end_bunch_a
+            _time.sleep(parms.wait_mask)
+            meas['sum_a'].append(bpm.mt_possum.mean())
+            meas['tim_a'].append(_time.time())
+
+            meas['current'].append(curr.current)
+            meas['rf_voltage'].append(rfcav.dev_cavmon.gap_voltage)
+            meas['avg_pressure'].append(press.value)
+
+            bpm.tbt_mask_beg = parms.mask_beg_bunch_b
+            bpm.tbt_mask_end = parms.mask_end_bunch_b
+            _time.sleep(parms.wait_mask)
+            meas['sum_b'].append(bpm.mt_possum.mean())
+            meas['tim_b'].append(_time.time())
+            if not idx % 100 and parms.save_partial:
+                self.data = meas
+                self.save_data(fname=parms.filename, overwrite=True)
+                print(f'{idx:04d}: data saved to file.')
             idx += 1
+
+        self.data = meas
+        self.save_data(fname=parms.filename, overwrite=True)
+        print(f'{idx:04d}: data saved to file.')
+        print('Done!')
 
     @staticmethod
     def _exp_fun(tim, *coeff):
@@ -218,11 +221,8 @@ class MeasTouschekLifetime(_BaseClass):
         return coeffs, errs
 
     def _handle_data_lens(self):
-        meas = self.data['measure']
-        len_a, len_b = len(meas['sum_a']), len(meas['sum_b'])
-        len_min = len_a
-        if len_a != len_b:
-            len_min = _np.min((len_a, len_b))
+        meas = self.data.get('measure', self.data)
+        len_min = min(len(meas['sum_a']), len(meas['sum_b']))
 
         sum_a, sum_b = meas['sum_a'][:len_min], meas['sum_b'][:len_min]
         tim_a, tim_b = meas['tim_a'][:len_min], meas['tim_b'][:len_min]
@@ -232,30 +232,29 @@ class MeasTouschekLifetime(_BaseClass):
         anly['sum_a'], anly['sum_b'] = sum_a, sum_b
         anly['tim_a'], anly['tim_b'] = tim_a, tim_b
         anly['current'] = currt
-        self.data['analysis'] = anly
+        self.analysis = anly
 
     def _remove_nans(self):
-        anly = self.data['analysis']
+        anly = self.analysis
         sum_a, sum_b = anly['sum_a'], anly['sum_b']
         tim_a, tim_b = anly['tim_a'], anly['tim_b']
         currt = anly['current']
 
-        vec = sum_a
-        for _ in range(1):
-            nanidx = _np.logical_not(_np.isnan(vec)).ravel()
-            sum_a, sum_b = _np.array(sum_a)[nanidx], _np.array(sum_b)[nanidx]
-            tim_a, tim_b = _np.array(tim_a)[nanidx], _np.array(tim_b)[nanidx]
-            currt = _np.array(currt)[nanidx]
-            vec = sum_b
+        nanidx = _np.logical_not(_np.isnan(sum_a)).ravel()
+        nanidx |= _np.logical_not(_np.isnan(sum_b)).ravel()
+        sum_a, sum_b = _np.array(sum_a)[nanidx], _np.array(sum_b)[nanidx]
+        tim_a, tim_b = _np.array(tim_a)[nanidx], _np.array(tim_b)[nanidx]
+        currt = _np.array(currt)[nanidx]
 
         anly = dict()
         anly['sum_a'], anly['sum_b'] = sum_a, sum_b
         anly['tim_a'], anly['tim_b'] = tim_a, tim_b
         anly['current'] = currt
-        self.data['analysis'] = anly
+        self.analysis = anly
 
     def _remove_outliers(self, filter_outlier=None):
-        anly = self.data['analysis']
+        anly = self.analysis
+
         dt_a = (anly['tim_a'] - anly['tim_a'][0])/3600
         dt_b = (anly['tim_b'] - anly['tim_b'][0])/3600
         curr_a = anly['current_a']
@@ -269,24 +268,32 @@ class MeasTouschekLifetime(_BaseClass):
         diff_a = (curr_a - fit_a)/curr_a
         diff_b = (curr_b - fit_b)/curr_b
         out = filter_outlier or MeasTouschekLifetime.FILTER_OUTLIER
-        idx_keep = (abs(diff_a) < out) & (abs(diff_b) < out)
+        idx_keep = (_np.abs(diff_a) < out) & (_np.abs(diff_b) < out)
         for key in anly.keys():
             anly[key] = _np.array(anly[key])[idx_keep]
-        self.data['analysis'] = anly
+        self.analysis = anly
 
     def _calc_current_per_bunch(self, nr_bunches):
         """."""
-        anly = self.data['analysis']
+        anly = self.analysis
         anly['current'] -= self.OFFSET_DCCT
         curr_a = pfit.polyval(anly['sum_a']/nr_bunches, self.EXCCURVE_SUMA)
         curr_b = pfit.polyval(anly['sum_b']/nr_bunches, self.EXCCURVE_SUMB)
         anly['current_a'] = curr_a
         anly['current_b'] = curr_b
-        self.data['analysis'] = anly
+        self.analysis = anly
 
     def calc_touschek_lifetime(self):
         """."""
-        anly = self.data['analysis']
+        def model(curr, gamma, delta):
+            curr_a, curr_b = curr
+            # alpha_a = gamma*curr_a/(1+delta*curr_a+beta*curr_a**2)
+            # alpha_b = gamma*curr_b/(1+delta*curr_b+beta*curr_b**2)
+            alpha_a = gamma*curr_a/(1+delta*curr_a)
+            alpha_b = gamma*curr_b/(1+delta*curr_b)
+            return alpha_a - alpha_b
+
+        anly = self.analysis
         curr_a, curr_b = anly['current_a'], anly['current_b']
         ltme_a, ltme_b = anly['total_lifetime_a'], anly['total_lifetime_b']
         window_a, window_b = anly['window_a'], anly['window_b']
@@ -297,13 +304,6 @@ class MeasTouschekLifetime(_BaseClass):
         # tsck_a = num/den
         # tsck_b = tsck_a * curr_a / curr_b
 
-        def model(curr, gamma, delta):
-            curr_a, curr_b = curr
-            # alpha_a = gamma*curr_a/(1+delta*curr_a+beta*curr_a**2)
-            # alpha_b = gamma*curr_b/(1+delta*curr_b+beta*curr_a**2)
-            alpha_a = gamma*curr_a/(1+delta*curr_a)
-            alpha_b = gamma*curr_b/(1+delta*curr_b)
-            return alpha_a - alpha_b
         p0_ = (1, 1)
         alpha_total = 1/ltme_a - 1/ltme_b
         coeffs, pcov = _opt.curve_fit(
@@ -324,11 +324,11 @@ class MeasTouschekLifetime(_BaseClass):
         anly['delta_error'] = errs[1]
         # anly['beta_error'] = errs[2]
         anly['alpha_total'] = alpha_total
-        self.data['analysis'] = anly
+        self.analysis = anly
 
     def calc_gas_lifetime(self):
         """."""
-        anly = self.data['analysis']
+        anly = self.analysis
         gas_rate_a = 1/anly['total_lifetime_a'] - 1/anly['touschek_a']
         gas_rate_b = 1/anly['total_lifetime_b'] - 1/anly['touschek_b']
         anly['gas_lifetime_a'] = 1/gas_rate_a
@@ -338,11 +338,15 @@ class MeasTouschekLifetime(_BaseClass):
 
     def process_data(self, window_a, window_b, nr_bunches):
         """."""
+        if 'analysis' in self.data:
+            self.analysis = self.data.pop('analysis')
+
         self._handle_data_lens()
         self._remove_nans()
         self._calc_current_per_bunch(nr_bunches=nr_bunches)
         self._remove_outliers()
-        anly = self.data['analysis']
+        anly = self.analysis
+
         tim_a, tim_b = anly['tim_a'], anly['tim_b']
         curr_a, curr_b = anly['current_a'], anly['current_b']
         anly['window_a'], anly['window_b'] = window_a, window_b
@@ -354,6 +358,7 @@ class MeasTouschekLifetime(_BaseClass):
         anly['total_lifetime_b'] = lifetime_b
         anly['fiterror_a'] = fiterror_a
         anly['fiterror_b'] = fiterror_b
+
         # dtime = (tim_a - tim_a[0])/3600
         # coeffs, errs = self.fit_lifetime_alt(dtime, curr_a, curr_b)
         # anly['initial_curr_a'] = coeffs[0]
@@ -361,14 +366,14 @@ class MeasTouschekLifetime(_BaseClass):
         # # anly['gas_rate'] = coeffs[2]
         # anly['gamma'] = coeffs[2]
         # anly['delta'] = coeffs[3]
-        self.data['analysis'] = anly
+        self.analysis = anly
         self.calc_touschek_lifetime()
         self.calc_gas_lifetime()
 
     def plot_touschek_lifetime(
             self, fname=None, title=None, fitting=False, rate=True):
         """."""
-        anly = self.data['analysis']
+        anly = self.analysis
         curr_a, curr_b = anly['current_a'], anly['current_b']
         window_a, window_b = anly['window_a'], anly['window_b']
         tsck_a, tsck_b = anly['touschek_a'], anly['touschek_b']
@@ -404,13 +409,12 @@ class MeasTouschekLifetime(_BaseClass):
         ax1.grid(ls='--', alpha=0.5)
         _mplt.tight_layout(True)
         if fname:
-            fig.savefig(
-                fname, dpi=300, format='png')
+            fig.savefig(fname, dpi=300, format='png')
         return fig, ax1
 
     def plot_gas_lifetime(self, fname=None, title=None, rate=True):
         """."""
-        anly = self.data['analysis']
+        anly = self.analysis
         curr_a, curr_b = anly['current_a'], anly['current_b']
         window_a, window_b = anly['window_a'], anly['window_b']
         curr_a, curr_b = curr_a[:-window_a], curr_b[:-window_b]
@@ -432,15 +436,14 @@ class MeasTouschekLifetime(_BaseClass):
         ax1.grid(ls='--', alpha=0.5)
         _mplt.tight_layout(True)
         if fname:
-            fig.savefig(
-                fname, dpi=300, format='png')
+            fig.savefig(fname, dpi=300, format='png')
         return fig, ax1
 
     def plot_total_lifetime(
             self, fname=None, title=None, fitting=False,
             rate=True, errors=True):
         """."""
-        anly = self.data['analysis']
+        anly = self.analysis
         curr_a, curr_b = anly['current_a'], anly['current_b']
         window_a, window_b = anly['window_a'], anly['window_b']
         total_a, total_b = anly['total_lifetime_a'], anly['total_lifetime_b']
@@ -490,13 +493,12 @@ class MeasTouschekLifetime(_BaseClass):
         ax1.grid(ls='--', alpha=0.5)
         _mplt.tight_layout(True)
         if fname:
-            fig.savefig(
-                fname, dpi=300, format='png')
+            fig.savefig(fname, dpi=300, format='png')
         return fig, ax1
 
     def plot_fitting_error(self, fname=None, title=None):
         """."""
-        anly = self.data['analysis']
+        anly = self.analysis
         curr_a, curr_b = anly['current_a'], anly['current_b']
         window_a, window_b = anly['window_a'], anly['window_b']
         fiterror_a, fiterror_b = anly['fiterror_a'], anly['fiterror_b']
@@ -519,13 +521,12 @@ class MeasTouschekLifetime(_BaseClass):
         ax1.grid(ls='--', alpha=0.5)
         _mplt.tight_layout(True)
         if fname:
-            fig.savefig(
-                fname, dpi=300, format='png')
+            fig.savefig(fname, dpi=300, format='png')
         return fig, ax1
 
     def plot_current_decay(self, fname=None, title=None):
         """."""
-        anly = self.data['analysis']
+        anly = self.analysis
         curr_a, curr_b = anly['current_a'], anly['current_b']
         dt_a = (anly['tim_a'] - anly['tim_a'][0])/3600
         dt_b = (anly['tim_b'] - anly['tim_b'][0])/3600
@@ -542,6 +543,5 @@ class MeasTouschekLifetime(_BaseClass):
         ax1.grid(ls='--', alpha=0.5)
         _mplt.tight_layout(True)
         if fname:
-            fig.savefig(
-                fname, dpi=300, format='png')
+            fig.savefig(fname, dpi=300, format='png')
         return fig, ax1
