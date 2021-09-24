@@ -115,8 +115,8 @@ class MeasTouschekLifetime(_BaseClass):
         return self.devices['egun'].cmd_switch_to_multi_bunch()
 
     def process_data(
-            self, proc_type='fit_model', nr_bunches=1, window=1000,
-            include_bunlen=False):
+            self, proc_type='fit_model', nr_bunches=1, nr_intervals=1,
+            window=1000, include_bunlen=False):
         """."""
         if 'analysis' in self.data:
             self.analysis = self.data.pop('analysis')
@@ -130,15 +130,36 @@ class MeasTouschekLifetime(_BaseClass):
         self._remove_outliers()
 
         if proc_type.lower().startswith('fit_model'):
-            self._process_model_totalrate()
+            self._process_model_totalrate(nr_intervals=nr_intervals)
         else:
             self._process_diffbunches(window, include_bunlen)
 
     @classmethod
     def totalrate_model(cls, curr, *coeff):
         """."""
-        gas, tous, blen = coeff
-        return (gas + tous*curr/(1 + blen*curr))
+        total = cls.gasrate_model(curr, *coeff[:-2])
+        total += cls.touschekrate_model(curr, *coeff[-2:])
+        return total
+
+    @classmethod
+    def gasrate_model(cls, curr, *gases):
+        """."""
+        nr_gas = len(gases)
+        totsiz = curr.size//2
+        quo = totsiz // nr_gas
+        rest = totsiz % nr_gas
+        lst = []
+        for i, gas in enumerate(gases):
+            siz = quo + (i < rest)
+            lst.extend([gas, ]*siz)
+        return _np.r_[lst, lst]
+
+    @classmethod
+    def touschekrate_model(cls, curr, *coeff):
+        """."""
+        tous = coeff[-2]
+        blen = coeff[-1]
+        return tous*curr/(1 + blen*curr)
 
     @classmethod
     def curr_model(cls, curr, *coeff, dtim=1):
@@ -399,7 +420,7 @@ class MeasTouschekLifetime(_BaseClass):
             anly[key] = _np.array(anly[key])[idx_keep]
         self.analysis = anly
 
-    def _process_model_totalrate(self):
+    def _process_model_totalrate(self, nr_intervals=5):
         anly = self.analysis
         curra = anly['current_a']
         currb = anly['current_b']
@@ -407,33 +428,35 @@ class MeasTouschekLifetime(_BaseClass):
         size = curra.size
         currt = _np.r_[curra, currb]
 
-        coeff0 = (10, 5, 0.6)
+        coeff0 = [10, ] * nr_intervals + [5, 0.6]
         coeff, pconv = _scy_opt.curve_fit(
             _partial(self.curr_model, dtim=dtim), currt, currt, p0=coeff0)
         errs = _np.sqrt(_np.diag(pconv))
 
-        rate = self.totalrate_model(currt, *coeff)*3600
-        gas, tous, bunlen = coeff
-        gas *= 3600
-        tous *= 3600
+        tousrate = self.touschekrate_model(currt, *coeff[-2:])
+        gasrate = self.gasrate_model(currt, *coeff[:-2])
+        gasrate *= 3600
+        tousrate *= 3600
+        totrate = tousrate + gasrate
+
         currt_fit = self.curr_model(currt, *coeff, dtim=dtim)
 
         anly['coeffs'] = coeff
         anly['coeffs_pconv'] = pconv
         anly['current_a_fit'] = currt_fit[:size]
         anly['current_b_fit'] = currt_fit[size:]
-        anly['total_lifetime_a'] = 1 / rate[:size]
-        anly['total_lifetime_b'] = 1 / rate[size:]
+        anly['total_lifetime_a'] = 1 / totrate[:size]
+        anly['total_lifetime_b'] = 1 / totrate[size:]
         fiterr = _np.sqrt(_np.sum(errs*errs/_np.array(coeff)))
-        anly['fiterror_a'] = 1/rate[:size] * fiterr
-        anly['fiterror_b'] = 1/rate[size:] * fiterr
+        anly['fiterror_a'] = 1/totrate[:size] * fiterr
+        anly['fiterror_b'] = 1/totrate[size:] * fiterr
 
         # Calc Touschek and Gas Lifetime
-        anly['touschek_a'] = 1/(rate[:size] - gas)
-        anly['touschek_b'] = 1/(rate[size:] - gas)
-        anly['gas_lifetime_a'] = 1/gas + curra*0
-        anly['gas_lifetime_b'] = 1/gas + currb*0
-        anly['gas_lifetime'] = 1/gas + currb*0
+        anly['touschek_a'] = 1/tousrate[:size]
+        anly['touschek_b'] = 1/tousrate[size:]
+        anly['gas_lifetime_a'] = 1/gasrate[:size]
+        anly['gas_lifetime_b'] = 1/gasrate[size:]
+        anly['gas_lifetime'] = 1/gasrate[:size]
 
     def _process_diffbunches(self, window, include_bunlen=False):
         anly = self.analysis
