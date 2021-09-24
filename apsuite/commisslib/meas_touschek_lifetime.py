@@ -430,7 +430,7 @@ class MeasTouschekLifetime(_BaseClass):
 
         # First do one round without bounds to use LM algorithm and find the
         # true miminum:
-        coeff0 = [10, ] * nr_intervals + [5, 0.6]
+        coeff0 = [1/40/3600, ] * nr_intervals + [1/10/3600, 0.2]
         coeff, pconv = _scy_opt.curve_fit(
             _partial(self.curr_model, dtim=dtim), currt, currt, p0=coeff0)
 
