@@ -428,9 +428,20 @@ class MeasTouschekLifetime(_BaseClass):
         size = curra.size
         currt = _np.r_[curra, currb]
 
+        # First do one round without bounds to use LM algorithm and find the
+        # true miminum:
         coeff0 = [10, ] * nr_intervals + [5, 0.6]
         coeff, pconv = _scy_opt.curve_fit(
             _partial(self.curr_model, dtim=dtim), currt, currt, p0=coeff0)
+
+        # Then fix the negative arguments to make the final round with bounds:
+        coeff = _np.array(coeff)
+        coeff[coeff < 0] = 0
+        lower = [0, ] * (nr_intervals + 2)
+        upper = [_np.inf, ] * (nr_intervals + 2)
+        coeff, pconv = _scy_opt.curve_fit(
+            _partial(self.curr_model, dtim=dtim), currt, currt, p0=coeff,
+            bounds=(lower, upper))
         errs = _np.sqrt(_np.diag(pconv))
 
         tousrate = self.touschekrate_model(currt, *coeff[-2:])
