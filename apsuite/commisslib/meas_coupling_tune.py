@@ -11,6 +11,8 @@ import matplotlib.pyplot as _plt
 import matplotlib.gridspec as _mpl_gs
 
 from siriuspy.devices import PowerSupply, Tune
+from siriuspy.search import PSSearch
+from siriuspy.util import ClassProperty as _classproperty
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
@@ -33,6 +35,41 @@ class CouplingParams(_ParamsBaseClass):
         'QFB', 'QFA', 'QDB1', 'QDB2', 'QFP',
         'QDB1', 'QDB2', 'QDP1', 'QDP2', 'QDA',
         'Q1', 'Q2', 'Q3', 'Q4')
+
+    # First singular vector of the effect of achromatic skews on the response
+    # matrix according to the model SI.V25.01
+    VH0 = _np.array([
+        +0.11632829, +0.21174876, +0.20343399, +0.01399281, -0.01317575,
+        -0.20355381, -0.21164404, -0.11682487, 0.11632829, +0.21174876,
+        +0.20343399, +0.01399281, -0.01317575, -0.20355381, -0.21164404,
+        -0.11682487, +0.11632829, +0.21174876, +0.20343399, +0.01399281,
+        -0.01317575, -0.20355381, -0.21164404, -0.11682487, +0.11632829,
+        +0.21174876, +0.20343399, +0.01399281, -0.01317575, -0.20355381,
+        -0.21164404, -0.11682487, +0.11632829, +0.21174876, +0.20343399,
+        +0.01399281, -0.01317575, -0.20355381, -0.21164404, -0.11682487])
+    # Fourth singular vector of the effect of achromatic skews on the response
+    # matrix according to the model SI.V25.01
+    VH3 = _np.array([
+        -0.19189697, +0.04820959, +0.07755773, +0.23400533, +0.23404174,
+        +0.07809868, +0.04898947, -0.19184053, -0.19189697, +0.04820959,
+        +0.07755773, +0.23400533, +0.23404174, +0.07809868, +0.04898947,
+        -0.19184053, -0.19189697, +0.04820959, +0.07755773, +0.23400533,
+        +0.23404174, +0.07809868, +0.04898947, -0.19184053, -0.19189697,
+        +0.04820959, +0.07755773, +0.23400533, +0.23404174, +0.07809868,
+        +0.04898947, -0.19184053, -0.19189697, +0.04820959, +0.07755773,
+        +0.23400533, +0.23404174, +0.07809868, +0.04898947, -0.19184053])
+
+    @_classproperty
+    def SKEWS(cls):
+        """List of achromatic skews to control coupling.
+
+        Returns:
+            list: device names of skews to control coupling.
+
+        """
+        skews = PSSearch.get_psnames({'sec': 'SI', 'dev': 'QS'})
+        skews = [sk for sk in skews if sk.sub.endswith('M1', 'M2')]
+        return skews
 
     def __init__(self):
         """."""
@@ -91,6 +128,23 @@ class MeasCoupling(_BaseClass):
             self.devices['quad'] = PowerSupply(
                 'SI-Fam:PS-' + self.params.quadfam_name)
             self.devices['tune'] = Tune(Tune.DEVICES.SI)
+            skn = self.params.SKEWS
+            skd = [PowerSupply(sk) for sk in skn]
+            self.devices.update({
+                'skew' + sk.sub: dev for sk, dev in zip(skn, skd)})
+            self._skew_devs = skd
+
+    def apply_delta_skew(self, delta_mintunesep):
+        """Change machine coupling using the main skew singular vectors.
+
+        Args:
+            delta_coup (float): Desired minimum tune separation variation.
+        """
+        # the minus signal is a convention adopted arbitrarely.
+        vec = -(self.params.VH0 + self.params.VH3)/_np.sqrt(2) * 1e-3
+        vec *= delta_mintunesep*100
+        for stren, skew in zip(vec, self._skew_devs):
+            skew.strength += stren
 
     def load_and_apply_old_data(self, fname):
         """."""
