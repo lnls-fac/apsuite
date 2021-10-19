@@ -9,7 +9,7 @@ import matplotlib.gridspec as _mgs
 import scipy.optimize as _scy_opt
 import scipy.integrate as _scy_int
 
-from siriuspy.devices import BPM, CurrInfoSI, EGun, RFCav
+from siriuspy.devices import BPM, CurrInfoSI, EGun, RFCav, Tune
 from siriuspy.search.bpms_search import BPMSearch
 from siriuspy.epics import PV
 
@@ -91,6 +91,7 @@ class MeasTouschekLifetime(_BaseClass):
             self.devices['currinfo'] = CurrInfoSI()
             self.devices['egun'] = EGun()
             self.devices['rfcav'] = RFCav(RFCav.DEVICES.SI)
+            self.devices['tune'] = Tune(Tune.DEVICES.SI)
             self.pvs['avg_pressure'] = PV(MeasTouschekLifetime.AVG_PRESSURE_PV)
 
     def set_si_bpms_attenuation(self, value_att=RFFEAttSB):
@@ -554,11 +555,12 @@ class MeasTouschekLifetime(_BaseClass):
     def _do_measure(self):
         meas = dict(
             sum_a=[], sum_b=[], tim_a=[], tim_b=[], current=[],
-            rf_voltage=[], avg_pressure=[])
+            rf_voltage=[], avg_pressure=[], tunex=[], tuney=[])
         parms = self.params
 
         curr = self.devices['currinfo']
         rfcav = self.devices['rfcav']
+        tune = self.devices['tune']
         press = self.pvs['avg_pressure']
         bpm = self.devices[parms.bpm_name]
 
@@ -571,6 +573,9 @@ class MeasTouschekLifetime(_BaseClass):
         maxidx = parms.total_duration / (2*parms.wait_mask)
         maxidx = float('inf') if maxidx < 1 else maxidx
         idx = 0
+
+        meas['tunex'] = tune.tunex
+        meas['tuney'] = tune.tuney
         while idx < maxidx and not self._stopevt.is_set():
             bpm.tbt_mask_beg = parms.mask_beg_bunch_a
             bpm.tbt_mask_end = parms.mask_end_bunch_a
