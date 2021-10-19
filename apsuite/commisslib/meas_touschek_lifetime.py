@@ -9,8 +9,9 @@ import matplotlib.gridspec as _mgs
 import scipy.optimize as _scy_opt
 import scipy.integrate as _scy_int
 
-from siriuspy.devices import BPM, CurrInfoSI, EGun, RFCav, Tune
-from siriuspy.search.bpms_search import BPMSearch
+from siriuspy.devices import BPM, CurrInfoSI, EGun, RFCav, Tune, Trigger, \
+    Event, EVG
+from siriuspy.search import BPMSearch
 from siriuspy.epics import PV
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
@@ -69,6 +70,8 @@ class MeasTouschekLifetime(_BaseClass):
     """."""
 
     AVG_PRESSURE_PV = 'Calc:VA-CCG-SI-Avg:Pressure-Mon'
+    EXC_TUNE_H = 'SI-Glob:DI-Tune-H'
+    EXC_TUNE_V = 'SI-Glob:DI-Tune-V'
     RFFEAttMB = 0  # [dB]  Multibunch Attenuation
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
     FILTER_OUTLIER = 0.2  # Relative error data/fitting
@@ -88,11 +91,22 @@ class MeasTouschekLifetime(_BaseClass):
             bpmsnames = BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
             self._bpms = {name: BPM(name) for name in bpmsnames}
             self.devices.update(self._bpms)
+            self.devices['trigger'] = Trigger('SI-Fam:TI-BPM')
+            self.devices['event'] = Event('Study')
+            self.devices['evg'] = EVG()
             self.devices['currinfo'] = CurrInfoSI()
             self.devices['egun'] = EGun()
             self.devices['rfcav'] = RFCav(RFCav.DEVICES.SI)
             self.devices['tune'] = Tune(Tune.DEVICES.SI)
             self.pvs['avg_pressure'] = PV(MeasTouschekLifetime.AVG_PRESSURE_PV)
+            self.pvs['exc_tunex_sts'] = PV(
+                MeasTouschekLifetime.EXC_TUNE_H+':Enbl-Sts')
+            self.pvs['exc_tunex_sel'] = PV(
+                MeasTouschekLifetime.EXC_TUNE_H+':Enbl-Sel')
+            self.pvs['exc_tuney_sts'] = PV(
+                MeasTouschekLifetime.EXC_TUNE_V+':Enbl-Sts')
+            self.pvs['exc_tuney_sel'] = PV(
+                MeasTouschekLifetime.EXC_TUNE_V+':Enbl-Sel')
 
     def set_si_bpms_attenuation(self, value_att=RFFEAttSB):
         """."""
@@ -106,6 +120,19 @@ class MeasTouschekLifetime(_BaseClass):
 
         for name, bpm in self._bpms.items():
             print(f'{name:<20s}: {val_old[name]:.0f} -> {bpm.rffe_att:.0f}')
+
+    def turn_off_bpms_auto_monitor(self):
+        """."""
+        if not self.isonline:
+            raise ConnectionError('Cannot do that in offline mode.')
+
+        for bpm in self._bpms.values():
+            if bpm.devname == self.params.bpm_name:
+                continue
+            am_sts = bpm.auto_monitor_status
+            for ppty, sts in am_sts.items():
+                if sts:
+                    bpm.set_auto_monitor(ppty, False)
 
     def cmd_switch_to_single_bunch(self):
         """."""
@@ -563,19 +590,37 @@ class MeasTouschekLifetime(_BaseClass):
         tune = self.devices['tune']
         press = self.pvs['avg_pressure']
         bpm = self.devices[parms.bpm_name]
+        excx0 = self.pvs['exc_tunex_sts'].value
+        excy0 = self.pvs['exc_tuney_sts'].value
 
+        self.devices['trigger'].source = 'Study'
+        self.devices['event'].mode = 'Continuous'
+        self.devices['evg'].cmd_update_events()
+
+        self.turn_off_bpms_auto_monitor()
         bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
         bpm.acq_nrsamples_post = parms.acq_nrsamples_post
         bpm.rffe_att = parms.bpm_attenuation
         bpm.tbt_mask_enbl = 1
+        bpm.cmd_acq_abort()
+        bpm.cmd_acq_start()
         _time.sleep(parms.wait_mask)
 
         maxidx = parms.total_duration / (2*parms.wait_mask)
         maxidx = float('inf') if maxidx < 1 else maxidx
         idx = 0
 
+        if not excx0:
+            self.pvs['exc_tunex_sel'].value = 1
+        if not excy0:
+            self.pvs['exc_tuney_sel'].value = 1
+        _time.sleep(1)
         meas['tunex'] = tune.tunex
         meas['tuney'] = tune.tuney
+        _time.sleep(1)
+        self.pvs['exc_tunex_sel'].value = 0
+        self.pvs['exc_tuney_sel'].value = 0
+
         while idx < maxidx and not self._stopevt.is_set():
             bpm.tbt_mask_beg = parms.mask_beg_bunch_a
             bpm.tbt_mask_end = parms.mask_end_bunch_a
@@ -598,6 +643,11 @@ class MeasTouschekLifetime(_BaseClass):
                 print(f'{idx:04d}: data saved to file.')
             idx += 1
 
+        self.pvs['exc_tunex_sel'].value = int(excx0)
+        self.pvs['exc_tuney_sel'].value = int(excy0)
+        self.devices['trigger'].source = 'DigSI'
+        self.devices['event'].mode = 'External'
+        self.devices['evg'].cmd_update_events()
         self.data = meas
         self.save_data(fname=parms.filename, overwrite=True)
         print(f'{idx:04d}: data saved to file.')
