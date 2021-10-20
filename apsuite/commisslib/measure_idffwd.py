@@ -54,15 +54,15 @@ class MeasAPUFFWD(_BaseClass):
     _MOVE_SLEEP = 0.2  # [s]
     _SOFB_FREQ = 10  # [Hz]
 
-    def __init__(self, idname):
+    def __init__(self, idname, isonline=True):
         """."""
-        super().__init__()
-        self.params = APUFFWDParams()
+        super().__init__(params=APUFFWDParams(), isonline=isonline)
         self._idname = idname
-        self.devices['sofb'], self.devices['apu'], self.devices['corr'] = \
-            self._create_devices()
-        self._nr_corrs = len(self.devices['corr'].orbitcorr_psnames)
-        self.data['ffwd'] = self._init_ffwd_table()
+        if self.isonline:
+            self.devices['sofb'], self.devices['apu'], self.devices['corr'] = \
+                self._create_devices()
+            self._nr_corrs = len(self.devices['corr'].orbitcorr_psnames)
+            self.data['ffwd'] = self._init_ffwd_table()
 
     def __str__(self):
         """Print FFWD table in cs-constants format."""
