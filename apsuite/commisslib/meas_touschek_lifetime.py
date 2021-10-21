@@ -3,7 +3,7 @@ import time as _time
 from functools import partial as _partial
 
 import numpy as _np
-import numpy.polynomial.polynomial as pfit
+import numpy.polynomial.polynomial as _np_pfit
 import matplotlib.pyplot as _mplt
 import matplotlib.gridspec as _mgs
 import scipy.optimize as _scy_opt
@@ -234,9 +234,9 @@ class MeasTouschekLifetime(_BaseClass):
         if fitting:
             currs = _np.r_[curr_a, curr_b]
             tscks = _np.r_[tsck_a, tsck_b]
-            poly = pfit.polyfit(currs, 1/tscks, deg=1)
+            poly = _np_pfit.polyfit(currs, 1/tscks, deg=1)
             currs_fit = _np.linspace(currs.min(), currs.max(), 2*currs.size)
-            rate_fit = pfit.polyval(currs_fit, poly)
+            rate_fit = _np_pfit.polyval(currs_fit, poly)
             tsck_fit = 1/rate_fit
             label = r"Fitting, $\tau \times I_b$={:.4f} C".format(3.6*poly[1])
             ax1.plot(
@@ -322,9 +322,9 @@ class MeasTouschekLifetime(_BaseClass):
         if fitting:
             currs = _np.hstack((curr_a, curr_b))
             totls = _np.hstack((total_a, total_b))
-            poly = pfit.polyfit(currs, 1/totls, deg=1)
+            poly = _np_pfit.polyfit(currs, 1/totls, deg=1)
             currs_fit = _np.linspace(currs.min(), currs.max(), 2*currs.size)
-            rate_fit = pfit.polyval(currs_fit, poly)
+            rate_fit = _np_pfit.polyval(currs_fit, poly)
             totls = 1/rate_fit
             label = 'Fitting'
             ax1.plot(
@@ -432,9 +432,9 @@ class MeasTouschekLifetime(_BaseClass):
         """."""
         anly = self.analysis
         anly['current'] -= self.OFFSET_DCCT
-        anly['current_a'] = pfit.polyval(
+        anly['current_a'] = _np_pfit.polyval(
             anly['sum_a']/nr_bunches, self.EXCCURVE_SUMA)
-        anly['current_b'] = pfit.polyval(
+        anly['current_b'] = _np_pfit.polyval(
             anly['sum_b']/nr_bunches, self.EXCCURVE_SUMB)
 
     def _remove_outliers(self, num_std=6, max_recursion=3):
@@ -447,10 +447,10 @@ class MeasTouschekLifetime(_BaseClass):
 
         loga = _np.log(curr_a)
         logb = _np.log(curr_b)
-        pol_a = pfit.polyfit(dt_a, loga, deg=1)
-        pol_b = pfit.polyfit(dt_b, logb, deg=1)
-        fit_a = _np.exp(pfit.polyval(dt_a, pol_a))
-        fit_b = _np.exp(pfit.polyval(dt_b, pol_b))
+        pol_a = _np_pfit.polyfit(dt_a, loga, deg=1)
+        pol_b = _np_pfit.polyfit(dt_b, logb, deg=1)
+        fit_a = _np.exp(_np_pfit.polyval(dt_a, pol_a))
+        fit_b = _np.exp(_np_pfit.polyval(dt_b, pol_b))
 
         diff_a = _np.abs(curr_a - fit_a)
         diff_b = _np.abs(curr_b - fit_b)
