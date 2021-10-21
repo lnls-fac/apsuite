@@ -133,15 +133,17 @@ class MeasTouschekLifetime(_BaseClass):
             bpm.rffe_att = value_att
         _time.sleep(1.0)
 
-        mstr = 'except:'
+        mstr = ''
         for name, bpm in self._bpms.items():
             if bpm.rffe_att != value_att:
-                mstr += (f'\n{name:<20s}: '
-                    'rb {bpm.rffe_att:.0f} != sp {value_att:.0f}')
-        if len(mstr) == len('except:'):
+                mstr += (
+                    f'\n{name:<20s}: ' +
+                    f'rb {bpm.rffe_att:.0f} != sp {value_att:.0f}')
+        if not mstr:
             print('RFFE attenuation set confirmed in all BPMs.')
         else:
-            print('RFFE attenuation set confirmed in all BPMs, ' + mstr)
+            print(
+                'RFFE attenuation set confirmed in all BPMs, except:' + mstr)
 
     def turn_off_bpms_auto_monitor(self):
         """."""
