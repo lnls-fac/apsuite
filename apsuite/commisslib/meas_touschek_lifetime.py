@@ -87,6 +87,8 @@ class MeasTouschekLifetime(_BaseClass):
             self, params=MeasTouschekParams(), target=self._do_measure,
             isonline=isonline)
 
+        self._recursion = 0
+
         if isonline:
             bpmsnames = BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
             self._bpms = {name: BPM(name) for name in bpmsnames}
@@ -126,7 +128,6 @@ class MeasTouschekLifetime(_BaseClass):
             print('RFFE attenuation set confirmed in all BPMs.')
         else:
             print('RFFE attenuation set confirmed in all BPMs, ' + mstr)
-        
 
     def turn_off_bpms_auto_monitor(self):
         """."""
@@ -151,7 +152,8 @@ class MeasTouschekLifetime(_BaseClass):
 
     def process_data(
             self, proc_type='fit_model', nr_bunches=1, nr_intervals=1,
-            window=1000, include_bunlen=False):
+            window=1000, include_bunlen=False, outlier_std=6,
+            outlier_max_recursion=3):
         """."""
         if 'analysis' in self.data:
             self.analysis = self.data.pop('analysis')
@@ -162,7 +164,8 @@ class MeasTouschekLifetime(_BaseClass):
         self._handle_data_lens()
         self._remove_nans()
         self._calc_current_per_bunch(nr_bunches=nr_bunches)
-        self._remove_outliers()
+        self._remove_outliers(
+            num_std=outlier_std, max_recursion=outlier_max_recursion)
 
         if proc_type.lower().startswith('fit_model'):
             self._process_model_totalrate(nr_intervals=nr_intervals)
@@ -197,7 +200,7 @@ class MeasTouschekLifetime(_BaseClass):
         return tous*curr/(1 + blen*curr)
 
     @classmethod
-    def curr_model(cls, curr, *coeff, dtim=1):
+    def curr_model(cls, curr, *coeff, tim=None):
         """."""
         size = curr.size // 2
         curra = curr[:size]
@@ -207,8 +210,8 @@ class MeasTouschekLifetime(_BaseClass):
         dratea_mod = drate_mod[:size]
         drateb_mod = drate_mod[size:]
 
-        curra_mod = _scy_int.cumtrapz(dratea_mod * curra, dx=dtim, initial=0.0)
-        currb_mod = _scy_int.cumtrapz(drateb_mod * currb, dx=dtim, initial=0.0)
+        curra_mod = _scy_int.cumtrapz(dratea_mod * curra, x=tim, initial=0.0)
+        currb_mod = _scy_int.cumtrapz(drateb_mod * currb, x=tim, initial=0.0)
         curra_mod += curra.mean() - curra_mod.mean()
         currb_mod += currb.mean() - currb_mod.mean()
         return _np.r_[curra_mod, currb_mod]
@@ -434,32 +437,43 @@ class MeasTouschekLifetime(_BaseClass):
         anly['current_b'] = pfit.polyval(
             anly['sum_b']/nr_bunches, self.EXCCURVE_SUMB)
 
-    def _remove_outliers(self, filter_outlier=None):
+    def _remove_outliers(self, num_std=6, max_recursion=3):
         anly = self.analysis
 
         dt_a = anly['tim_a']/3600
         dt_b = anly['tim_b']/3600
         curr_a = anly['current_a']
         curr_b = anly['current_b']
-        func = MeasTouschekLifetime._exp_fun
-        p0_ = (1, 1, 1)
-        coeff_a, *_ = _scy_opt.curve_fit(func, dt_a, curr_a, p0=p0_)
-        coeff_b, *_ = _scy_opt.curve_fit(func, dt_b, curr_b, p0=p0_)
-        fit_a = func(dt_a, *coeff_a)
-        fit_b = func(dt_b, *coeff_b)
-        diff_a = (curr_a - fit_a)/curr_a
-        diff_b = (curr_b - fit_b)/curr_b
-        out = filter_outlier or MeasTouschekLifetime.FILTER_OUTLIER
-        idx_keep = (_np.abs(diff_a) < out) & (_np.abs(diff_b) < out)
+
+        loga = _np.log(curr_a)
+        logb = _np.log(curr_b)
+        pol_a = pfit.polyfit(dt_a, loga, deg=1)
+        pol_b = pfit.polyfit(dt_b, logb, deg=1)
+        fit_a = _np.exp(pfit.polyval(dt_a, pol_a))
+        fit_b = _np.exp(pfit.polyval(dt_b, pol_b))
+
+        diff_a = _np.abs(curr_a - fit_a)
+        diff_b = _np.abs(curr_b - fit_b)
+
+        out = num_std
+        idx_keep = (diff_a < out*diff_a.std()) & (diff_b < out*diff_b.std())
+
         for key in anly.keys():
-            anly[key] = _np.array(anly[key])[idx_keep]
-        self.analysis = anly
+            anly[key] = anly[key][idx_keep]
+
+        print('Filtering outliers: recursion = {0:d}, num = {1:d}'.format(
+            self._recursion, curr_a.size - _np.sum(idx_keep)))
+        if _np.sum(idx_keep) < curr_a.size and self._recursion < max_recursion:
+            self._recursion += 1
+            self._remove_outliers(num_std, max_recursion=max_recursion)
+        else:
+            self._recursion = 0
 
     def _process_model_totalrate(self, nr_intervals=5):
         anly = self.analysis
         curra = anly['current_a']
         currb = anly['current_b']
-        dtim = anly['tim_a'][1]
+        tim = anly['tim_a']
         size = curra.size
         currt = _np.r_[curra, currb]
 
@@ -467,7 +481,7 @@ class MeasTouschekLifetime(_BaseClass):
         # true miminum:
         coeff0 = [1/40/3600, ] * nr_intervals + [1/10/3600, 0.2]
         coeff, pconv = _scy_opt.curve_fit(
-            _partial(self.curr_model, dtim=dtim), currt, currt, p0=coeff0)
+            _partial(self.curr_model, tim=tim), currt, currt, p0=coeff0)
 
         # Then fix the negative arguments to make the final round with bounds:
         coeff = _np.array(coeff)
@@ -477,7 +491,7 @@ class MeasTouschekLifetime(_BaseClass):
             lower = [0, ] * (nr_intervals + 2)
             upper = [_np.inf, ] * (nr_intervals + 2)
             coeff, pconv = _scy_opt.curve_fit(
-                _partial(self.curr_model, dtim=dtim), currt, currt, p0=coeff,
+                _partial(self.curr_model, tim=tim), currt, currt, p0=coeff,
                 bounds=(lower, upper))
         errs = _np.sqrt(_np.diag(pconv))
 
@@ -487,7 +501,7 @@ class MeasTouschekLifetime(_BaseClass):
         tousrate *= 3600
         totrate = tousrate + gasrate
 
-        currt_fit = self.curr_model(currt, *coeff, dtim=dtim)
+        currt_fit = self.curr_model(currt, *coeff, tim=tim)
 
         anly['coeffs'] = coeff
         anly['coeffs_pconv'] = pconv
