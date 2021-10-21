@@ -145,19 +145,6 @@ class MeasTouschekLifetime(_BaseClass):
             print(
                 'RFFE attenuation set confirmed in all BPMs, except:' + mstr)
 
-    def turn_off_bpms_auto_monitor(self):
-        """."""
-        if not self.isonline:
-            raise ConnectionError('Cannot do that in offline mode.')
-
-        for bpm in self._bpms.values():
-            if bpm.devname == self.params.bpm_name:
-                continue
-            am_sts = bpm.auto_monitor_status
-            for ppty, sts in am_sts.items():
-                if sts:
-                    bpm.set_auto_monitor(ppty, False)
-
     def cmd_switch_to_single_bunch(self):
         """."""
         return self.devices['egun'].cmd_switch_to_single_bunch()
@@ -634,7 +621,6 @@ class MeasTouschekLifetime(_BaseClass):
         self.devices['event'].mode = 'Continuous'
         self.devices['evg'].cmd_update_events()
 
-        self.turn_off_bpms_auto_monitor()
         bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
         bpm.acq_nrsamples_post = parms.acq_nrsamples_post
         bpm.rffe_att = parms.bpm_attenuation
