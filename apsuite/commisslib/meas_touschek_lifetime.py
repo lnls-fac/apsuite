@@ -113,16 +113,15 @@ class MeasTouschekLifetime(_BaseClass):
         if not self.isonline:
             raise ConnectionError('Cannot do that in offline mode.')
 
-        val_old = {name: bpm.rffe_att for name, bpm in self._bpms.items()}
         for bpm in self._bpms.values():
             bpm.rffe_att = value_att
         _time.sleep(1.0)
 
         mstr = 'except:'
         for name, bpm in self._bpms.items():
-            if val_old[name] != bpm.rffe_att:
+            if bpm.rffe_att != value_att:
                 mstr += (f'\n{name:<20s}: '
-                    'rb {bpm.rffe_att:.0f} != sp {val_old[name]:.0f}')
+                    'rb {bpm.rffe_att:.0f} != sp {value_att:.0f}')
         if len(mstr) == len('except:'):
             print('RFFE attenuation set confirmed in all BPMs.')
         else:
