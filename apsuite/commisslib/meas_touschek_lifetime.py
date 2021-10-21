@@ -108,7 +108,7 @@ class MeasTouschekLifetime(_BaseClass):
             self.pvs['exc_tuney_sel'] = PV(
                 MeasTouschekLifetime.EXC_TUNE_V+':Enbl-Sel')
 
-    def set_si_bpms_attenuation(self, value_att=RFFEAttSB):
+    def set_bpms_attenuation(self, value_att=RFFEAttSB):
         """."""
         if not self.isonline:
             raise ConnectionError('Cannot do that in offline mode.')
@@ -118,8 +118,16 @@ class MeasTouschekLifetime(_BaseClass):
             bpm.rffe_att = value_att
         _time.sleep(1.0)
 
+        mstr = 'except:'
         for name, bpm in self._bpms.items():
-            print(f'{name:<20s}: {val_old[name]:.0f} -> {bpm.rffe_att:.0f}')
+            if val_old[name] != bpm.rffe_att:
+                mstr += (f'\n{name:<20s}: '
+                    'rb {bpm.rffe_att:.0f} != sp {val_old[name]:.0f}')
+        if len(mstr) == len('except:'):
+            print('RFFE attenuation set confirmed in all BPMs.')
+        else:
+            print('RFFE attenuation set confirmed in all BPMs, ' + mstr)
+        
 
     def turn_off_bpms_auto_monitor(self):
         """."""
