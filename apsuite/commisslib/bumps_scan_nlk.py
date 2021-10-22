@@ -2,8 +2,8 @@
 import time as _time
 import numpy as _np
 from siriuspy.devices import SOFB, BunchbyBunch, PowerSupplyPU, BPM
-from siriuspy.search import BPMSearch
-from siriuspy.clientconfigdb import ConfigDBClient
+from siriuspy.search import BPMSearch as _BPMSearch
+from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 from siriuspy.sofb.utils import si_calculate_bump
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
@@ -18,10 +18,10 @@ class BumpNLKParams(_ParamsBaseClass):
         _ParamsBaseClass().__init__()
         self.posx_min = 0  # [um]
         self.posx_max = 0  # [um]
-        self.nr_steps_x = 1
+        self.nr_stepsx = 1
         self.posy_min = 0  # [um]
         self.posy_max = 0  # [um]
-        self.nr_steps_y = 1
+        self.nr_stepsy = 1
         self.nlk_kick = 0  # [urad]
         self.filename = ''
 
@@ -32,10 +32,10 @@ class BumpNLKParams(_ParamsBaseClass):
         stmp = '{0:20s} = {1:}\n'.format
         stg = ftmp('posx_min', self.posx_min, '[um]')
         stg += ftmp('posx_max', self.posx_max, '[um]')
-        stg += dtmp('nr_steps_x', self.nr_steps_x)
+        stg += dtmp('nr_stepsx', self.nr_stepsx)
         stg += ftmp('posy_min', self.posy_min, '[um]')
         stg += ftmp('posy_max', self.posy_max, '[um]')
-        stg += dtmp('nr_steps_y', self.nr_steps_y)
+        stg += dtmp('nr_stepsy', self.nr_stepsy)
         stg += ftmp('nlk_kick', self.nlk_kick, '[urad]')
         stg += stmp('filename', self.filename)
         return stg
@@ -58,13 +58,16 @@ class BumpNLK(_BaseClass):
             self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
             self.devices['nlk'] = PowerSupplyPU(
                 PowerSupplyPU.DEVICES.SI_INJ_NLKCKR)
-            self.configdb = ConfigDBClient(config_type='si_orbit')
-            self.reforb = self.configdb.get_config_value('ref_orb')
+            self._configdb = _ConfigDBClient(config_type='si_orbit')
+            self.reforb = self._configdb.get_config_value('ref_orb')
+            self.reforbx = _np.array(self.reforb['x'])
+            self.reforby = _np.array(self.reforb['y'])
 
     def _create_bpms(self):
         """."""
-        bpmsnames = BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
+        bpmsnames = _BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
         properties = BPM(bpmsnames[0]).auto_monitor_status()
+        self._bpms = dict()
         for name in bpmsnames:
             bpm = BPM(name)
             for ppt in properties:
@@ -91,8 +94,8 @@ class BumpNLK(_BaseClass):
             agx=0, agy=0, psx=0, psy=0, nr_iters=5, residue=1):
         """."""
         sofb = self.devices['sofb']
-        refx0 = refx0 or _np.array(self.reforb['x'])
-        refy0 = refy0 or _np.array(self.reforb['y'])
+        refx0 = refx0 or self.reforbx
+        refy0 = refy0 or self.reforby
         nrefx, nrefy = si_calculate_bump(
                 refx0, refy0, BumpNLK.DEFAULT_SS,
                 agx=agx, agy=agy, psx=psx, psy=psy)
@@ -110,20 +113,23 @@ class BumpNLK(_BaseClass):
         nlk = self.devices['nlk']
         nlk.cmd_turn_on()
         nlk.strength = prms.nlk_kick
-        _time.sleep(5)
         nlk.cmd_turn_on_pulse()
+        # use wait on strength
+        _time.sleep(5)
 
         # go to initial bump configuration
         self.implement_bump(psx=posx_span[idx[0]], psy=posy_span[idy[0]])
-        data, datah, datav = dict(), list(), list()
+        datah, datav, bumps = list(), list(), list()
         for iter in range(idx.size):
             px_ = posx_span[idx[iter]]
             py_ = posy_span[idy[iter]]
             self.implement_bump(psx=px_, psy=py_, nr_iters=3)
             datah.append(self.get_measurement_data(plane='H'))
             datav.append(self.get_measurement_data(plane='V'))
-            data['horizontal'] = datah
-            data['vertical'] = datav
+            bumps.append((px_, py_))
+            self.data['measure']['horizontal'] = datah
+            self.data['measure']['vertical'] = datav
+            self.data['measure']['bump'] = bumps
             self.save_data(fname=prms.filename, overwrite=True)
             print('Data saved!')
 
