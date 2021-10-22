@@ -1,6 +1,7 @@
 """."""
 import time as _time
 from functools import partial as _partial
+from threading import Event as _Event
 
 import numpy as _np
 import numpy.polynomial.polynomial as _np_pfit
@@ -30,7 +31,8 @@ class MeasTouschekParams(_ParamsBaseClass):
         self.save_partial = True
         self.bpm_name = self.DEFAULT_BPMNAME
         self.bpm_attenuation = 14  # [dB]
-        self.wait_mask = 2  # [s]
+        self.acquisition_timeout = 1  # [s]
+        self.acquisition_period = 4  # [s]
         self.mask_beg_bunch_a = 180
         self.mask_end_bunch_a = 0
         self.mask_beg_bunch_b = 0
@@ -53,7 +55,8 @@ class MeasTouschekParams(_ParamsBaseClass):
         stg += f'save_partial = {str(bool(self.save_partial)):s}'
         stg += stmp('bpm_name', self.bpm_name)
         stg += ftmp('bpm_attenuation', self.bpm_attenuation, '[dB]')
-        stg += ftmp('wait_mask', self.wait_mask, '[s]')
+        stg += ftmp('acquisition_timeout', self.acquisition_timeout, '[s]')
+        stg += ftmp('acquisition_period', self.acquisition_period, '[s]')
         stg += dtmp('mask_beg_bunch_a', self.mask_beg_bunch_a)
         stg += dtmp('mask_end_bunch_a', self.mask_end_bunch_a)
         stg += dtmp('mask_beg_bunch_b', self.mask_beg_bunch_b)
@@ -86,6 +89,7 @@ class MeasTouschekLifetime(_BaseClass):
             isonline=isonline)
 
         self._recursion = 0
+        self._updated_evt = _Event()
 
         if isonline:
             self.create_bpms()
@@ -590,8 +594,8 @@ class MeasTouschekLifetime(_BaseClass):
 
     def _do_measure(self):
         meas = dict(
-            sum_a=[], sum_b=[], tim_a=[], tim_b=[], current=[],
-            rf_voltage=[], avg_pressure=[], tunex=[], tuney=[])
+            sum_a=[], sum_b=[], nan_a=[], nan_b=[], tim_a=[], tim_b=[],
+            current=[], rf_voltage=[], avg_pressure=[], tunex=[], tuney=[])
         parms = self.params
 
         curr = self.devices['currinfo']
@@ -600,63 +604,106 @@ class MeasTouschekLifetime(_BaseClass):
         press = self.pvs['avg_pressure']
         bpm = self.devices[parms.bpm_name]
 
+        excx0 = tune.enablex
+        excy0 = tune.enabley
+
+        pvsum = bpm.pv_object('GEN_SUMArrayData')
+        pvsum.auto_monitor = True
+        pvsum.add_callback(self._pv_updated)
+
         self.devices['trigger'].source = 'Study'
         self.devices['event'].mode = 'Continuous'
         self.devices['evg'].cmd_update_events()
 
+        bpm.cmd_acq_abort()
         bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
         bpm.acq_nrsamples_post = parms.acq_nrsamples_post
+        bpm.acq_repeat = 'normal'
+        bpm.acq_trigger = 'external'
         bpm.rffe_att = parms.bpm_attenuation
         bpm.tbt_mask_enbl = 1
-        bpm.cmd_acq_abort()
-        bpm.cmd_acq_start()
-        _time.sleep(parms.wait_mask)
 
-        maxidx = parms.total_duration / (2*parms.wait_mask)
+        maxidx = parms.total_duration / parms.acquisition_period
         maxidx = float('inf') if maxidx < 1 else maxidx
         idx = 0
 
         while idx < maxidx and not self._stopevt.is_set():
+            # Get data for bunch with higher current
             bpm.tbt_mask_beg = parms.mask_beg_bunch_a
             bpm.tbt_mask_end = parms.mask_end_bunch_a
-            _time.sleep(parms.wait_mask)
-            meas['sum_a'].append(bpm.mt_possum.mean())
+            self._updated_evt.clear()
+            bpm.cmd_acq_start()
+            bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
+            self._updated_evt.wait(timeout=parms.acquisition_timeout)
+            suma = bpm.mt_possum
+            meas['sum_a'].append(_np.nanmean(suma))
+            meas['nan_a'].append(_np.sum(_np.isnan(suma)))
             meas['tim_a'].append(_time.time())
 
+            # Get data for bunch with lower current
+            bpm.tbt_mask_beg = parms.mask_beg_bunch_b
+            bpm.tbt_mask_end = parms.mask_end_bunch_b
+            self._updated_evt.clear()
+            bpm.cmd_acq_start()
+            bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
+            self._updated_evt.wait(timeout=parms.acquisition_timeout)
+            sumb = bpm.mt_possum
+            meas['sum_b'].append(_np.nanmean(sumb))
+            meas['nan_b'].append(_np.sum(_np.isnan(sumb)))
+            meas['tim_b'].append(_time.time())
+
+            # Get other relevant parameters
             meas['current'].append(curr.current)
             meas['tunex'] = tune.tunex
             meas['tuney'] = tune.tuney
             meas['rf_voltage'].append(rfcav.dev_cavmon.gap_voltage)
             meas['avg_pressure'].append(press.value)
 
-            bpm.tbt_mask_beg = parms.mask_beg_bunch_b
-            bpm.tbt_mask_end = parms.mask_end_bunch_b
-            _time.sleep(parms.wait_mask)
-            meas['sum_b'].append(bpm.mt_possum.mean())
-            meas['tim_b'].append(_time.time())
             if not idx % 100 and parms.save_partial:
+                # Only get the tune at every 100 iterations not to disturb the
+                # beam too much with the tune shaker
+                tunex, tuney = self._get_tunes()
+                meas['tunex'].append(tunex)
+                meas['tuney'].append(tuney)
+
                 self.data = meas
                 self.save_data(fname=parms.filename, overwrite=True)
                 print(f'{idx:04d}: data saved to file.')
             idx += 1
+            _time.sleep(parms.acquisition_period)
 
+        tune.enablex = int(excx0)
+        tune.enabley = int(excy0)
         self.devices['trigger'].source = 'DigSI'
         self.devices['event'].mode = 'External'
         self.devices['evg'].cmd_update_events()
+        pvsum.clear_callbacks()
+        pvsum.auto_monitor = False
+
         self.data = meas
         self.save_data(fname=parms.filename, overwrite=True)
         print(f'{idx:04d}: data saved to file.')
         print('Done!')
 
+    def _pv_updated(self, *args, **kwargs):
+        _ = args, kwargs
+        self._updated_evt.set()
+
+    def _get_tunes(self):
+        tune = self.devices['tune']
+        tune.enablex = 1
+        tune.enabley = 1
+        _time.sleep(1)
+        tunex = tune.tunex
+        tuney = tune.tuney
+        tune.enablex = 0
+        tune.enabley = 0
+        return tunex, tuney
+
     @staticmethod
     def _linear_fun(tim, *coeff):
         amp, tau = coeff
         return amp*(1 - tim/tau)
-
-    @staticmethod
-    def _exp_fun(tim, *coeff):
-        amp, off, tau = coeff
-        return amp*_np.exp(-tim/tau) + off
 
     @staticmethod
     def _fit_lifetime(dtime, current, window):
