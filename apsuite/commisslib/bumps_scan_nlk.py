@@ -18,10 +18,10 @@ class BumpNLKParams(_ParamsBaseClass):
         _ParamsBaseClass().__init__()
         self.posx_min = 0  # [um]
         self.posx_max = 0  # [um]
-        self.nr_steps_x = 0
+        self.nr_steps_x = 1
         self.posy_min = 0  # [um]
         self.posy_max = 0  # [um]
-        self.nr_steps_y = 0
+        self.nr_steps_y = 1
         self.nlk_kick = 0  # [urad]
         self.filename = ''
 
@@ -72,38 +72,59 @@ class BumpNLK(_BaseClass):
             self._bpms[name] = bpm
         self.devices.update(self._bpms)
 
-    def get_data(self):
+    def get_measurement_data(self, plane):
         """."""
-        # Get data from BbB and BPMs (TbT rate)
-        return NotImplementedError
+        bbbtype = 'bbbh' if plane.upper() == 'H' else 'bbbv'
+        bbb = self.devices[bbbtype]
+        data = {
+            'timestamp': _time.time(),
+            'stored_current': bbb.dcct.current,
+            'spec_mag': bbb.sram.spec_mag,
+            'spec_data': bbb.sram.spec_data,
+            'spec_freq': bbb.sram.spec_freq,
+            'spec_mark1': bbb.sram.spec_marker1_mag,
+            }
+        return data
+
+    def implement_bump(
+            self, refx0=None, refy0=None,
+            agx=0, agy=0, psx=0, psy=0, nr_iters=5, residue=1):
+        """."""
+        sofb = self.devices['sofb']
+        refx0 = refx0 or _np.array(self.reforb['x'])
+        refy0 = refy0 or _np.array(self.reforb['y'])
+        nrefx, nrefy = si_calculate_bump(
+                refx0, refy0, BumpNLK.DEFAULT_SS,
+                agx=agx, agy=agy, psx=psx, psy=psy)
+        sofb.refx, sofb.refy = nrefx, nrefy
+        sofb.correct_orbit_manually(nr_iters=nr_iters, residue=residue)
 
     def _do_measure(self):
-        refx0, refy0 = _np.array(self.reforb['x']), _np.array(self.reforb['y'])
         prms = self.params
-        posx_span = _np.linspace(prms.posx_min, prms.posx_max, prms.nr_steps_x)
-        posy_span = _np.linspace(prms.posy_min, prms.posy_max, prms.nr_steps_y)
+        posx_span = _np.linspace(prms.posx_min, prms.posx_max, prms.nr_stepsx)
+        posy_span = _np.linspace(prms.posy_min, prms.posy_max, prms.nr_stepsy)
+        idy, idx = _np.meshgrid(range(prms.nr_pointsy), range(prms.nr_pointsx))
+        idy[1::2] = _np.flip(idy[1::2])
+        idx, idy = idx.ravel(), idy.ravel()
 
-        sofb = self.devices['sofb']
         nlk = self.devices['nlk']
         nlk.cmd_turn_on()
         nlk.strength = prms.nlk_kick
         _time.sleep(5)
         nlk.cmd_turn_on_pulse()
 
-        for px_ in posx_span:
-            nrefx, nrefy = si_calculate_bump(
-                refx0, refy0, BumpNLK.DEFAULT_SS,
-                agx=0, agy=0, psx=px_, psy=prms.posy_min)
-            sofb.refx = nrefx
-            sofb.refy = nrefy
-            sofb.correct_orbit_manually(nr_iters=5, residue=1)
-            # get_data
+        # go to initial bump configuration
+        self.implement_bump(psx=posx_span[idx[0]], psy=posy_span[idy[0]])
+        data, datah, datav = dict(), list(), list()
+        for iter in range(idx.size):
+            px_ = posx_span[idx[iter]]
+            py_ = posy_span[idy[iter]]
+            self.implement_bump(psx=px_, psy=py_, nr_iters=3)
+            datah.append(self.get_measurement_data(plane='H'))
+            datav.append(self.get_measurement_data(plane='V'))
+            data['horizontal'] = datah
+            data['vertical'] = datav
+            self.save_data(fname=prms.filename, overwrite=True)
+            print('Data saved!')
 
-            for py_ in posy_span:
-                nrefx, nrefy = si_calculate_bump(
-                    refx0, refy0, BumpNLK.DEFAULT_SS,
-                    agx=0, agy=0, psx=px_, psy=py_)
-                sofb.refx = nrefx
-                sofb.refy = nrefy
-                sofb.correct_orbit_manually(nr_iters=3, residue=1)
-                # get_data
+        self.implement_bump(psx=0, psy=0)
