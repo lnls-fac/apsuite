@@ -88,11 +88,22 @@ class MeasTouschekLifetime(_BaseClass):
             self, params=MeasTouschekParams(), target=self._do_measure,
             isonline=isonline)
 
+        self._bpms = dict()
         self._recursion = 0
         self._updated_evt = _Event()
 
         if isonline:
-            self.create_bpms()
+            bpmnames = BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
+            bpm = BPM(bpmnames[0])
+            self._bpms[bpmnames[0]] = bpm
+            propties = bpm.auto_monitor_status()
+            for name in bpmnames[1:]:
+                bpm = BPM(name)
+                for ppt in propties:
+                    bpm.set_auto_monitor(ppt, False)
+                self._bpms[name] = bpm
+
+            self.devices.update(self._bpms)
             self.devices['trigger'] = Trigger('SI-Fam:TI-BPM')
             self.devices['event'] = Event('Study')
             self.devices['evg'] = EVG()
@@ -101,17 +112,6 @@ class MeasTouschekLifetime(_BaseClass):
             self.devices['rfcav'] = RFCav(RFCav.DEVICES.SI)
             self.devices['tune'] = Tune(Tune.DEVICES.SI)
             self.pvs['avg_pressure'] = PV(MeasTouschekLifetime.AVG_PRESSURE_PV)
-
-    def create_bpms(self):
-        """."""
-        bpmsnames = BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
-        properties = BPM(bpmsnames[0]).auto_monitor_status()
-        for name in bpmsnames:
-            bpm = BPM(name)
-            for ppt in properties:
-                bpm.set_auto_monitor(ppt, False)
-            self._bpms[name] = bpm
-        self.devices.update(self._bpms)
 
     def set_bpms_attenuation(self, value_att=RFFEAttSB):
         """."""
