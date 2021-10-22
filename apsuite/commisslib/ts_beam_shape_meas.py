@@ -33,11 +33,12 @@ class Params(_ParamsBaseClass):
 class BeamShapeTS(_BaseClass):
     """."""
 
-    def __init__(self):
+    def __init__(self, isonline=True):
         """."""
-        super().__init__(params=Params())
-        for i in range(1, 7):
-            self.devices[i] = Screen(getattr(Screen.DEVICES, f'TS_{i:d}'))
+        super().__init__(params=Params(), isonline=isonline)
+        if self.isonline:
+            for i in range(1, 7):
+                self.devices[i] = Screen(getattr(Screen.DEVICES, f'TS_{i:d}'))
 
         # create model
         si_mod = pysi.create_accelerator()

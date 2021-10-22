@@ -45,12 +45,15 @@ class MeasParams(_ParamsBaseClass):
 class MeasDispChrom(_BaseClass):
     """."""
 
-    def __init__(self):
+    def __init__(self, isonline=True):
         """."""
-        super().__init__(params=MeasParams(), target=self._do_meas)
-        self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
-        self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        self.devices['rf'] = RFGen()
+        super().__init__(
+            params=MeasParams(), target=self._do_meas, isonline=isonline)
+
+        if self.isonline:
+            self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+            self.devices['tune'] = Tune(Tune.DEVICES.SI)
+            self.devices['rf'] = RFGen()
 
     def __str__(self):
         """."""

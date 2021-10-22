@@ -34,10 +34,11 @@ class _FitInjTrajBase(_BaseClass):
     POLYNOM = 1e-9 * np.zeros(15, dtype=float)
     NONLINEAR = True
 
-    def __init__(self):
+    def __init__(self, isonline=True):
         """."""
-        super().__init__(Params())
-        self.devices['sofb'] = None
+        super().__init__(params=Params(), isonline=isonline)
+        if self.isonline:
+            self.devices['sofb'] = None
         self.model = None
         self.simul_model = None
         self.famdata = None
@@ -271,15 +272,16 @@ class SIFitInjTraj(_FitInjTrajBase):
         -1.13979600e6, 9.54919660e7, 2.43619500e7])
     NONLINEAR = True
 
-    def __init__(self, ring=None, sim_mod=None):
+    def __init__(self, ring=None, sim_mod=None, isonline=True):
         """."""
-        super().__init__()
-        self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
-        self.devices['dcct'] = DCCT(DCCT.DEVICES.SI_13C4)
-        self.devices['injdpkckr'] = PowerSupplyPU(
-            PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
-        self.devices['injnlkckr'] = PowerSupplyPU(
-            PowerSupplyPU.DEVICES.SI_INJ_NLKCKR)
+        super().__init__(isonline=isonline)
+        if self.isonline:
+            self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+            self.devices['dcct'] = DCCT(DCCT.DEVICES.SI_13C4)
+            self.devices['injdpkckr'] = PowerSupplyPU(
+                PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
+            self.devices['injnlkckr'] = PowerSupplyPU(
+                PowerSupplyPU.DEVICES.SI_INJ_NLKCKR)
         self.model = ring if ring is not None else si.create_accelerator()
         self.simul_model = sim_mod if sim_mod is not None else self.model[:]
 
@@ -342,10 +344,11 @@ class BOFitInjTraj(_FitInjTrajBase):
         1.54782e6, 9.90632e7, 2.06262e7, 0, 0, 0, 0, 0])
     NONLINEAR = False
 
-    def __init__(self, ring=None, sim_mod=None):
+    def __init__(self, ring=None, sim_mod=None, isonline=True):
         """."""
-        super().__init__()
-        self.devices['sofb'] = SOFB(SOFB.DEVICES.BO)
+        super().__init__(isonline=isonline)
+        if self.isonline:
+            self.devices['sofb'] = SOFB(SOFB.DEVICES.BO)
         self.model = ring if ring is not None else bo.create_accelerator()
         self.simul_model = sim_mod if sim_mod is not None else self.model[:]
 

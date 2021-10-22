@@ -70,7 +70,8 @@ class MeasIDIntegral(_BaseClass):
     MEAS_TYPE = _namedtuple('MeasType', ['Static', 'Dynamic'])(0, 1)
 
     def __init__(
-            self, model, id_name=None, phases=None, meas_type=None):
+            self, model, id_name=None,
+            phases=None, meas_type=None, isonline=True):
         """."""
         if meas_type is None:
             self._meas_type = MeasIDIntegral.MEAS_TYPE.Static
@@ -80,16 +81,17 @@ class MeasIDIntegral(_BaseClass):
             self._meas_func = self._meas_integral_static
         elif self.meas_type == MeasIDIntegral.MEAS_TYPE.Dynamic:
             self._meas_func = self._meas_integral_dynamic
-        super().__init__(target=self._meas_func)
+        super().__init__(target=self._meas_func, isonline=isonline)
 
         self.model = model
         self.famdata = si.get_family_data(model)
         self.id_name = _SiriusPVName(id_name)
-        self.devices['apu'] = APU(self.id_name)
-        self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
-        self.devices['study_event'] = PV('AS-RaMO:TI-EVG:StudyExtTrig-Cmd')
-        self.devices['current_info'] = CurrInfoSI()
+        if self.isonline:
+            self.devices['apu'] = APU(self.id_name)
+            self.devices['tune'] = Tune(Tune.DEVICES.SI)
+            self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+            self.devices['study_event'] = PV('AS-RaMO:TI-EVG:StudyExtTrig-Cmd')
+            self.devices['current_info'] = CurrInfoSI()
         self.params = IDParams(phases, self.meas_type, self.devices['sofb'])
         self.id_idx = self._get_id_idx()
         self.bpm_idx = _np.array(self.famdata['BPM']['index']).ravel()
