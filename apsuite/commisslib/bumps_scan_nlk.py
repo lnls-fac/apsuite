@@ -23,7 +23,10 @@ class BumpNLKParams(_ParamsBaseClass):
         self.posy_max = 0  # [um]
         self.nr_stepsy = 1
         self.nlk_kick = 0  # [urad]
+        self.acq_nrsamples_pre = 0
+        self.acq_nrsamples_post = 2000
         self.filename = ''
+        self.save_data = True
 
     def __str__(self):
         """."""
@@ -37,7 +40,10 @@ class BumpNLKParams(_ParamsBaseClass):
         stg += ftmp('posy_max', self.posy_max, '[um]')
         stg += dtmp('nr_stepsy', self.nr_stepsy)
         stg += ftmp('nlk_kick', self.nlk_kick, '[urad]')
+        stg += dtmp('acq_nrsamples_pre', self.acq_nrsamples_pre)
+        stg += dtmp('acq_nrsamples_post', self.acq_nrsamples_post)
         stg += stmp('filename', self.filename)
+        stg += dtmp('save_data', self.save_data)
         return stg
 
 
@@ -52,7 +58,9 @@ class BumpNLK(_BaseClass):
             params=BumpNLKParams(), target=self._do_measure, isonline=isonline)
         self.data = dict(measure=dict(), analysis=dict())
         if self.isonline:
+            self._bpmsnames = _BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
             self._create_bpms()
+            self._csbpm = self.devices[self._bpmsnames[0]].csdata
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
             self.devices['bbbh'] = BunchbyBunch(BunchbyBunch.DEVICES.H)
             self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
@@ -65,27 +73,56 @@ class BumpNLK(_BaseClass):
 
     def _create_bpms(self):
         """."""
-        bpmsnames = _BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
-        properties = BPM(bpmsnames[0]).auto_monitor_status()
+        properties = BPM(self._bpmsnames[0]).auto_monitor_status()
         self._bpms = dict()
-        for name in bpmsnames:
+        for name in self._bpmsnames:
             bpm = BPM(name)
             for ppt in properties:
                 bpm.set_auto_monitor(ppt, False)
             self._bpms[name] = bpm
         self.devices.update(self._bpms)
 
-    def get_measurement_data(self, plane):
+    def set_nr_samples_pre(self, value):
         """."""
-        bbbtype = 'bbbh' if plane.upper() == 'H' else 'bbbv'
-        bbb = self.devices[bbbtype]
+        value = int(value)
+        for bpm in self._bpmsnames:
+            self.devices[bpm].acq_nrsamples_pre = value
+
+    def set_nr_samples_post(self, value):
+        """."""
+        value = int(value)
+        for bpm in self._bpmsnames:
+            self.devices[bpm].acq_nrsamples_post = value
+
+    def get_trajectory_bpms(self):
+        """."""
+        bpms = self._bpmsnames
+        nrpts = len(self.devices[bpms[0]].mt_posx)
+        trajx = _np.zeros((len(bpms), nrpts))
+        trajy = _np.zeros((len(bpms), nrpts))
+        for num, bpm in enumerate(bpms):
+            trajx[num, :] = self.devices[bpm].mt_posx
+            trajy[num, :] = self.devices[bpm].mt_posy
+        return trajx, trajy
+
+    def get_measurement_data(self):
+        """."""
+        bbbh, bbbv = self.devices['bbbh'], self.devices['bbbv']
+        trajx, trajy = self.get_trajectory_bpms()
         data = {
             'timestamp': _time.time(),
-            'stored_current': bbb.dcct.current,
-            'spec_mag': bbb.sram.spec_mag,
-            'spec_data': bbb.sram.spec_data,
-            'spec_freq': bbb.sram.spec_freq,
-            'spec_mark1': bbb.sram.spec_marker1_mag,
+            'stored_current': bbbh.dcct.current,
+            'spec_magh': bbbh.sram.spec_mag,
+            'spec_datah': bbbh.sram.spec_data,
+            'spec_freqh': bbbh.sram.spec_freq,
+            'spec_mark1h': bbbh.sram.spec_marker1_mag,
+            'trajx': trajx,
+
+            'spec_magv': bbbv.sram.spec_mag,
+            'spec_datav': bbbv.sram.spec_data,
+            'spec_freqv': bbbv.sram.spec_freq,
+            'spec_mark1v': bbbv.sram.spec_marker1_mag,
+            'trajy': trajy,
             }
         return data
 
@@ -110,6 +147,9 @@ class BumpNLK(_BaseClass):
         idy[1::2] = _np.flip(idy[1::2])
         idx, idy = idx.ravel(), idy.ravel()
 
+        self.set_nr_samples_pre(value=prms.acq_nrsamples_pre)
+        self.set_nr_samples_post(value=prms.acq_nrsamples_post)
+
         nlk = self.devices['nlk']
         nlk.cmd_turn_on()
         nlk.strength = prms.nlk_kick
@@ -119,18 +159,19 @@ class BumpNLK(_BaseClass):
 
         # go to initial bump configuration
         self.implement_bump(psx=posx_span[idx[0]], psy=posy_span[idy[0]])
-        datah, datav, bumps = list(), list(), list()
+        data = list()
         for iter in range(idx.size):
-            px_ = posx_span[idx[iter]]
-            py_ = posy_span[idy[iter]]
-            self.implement_bump(psx=px_, psy=py_, nr_iters=3)
-            datah.append(self.get_measurement_data(plane='H'))
-            datav.append(self.get_measurement_data(plane='V'))
-            bumps.append((px_, py_))
-            self.data['measure']['horizontal'] = datah
-            self.data['measure']['vertical'] = datav
-            self.data['measure']['bump'] = bumps
-            self.save_data(fname=prms.filename, overwrite=True)
-            print('Data saved!')
+            posx = posx_span[idx[iter]]
+            posy = posy_span[idy[iter]]
+            self.implement_bump(psx=posx, psy=posy, nr_iters=3)
+            fstr = 'posx = {posx:6.1f} um, posy = {posy:6.1f} um'
+            print(fstr)
+            data.append(self.get_measurement_data())
+            data[-1]['bump'] = (posx, posy)
+            self.data = data
+            if prms.save_data:
+                self.save_data(fname=prms.filename, overwrite=True)
+                print('Data saved!')
 
-        self.implement_bump(psx=0, psy=0)
+        # return to initial ref_orbit
+        self.implement_bump(psx=0, psy=0, nr_iters=10)
