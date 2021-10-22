@@ -143,6 +143,8 @@ class BumpNLK(_BaseClass):
         prms = self.params
         posx_span = _np.linspace(prms.posx_min, prms.posx_max, prms.nr_stepsx)
         posy_span = _np.linspace(prms.posy_min, prms.posy_max, prms.nr_stepsy)
+
+        # zig-zag type of scan in the y plane
         idy, idx = _np.meshgrid(range(prms.nr_pointsy), range(prms.nr_pointsx))
         idy[1::2] = _np.flip(idy[1::2])
         idx, idy = idx.ravel(), idy.ravel()
@@ -154,11 +156,12 @@ class BumpNLK(_BaseClass):
         nlk.cmd_turn_on()
         nlk.strength = prms.nlk_kick
         nlk.cmd_turn_on_pulse()
-        # use wait on strength
+        # use wait on strength (?)
         _time.sleep(5)
 
         # go to initial bump configuration
         self.implement_bump(psx=posx_span[idx[0]], psy=posy_span[idy[0]])
+
         data = list()
         for iter in range(idx.size):
             posx = posx_span[idx[iter]]
