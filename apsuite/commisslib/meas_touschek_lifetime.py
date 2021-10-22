@@ -88,11 +88,11 @@ class MeasTouschekLifetime(_BaseClass):
             self, params=MeasTouschekParams(), target=self._do_measure,
             isonline=isonline)
 
-        self._bpms = dict()
         self._recursion = 0
         self._updated_evt = _Event()
 
         if isonline:
+            self._bpms = dict()
             bpmnames = BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
             bpm = BPM(bpmnames[0])
             self._bpms[bpmnames[0]] = bpm
