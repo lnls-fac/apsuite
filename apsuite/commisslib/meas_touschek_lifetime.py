@@ -26,7 +26,7 @@ class MeasTouschekParams(_ParamsBaseClass):
 
     def __init__(self):
         """."""
-        _ParamsBaseClass().__init__()
+        super().__init__()
         self.total_duration = 0  # [s] 0 means infinity
         self.save_partial = True
         self.bpm_name = self.DEFAULT_BPMNAME
@@ -52,7 +52,7 @@ class MeasTouschekParams(_ParamsBaseClass):
         stg = ''
         stg += ftmp(
             'total_duration', self.total_duration, '[s] (0) means forever')
-        stg += f'save_partial = {str(bool(self.save_partial)):s}'
+        stg += f'{"save_partial":20s} = {str(bool(self.save_partial)):s}\n'
         stg += stmp('bpm_name', self.bpm_name)
         stg += ftmp('bpm_attenuation', self.bpm_attenuation, '[dB]')
         stg += ftmp('acquisition_timeout', self.acquisition_timeout, '[s]')
@@ -96,7 +96,7 @@ class MeasTouschekLifetime(_BaseClass):
             bpmnames = BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
             bpm = BPM(bpmnames[0])
             self._bpms[bpmnames[0]] = bpm
-            propties = bpm.auto_monitor_status()
+            propties = bpm.auto_monitor_status
             for name in bpmnames[1:]:
                 bpm = BPM(name)
                 for ppt in propties:
@@ -615,6 +615,8 @@ class MeasTouschekLifetime(_BaseClass):
         self.devices['event'].mode = 'Continuous'
         self.devices['evg'].cmd_update_events()
 
+        swtch0 = bpm.switching
+        bpm.cmd_turn_off_switching()
         bpm.cmd_acq_abort()
         bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
         bpm.acq_nrsamples_post = parms.acq_nrsamples_post
@@ -654,8 +656,6 @@ class MeasTouschekLifetime(_BaseClass):
 
             # Get other relevant parameters
             meas['current'].append(curr.current)
-            meas['tunex'] = tune.tunex
-            meas['tuney'] = tune.tuney
             meas['rf_voltage'].append(rfcav.dev_cavmon.gap_voltage)
             meas['avg_pressure'].append(press.value)
 
@@ -672,17 +672,23 @@ class MeasTouschekLifetime(_BaseClass):
             idx += 1
             _time.sleep(parms.acquisition_period)
 
-        tune.enablex = int(excx0)
-        tune.enabley = int(excy0)
+        self.data = meas
+        self.save_data(fname=parms.filename, overwrite=True)
+        print(f'{idx:04d}: data saved to file.')
+
+        if excx0:
+            tune.cmd_enablex()
+        if excy0:
+            tune.cmd_enabley()
+        if swtch0:
+            bpm.cmd_turn_on_switching()
+
         self.devices['trigger'].source = 'DigSI'
         self.devices['event'].mode = 'External'
         self.devices['evg'].cmd_update_events()
         pvsum.clear_callbacks()
         pvsum.auto_monitor = False
 
-        self.data = meas
-        self.save_data(fname=parms.filename, overwrite=True)
-        print(f'{idx:04d}: data saved to file.')
         print('Done!')
 
     def _pv_updated(self, *args, **kwargs):
@@ -691,13 +697,13 @@ class MeasTouschekLifetime(_BaseClass):
 
     def _get_tunes(self):
         tune = self.devices['tune']
-        tune.enablex = 1
-        tune.enabley = 1
+        tune.cmd_enablex()
+        tune.cmd_enabley()
         _time.sleep(1)
         tunex = tune.tunex
         tuney = tune.tuney
-        tune.enablex = 0
-        tune.enabley = 0
+        tune.cmd_disablex()
+        tune.cmd_disabley()
         return tunex, tuney
 
     @staticmethod
