@@ -633,6 +633,7 @@ class MeasTouschekLifetime(_BaseClass):
             # Get data for bunch with higher current
             bpm.tbt_mask_beg = parms.mask_beg_bunch_a
             bpm.tbt_mask_end = parms.mask_end_bunch_a
+            _time.sleep(parms.acquisition_period/4)
             self._updated_evt.clear()
             bpm.cmd_acq_start()
             bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
@@ -642,9 +643,12 @@ class MeasTouschekLifetime(_BaseClass):
             meas['nan_a'].append(_np.sum(_np.isnan(suma)))
             meas['tim_a'].append(_time.time())
 
+            _time.sleep(parms.acquisition_period/4)
+            
             # Get data for bunch with lower current
             bpm.tbt_mask_beg = parms.mask_beg_bunch_b
             bpm.tbt_mask_end = parms.mask_end_bunch_b
+            _time.sleep(parms.acquisition_period/4)
             self._updated_evt.clear()
             bpm.cmd_acq_start()
             bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
@@ -670,7 +674,7 @@ class MeasTouschekLifetime(_BaseClass):
                 self.save_data(fname=parms.filename, overwrite=True)
                 print(f'{idx:04d}: data saved to file.')
             idx += 1
-            _time.sleep(parms.acquisition_period)
+            _time.sleep(parms.acquisition_period/4)
 
         self.data = meas
         self.save_data(fname=parms.filename, overwrite=True)
