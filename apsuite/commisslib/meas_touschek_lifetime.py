@@ -144,8 +144,8 @@ class MeasTouschekLifetime(_BaseClass):
 
     def process_data(
             self, proc_type='fit_model', nr_bunches=1, nr_intervals=1,
-            window=1000, include_bunlen=False, outlier_std=6,
-            outlier_max_recursion=3):
+            window=1000, include_bunlen=False, poly_deg=8,
+            outlier_std=6, outlier_max_recursion=3):
         """."""
         if 'analysis' in self.data:
             self.analysis = self.data.pop('analysis')
@@ -157,7 +157,9 @@ class MeasTouschekLifetime(_BaseClass):
         self._remove_nans()
         self._calc_current_per_bunch(nr_bunches=nr_bunches)
         self._remove_outliers(
-            num_std=outlier_std, max_recursion=outlier_max_recursion)
+            poly_deg=poly_deg,
+            num_std=outlier_std,
+            max_recursion=outlier_max_recursion)
 
         if proc_type.lower().startswith('fit_model'):
             self._process_model_totalrate(nr_intervals=nr_intervals)
@@ -429,7 +431,7 @@ class MeasTouschekLifetime(_BaseClass):
         anly['current_b'] = _np_pfit.polyval(
             anly['sum_b']/nr_bunches, self.EXCCURVE_SUMB)
 
-    def _remove_outliers(self, num_std=6, max_recursion=3):
+    def _remove_outliers(self, poly_deg=8, num_std=6, max_recursion=3):
         anly = self.analysis
 
         dt_a = anly['tim_a']/3600
@@ -437,19 +439,17 @@ class MeasTouschekLifetime(_BaseClass):
         curr_a = anly['current_a']
         curr_b = anly['current_b']
 
-        loga = _np.log(curr_a)
-        logb = _np.log(curr_b)
-        pol_a = _np_pfit.polyfit(dt_a, loga, deg=1)
-        pol_b = _np_pfit.polyfit(dt_b, logb, deg=1)
-        fit_a = _np.exp(_np_pfit.polyval(dt_a, pol_a))
-        fit_b = _np.exp(_np_pfit.polyval(dt_b, pol_b))
+        pol_a = _np_pfit.polyfit(dt_a, curr_a, deg=poly_deg)
+        pol_b = _np_pfit.polyfit(dt_b, curr_b, deg=poly_deg)
+
+        fit_a = _np_pfit.polyval(dt_a, pol_a)
+        fit_b = _np_pfit.polyval(dt_b, pol_b)
 
         diff_a = _np.abs(curr_a - fit_a)
         diff_b = _np.abs(curr_b - fit_b)
 
         out = num_std
         idx_keep = (diff_a < out*diff_a.std()) & (diff_b < out*diff_b.std())
-
         for key in anly.keys():
             anly[key] = anly[key][idx_keep]
 
@@ -457,7 +457,8 @@ class MeasTouschekLifetime(_BaseClass):
             self._recursion, curr_a.size - _np.sum(idx_keep)))
         if _np.sum(idx_keep) < curr_a.size and self._recursion < max_recursion:
             self._recursion += 1
-            self._remove_outliers(num_std, max_recursion=max_recursion)
+            self._remove_outliers(
+                poly_deg, num_std, max_recursion=max_recursion)
         else:
             self._recursion = 0
 
