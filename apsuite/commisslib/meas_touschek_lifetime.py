@@ -155,6 +155,7 @@ class MeasTouschekLifetime(_BaseClass):
         # Pre-processing of data:
         self._handle_data_lens()
         self._remove_nans()
+        self._remove_negatives()
         self._calc_current_per_bunch(nr_bunches=nr_bunches)
         self._remove_outliers(
             poly_deg=poly_deg,
@@ -415,6 +416,23 @@ class MeasTouschekLifetime(_BaseClass):
         sum_a, sum_b = sum_a[~nanidx], sum_b[~nanidx]
         tim_a, tim_b = tim_a[~nanidx], tim_b[~nanidx]
         currt = currt[~nanidx]
+
+        anly = dict()
+        anly['sum_a'], anly['sum_b'] = sum_a, sum_b
+        anly['tim_a'], anly['tim_b'] = tim_a, tim_b
+        anly['current'] = currt
+        self.analysis = anly
+
+    def _remove_negatives(self):
+        anly = self.analysis
+        sum_a, sum_b = anly['sum_a'], anly['sum_b']
+        tim_a, tim_b = anly['tim_a'], anly['tim_b']
+        currt = anly['current']
+
+        posidx = (sum_a > 0) & (sum_b > 0)
+        sum_a, sum_b = sum_a[posidx], sum_b[posidx]
+        tim_a, tim_b = tim_a[posidx], tim_b[posidx]
+        currt = currt[posidx]
 
         anly = dict()
         anly['sum_a'], anly['sum_b'] = sum_a, sum_b
