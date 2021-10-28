@@ -389,6 +389,28 @@ class MeasTouschekLifetime(_BaseClass):
             fig.savefig(fname, dpi=300, format='png')
         return fig, ax1
 
+    def plot_raw_data(self, fname=None, title=None):
+        """."""
+        meas = self.data
+        sum_a, sum_b = meas['sum_a'], meas['sum_b']
+        dt_a = (_np.array(meas['tim_a']) - meas['tim_a'][0])/3600
+        dt_b = (_np.array(meas['tim_b']) - meas['tim_b'][0])/3600
+
+        fig = _mplt.figure(figsize=(8, 6))
+        gs = _mgs.GridSpec(1, 1)
+        ax1 = _mplt.subplot(gs[0, 0])
+        ax1.plot(dt_a, sum_a, '.', color='C0', label='Bunch A')
+        ax1.plot(dt_b, sum_b, '.', color='C1', label='Bunch B')
+        ax1.set_xlabel('time [h]')
+        ax1.set_ylabel('BPM sum [counts]')
+        ax1.set_title(title)
+        ax1.legend()
+        ax1.grid(ls='--', alpha=0.5)
+        _mplt.tight_layout(True)
+        if fname:
+            fig.savefig(fname, dpi=300, format='png')
+        return fig, ax1
+
     def _handle_data_lens(self):
         meas = self.data
         len_min = min(len(meas['sum_a']), len(meas['sum_b']))
