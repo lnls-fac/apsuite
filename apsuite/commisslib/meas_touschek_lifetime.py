@@ -644,6 +644,7 @@ class MeasTouschekLifetime(_BaseClass):
         tune = self.devices['tune']
         press = self.pvs['avg_pressure']
         bpm = self.devices[parms.bpm_name]
+        bpm.cmd_sync_tbt()  # Sync TbT BPM acquisition
 
         excx0 = tune.enablex
         excy0 = tune.enabley
