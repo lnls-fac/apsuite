@@ -3,6 +3,8 @@ import time as _time
 import numpy as _np
 from siriuspy.devices import SOFB, BunchbyBunch
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
+import matplotlib.pyplot as _mplt
+import matplotlib.gridspec as _mgs
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
@@ -176,3 +178,89 @@ class BumpNLK(_BaseClass):
         print('Returning to ref_orb...')
         self.implement_bump(psx=0, psy=0, nr_iters=10)
         print('Finished!')
+
+    def process_data(self):
+        """."""
+        posx, posy, magx, magy = [], [], [], []
+        trajx, trajy = [], []
+        for datai in self.data:
+            trjx = datai['trajx'].copy()
+            trjx -= trjx.mean(axis=0)[None, :]
+            trjy = datai['trajy'].copy()
+            trjy -= trjy.mean(axis=0)[None, :]
+            trajx.append(trjx.std())
+            trajy.append(trjy.std())
+            posx.append(datai['bump'][0])
+            posy.append(datai['bump'][1])
+            magx.append(datai['spech_mk1_mag'])
+            magy.append(datai['specv_mk1_mag'])
+
+        nsteps = self.params.nr_stepsx
+        anly = dict()
+        anly['posx_bump'] = self._reshape_vec(posx, dim=nsteps)
+        anly['posy_bump'] = self._reshape_vec(posy, dim=nsteps)
+        anly['bbbh_mag'] = self._reshape_vec(magx, dim=nsteps)
+        anly['bbbv_mag'] = self._reshape_vec(magy, dim=nsteps)
+        anly['tbt_trajx_std'] = self._reshape_vec(trajx, dim=nsteps)
+        anly['tbt_trajy_std'] = self._reshape_vec(trajy, dim=nsteps)
+        self.analysis = anly
+
+    def plot_bbb_mag(self, plane='HV'):
+        """."""
+        fig = _mplt.figure(figsize=(8, 6))
+        gs = _mgs.GridSpec(1, 1)
+        ax1 = _mplt.subplot(gs[0, 0])
+        anly = self.analysis
+        posx, posy = anly['posx_bump'], anly['posy_bump']
+
+        if plane.upper() == 'HV':
+            _mx, _my = anly['bbbh_mag'], anly['bbbv_mag']
+            _mx, _my = 10**(_mx/20), 10**(_my/20)
+            mag = _np.log(_mx**2 + _my**2)
+        elif plane.upper() == 'H':
+            mag = 10**(anly['bbbh_mag']/20)
+        elif plane.upper() == 'V':
+            mag = 10**(anly['bbbv_mag']/20)
+        else:
+            raise Exception('plane argument must be HV, H or V.')
+
+        pcm = ax1.pcolormesh(posx, posy, mag, shading='gouraud')
+        ax1.set_xlabel(r'Bump x [$\mu$m]')
+        ax1.set_ylabel(r'Bump y [$\mu$m]')
+        cbar = fig.colorbar(pcm, ax=ax1)
+        cbar.set_label(plane + ' BbB Mag')
+        ax1.set_title('')
+        _mplt.tight_layout(True)
+        return fig, ax1
+
+    def plot_tbt_traj(self, plane='HV'):
+        """."""
+        fig = _mplt.figure(figsize=(8, 6))
+        gs = _mgs.GridSpec(1, 1)
+        ax1 = _mplt.subplot(gs[0, 0])
+        anly = self.analysis
+        posx, posy = anly['posx_bump'], anly['posy_bump']
+
+        if plane.upper() == 'HV':
+            _tx, _ty = anly['tbt_trajx_std'], anly['tbt_trajy_std']
+            traj = _np.sqrt(_tx**2 + _ty**2)
+        elif plane.upper() == 'H':
+            traj = anly['tbt_trajx_std']
+        elif plane.upper() == 'V':
+            traj = anly['tbt_trajy_std']
+        else:
+            raise Exception('plane argument must be HV, H or V.')
+
+        pcm = ax1.pcolormesh(posx, posy, traj, shading='gouraud')
+        ax1.set_xlabel(r'Bump x [$\mu$m]')
+        ax1.set_ylabel(r'Bump y [$\mu$m]')
+        cbar = fig.colorbar(pcm, ax=ax1)
+        cbar.set_label(plane + r' TbT Traj std. [$\mu$m]')
+        ax1.set_title('')
+        _mplt.tight_layout(True)
+        return fig, ax1
+
+    @staticmethod
+    def _reshape_vec(vec, dim):
+        new_vec = _np.array(vec).reshape((dim, -1))
+        return new_vec[1::2, ::-1]
