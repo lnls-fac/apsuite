@@ -144,7 +144,7 @@ class MeasTouschekLifetime(_BaseClass):
 
     def process_data(
             self, proc_type='fit_model', nr_bunches=1, nr_intervals=1,
-            window=1000, include_bunlen=False, poly_deg=8,
+            window=1000, include_bunlen=False, outlier_poly_deg=8,
             outlier_std=6, outlier_max_recursion=3):
         """."""
         if 'analysis' in self.data:
@@ -158,7 +158,7 @@ class MeasTouschekLifetime(_BaseClass):
         self._remove_negatives()
         self._calc_current_per_bunch(nr_bunches=nr_bunches)
         self._remove_outliers(
-            poly_deg=poly_deg,
+            poly_deg=outlier_poly_deg,
             num_std=outlier_std,
             max_recursion=outlier_max_recursion)
 
@@ -686,7 +686,7 @@ class MeasTouschekLifetime(_BaseClass):
             meas['tim_a'].append(_time.time())
 
             _time.sleep(parms.acquisition_period/4)
-            
+
             # Get data for bunch with lower current
             bpm.tbt_mask_beg = parms.mask_beg_bunch_b
             bpm.tbt_mask_end = parms.mask_end_bunch_b
