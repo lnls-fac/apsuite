@@ -726,8 +726,8 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         freq = _np.fft.fftfreq(tim.size, d=(tim[1]-tim[0])/1000)
         data = UtilClass.filter_data(freq, data, self.params)
         abs_data = _np.abs(data)
-        if len(abs_data.shape) > 1:
-            abs_data = abs_data.reshape(abs_data.size, -1)
+        if len(abs_data.shape) == 1:
+            abs_data = abs_data.reshape(-1, abs_data.size)
 
         coeffs, fittings = [], []
         for abs_mode in abs_data:
