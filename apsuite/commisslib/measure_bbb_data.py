@@ -267,7 +267,6 @@ class BbBLParams(_ParamsBaseClass):
     def __str__(self):
         """."""
         ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
-        # dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
         stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
         st = ftmp('center_frequency  [Hz]', self.center_frequency, '')
         st += ftmp('bandwidth [Hz]', self.bandwidth, '')
@@ -641,9 +640,9 @@ class DriveDampLParams(BbBLParams):
 
     def __str__(self):
         """."""
-        dtmp = '{0:20s} = {1:9d}\n'.format
-        ftmp = '{0:20s} = {1:9.4f}  {2:s}\n'.format
-        stmp = '{0:20s} = {1:}\n'.format
+        dtmp = '{0:24s} = {1:9d}\n'.format
+        ftmp = '{0:24s} = {1:9.4f}  {2:s}\n'.format
+        stmp = '{0:24s} = {1:}\n'.format
 
         stg = super().__str__()
         stg += dtmp('drive_num', self.drive_num)
@@ -751,9 +750,9 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         gsp.update(left=0.09, right=0.98, top=0.98, bottom=0.1)
         ax = _mplt.subplot(gsp[0, 0])
 
-        modes_num = self.data['modes_num']
+        modes_meas = self.data['modes_measured']
         coeffs = self.analysis['coeffs']
-        for num, coeff in zip(modes_num, coeffs):
+        for num, coeff in zip(modes_meas, coeffs):
             ax.plot(num, coeff[:, 2]*1000, 'ob')
         ax.set_ylabel('Growth Rates [1/s]')
         ax.set_xlabel('Modes')
@@ -761,7 +760,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
 
     def plot_modes_evolution(self, data_index=0, title=''):
         """."""
-        mode_num = self.data['modes_num'][data_index]
+        mode_meas = self.data['modes_measured'][data_index]
         infos = self.data['infos'][data_index]
         mode_filt = self.analysis['modes_filt'][data_index]
         tfit = self.analysis['tims_fit'][data_index]
@@ -781,7 +780,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         for i, absm in enumerate(abs_mode):
             ffit = fit[i]
             cff = coeff[i]
-            num = mode_num[i]
+            num = mode_meas[i]
             aty.plot(tim, absm, label=f'{num:03d}')
             aty.plot(tfit, ffit)
 
@@ -844,7 +843,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             data = analysis['mode_data'][modei]
             infos.pop('rawdata')
 
-            self.data['modes_num'].append(modei)
+            self.data['modes_measured'].append(modei)
             self.data['modes_data'].append(data)
             self.data['infos'].append(infos)
 
