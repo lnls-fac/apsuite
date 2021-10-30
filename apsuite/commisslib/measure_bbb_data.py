@@ -656,7 +656,7 @@ class DriveDampLParams(BbBLParams):
             modes_stg += ', ..., '
             modes_stg += ', '.join([f'{m:03d}' for m in modes[-3:]])
         else:
-            modes_stg = ', '.join(['{m:03d}' for m in modes])
+            modes_stg = ', '.join([f'{m:03d}' for m in modes])
         stg += stmp(
             'modes_to_measure', f'[{modes_stg:s}] (size = {len(modes):d})')
         return stg
