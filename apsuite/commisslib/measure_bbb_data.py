@@ -817,7 +817,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
 
         bbb = self.devices['bbb']
         drive = bbb.drive0 if drive_num == 0 else bbb.drive1
-        drive = drive if drive_num == 1 else bbb.drive2
+        drive = drive if drive_num != 2 else bbb.drive2
 
         harm_num = bbb.info.harmonic_number
         modes_to_measure = self.params.modes_to_measure
