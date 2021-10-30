@@ -691,7 +691,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             params = DriveDampVParams()
 
         super().__init__(
-            self, params=params, target=self._do_measure, isonline=isonline)
+            params=params, target=self._do_measure, isonline=isonline)
         if self.isonline:
             self.devices['bbb'] = BunchbyBunch(devname)
 
