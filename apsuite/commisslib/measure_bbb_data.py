@@ -140,9 +140,9 @@ class UtilClass:
             H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
             H /= H.max()
             if len(data.shape) > 1:
-                data_dft *= H
-            else:
                 data_dft *= H[None, :]
+            else:
+                data_dft *= H
         else:
             indcs = (freq > center_freq - sigma_freq)
             indcs &= (freq < center_freq + sigma_freq)
