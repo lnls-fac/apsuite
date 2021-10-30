@@ -25,7 +25,7 @@ class UtilClass:
         """Get Raw data to file."""
         acq = bbb.sram if acqtype in 'SRAM' else bbb.bram
         rawdata = acq.data_raw.reshape(
-            (-1, bbb.info.harmonic_number)).T.copy()
+            (-1, bbb.info.harmonic_number)).T.astype(float)
         dtime = acq.downsample / bbb.info.revolution_freq_nom
         return dict(
             rawdata=rawdata,
