@@ -763,7 +763,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         mode_meas = self.data['modes_measured'][data_index]
         infos = self.data['infos'][data_index]
         mode_filt = self.analysis['modes_filt'][data_index]
-        tfit = self.analysis['tims_fit'][data_index]
+        tfit = self.analysis['tim_fits'][data_index]
         fit = self.analysis['fits'][data_index]
         coeff = self.analysis['coeffs'][data_index]
 
