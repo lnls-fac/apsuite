@@ -740,7 +740,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         coeffs = _np.array(coeffs)
         fittings = _np.array(fittings)
         if not full:
-            return coeffs[:, 2]
+            return coeffs[:, 2] * 1000
         return coeffs, tim_fit, fittings
 
     def plot_growth_rates(self):
@@ -828,6 +828,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         infos = self.get_data(bbb, acqtype)
         analysis = self._process_data(infos, self.params)
         interval = self.estimate_fitting_intervals(infos, clearance=5)
+        tim = infos['time']
 
         if not self.data:
             self.data = dict(infos=[], modes_data=[], modes_measured=[])
@@ -847,7 +848,8 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             self.data['modes_data'].append(data)
             self.data['infos'].append(infos)
 
-            grt = self.fit_growth_rates(data, interval=interval, full=False)
+            grt = self.fit_growth_rates(
+                tim, data, interval=interval, full=False)
             print(',   '.join([
                 f'mode: {m:03d} --> growth: {gt:.2f}'
                 for m, gt in zip(modei, grt.ravel())]))
