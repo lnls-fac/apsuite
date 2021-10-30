@@ -828,8 +828,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         _time.sleep(0.2)
         infos = self.get_data(bbb, acqtype)
         analysis = self._process_data(infos, self.params)
-        intervals = self.estimate_fitting_intervals(
-            infos, int_type='damp', clearance=5)
+        intervals = self.estimate_fitting_intervals(infos, clearance=5)
 
         if not self.data:
             self.data = dict(infos=[], modes_data=[], modes_measured=[])
