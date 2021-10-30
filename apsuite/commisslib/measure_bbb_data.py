@@ -140,7 +140,7 @@ class UtilClass:
             H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
             H /= H.max()
             if len(data.shape) > 1:
-                data_dft *= H[None, :]
+                data_dft *= H
             else:
                 data_dft *= H[None, :]
         else:
@@ -723,7 +723,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
 
     def fit_growth_rates(self, tim, data, interval, full=False):
         """."""
-        freq = _np.fft.rfftfreq(tim.size, d=(tim[1]-tim[0])/1000)
+        freq = _np.fft.fftfreq(tim.size, d=(tim[1]-tim[0])/1000)
         data = UtilClass.filter_data(freq, data, self.params)
         abs_data = _np.abs(data)
         if len(abs_data.shape) > 1:
