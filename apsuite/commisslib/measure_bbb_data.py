@@ -781,14 +781,14 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             ffit = fit[i]
             cff = coeff[i]
             num = mode_meas[i]
-            lin = aty.plot(tim, absm, label=f'{num:03d}')[0]
+            lin = aty.plot(tim, absm, label=f'{num:03d}', lw=1)[0]
             aty.plot(tfit, ffit, ls='--', lw=3, color=lin.get_color())
 
             idx = int(ffit.size/(abs_mode.shape[0]+1) * (i+1))
             aty.annotate(
                 f'rate = {cff[2]*1000:.2f} Hz', fontsize='x-small',
                 xy=(tfit[idx], ffit[idx]),
-                textcoords='offset points', xytext=(100, 100),
+                textcoords='offset points', xytext=(10, 20),
                 arrowprops=dict(arrowstyle='->'),
                 bbox=dict(boxstyle="round", fc="0.8"))
 
@@ -796,7 +796,6 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             inst_freq /= 1e3
             idx = absm > absm.max()/10
             atx.plot(tim[idx], inst_freq[idx], color=lin.get_color())
-
         aty.legend(loc='best', fontsize='small')
         aty.set_title(title, fontsize='small')
         aty.set_xlabel('time [ms]')
