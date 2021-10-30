@@ -781,7 +781,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             ffit = fit[i]
             cff = coeff[i]
             num = mode_meas[i]
-            lin = aty.plot(tim, absm, label=f'{num:03d}')
+            lin = aty.plot(tim, absm, label=f'{num:03d}')[0]
             aty.plot(tfit, ffit, ls='--', lw=3, color=lin.get_color())
 
             idx = int(ffit.size/(abs_mode.shape[0]+1) * (i+1))
