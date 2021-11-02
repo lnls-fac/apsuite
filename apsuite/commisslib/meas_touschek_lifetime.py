@@ -90,8 +90,8 @@ class MeasTouschekLifetime(_BaseClass):
 
     def __init__(self, isonline=True):
         """."""
-        _BaseClass.__init__(
-            self, params=MeasTouschekParams(), target=self._do_measure,
+        super().__init__(
+            params=MeasTouschekParams(), target=self._do_measure,
             isonline=isonline)
 
         self._recursion = 0

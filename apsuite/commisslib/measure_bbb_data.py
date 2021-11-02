@@ -13,73 +13,45 @@ from matplotlib.collections import PolyCollection as _PolyCollection
 from siriuspy.devices import BunchbyBunch, PowerSupplyPU, EGTriggerPS
 
 from ..utils import MeasBaseClass as _BaseClass, \
-    ParamsBaseClass as _ParamsBaseClass
+    ParamsBaseClass as _ParamsBaseClass, \
+    ThreadedMeasBaseClass as _ThreadBaseClass
 
 
-class BbBLParams(_ParamsBaseClass):
+class UtilClass:
     """."""
 
-    DAC_NBITS = 14
-    SAT_THRES = 2**(DAC_NBITS-1) - 1
-    CALIBRATION_FACTOR = 1000  # Counts/mA/degree
-    DAMPING_RATE = 1/13.0  # Hz
-    FREQ_RF = 499666000
-    HARM_NUM = 864
-    FREQ_REV = FREQ_RF / HARM_NUM
-    PER_REV = 1 / FREQ_REV
-
-    def __init__(self):
-        """."""
-        super().__init__()
-        self.center_frequency = 2090  # [Hz]
-        self.bandwidth = 200  # [Hz]
-
-    def __str__(self):
-        """."""
-        ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
-        # dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
-        st = ftmp('center_frequency  [Hz]', self.center_frequency, '')
-        st += ftmp('bandwidth [Hz]', self.bandwidth, '')
-        return st
-
-
-class BbBHParams(BbBLParams):
-    """."""
-
-    DAMPING_RATE = 1/16.9e-3  # Hz
-    CALIBRATION_FACTOR = 1000  # Counts/mA/um
-
-
-class BbBVParams(BbBLParams):
-    """."""
-
-    DAMPING_RATE = 1/22.0e-3  # Hz
-    CALIBRATION_FACTOR = 1000  # Counts/mA/um
-
-
-class BbBData(_BaseClass):
-    """."""
-
-    DEVICES = BunchbyBunch.DEVICES
-
-    def __init__(self, devname):
-        """."""
-        if devname.endswith('L'):
-            params = BbBLParams()
-        elif devname.endswith('H'):
-            params = BbBHParams()
-        elif devname.endswith('V'):
-            params = BbBVParams()
-
-        super().__init__(params=params)
-        self.devices['bbb'] = BunchbyBunch(devname)
-
-    def get_data(self):
+    @staticmethod
+    def get_data(bbb, acqtype):
         """Get Raw data to file."""
-        acqtype = self.params.acqtype
-        bbb = self.devices['bbb']
         acq = bbb.sram if acqtype in 'SRAM' else bbb.bram
-        cavity_data = dict(
+        rawdata = acq.data_raw.reshape(
+            (-1, bbb.info.harmonic_number)).T.copy()
+        dtime = acq.downsample / bbb.info.revolution_freq_nom
+        return dict(
+            rawdata=rawdata,
+            time=_np.arange(rawdata.shape[1]) * dtime * 1000,
+            dft_freq=_np.fft.fftfreq(rawdata.shape[1], d=dtime),
+            stored_current=bbb.dcct.current,
+            timestamp=_time.time(),
+            cavity_data=UtilClass.get_cavity_data(bbb),
+            acqtype=acqtype, downsample=acq.downsample,
+            fb_set0=bbb.coeffs.set0, fb_set1=bbb.coeffs.set1,
+            fb_set0_desc=bbb.coeffs.set0_desc,
+            fb_set1_desc=bbb.coeffs.set1_desc,
+            fb_downsample=bbb.feedback.downsample,
+            fb_state=bbb.feedback.loop_state,
+            fb_shift_gain=bbb.feedback.shift_gain,
+            fb_setsel=bbb.feedback.coeff_set,
+            fb_growdamp_state=bbb.feedback.grow_damp_state,
+            fb_mask=bbb.feedback.mask,
+            growth_time=acq.growthtime, acq_time=acq.acqtime,
+            hold_time=acq.holdtime, post_time=acq.posttime,
+            )
+
+    @staticmethod
+    def get_cavity_data(bbb):
+        """."""
+        return dict(
             temperature={
                 'cell1': bbb.rfcav.dev_cavmon.temp_cell1,
                 'cell2': bbb.rfcav.dev_cavmon.temp_cell2,
@@ -96,31 +68,273 @@ class BbBData(_BaseClass):
                 'cell6': bbb.rfcav.dev_cavmon.power_cell6,
                 'forward': bbb.rfcav.dev_cavmon.power_forward,
                 'reverse': bbb.rfcav.dev_cavmon.power_reverse,
+                'voltage': bbb.rfcav.dev_cavmon.gap_voltage,
                 },
             voltage=bbb.rfcav.dev_llrf.voltage_mon,
             phase=bbb.rfcav.dev_llrf.phase_mon,
             detune=bbb.rfcav.dev_llrf.detune,
             detune_error=bbb.rfcav.dev_llrf.detune_error,
             )
-        self.data = dict(
-            stored_current=bbb.dcct.current,
-            timestamp=_time.time(),
-            cavity_data=cavity_data,
-            acqtype=acqtype, downsample=acq.downsample,
-            rawdata=_np.array(
-                acq.data_raw.reshape((-1, self.params.HARM_NUM)).T,
-                dtype=float),
-            fb_set0=bbb.coeffs.set0, fb_set1=bbb.coeffs.set1,
-            fb_set0_desc=bbb.coeffs.set0_desc,
-            fb_set1_desc=bbb.coeffs.set1_desc,
-            fb_downsample=bbb.feedback.downsample,
-            fb_state=bbb.feedback.loop_state,
-            fb_shift_gain=bbb.feedback.shift_gain,
-            fb_setsel=bbb.feedback.coeff_set,
-            fb_growdamp_state=bbb.feedback.grow_damp_state,
-            growth_time=acq.growthtime, acq_time=acq.acqtime,
-            hold_time=acq.holdtime, post_time=acq.posttime,
-            )
+
+    @staticmethod
+    def _process_data(data, params, rawdata=None):
+        """."""
+        per_rev = params.PER_REV
+        calib = params.CALIBRATION_FACTOR
+        harm_num = params.HARM_NUM
+        current = data.get('stored_current', None)
+        if current is None:
+            current = data['current']
+
+        time = data['time'].copy()
+        freq = data['dft_freq'].copy()
+
+        if rawdata is None:
+            dataraw = data['rawdata'].astype(float)
+            dataraw *= 1 / (calib * current / harm_num)
+        else:
+            dataraw = rawdata.astype(float)
+
+        # remove DC component from bunches
+        dataraw -= dataraw.mean(axis=1)[:, None]
+
+        # get the analytic data vector, via discrete hilbert transform
+        data_anal = _scysig.hilbert(dataraw, axis=1).copy()
+
+        # calculate DFT:
+        data_dft = _np.fft.fft(data_anal, axis=1)
+
+        # compensate the different time samplings of each bunch:
+        dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * per_rev
+        comp = _np.exp(-1j*2*_np.pi * freq[None, :]*dts[:, None])
+        data_dft *= comp
+
+        # get the processed data by inverse DFT
+        data_anal = _np.fft.ifft(data_dft, axis=1)
+
+        # decompose data into even fill eigenvectors:
+        data_modes = _np.fft.fft(data_anal, axis=0) / data_anal.shape[0]
+
+        analysis = dict()
+        analysis['bunch_numbers'] = _np.arange(1, dataraw.shape[0]+1)
+        analysis['dft_freq'] = freq
+        analysis['mode_numbers'] = _np.arange(data_modes.shape[0])
+        analysis['time'] = time
+        analysis['mode_data'] = data_modes
+        analysis['bunch_data'] = data_anal
+
+        return analysis
+
+    @staticmethod
+    def filter_data(freq, data, params):
+        """."""
+        center_freq = params.center_frequency
+        sigma_freq = params.bandwidth
+        ftype = params.filter_type
+
+        data_dft = _np.fft.fft(data, axis=-1)
+
+        if ftype.lower().startswith('gauss'):
+            # Apply Gaussian filter to get only the synchrotron frequency
+            H = _np.exp(-(freq - center_freq)**2/2/sigma_freq**2)
+            H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
+            H /= H.max()
+            if len(data.shape) > 1:
+                data_dft *= H[None, :]
+            else:
+                data_dft *= H
+        else:
+            indcsp = (freq > center_freq - sigma_freq)
+            indcsp &= (freq < center_freq + sigma_freq)
+            indcsn = (-freq > center_freq - sigma_freq)
+            indcsn &= (-freq < center_freq + sigma_freq)
+            indcs = indcsp | indcsn
+            if len(data.shape) > 1:
+                data_dft[:, ~indcs] = 0
+            else:
+                data_dft[~indcs] = 0
+        return _np.fft.ifft(data_dft, axis=-1)
+
+    @staticmethod
+    def estimate_fitting_intervals(infos, int_type='both', clearance=0):
+        """."""
+        growth_time = infos['growth_time']
+        post_time = infos['post_time']
+        tim = infos['time']
+
+        change_time = tim[-1] - (post_time - growth_time)
+        change_time = max(tim[0], min(tim[-1], change_time))
+
+        grow_int = [0 + clearance, change_time - clearance]
+        damp_int = [change_time + clearance, tim[-1] - clearance]
+        if int_type == 'both':
+            return [grow_int, damp_int]
+        if int_type == 'damp':
+            return [damp_int, ]
+        return [grow_int, ]
+
+    @staticmethod
+    def get_strongest_modes(
+            data_modes, nr_modes=None, nr_std=4, ignore_mode0=True):
+        """."""
+        abs_modes = _np.abs(data_modes)
+
+        avg_modes = abs_modes.max(axis=1)
+        if ignore_mode0:
+            avg_modes = avg_modes[1:]
+
+        if nr_modes is not None:
+            modes = _np.argsort(avg_modes)[::-1]
+            modes = modes[:nr_modes]
+        else:
+            avg = avg_modes.mean()
+            std = avg_modes.std()
+            modes = (avg_modes > (avg + nr_std*std)).nonzero()[0]
+
+        modes += ignore_mode0
+        return modes
+
+    @classmethod
+    def fit_exponential(cls, times, data, t_ini=None, t_fin=None, offset=True):
+        """Fit exponential function."""
+        t_ini = t_ini or times.min()
+        t_fin = t_fin or times.max()
+        idx = (times >= t_ini) & (times <= t_fin)
+        tim = times[idx]
+        dtim = data[idx]
+
+        # Exponential function without offset
+        if not offset:
+            log_amp, rate = _np.polynomial.polynomial.polyfit(
+                tim, _np.log(dtim), deg=1, rcond=None)
+            return tim, (0, _np.exp(log_amp), rate)
+
+        # method to estimate fitting parameters of
+        # y = a + b*exp(c*x)
+        # based on:
+        # https://www.scribd.com/doc/14674814/Regressions-et-equations-integrales
+        # pages 16-18
+        s = _scyint.cumtrapz(dtim, x=tim, initial=0.0)
+        ym = dtim - dtim[0]
+        xm = tim - tim[0]
+        mat = _np.array([xm, s]).T
+        (_, rate), *_ = _np.linalg.lstsq(mat, ym, rcond=None)
+        theta = _np.exp(rate*tim)
+        mat = _np.ones((theta.size, 2))
+        mat[:, 1] = theta
+        (off, amp), *_ = _np.linalg.lstsq(mat, dtim, rcond=None)
+
+        # Now use scipy to refine the estimatives:
+        coefs = (off, amp, rate)
+        try:
+            coefs, _ = _scyopt.curve_fit(
+                cls.exponential_func, tim, dtim, p0=coefs)
+        except RuntimeError:
+            pass
+        return tim, coefs
+
+    @staticmethod
+    def exponential_func(tim, off, amp, rate):
+        """Return exponential function with offset."""
+        return off + amp*_np.exp(rate*tim)
+
+    @staticmethod
+    def calc_instant_frequency(data, dtime):
+        """."""
+        freq = _np.unwrap(_np.angle(data))
+        freq = _np.gradient(freq, axis=-1)
+        freq /= 2*_np.pi*dtime
+        return freq
+
+
+class BbBLParams(_ParamsBaseClass):
+    """."""
+
+    DAC_NBITS = 14
+    SAT_THRES = 2**(DAC_NBITS-1) - 1
+    CALIBRATION_FACTOR = 1000  # [Counts/mA/degree]
+    DAMPING_RATE = 1/13.0  # [Hz]
+    FREQ_RF = 499666000
+    HARM_NUM = 864
+    FREQ_REV = FREQ_RF / HARM_NUM
+    PER_REV = 1 / FREQ_REV
+
+    def __init__(self):
+        """."""
+        super().__init__()
+        self.center_frequency = 2090  # [Hz]
+        self.bandwidth = 200  # [Hz]
+        self.filter_type = 'gauss'  # (gauss, sinc)
+        self.acqtype = 'SRAM'
+
+    def __str__(self):
+        """."""
+        ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
+        stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
+        st = ftmp('center_frequency  [Hz]', self.center_frequency, '')
+        st += ftmp('bandwidth [Hz]', self.bandwidth, '')
+        st += stmp('filter_type', self.filter_type, '[gauss or sinc]')
+        st += stmp('acqtype', self.acqtype, '[SRAM or BRAM]')
+        return st
+
+
+class BbBHParams(BbBLParams):
+    """."""
+
+    DAMPING_RATE = 1/16.9e-3  # [Hz]
+    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+
+
+class BbBVParams(BbBLParams):
+    """."""
+
+    DAMPING_RATE = 1/22.0e-3  # [Hz]
+    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+
+
+class BbBAcqData(_BaseClass, UtilClass):
+    """."""
+
+    DEVICES = BunchbyBunch.DEVICES
+
+    def __init__(self, devname):
+        """."""
+        if devname.endswith('L'):
+            params = BbBLParams()
+        elif devname.endswith('H'):
+            params = BbBHParams()
+        elif devname.endswith('V'):
+            params = BbBVParams()
+
+        super().__init__(params=params)
+        if self.isonline:
+            self.devices['bbb'] = BunchbyBunch(devname)
+
+    def get_data(self):
+        """Get Raw data to file."""
+        acqtype = self.params.acqtype
+        bbb = self.devices['bbb']
+        self.data = UtilClass.get_data(bbb, acqtype)
+
+    def get_cavity_data(self):
+        """."""
+        bbb = self.devices['bbb']
+        return UtilClass.get_cavity_data(bbb)
+
+    def process_data(self, rawdata=None):
+        """."""
+        analysis = UtilClass._process_data(
+            self.data, self.params, rawdata=rawdata)
+
+        freq = analysis['dft_freq']
+        analysis['mode_data'] = UtilClass.filter_data(
+            freq, analysis['mode_data'], self.params)
+        analysis['bunch_data'] = UtilClass.filter_data(
+            freq, analysis['bunch_data'], self.params)
+
+        if rawdata is None:
+            self.analysis.update(analysis)
+        return analysis
 
     def load_and_apply_old_data(self, fname):
         """."""
@@ -144,68 +358,6 @@ class BbBData(_BaseClass):
             voltage=0.0, phase=0.0, detune=0.0, detune_error=0.0,
             )
         self.data = data
-
-    def process_data(self, rawdata=None):
-        """."""
-        center_freq = self.params.center_frequency
-        sigma_freq = self.params.bandwidth
-        per_rev = self.params.PER_REV
-        calib = self.params.CALIBRATION_FACTOR
-        harm_num = self.params.HARM_NUM
-        downsample = self.data['downsample']
-        current = self.data.get('stored_current', None)
-        if current is None:
-            current = self.data['current']
-        dtime = per_rev*downsample
-
-        if rawdata is None:
-            dataraw = self.data['rawdata'].copy()
-            dataraw *= 1 / (calib * current / harm_num)
-        else:
-            dataraw = rawdata.copy()
-
-        # remove DC component from bunches
-        dataraw -= dataraw.mean(axis=1)[:, None]
-
-        # get the analytic data vector, via discrete hilbert transform
-        data_anal = _np.array(_scysig.hilbert(dataraw, axis=1))
-
-        # calculate DFT:
-        data_dft = _np.fft.fft(data_anal, axis=1)
-        freq = _np.fft.fftfreq(data_anal.shape[1], d=dtime)
-
-        # Apply Gaussian filter to get only the synchrotron frequency
-        H = _np.exp(-(freq - center_freq)**2/2/sigma_freq**2)
-        H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
-        H /= H.max()
-        data_dft *= H[None, :]
-
-        # compensate the different time samplings of each bunch:
-        dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * per_rev
-        comp = _np.exp(-1j*2*_np.pi * freq[None, :]*dts[:, None])
-        data_dft *= comp
-
-        # get the processed data by inverse DFT
-        data_anal = _np.fft.ifft(data_dft, axis=1)
-        data_dft /= data_anal.shape[1]
-
-        # decompose data into even fill eigenvectors:
-        data_modes = _np.fft.fft(data_anal, axis=0) / data_anal.shape[0]
-
-        analysis = dict()
-        analysis['bunch_numbers'] = _np.arange(1, dataraw.shape[0]+1)
-        analysis['dft_freq'] = freq
-        analysis['mode_numbers'] = _np.arange(data_modes.shape[0])
-        analysis['time'] = _np.arange(data_anal.shape[1]) * dtime
-        analysis['mode_data'] = data_modes
-        analysis['bunch_data'] = data_anal
-        analysis['dft_data'] = data_dft
-        analysis['dft_filter'] = H
-
-        if rawdata is None:
-            self.analysis.update(analysis)
-
-        return analysis
 
     def get_dac_output(self, coeff=None, shift_gain=None, saturate=True):
         """."""
@@ -232,26 +384,31 @@ class BbBData(_BaseClass):
             current = self.data['current']
 
         if rawdata is None:
-            rawdata = self.data['rawdata'].copy()
+            rawdata = self.data['rawdata'].astype(float)
             rawdata *= 1 / (calib * current / harm_num)
         else:
-            rawdata = rawdata.copy()
+            rawdata = rawdata.astype(float)
 
         rawdata -= rawdata.mean(axis=1)[:, None]
         return _np.linalg.svd(rawdata)
 
-    def estimate_fitting_intervals(self):
+    def get_strongest_modes(
+            self, nr_modes=None, nr_std=4, ignore_mode0=True, analysis=None):
         """."""
-        tim = self.analysis['time'] * 1000
-        growth_time = self.data['growth_time']
-        post_time = self.data['post_time']
+        if analysis is None:
+            analysis = self.analysis
+        data_modes = analysis['mode_data']
 
-        change_time = tim[-1] - (post_time - growth_time)
-        change_time = max(tim[0], min(tim[-1], change_time))
+        return UtilClass.get_strongest_modes(
+            data_modes, nr_modes=nr_modes, nr_std=nr_std,
+            ignore_mode0=ignore_mode0)
 
-        return [[0, change_time], [change_time, tim[-1]]]
+    def estimate_fitting_intervals(self, int_type='both', clearance=0):
+        """."""
+        return super().estimate_fitting_intervals(
+            self.data, int_type, clearance)
 
-    def fit_and_plot_grow_rates(
+    def fit_and_plot_growth_rates(
             self, mode_num, intervals=None, labels=None, title='',
             analysis=None):
         """."""
@@ -260,15 +417,10 @@ class BbBData(_BaseClass):
         if intervals is None:
             intervals = self.estimate_fitting_intervals()
 
-        per_rev = self.params.PER_REV
-        downsample = self.data['downsample']
-        dtime = per_rev*downsample
+        tim = analysis['time']
+        dtime = (tim[1] - tim[0]) / 1000
 
-        tim = analysis['time'] * 1000
-        if isinstance(mode_num, _np.ndarray) and mode_num.size > 1:
-            data_mode = mode_num.copy()
-        else:
-            data_mode = analysis['mode_data'][mode_num]
+        data_mode = analysis['mode_data'][mode_num]
         abs_mode = _np.abs(data_mode)
 
         labels = ['']*len(intervals) if labels is None else labels
@@ -314,21 +466,23 @@ class BbBData(_BaseClass):
         fig.show()
         return fig, aty, atx, gtimes
 
-    def plot_modes_evolution(self, nr_modes=5, title='', analysis=None):
+    def plot_modes_evolution(
+            self, nr_modes=None, nr_std=4, ignore_mode0=True, title='',
+            analysis=None):
         """."""
         if analysis is None:
             analysis = self.analysis
 
         data_modes = analysis['mode_data']
         abs_modes = _np.abs(data_modes)
-        tim = analysis['time'] * 1000
-        per_rev = self.params.PER_REV
-        downsample = self.data['downsample']
-        dtime = per_rev*downsample
+        tim = analysis['time']
+        dtime = (tim[1] - tim[0]) / 1000
 
         avg_modes = abs_modes.max(axis=1)
-        indcs = _np.argsort(avg_modes)[::-1]
-        indcs = indcs[:nr_modes]
+
+        indcs = self.get_strongest_modes(
+            nr_modes=nr_modes, nr_std=nr_std, ignore_mode0=ignore_mode0,
+            analysis=analysis)
 
         fig = _mplt.figure(figsize=(7, 10))
         gsp = _mgs.GridSpec(3, 1)
@@ -367,7 +521,7 @@ class BbBData(_BaseClass):
         """."""
         if rawdata is None:
             rawdata = self.data['rawdata']
-        rawdata = rawdata.copy()
+        rawdata = rawdata.astype(float)
         per_rev = self.params.PER_REV
         downsample = self.data['downsample']
         dtime = per_rev*downsample
@@ -397,7 +551,7 @@ class BbBData(_BaseClass):
 
         data_modes = analysis['mode_data']
         data_anal = analysis['bunch_data']
-        tim = analysis['time'] * 1000
+        tim = analysis['time']
         mode_nums = analysis['mode_numbers']
         bunch_nums = analysis['bunch_numbers']
 
@@ -454,55 +608,6 @@ class BbBData(_BaseClass):
         f.show()
         return f
 
-    @classmethod
-    def fit_exponential(cls, times, data, t_ini=None, t_fin=None, offset=True):
-        """Fit exponential function."""
-        t_ini = t_ini or times.min()
-        t_fin = t_fin or times.max()
-        idx = (times >= t_ini) & (times <= t_fin)
-        tim = times[idx]
-        dtim = data[idx]
-
-        # Exponential function without offset
-        if not offset:
-            log_amp, rate = _np.polynomial.polynomial.polyfit(
-                tim, _np.log(dtim), deg=1, rcond=None)
-            return tim, (0, _np.exp(log_amp), rate)
-
-        # method to estimate fitting parameters of
-        # y = a + b*exp(c*x)
-        # based on:
-        # https://www.scribd.com/doc/14674814/Regressions-et-equations-integrales
-        # pages 16-18
-        s = _scyint.cumtrapz(dtim, x=tim, initial=0.0)
-        ym = dtim - dtim[0]
-        xm = tim - tim[0]
-        mat = _np.array([xm, s]).T
-        (_, rate), *_ = _np.linalg.lstsq(mat, ym, rcond=None)
-        theta = _np.exp(rate*tim)
-        mat = _np.ones((theta.size, 2))
-        mat[:, 1] = theta
-        (off, amp), *_ = _np.linalg.lstsq(mat, dtim, rcond=None)
-
-        # Now use scipy to refine the estimatives:
-        coefs = (off, amp, rate)
-        try:
-            coefs, _ = _scyopt.curve_fit(
-                cls.exponential_func, tim, dtim, p0=coefs)
-        except RuntimeError:
-            pass
-        return tim, coefs
-
-    @staticmethod
-    def exponential_func(tim, off, amp, rate):
-        """Return exponential function with offset."""
-        return off + amp*_np.exp(rate*tim)
-
-    @staticmethod
-    def calc_instant_frequency(data, dtime):
-        """."""
-        return _np.gradient(_np.unwrap(_np.angle(data)))/(2*_np.pi*dtime)
-
     @staticmethod
     def waterfall_plot(axis, xs, zs, data):
         """."""
@@ -523,6 +628,253 @@ class BbBData(_BaseClass):
         axis.set_ylim3d(xs.min(), xs.max())
         axis.set_xlim3d(zs.min(), zs.max())
         axis.set_zlim3d(0, data.max())
+
+
+class DriveDampLParams(BbBLParams):
+    """."""
+
+    def __init__(self):
+        """."""
+        super().__init__()
+        self.modes_to_measure = _np.arange(self.HARM_NUM//2+1)
+        self.drive_num = 0
+        self.wait_acquisition = 1  # [s]
+        self.wait_pv_update = 0  # [s]
+        self.fitting_clearance_ini = 0  # [ms]
+        self.fitting_clearance_fin = 100  # [ms]
+
+    def __str__(self):
+        """."""
+        dtmp = '{0:24s} = {1:9d}\n'.format
+        ftmp = '{0:24s} = {1:9.4f}  {2:s}\n'.format
+        stmp = '{0:24s} = {1:}\n'.format
+
+        stg = super().__str__()
+        stg += dtmp('drive_num', self.drive_num)
+        stg += ftmp('wait_acquisition', self.wait_acquisition, '[s]')
+        stg += ftmp('wait_pv_update', self.wait_pv_update, '[s]')
+        stg += ftmp(
+            'fitting_clearance_ini', self.fitting_clearance_ini, '[ms]')
+        stg += ftmp(
+            'fitting_clearance_fin', self.fitting_clearance_fin, '[ms]')
+
+        modes = self.modes_to_measure
+        if len(modes) > 6:
+            modes_stg = ', '.join([f'{m:03d}' for m in modes[:3]])
+            modes_stg += ', ..., '
+            modes_stg += ', '.join([f'{m:03d}' for m in modes[-3:]])
+        else:
+            modes_stg = ', '.join([f'{m:03d}' for m in modes])
+        stg += stmp(
+            'modes_to_measure', f'[{modes_stg:s}] (size = {len(modes):d})')
+        return stg
+
+
+class DriveDampHParams(DriveDampLParams):
+    """."""
+
+    DAMPING_RATE = 1/16.9e-3  # [Hz]
+    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+
+
+class DriveDampVParams(DriveDampLParams):
+    """."""
+
+    DAMPING_RATE = 1/22.0e-3  # [Hz]
+    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+
+
+class MeasDriveDamp(_ThreadBaseClass, UtilClass):
+    """."""
+
+    DEVICES = BbBAcqData.DEVICES
+
+    def __init__(self, devname, isonline=True):
+        """."""
+        if devname.endswith('L'):
+            params = DriveDampLParams()
+        elif devname.endswith('H'):
+            params = DriveDampHParams()
+        elif devname.endswith('V'):
+            params = DriveDampVParams()
+
+        super().__init__(
+            params=params, target=self._do_measure, isonline=isonline)
+        if self.isonline:
+            self.devices['bbb'] = BunchbyBunch(devname)
+
+    def process_data(self):
+        """."""
+        infos = self.data['infos']
+        data = self.data['modes_data']
+
+        analysis = dict(coeffs=[], tim_fits=[], fits=[], modes_filt=[])
+        for i, (info, datum) in enumerate(zip(infos, data)):
+            print('.', end='')
+            if not ((i+1) % 80):
+                print()
+            tim = info['time']
+            freq = info['dft_freq']
+            interval = self.estimate_fitting_intervals(
+                info, clearance_ini=self.params.fitting_clearance_ini,
+                clearance_fin=self.params.fitting_clearance_fin)
+            coeff, tim_fit, fit = self.fit_growth_rates(
+                tim, datum, interval=interval, full=True)
+
+            mode_filt = self.filter_data(freq, datum, self.params)
+
+            analysis['coeffs'].append(coeff)
+            analysis['tim_fits'].append(tim_fit)
+            analysis['fits'].append(fit)
+            analysis['modes_filt'].append(mode_filt)
+        self.analysis = analysis
+
+    def estimate_fitting_intervals(
+            self, infos, clearance_ini=0, clearance_fin=0):
+        """."""
+        interv = super().estimate_fitting_intervals(
+            infos, int_type='damp', clearance=0)[0]
+        interv[0] += max(clearance_ini, 0)
+        interv[1] -= max(clearance_fin, 0)
+        return interv
+
+    def fit_growth_rates(self, tim, data, interval, full=False):
+        """."""
+        freq = _np.fft.fftfreq(tim.size, d=(tim[1]-tim[0])/1000)
+        data = UtilClass.filter_data(freq, data, self.params)
+        abs_data = _np.abs(data)
+        if len(abs_data.shape) == 1:
+            abs_data = abs_data.reshape(-1, abs_data.size)
+
+        coeffs, fittings = [], []
+        for abs_mode in abs_data:
+            tim_fit, coef = self.fit_exponential(
+                tim, abs_mode, t_ini=interval[0], t_fin=interval[1])
+            fit = self.exponential_func(tim_fit, *coef)
+            coeffs.append(coef)
+            fittings.append(fit)
+
+        coeffs = _np.array(coeffs)
+        fittings = _np.array(fittings)
+        if not full:
+            return coeffs[:, 2] * 1000
+        return coeffs, tim_fit, fittings
+
+    def plot_growth_rates(self):
+        """."""
+        fig = _mplt.figure(figsize=(7, 5))
+        gsp = _mgs.GridSpec(1, 1)
+        gsp.update(left=0.09, right=0.98, top=0.98, bottom=0.1)
+        ax = _mplt.subplot(gsp[0, 0])
+
+        modes_meas = self.data['modes_measured']
+        coeffs = self.analysis['coeffs']
+        for num, coeff in zip(modes_meas, coeffs):
+            ax.plot(num, coeff[:, 2]*1000, 'ob')
+        ax.set_ylabel('Growth Rates [1/s]')
+        ax.set_xlabel('Modes')
+        return fig, ax
+
+    def plot_modes_evolution(self, data_index=0, title=''):
+        """."""
+        mode_meas = self.data['modes_measured'][data_index]
+        infos = self.data['infos'][data_index]
+        mode_filt = self.analysis['modes_filt'][data_index]
+        tfit = self.analysis['tim_fits'][data_index]
+        fit = self.analysis['fits'][data_index]
+        coeff = self.analysis['coeffs'][data_index]
+
+        abs_mode = _np.abs(mode_filt)
+
+        fig = _mplt.figure(figsize=(7, 8))
+        gsp = _mgs.GridSpec(2, 1)
+        gsp.update(left=0.15, right=0.95, top=0.94, bottom=0.1, hspace=0.2)
+        aty = _mplt.subplot(gsp[0, 0])
+        atx = _mplt.subplot(gsp[1, 0], sharex=aty)
+
+        tim = infos['time']
+        dtime = (tim[1] - tim[0]) / 1000
+        for i, absm in enumerate(abs_mode):
+            ffit = fit[i]
+            cff = coeff[i]
+            num = mode_meas[i]
+            lin = aty.plot(tim, absm, label=f'{num:03d}', lw=1)[0]
+            aty.plot(tfit, ffit, ls='--', lw=3, color=lin.get_color())
+
+            idx = int(ffit.size/(abs_mode.shape[0]+1) * (i+1))
+            aty.annotate(
+                f'rate = {cff[2]*1000:.2f} Hz', fontsize='x-small',
+                xy=(tfit[idx], ffit[idx]),
+                textcoords='offset points', xytext=(10, 20),
+                arrowprops=dict(arrowstyle='->'),
+                bbox=dict(boxstyle="round", fc="0.8"))
+
+            inst_freq = self.calc_instant_frequency(mode_filt[i], dtime)
+            inst_freq /= 1e3
+            idx = absm > absm.max()/10
+            atx.plot(tim[idx], inst_freq[idx], color=lin.get_color())
+        aty.legend(loc='best', fontsize='small')
+        aty.set_title(title, fontsize='small')
+        aty.set_xlabel('time [ms]')
+        aty.set_ylabel('Amplitude [°]')
+
+        atx.set_xlabel('time [ms]')
+        atx.set_ylabel('Instantaneous Frequency [kHz]')
+        cenf = self.params.center_frequency / 1000
+        sig = self.params.bandwidth / 1000
+        atx.set_ylim([cenf - sig, cenf + sig])
+
+        fig.show()
+        return fig, aty, atx, coeff[:, 2] * 1000
+
+    def _do_measure(self):
+        acqtype = self.params.acqtype
+        drive_num = self.params.drive_num
+
+        bbb = self.devices['bbb']
+        drive = bbb.drive0 if drive_num == 0 else bbb.drive1
+        drive = drive if drive_num != 2 else bbb.drive2
+
+        harm_num = bbb.info.harmonic_number
+        modes_to_measure = self.params.modes_to_measure
+        bunches = _np.arange(harm_num)
+
+        bbb.sram.cmd_data_dump(pv_update=True)
+        _time.sleep(self.params.wait_pv_update)
+        infos = self.get_data(bbb, acqtype)
+        analysis = self._process_data(infos, self.params)
+        interval = self.estimate_fitting_intervals(
+            infos, clearance_ini=self.params.fitting_clearance_ini,
+            clearance_fin=self.params.fitting_clearance_fin)
+        tim = infos['time']
+
+        if not self.data:
+            self.data = dict(infos=[], modes_data=[], modes_measured=[])
+        for mode in modes_to_measure:
+            drive.mask = _np.cos(2*_np.pi*bunches*mode/harm_num) > 0
+            _time.sleep(self.params.wait_acquisition)
+            bbb.sram.cmd_data_dump(pv_update=True)
+            _time.sleep(self.params.wait_pv_update)
+
+            infos = self.get_data(bbb, acqtype)
+            analysis = self._process_data(infos, self.params)
+            modei = sorted({mode, harm_num - mode})
+            data = analysis['mode_data'][modei]
+            infos.pop('rawdata')
+
+            self.data['modes_measured'].append(modei)
+            self.data['modes_data'].append(data)
+            self.data['infos'].append(infos)
+
+            grt = self.fit_growth_rates(
+                tim, data, interval=interval, full=False)
+            print(',   '.join([
+                f'mode: {m:03d} --> growth: {gt:.2f}'
+                for m, gt in zip(modei, grt.ravel())]))
+            if self._stopevt.is_set():
+                print('Stopping...')
+                break
+        print('Finished!!')
 
 
 class TuneShiftParams(_ParamsBaseClass):
