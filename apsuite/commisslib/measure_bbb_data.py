@@ -252,8 +252,8 @@ class BbBLParams(_ParamsBaseClass):
 
     DAC_NBITS = 14
     SAT_THRES = 2**(DAC_NBITS-1) - 1
-    CALIBRATION_FACTOR = 1000  # Counts/mA/degree
-    DAMPING_RATE = 1/13.0  # Hz
+    CALIBRATION_FACTOR = 1000  # [Counts/mA/degree]
+    DAMPING_RATE = 1/13.0  # [Hz]
     FREQ_RF = 499666000
     HARM_NUM = 864
     FREQ_REV = FREQ_RF / HARM_NUM
@@ -281,15 +281,15 @@ class BbBLParams(_ParamsBaseClass):
 class BbBHParams(BbBLParams):
     """."""
 
-    DAMPING_RATE = 1/16.9e-3  # Hz
-    CALIBRATION_FACTOR = 1000  # Counts/mA/um
+    DAMPING_RATE = 1/16.9e-3  # [Hz]
+    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
 
 
 class BbBVParams(BbBLParams):
     """."""
 
-    DAMPING_RATE = 1/22.0e-3  # Hz
-    CALIBRATION_FACTOR = 1000  # Counts/mA/um
+    DAMPING_RATE = 1/22.0e-3  # [Hz]
+    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
 
 
 class BbBAcqData(_BaseClass, UtilClass):
@@ -638,8 +638,10 @@ class DriveDampLParams(BbBLParams):
         super().__init__()
         self.modes_to_measure = _np.arange(self.HARM_NUM//2+1)
         self.drive_num = 0
-        self.wait_acquisition = 2  # [s]
-        self.fitting_clearance = 5  # [ms]
+        self.wait_acquisition = 1  # [s]
+        self.wait_pv_update = 0  # [s]
+        self.fitting_clearance_ini = 0  # [ms]
+        self.fitting_clearance_fin = 100  # [ms]
 
     def __str__(self):
         """."""
@@ -667,15 +669,15 @@ class DriveDampLParams(BbBLParams):
 class DriveDampHParams(DriveDampLParams):
     """."""
 
-    DAMPING_RATE = 1/16.9e-3  # Hz
-    CALIBRATION_FACTOR = 1000  # Counts/mA/um
+    DAMPING_RATE = 1/16.9e-3  # [Hz]
+    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
 
 
 class DriveDampVParams(DriveDampLParams):
     """."""
 
-    DAMPING_RATE = 1/22.0e-3  # Hz
-    CALIBRATION_FACTOR = 1000  # Counts/mA/um
+    DAMPING_RATE = 1/22.0e-3  # [Hz]
+    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
 
 
 class MeasDriveDamp(_ThreadBaseClass, UtilClass):
