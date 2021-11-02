@@ -736,8 +736,7 @@ class MeasTouschekLifetime(_BaseClass):
             tune.cmd_enablex()
         if excy0:
             tune.cmd_enabley()
-        if swtch0:
-            bpm.cmd_turn_on_switching()
+        bpm.switching_mode = swtch0
 
         self.devices['trigger'].source = 'DigSI'
         self.devices['event'].mode = 'External'
