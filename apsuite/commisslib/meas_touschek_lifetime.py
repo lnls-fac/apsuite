@@ -77,10 +77,16 @@ class MeasTouschekLifetime(_BaseClass):
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
     FILTER_OUTLIER = 0.2  # Relative error data/fitting
 
-    # calibration curves measured during machine shift in 2021/09/21:
-    EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
-    EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
-    OFFSET_DCCT = 8.4e-3  # [mA]
+    # # calibration curves measured during machine shift in 2021/09/21:
+    # EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
+    # EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
+    # OFFSET_DCCT = 8.4e-3  # [mA]
+
+    # calibration curves measured with BPM switching off (direct mode) during
+    # machine shift in 2021/11/01:
+    EXCCURVE_SUMA = [1.22949e-3, 1.9433e-4]  # BPM Sum [counts] -> Current [mA]
+    EXCCURVE_SUMB = [2.55117e-3, 1.9519e-4]  # BPM Sum [counts] -> Current [mA]
+    OFFSET_DCCT = 12.64e-3  # [mA]
 
     def __init__(self, isonline=True):
         """."""
@@ -657,7 +663,7 @@ class MeasTouschekLifetime(_BaseClass):
         self.devices['event'].mode = 'Continuous'
         self.devices['evg'].cmd_update_events()
 
-        swtch0 = bpm.switching
+        swtch0 = bpm.switching_mode
         bpm.cmd_turn_off_switching()
         bpm.cmd_acq_abort()
         bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
