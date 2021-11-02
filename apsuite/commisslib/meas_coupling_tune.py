@@ -39,7 +39,7 @@ class CouplingParams(_ParamsBaseClass):
         super().__init__()
         self._quadfam_name = 'Q3'
         self.nr_points = 21
-        self.time_wait = 5  # s
+        self.time_wait = 5  # [s]
         self.neg_percent = 0.1/100
         self.pos_percent = 0.1/100
         self.coupling_resolution = 0.02/100
