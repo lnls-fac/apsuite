@@ -77,10 +77,16 @@ class MeasTouschekLifetime(_BaseClass):
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
     FILTER_OUTLIER = 0.2  # Relative error data/fitting
 
-    # calibration curves measured during machine shift in 2021/09/21:
-    EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
-    EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
-    OFFSET_DCCT = 8.4e-3  # [mA]
+    # # calibration curves measured during machine shift in 2021/09/21:
+    # EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
+    # EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
+    # OFFSET_DCCT = 8.4e-3  # [mA]
+
+    # calibration curves measured with BPM switching off (direct mode) during
+    # machine shift in 2021/11/01:
+    EXCCURVE_SUMA = [1.22949e-3, 1.9433e-4]  # BPM Sum [counts] -> Current [mA]
+    EXCCURVE_SUMB = [2.55117e-3, 1.9519e-4]  # BPM Sum [counts] -> Current [mA]
+    OFFSET_DCCT = 12.64e-3  # [mA]
 
     def __init__(self, isonline=True):
         """."""
@@ -657,7 +663,7 @@ class MeasTouschekLifetime(_BaseClass):
         self.devices['event'].mode = 'Continuous'
         self.devices['evg'].cmd_update_events()
 
-        swtch0 = bpm.switching
+        swtch0 = bpm.switching_mode
         bpm.cmd_turn_off_switching()
         bpm.cmd_acq_abort()
         bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
@@ -681,8 +687,9 @@ class MeasTouschekLifetime(_BaseClass):
             bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
             self._updated_evt.wait(timeout=parms.acquisition_timeout)
             suma = bpm.mt_possum
-            # Use median to remove influence of bad points:
-            meas['sum_a'].append(_np.nanmedian(suma))
+            # Use mean to remove influence of bad points
+            # (maybe consider using median):
+            meas['sum_a'].append(_np.nanmean(suma))
             meas['nan_a'].append(_np.sum(_np.isnan(suma)))
             meas['tim_a'].append(_time.time())
 
@@ -697,8 +704,9 @@ class MeasTouschekLifetime(_BaseClass):
             bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
             self._updated_evt.wait(timeout=parms.acquisition_timeout)
             sumb = bpm.mt_possum
-            # Use median to remove influence of bad points:
-            meas['sum_b'].append(_np.nanmedian(sumb))
+            # Use mean to remove influence of bad points
+            # (maybe consider using median):
+            meas['sum_b'].append(_np.nanmean(sumb))
             meas['nan_b'].append(_np.sum(_np.isnan(sumb)))
             meas['tim_b'].append(_time.time())
 
@@ -728,8 +736,7 @@ class MeasTouschekLifetime(_BaseClass):
             tune.cmd_enablex()
         if excy0:
             tune.cmd_enabley()
-        if swtch0:
-            bpm.cmd_turn_on_switching()
+        bpm.switching_mode = swtch0
 
         self.devices['trigger'].source = 'DigSI'
         self.devices['event'].mode = 'External'
