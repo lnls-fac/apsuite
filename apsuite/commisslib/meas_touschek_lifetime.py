@@ -687,8 +687,9 @@ class MeasTouschekLifetime(_BaseClass):
             bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
             self._updated_evt.wait(timeout=parms.acquisition_timeout)
             suma = bpm.mt_possum
-            # Use median to remove influence of bad points:
-            meas['sum_a'].append(_np.nanmedian(suma))
+            # Use mean to remove influence of bad points
+            # (maybe consider using median):
+            meas['sum_a'].append(_np.nanmean(suma))
             meas['nan_a'].append(_np.sum(_np.isnan(suma)))
             meas['tim_a'].append(_time.time())
 
@@ -703,8 +704,9 @@ class MeasTouschekLifetime(_BaseClass):
             bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
             self._updated_evt.wait(timeout=parms.acquisition_timeout)
             sumb = bpm.mt_possum
-            # Use median to remove influence of bad points:
-            meas['sum_b'].append(_np.nanmedian(sumb))
+            # Use mean to remove influence of bad points
+            # (maybe consider using median):
+            meas['sum_b'].append(_np.nanmean(sumb))
             meas['nan_b'].append(_np.sum(_np.isnan(sumb)))
             meas['tim_b'].append(_time.time())
 
