@@ -25,7 +25,7 @@ class UtilClass:
         """Get Raw data to file."""
         acq = bbb.sram if acqtype in 'SRAM' else bbb.bram
         rawdata = acq.data_raw.reshape(
-            (-1, bbb.info.harmonic_number)).T.astype(float)
+            (-1, bbb.info.harmonic_number)).T.copy()
         dtime = acq.downsample / bbb.info.revolution_freq_nom
         return dict(
             rawdata=rawdata,
@@ -90,10 +90,10 @@ class UtilClass:
         freq = data['dft_freq'].copy()
 
         if rawdata is None:
-            dataraw = data['rawdata'].copy()
+            dataraw = data['rawdata'].astype(float)
             dataraw *= 1 / (calib * current / harm_num)
         else:
-            dataraw = rawdata.copy()
+            dataraw = rawdata.astype(float)
 
         # remove DC component from bunches
         dataraw -= dataraw.mean(axis=1)[:, None]
@@ -384,10 +384,10 @@ class BbBAcqData(_BaseClass, UtilClass):
             current = self.data['current']
 
         if rawdata is None:
-            rawdata = self.data['rawdata'].copy()
+            rawdata = self.data['rawdata'].astype(float)
             rawdata *= 1 / (calib * current / harm_num)
         else:
-            rawdata = rawdata.copy()
+            rawdata = rawdata.astype(float)
 
         rawdata -= rawdata.mean(axis=1)[:, None]
         return _np.linalg.svd(rawdata)
@@ -521,7 +521,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         """."""
         if rawdata is None:
             rawdata = self.data['rawdata']
-        rawdata = rawdata.copy()
+        rawdata = rawdata.astype(float)
         per_rev = self.params.PER_REV
         downsample = self.data['downsample']
         dtime = per_rev*downsample
