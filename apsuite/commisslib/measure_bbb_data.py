@@ -144,8 +144,11 @@ class UtilClass:
             else:
                 data_dft *= H
         else:
-            indcs = (freq > center_freq - sigma_freq)
-            indcs &= (freq < center_freq + sigma_freq)
+            indcsp = (freq > center_freq - sigma_freq)
+            indcsp &= (freq < center_freq + sigma_freq)
+            indcsn = (-freq > center_freq - sigma_freq)
+            indcsn &= (-freq < center_freq + sigma_freq)
+            indcs = indcsp | indcsn
             if len(data.shape) > 1:
                 data_dft[:, ~indcs] = 0
             else:
