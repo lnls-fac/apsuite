@@ -480,7 +480,7 @@ class BbBAcqData(_BaseClass, UtilClass):
 
         avg_modes = abs_modes.max(axis=1)
 
-        indcs = self.get_proeminent_modes(
+        indcs = self.get_strongest_modes(
             nr_modes=nr_modes, nr_std=nr_std, ignore_mode0=ignore_mode0,
             analysis=analysis)
 
@@ -652,7 +652,11 @@ class DriveDampLParams(BbBLParams):
         stg = super().__str__()
         stg += dtmp('drive_num', self.drive_num)
         stg += ftmp('wait_acquisition', self.wait_acquisition, '[s]')
-        stg += ftmp('fitting_clearance', self.fitting_clearance, '[ms]')
+        stg += ftmp('wait_pv_update', self.wait_pv_update, '[s]')
+        stg += ftmp(
+            'fitting_clearance_ini', self.fitting_clearance_ini, '[ms]')
+        stg += ftmp(
+            'fitting_clearance_fin', self.fitting_clearance_fin, '[ms]')
 
         modes = self.modes_to_measure
         if len(modes) > 6:
@@ -705,11 +709,15 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         data = self.data['modes_data']
 
         analysis = dict(coeffs=[], tim_fits=[], fits=[], modes_filt=[])
-        for info, datum in zip(infos, data):
+        for i, (info, datum) in enumerate(zip(infos, data)):
+            print('.', end='')
+            if not ((i+1) % 80):
+                print()
             tim = info['time']
             freq = info['dft_freq']
             interval = self.estimate_fitting_intervals(
-                info, clearance=self.params.fitting_clearance)
+                info, clearance_ini=self.params.fitting_clearance_ini,
+                clearance_fin=self.params.fitting_clearance_fin)
             coeff, tim_fit, fit = self.fit_growth_rates(
                 tim, datum, interval=interval, full=True)
 
@@ -721,10 +729,14 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             analysis['modes_filt'].append(mode_filt)
         self.analysis = analysis
 
-    def estimate_fitting_intervals(self, infos, clearance=5):
+    def estimate_fitting_intervals(
+            self, infos, clearance_ini=0, clearance_fin=0):
         """."""
-        return super().estimate_fitting_intervals(
-            infos, int_type='damp', clearance=clearance)[0]
+        interv = super().estimate_fitting_intervals(
+            infos, int_type='damp', clearance=0)[0]
+        interv[0] += max(clearance_ini, 0)
+        interv[1] -= max(clearance_fin, 0)
+        return interv
 
     def fit_growth_rates(self, tim, data, interval, full=False):
         """."""
@@ -827,11 +839,13 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         modes_to_measure = self.params.modes_to_measure
         bunches = _np.arange(harm_num)
 
-        bbb.sram.cmd_data_dump()
-        _time.sleep(0.2)
+        bbb.sram.cmd_data_dump(pv_update=True)
+        _time.sleep(self.params.wait_pv_update)
         infos = self.get_data(bbb, acqtype)
         analysis = self._process_data(infos, self.params)
-        interval = self.estimate_fitting_intervals(infos, clearance=5)
+        interval = self.estimate_fitting_intervals(
+            infos, clearance_ini=self.params.fitting_clearance_ini,
+            clearance_fin=self.params.fitting_clearance_fin)
         tim = infos['time']
 
         if not self.data:
@@ -839,9 +853,9 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         for mode in modes_to_measure:
             drive.mask = _np.cos(2*_np.pi*bunches*mode/harm_num) > 0
             _time.sleep(self.params.wait_acquisition)
-            bbb.sram.cmd_data_dump()
+            bbb.sram.cmd_data_dump(pv_update=True)
+            _time.sleep(self.params.wait_pv_update)
 
-            _time.sleep(0.2)
             infos = self.get_data(bbb, acqtype)
             analysis = self._process_data(infos, self.params)
             modei = sorted({mode, harm_num - mode})
