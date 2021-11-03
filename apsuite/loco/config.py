@@ -1,6 +1,6 @@
 """."""
 
-from collections import namedtuple as _namedtuple
+from mathphys.functions import get_namedtuple
 from copy import deepcopy as _dcopy
 
 import numpy as _np
@@ -24,12 +24,12 @@ class LOCOConfig:
 
     FAMNAME_RF = 'SRFCav'
 
-    INVERSION = _namedtuple(
-        'Methods', ['Normal', 'Transpose'])(0, 1)
-    MINIMIZATION = _namedtuple(
-        'Methods', ['GaussNewton', 'LevenbergMarquardt'])(0, 1)
-    SVD = _namedtuple(
-        'Methods', ['Selection', 'Threshold'])(0, 1)
+    INVERSION = get_namedtuple(
+        'Methods', ['Normal', 'Transpose'])
+    MINIMIZATION = get_namedtuple(
+        'Methods', ['GaussNewton', 'LevenbergMarquardt'])
+    SVD = get_namedtuple(
+        'Methods', ['Selection', 'Threshold'])
 
     def __init__(self, **kwargs):
         """."""

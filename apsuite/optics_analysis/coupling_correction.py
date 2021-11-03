@@ -1,7 +1,7 @@
 """."""
 
 from copy import deepcopy as _dcopy
-from collections import namedtuple as _namedtuple
+from mathphys.functions import get_namedtuple
 import numpy as np
 
 import pyaccel
@@ -12,8 +12,8 @@ from ..orbcorr import OrbRespmat
 class CouplingCorr():
     """."""
 
-    CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
-    CORR_METHODS = _namedtuple('CorrMethods', ['Orbrespm'])(0)
+    CORR_STATUS = get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
+    CORR_METHODS = get_namedtuple('CorrMethods', ['Orbrespm'])
 
     def __init__(self, model, acc, dim='4d',
                  skew_list=None, correction_method=None):
