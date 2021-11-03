@@ -1,5 +1,5 @@
 """."""
-from mathphys.functions import get_namedtuple
+from mathphys.functions import get_namedtuple as _get_namedtuple
 from copy import deepcopy as _dcopy
 import time as _time
 
@@ -67,7 +67,7 @@ class MeasIDIntegral(_BaseClass):
     """."""
 
     DEFAULT_CORR_LEN = 1e-6  # [m]
-    MEAS_TYPE = get_namedtuple('MeasType', ['Static', 'Dynamic'])
+    MEAS_TYPE = _get_namedtuple('MeasType', ['Static', 'Dynamic'])
 
     def __init__(
             self, model, id_name=None,

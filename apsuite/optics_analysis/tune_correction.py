@@ -6,7 +6,7 @@ import pyaccel
 from pymodels import bo, si
 
 from .base_correction import BaseCorr
-from mathphys.functions import get_namedtuple
+from mathphys.functions import get_namedtuple as _get_namedtuple
 
 
 class TuneCorr(BaseCorr):
@@ -17,7 +17,7 @@ class TuneCorr(BaseCorr):
     SI_QD = ['QDA', 'QDB1', 'QDB2', 'QDP1', 'QDP2']
     BO_QF = ['QF']
     BO_QD = ['QD']
-    OPTICS = get_namedtuple('Optics', ['EdwardsTeng', 'Twiss'])
+    OPTICS = _get_namedtuple('Optics', ['EdwardsTeng', 'Twiss'])
 
     def __init__(self, model, acc, qf_knobs=None, qd_knobs=None,
                  method=None, grouping=None, type_optics=None):

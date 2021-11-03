@@ -1,7 +1,7 @@
 """."""
 
 from copy import deepcopy as _dcopy
-from mathphys.functions import get_namedtuple
+from mathphys.functions import get_namedtuple as _get_namedtuple
 import numpy as np
 
 import pyaccel
@@ -11,9 +11,9 @@ from pymodels import bo, si
 class OpticsCorr():
     """."""
 
-    METHODS = get_namedtuple('Methods', ['Additional', 'Proportional'])
-    CORR_STATUS = get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
-    CORR_METHODS = get_namedtuple('CorrMethods', ['LOCO'])
+    METHODS = _get_namedtuple('Methods', ['Additional', 'Proportional'])
+    CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
+    CORR_METHODS = _get_namedtuple('CorrMethods', ['LOCO'])
 
     def __init__(self, model, acc, dim='4d', knobs_list=None,
                  method=None, correction_method=None):
