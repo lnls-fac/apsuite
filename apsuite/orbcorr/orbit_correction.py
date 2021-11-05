@@ -1,7 +1,7 @@
 """."""
 
 from copy import deepcopy as _dcopy
-from collections import namedtuple as _namedtuple
+from mathphys.functions import get_namedtuple as _get_namedtuple
 import numpy as _np
 
 import pyaccel
@@ -32,7 +32,7 @@ class CorrParams:
 class OrbitCorr:
     """."""
 
-    CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
+    CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
 
     def __init__(self, model, acc):
         """."""
