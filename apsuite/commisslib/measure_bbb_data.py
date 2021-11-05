@@ -74,6 +74,11 @@ class UtilClass:
             phase=bbb.rfcav.dev_llrf.phase_mon,
             detune=bbb.rfcav.dev_llrf.detune,
             detune_error=bbb.rfcav.dev_llrf.detune_error,
+            field_flatness_error=bbb.rfcav.dev_llrf.field_flatness_error,
+            field_flatness_gain1=bbb.rfcav.dev_llrf.field_flatness_gain1,
+            field_flatness_gain2=bbb.rfcav.dev_llrf.field_flatness_gain2,
+            field_flatness_amp1=bbb.rfcav.dev_llrf.field_flatness_amp1,
+            field_flatness_amp2=bbb.rfcav.dev_llrf.field_flatness_amp2,
             )
 
     @staticmethod
