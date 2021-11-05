@@ -48,7 +48,8 @@ class Injection:
         self._bo.vchamber_on = True
 
         # Importing Transport Line
-        self._ts, self._ts_init_twiss = pm.ts.create_accelerator()
+        self._ts, self._ts_init_twiss = pm.ts.create_accelerator(
+            optics_mode="M1")  # Maybe is better change to "M2"
         # Remember that only the ts first index is a model
         self._ts.radiation_on = True
         self._ts.vchamber_on = True
@@ -163,10 +164,11 @@ class Injection:
             )
         self._bunch = self._bunch - ts_chamber_at_bo
         # bo_extraction_twiss = self._bo_twiss[self._bo_ejesepta_idx[0]]
-
+        self._ts_twiss, *_ = pa.optics.calc_twiss(self._ts,
+                                                  self._ts_init_twiss)
         if plot:
             plot_phase_diagram2(
-                self._bunch, self._ts_init_twiss, self._bo_eqparams,
+                self._bunch, self._ts_twiss[0], self._bo_eqparams,
                 title='bunch at beginning of TS', emmit_error=True)
 
         # adds error in thin and thick BO extraction septa
@@ -174,6 +176,8 @@ class Injection:
         # Maybe I could use lattice.add_erro
 
         # transports bunch through TS
+        # self._ts_twiss, *_ = pa.optics.calc_edwards_teng(self._ts,
+        #                                                 self._ts_init_twiss)
         self.part_out, lost_flag, *_ = pa.tracking.line_pass(
             self._ts, self._bunch, indices='open'
             )
@@ -183,12 +187,16 @@ class Injection:
                                len(self._ts)-1,
                                title="bunch transported along TS")
 
+        # bunch at the middle of TS
+        self.bunch = self.part_out[:, :, 69]
+        if plot:
+            plot_phase_diagram2(self._bunch, self._ts_twiss[69],
+                                self._bo_eqparams,
+                                title='bunch at middle of TS (index 86)',
+                                emmit_error=True)
+
         # bunch at the end of TS
         self._bunch = self.part_out[:, :, -1]
-        # self._ts_twiss, *_ = pa.optics.calc_edwards_teng(self._ts,
-        #                                                 self._ts_init_twiss)
-        self._ts_twiss, *_ = pa.optics.calc_twiss(self._ts,
-                                                  self._ts_init_twiss)
         if plot:
             plot_phase_diagram2(self._bunch, self._ts_twiss[-1],
                                 self._bo_eqparams, title='bunch at end of TS',
@@ -236,7 +244,6 @@ class Injection:
                  np.sum(np.isnan(self._bunch[0, :])) - self.lost_particles
             print('Particles losts at injection point to nlk transport =',
                   self.lost_particles)
-
         pass
 
     def sets_nlk_and_kicks_beam(self):
