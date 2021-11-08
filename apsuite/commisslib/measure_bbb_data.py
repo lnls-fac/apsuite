@@ -414,7 +414,7 @@ class BbBAcqData(_BaseClass, UtilClass):
             self.data, int_type, clearance)
 
     def fit_and_plot_growth_rates(
-            self, mode_num, intervals=None, labels=None, title='',
+            self, mode_num, intervals=None, offset=True, labels=None, title='',
             analysis=None):
         """."""
         if analysis is None:
@@ -442,7 +442,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         for inter, label in zip(intervals, labels):
             ini, fin = inter
             tim_fit, coef = self.fit_exponential(
-                tim, abs_mode, t_ini=ini, t_fin=fin)
+                tim, abs_mode, t_ini=ini, t_fin=fin, offset=offset)
             fit = self.exponential_func(tim_fit, *coef)
             gtimes.append(coef[2] * 1000)
             aty.plot(tim_fit, fit, label=label)
@@ -641,18 +641,19 @@ class DriveDampLParams(BbBLParams):
     def __init__(self):
         """."""
         super().__init__()
-        self.modes_to_measure = _np.arange(self.HARM_NUM//2+1)
+        self.modes_to_measure = _np.arange(1, self.HARM_NUM//2+1)
         self.drive_num = 0
         self.wait_acquisition = 1  # [s]
         self.wait_pv_update = 0  # [s]
         self.fitting_clearance_ini = 0  # [ms]
         self.fitting_clearance_fin = 100  # [ms]
+        self.fitting_consider_offset = True  # (True, False)
 
     def __str__(self):
         """."""
         dtmp = '{0:24s} = {1:9d}\n'.format
         ftmp = '{0:24s} = {1:9.4f}  {2:s}\n'.format
-        stmp = '{0:24s} = {1:}\n'.format
+        stmp = '{0:24s} = {1:}  {2:s}\n'.format
 
         stg = super().__str__()
         stg += dtmp('drive_num', self.drive_num)
@@ -662,6 +663,10 @@ class DriveDampLParams(BbBLParams):
             'fitting_clearance_ini', self.fitting_clearance_ini, '[ms]')
         stg += ftmp(
             'fitting_clearance_fin', self.fitting_clearance_fin, '[ms]')
+        stg += stmp(
+            'fitting_consider_offset', str(bool(self.fitting_consider_offset)),
+            '(True | False)')
+
 
         modes = self.modes_to_measure
         if len(modes) > 6:
@@ -671,7 +676,7 @@ class DriveDampLParams(BbBLParams):
         else:
             modes_stg = ', '.join([f'{m:03d}' for m in modes])
         stg += stmp(
-            'modes_to_measure', f'[{modes_stg:s}] (size = {len(modes):d})')
+            'modes_to_measure', f'[{modes_stg:s}] (size = {len(modes):d})', '')
         return stg
 
 
@@ -724,7 +729,9 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
                 info, clearance_ini=self.params.fitting_clearance_ini,
                 clearance_fin=self.params.fitting_clearance_fin)
             coeff, tim_fit, fit = self.fit_growth_rates(
-                tim, datum, interval=interval, full=True)
+                tim, datum, interval=interval,
+                offset=self.params.fitting_consider_offset,
+                full=True)
 
             mode_filt = self.filter_data(freq, datum, self.params)
 
@@ -743,7 +750,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         interv[1] -= max(clearance_fin, 0)
         return interv
 
-    def fit_growth_rates(self, tim, data, interval, full=False):
+    def fit_growth_rates(self, tim, data, interval, offset=True, full=False):
         """."""
         freq = _np.fft.fftfreq(tim.size, d=(tim[1]-tim[0])/1000)
         data = UtilClass.filter_data(freq, data, self.params)
@@ -754,7 +761,8 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         coeffs, fittings = [], []
         for abs_mode in abs_data:
             tim_fit, coef = self.fit_exponential(
-                tim, abs_mode, t_ini=interval[0], t_fin=interval[1])
+                tim, abs_mode, t_ini=interval[0], t_fin=interval[1],
+                offset=offset)
             fit = self.exponential_func(tim_fit, *coef)
             coeffs.append(coef)
             fittings.append(fit)
@@ -833,6 +841,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         return fig, aty, atx, coeff[:, 2] * 1000
 
     def _do_measure(self):
+        elt0 = _time.time()
         acqtype = self.params.acqtype
         drive_num = self.params.drive_num
 
@@ -856,6 +865,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         if not self.data:
             self.data = dict(infos=[], modes_data=[], modes_measured=[])
         for mode in modes_to_measure:
+            elt = _time.time()
             drive.mask = _np.cos(2*_np.pi*bunches*mode/harm_num) > 0
             _time.sleep(self.params.wait_acquisition)
             bbb.sram.cmd_data_dump(pv_update=True)
@@ -872,14 +882,21 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             self.data['infos'].append(infos)
 
             grt = self.fit_growth_rates(
-                tim, data, interval=interval, full=False)
-            print(',   '.join([
-                f'mode: {m:03d} --> growth: {gt:.2f}'
-                for m, gt in zip(modei, grt.ravel())]))
+                tim, data, interval=interval,
+                offset=self.params.fitting_consider_offset,
+                full=False)
+            print(',      '.join([
+                f'mode: {m:03d} --> growth: {gt:+7.2f}'
+                for m, gt in zip(modei, grt.ravel())]), end='')
+            elt -= _time.time()
+            elt *= -1
+            print(f',      ET: {elt:.2f}s')
             if self._stopevt.is_set():
                 print('Stopping...')
                 break
-        print('Finished!!')
+        elt0 -= _time.time()
+        elt0 *= -1
+        print(f'Finished!!  ET: {elt0/60:.2f}min')
 
 
 class TuneShiftParams(_ParamsBaseClass):
