@@ -730,14 +730,14 @@ class MeasTouschekLifetime(_BaseClass):
                 # (since switching mode is off);
                 # 4) singular values should be removed until the delta kicks
                 # are reasonable (about 120 out of 281 SVs are sufficient);
-                dorbx, dorby = self._get_orbs()
+                dorbx, dorby = self._correct_and_get_cod()
                 meas['dorbx'].append(dorbx)
                 meas['dorby'].append(dorby)
 
                 # Turn on tune excitation and get the tune only at every 100
                 # iterations not to disturb the beam too much with the tune
                 # shaker.
-                tunex, tuney = self._get_tunes()
+                tunex, tuney = self._excite_and_get_tunes()
                 meas['tunex'].append(tunex)
                 meas['tuney'].append(tuney)
 
@@ -769,7 +769,7 @@ class MeasTouschekLifetime(_BaseClass):
         _ = args, kwargs
         self._updated_evt.set()
 
-    def _get_tunes(self):
+    def _excite_and_get_tunes(self):
         tune = self.devices['tune']
         tune.cmd_enablex()
         tune.cmd_enabley()
@@ -780,7 +780,7 @@ class MeasTouschekLifetime(_BaseClass):
         tune.cmd_disabley()
         return tunex, tuney
 
-    def _get_orbs(self):
+    def _correct_and_get_cod(self):
         sofb = self.devices['sofb']
         sofb.correct_orbit_manually(nr_iters=5)
         return sofb.orbx-sofb.refx, sofb.orby-sofb.refy
