@@ -730,7 +730,6 @@ class MeasTouschekLifetime(_BaseClass):
                 # (since switching mode is off);
                 # 4) singular values should be removed until the delta kicks
                 # are reasonable (about 120 out of 281 SVs are sufficient);
-                self.devices['sofb'].correct_orbit_manually(nr_iters=5)
                 dorbx, dorby = self._get_orbs()
                 meas['dorbx'].append(dorbx)
                 meas['dorby'].append(dorby)
@@ -783,6 +782,7 @@ class MeasTouschekLifetime(_BaseClass):
 
     def _get_orbs(self):
         sofb = self.devices['sofb']
+        sofb.correct_orbit_manually(nr_iters=5)
         return sofb.orbx-sofb.refx, sofb.orby-sofb.refy
 
     @staticmethod
