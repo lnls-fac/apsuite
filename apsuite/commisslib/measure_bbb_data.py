@@ -235,7 +235,7 @@ class UtilClass:
             coefs, _ = _scyopt.curve_fit(
                 cls.exponential_func, tim, dtim, p0=coefs)
         except RuntimeError:
-            pass
+            print("Curve fit didn't converge.")
         return tim, coefs
 
     @staticmethod
@@ -713,6 +713,98 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         if self.isonline:
             self.devices['bbb'] = BunchbyBunch(devname)
 
+    def get_property(self, propty):
+        """Get a given property saves in `data` or `analysis` dictionary.
+
+        Args:
+            propty (str): Comma concatenated string of nested dictionary keys
+                where the property is located. Examples:
+                    - 'infos,cavity_data,temperature,cell4'
+                    - 'coeffs';
+                    - 'modes_measured';
+                    - 'infos,cavity_data,field_flatness_amp1'.
+
+        Raises:
+            TypeError: if the concatenated string is not complete, that is do
+                not lead to a unique property. Example:
+                    - 'infos,cavity_data,temperature';
+                    - '';
+            KeyError: if the concatenated string contains keys not present in
+                the nested dictionaries. Example:
+                    - 'infos,blbalkdia';
+
+        Returns:
+            np.ndarray: array with the value of the desired property for all
+                modes measured.
+
+        """
+        dic = dict()
+        dic.update(self.data)
+        dic.update(self.analysis)
+        if not propty:
+            raise TypeError(
+                'String concatenation passed in propty is not complete.\n'
+                'Possible options to continue are: '
+                ', '.join(list(dic.keys())))
+
+        propty = propty.split(',')
+        lsts = dic[propty[0]]
+        prop = []
+        for lst in lsts:
+            for p in propty[1:]:
+                if p:
+                    lst = lst[p]
+            if isinstance(lst, dict):
+                raise TypeError(
+                    'String concatenation passed in propty is not complete.\n'
+                    'Possible options to continue are: '
+                    ', '.join(list(lst.keys())))
+            prop.append(lst)
+
+        if isinstance(prop[0], (int, float)):
+            prop = _np.array(prop)
+        elif isinstance(prop[0], (list, tuple)):
+            prop = _np.hstack(prop)
+        elif isinstance(prop[0], _np.ndarray):
+            prop = _np.vstack(prop)
+        else:
+            return prop
+
+        # Make sure the size of the first dimension of the array is equal to
+        # the number of modes measured by repeating values when needed.
+        modes_meas = dic['modes_measured']
+        idcs = []
+        for i, ms in enumerate(modes_meas):
+            idcs.extend([i, ]*len(ms))
+
+        if prop.shape[0] < len(idcs):
+            prop = prop[idcs]
+        return prop
+
+    def load_merge_and_apply_data(self, fnames):
+        """Load data from several files and merge them as single measurement.
+
+        Args:
+            fnames (list): filenames of the saved data.
+        """
+        self.clear_data()
+        data = dict()
+        params = self.params
+        for fname in fnames:
+            datum = self.load_data(fname)['data']
+            if not data:
+                data.update(datum)
+                continue
+            for key, val in datum.items():
+                data[key] += val
+        self.data = data
+        self.params = params
+
+    def clear_data(self):
+        """Reset `data` and `analysis` dictionaries."""
+        self.data = dict()
+        self.analysis = dict()
+
     def process_data(self):
         """."""
         infos = self.data['infos']
@@ -773,17 +865,18 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             return coeffs[:, 2] * 1000
         return coeffs, tim_fit, fittings
 
-    def plot_growth_rates(self):
+    def plot_growth_rates(self, title=''):
         """."""
         fig = _mplt.figure(figsize=(7, 5))
         gsp = _mgs.GridSpec(1, 1)
-        gsp.update(left=0.09, right=0.98, top=0.98, bottom=0.1)
+        gsp.update(left=0.09, right=0.98, top=0.90, bottom=0.1)
         ax = _mplt.subplot(gsp[0, 0])
 
         modes_meas = self.data['modes_measured']
         coeffs = self.analysis['coeffs']
         for num, coeff in zip(modes_meas, coeffs):
             ax.plot(num, coeff[:, 2]*1000, 'ob')
+        ax.set_title(title)
         ax.set_ylabel('Growth Rates [1/s]')
         ax.set_xlabel('Modes')
         return fig, ax
