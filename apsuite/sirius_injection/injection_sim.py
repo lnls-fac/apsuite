@@ -239,7 +239,7 @@ class Injection:
                   % (centroid[0], centroid[1], centroid[2], centroid[3]))
 
         # shifts si so that it starts at nlk
-        self._si = pa.lattice.shift(self._si, self._nlk_idx)
+        self._si = pa.lattice.shift(self._si, self._nlk_idx[0])
         # p.si{p.si_nlk_idx}.VChamber(1) = p.si_nlk_physaccp(1);
         # I dont implement the above line because I think that the actual
         # Sirius model has the vaacum chamber with true dimensions at all ring.
