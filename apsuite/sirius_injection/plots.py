@@ -26,6 +26,7 @@ def plot_phase_diagram(bunch, closed_orbit=None, title=""):
     fig.suptitle(title)
     if closed_orbit is not None:
         plt.legend()
+
     return fig, ax
 
 
@@ -66,7 +67,7 @@ def plot_phase_diagram2(bunch, local_twiss, eqparams, title="",
     if emmit_error:
         u_sigma, _, _ = sigmax_error(bunch, local_twiss, eqparams,
                                      outprint=False)
-        ax[0].legend(['$\sigma_x$ error = {:.2f} %'.format(u_sigma*100)],
+        ax[0].legend(['$ \sigma_x$ error = {:.2f} %'.format(u_sigma*100)],
                      loc='center left', bbox_to_anchor=(2.06, 0.5))
 
     return fig, ax
@@ -87,3 +88,4 @@ def plot_xtrajectories(model, part_out, init_idx, final_idx, title=""):
         plt.plot(spos[init_idx:final_idx+1], xparticles[i, :])
     plt.xlim(0, spos[final_idx])
     pa.graphics.draw_lattice(model, offset=-0.0011, height=0.001, gca=True)
+    plt.show()
