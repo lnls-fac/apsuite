@@ -49,7 +49,7 @@ class Injection:
 
         # Importing Transport Line
         self._ts, self._ts_init_twiss = pm.ts.create_accelerator(
-            optics_mode="M1")  # Maybe is better change to "M2"
+            optics_mode="M2")  # Maybe is better change to "M2"
         # Remember that only the ts first index is a model
         self._ts.radiation_on = True
         self._ts.vchamber_on = True
@@ -163,13 +163,9 @@ class Injection:
              [0], [0], [0], [0]]
             )
         self._bunch = self._bunch - ts_chamber_at_bo
-        # bo_extraction_twiss = self._bo_twiss[self._bo_ejesepta_idx[0]]
-        self._ts_twiss, *_ = pa.optics.calc_twiss(self._ts,
-                                                  self._ts_init_twiss)
+
         if plot:
-            plot_phase_diagram2(
-                self._bunch, self._ts_twiss[0], self._bo_eqparams,
-                title='bunch at beginning of TS', emmit_error=True)
+            plot_phase_diagram(self._bunch, title='bunch at beginning of TS')
 
         # adds error in thin and thick BO extraction septa
         # (INCOMPLETE!!! right now they have ideal pulses)
@@ -178,6 +174,7 @@ class Injection:
         # transports bunch through TS
         # self._ts_twiss, *_ = pa.optics.calc_edwards_teng(self._ts,
         #                                                 self._ts_init_twiss)
+
         self.part_out, lost_flag, *_ = pa.tracking.line_pass(
             self._ts, self._bunch, indices='open'
             )
@@ -187,20 +184,10 @@ class Injection:
                                len(self._ts)-1,
                                title="bunch transported along TS")
 
-        # bunch at the middle of TS
-        self.bunch = self.part_out[:, :, 69]
-        if plot:
-            plot_phase_diagram2(self._bunch, self._ts_twiss[69],
-                                self._bo_eqparams,
-                                title='bunch at middle of TS (index 86)',
-                                emmit_error=True)
-
         # bunch at the end of TS
         self._bunch = self.part_out[:, :, -1]
         if plot:
-            plot_phase_diagram2(self._bunch, self._ts_twiss[-1],
-                                self._bo_eqparams, title='bunch at end of TS',
-                                emmit_error=True)
+            plot_phase_diagram(self._bunch, title='bunch at end of TS')
 
         # lost particles and trajectories
         if lost_flag and verbose:
@@ -212,7 +199,7 @@ class Injection:
 
         # Translation of bunch coordinates from TS to SI
         co = pa.tracking.find_orbit6(self._si)
-        beam_long_center_si_inj = np.mean(self._bunch[5, :])
+        beam_long_center_si_inj = np.nanmean(self._bunch[5, :])
         si_chamber_at_ts = np.array(
             [[self._si_chamber_rx_at_ts],
              [self._si_chamber_px_at_ts],
@@ -221,10 +208,11 @@ class Injection:
             )
         # Bunch at injection point
         self._bunch = self._bunch - si_chamber_at_ts
-        centroid = np.mean(self._bunch, axis=1)
+        centroid = 1e3*np.nanmean(self._bunch, axis=1)  # nm
         print("- beam centroid at si injpoint (rx,px)(ry,py):"
               "(%+.3f mm, %+.3f mrad) (%+.3f mm, %+.3f mrad)\n"
               % (centroid[0], centroid[1], centroid[2], centroid[3]))
+
         # plots bunch at SI injection point
         if plot:
             plot_phase_diagram(self._bunch, closed_orbit=co,
@@ -237,6 +225,7 @@ class Injection:
         self.part_out, lost_flag, *_ = pa.tracking.line_pass(
             inj_2_nlk, self._bunch, indices='open'
             )
+        # bunch at entrance of nlk
         self._bunch = self.part_out[:, :, -1]
 
         if lost_flag and verbose:
@@ -244,7 +233,16 @@ class Injection:
                  np.sum(np.isnan(self._bunch[0, :])) - self.lost_particles
             print('Particles losts at injection point to nlk transport =',
                   self.lost_particles)
-        pass
+            centroid = 1e3*np.nanmean(self._bunch, axis=1)  # nm
+            print("- beam centroid at entrance of si nlk (rx,px):"
+                  "(%+.3f mm, %+.3f mrad) (%+.3f mm, %+.3f mrad)\n"
+                  % (centroid[0], centroid[1], centroid[2], centroid[3]))
+
+        # shifts si so that it starts at nlk
+        self._si = pa.lattice.shift(self._si, self._nlk_idx)
+        # p.si{p.si_nlk_idx}.VChamber(1) = p.si_nlk_physaccp(1);
+        # I dont implement the above line because I think that the actual
+        # Sirius model has the vaacum chamber with true dimensions at all ring.
 
     def sets_nlk_and_kicks_beam(self):
         pass
