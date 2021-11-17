@@ -3,6 +3,7 @@ import numpy as np
 import pyaccel as pa
 import pymodels as pm
 from plots import plot_phase_diagram, plot_phase_diagram2, plot_xtrajectories
+import matplotlib.pyplot as plt
 
 
 class Injection:
@@ -217,6 +218,7 @@ class Injection:
         if plot:
             plot_phase_diagram(self._bunch, closed_orbit=co,
                                title='bunch at Sirius Injection')
+            plt.show()
 
         # transports bunch from injection point to nlk
         self._nlk_idx = pa.lattice.find_indices(
@@ -245,8 +247,27 @@ class Injection:
         # Sirius model has the vaacum chamber with true dimensions at all ring.
 
     def sets_nlk_and_kicks_beam(self):
-        pass
 
+        # Calcs stored beam and acceptance
+        co = pa.tracking.find_orbit6(self._si, indices=[0])
+        temp_si = self._si
+        temp_si.radiation_on = False
+        temp_si.cavity_on = False
+        fp = np.concatenate([co[0:4], np.zeros(2)]) \
+            + np.concatenate([[-self._si_nlk_physaccp[0]], np.zeros(5)])
+        self.si_acceptance_nlk = pa.tracking.ring_pass(temp_si, fp, 1000)
+        si_envelope = pa.optics.calc_beamenvelope(accelerator=self.si,
+                                                  indices=[0])
+        bunch = pa.tracking.generate_bunch(n_part=self._nparticles,
+                                           envelope=si_envelope)
+        self.si_estored_bunch = bunch[0] + co
+
+        # gets nlk pulse parameters
+        self._si_nlk_pulse = np.concatenate(
+            [self._si_nlk_pulse,
+             np.zeros(self._nturns - len(self._si_nlk_pulse))]
+            )
+    
     def vary_si_nlk_strength(self):
         pass
 
