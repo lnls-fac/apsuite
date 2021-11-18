@@ -54,10 +54,11 @@ class BPMeasure:
         if offset is None:
             offset = _np.array([[0], [0], [0], [0], [0], [0]])
 
-        emit1, emit2 = self._eqparams.emit1, self._eqparams.emit2
+        emit1, emit2 = self._eqparams.emit1, _np.abs(self._eqparams.emit2)
         sigmae, sigmal = self._eqparams.espread0, self._eqparams.bunlen
         self._bunch = _pa.tracking.generate_bunch(n_part=n_part, emit1=emit1,
-                                                  emit2=emit2,
+                                                  emit2=emit2, 
+                                                  optics=self._et[0],
                                                   sigmae=sigmae, sigmas=sigmal)
         co = _pa.tracking.find_orbit6(accelerator=self._bo, indices='closed')
         self._bunch += co[:, [0]] + offset
@@ -67,8 +68,8 @@ class BPMeasure:
         bpm_idx = self._famdata['BPM']['index']
         M = len(bpm_idx)
 
-        x_measures = _np.zeros([N_turns, M])      # First idx = Turn of revolution
-        y_measures = _np.zeros(x_measures.shape)  # Second idx = measure at specific BPM
+        x_measures = _np.zeros([N_turns, M])   # (Turn x BPM)
+        y_measures = _np.zeros(x_measures.shape)
 
         for n in range(N_turns):
             part_out, *_ = _pa.tracking.line_pass(
@@ -77,8 +78,8 @@ class BPMeasure:
                 )
             centroid = _np.mean(part_out, axis=1)
             bpm_measures = centroid[:, bpm_idx].reshape(6, M)
-            x_measures[n, :] = bpm_measures[0, :]  # Selects measured x position to all BPM
-            y_measures[n, :] = bpm_measures[2, :]  # Selects measured y position to all BPM
+            x_measures[n, :] = bpm_measures[0, :]  # Selects  x at all BPM's
+            y_measures[n, :] = bpm_measures[2, :]  # Selects  y at all BpM's
             self._bunch = part_out[:, :, -1]
 
         return x_measures, y_measures
@@ -100,7 +101,10 @@ def DFT(betatron_osc):
     peaks, _ = find_peaks(yf_normalized)
     y_peaks = yf_normalized[peaks]
     tune_peaks = tunes[peaks]
-    maxpeak = _np.argmax(y_peaks)
+    if tune_peaks.size != 0:
+        maxpeak = _np.argmax(y_peaks)
+    else:
+        return 0
 
     return tune_peaks[maxpeak]
 
@@ -140,6 +144,14 @@ def tune_by_NAFF(x_measures, y_measures, decimal_only=False):
     naffy = _pnf.naff(Ay, turns=len(Ay), nterms=1, skipTurns=0,
                       getFullSpectrum=False, window=1)
 
-    tune1, tune2 = M*naffx[0][1], M*naffy[0][1]
+    if naffx.size == 0:
+        tune1 = 0
+    else:
+        tune1 = M*naffx[0][1]
+
+    if naffy.size == 0:
+        tune2 = 0
+    else:
+        tune2 = M*naffy[0][1]
 
     return tune1, tune2
