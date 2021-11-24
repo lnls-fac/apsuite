@@ -667,7 +667,6 @@ class DriveDampLParams(BbBLParams):
             'fitting_consider_offset', str(bool(self.fitting_consider_offset)),
             '(True | False)')
 
-
         modes = self.modes_to_measure
         if len(modes) > 6:
             modes_stg = ', '.join([f'{m:03d}' for m in modes[:3]])
