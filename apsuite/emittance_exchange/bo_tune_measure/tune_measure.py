@@ -57,7 +57,7 @@ class BPMeasure:
         emit1, emit2 = self._eqparams.emit1, _np.abs(self._eqparams.emit2)
         sigmae, sigmal = self._eqparams.espread0, self._eqparams.bunlen
         self._bunch = _pa.tracking.generate_bunch(n_part=n_part, emit1=emit1,
-                                                  emit2=emit2, 
+                                                  emit2=emit2,
                                                   optics=self._et[0],
                                                   sigmae=sigmae, sigmas=sigmal)
         co = _pa.tracking.find_orbit6(accelerator=self._bo, indices='closed')
@@ -127,7 +127,7 @@ def tune_by_DFT(x_measures, y_measures):
     return tunesx.mean(), tunesy.mean()
 
 
-def tune_by_NAFF(x_measures, y_measures, decimal_only=False):
+def tune_by_NAFF(x_measures, y_measures, n_points=None, window_param=None):
     """Estimates tunes using mixed BPM data and Numerical Analysis
     of Fundamental Frequencies"""
 
@@ -139,10 +139,20 @@ def tune_by_NAFF(x_measures, y_measures, decimal_only=False):
     Ax = beta_osc_x.flatten()
     Ay = beta_osc_y.flatten()
 
-    naffx = _pnf.naff(Ax, turns=len(Ax), nterms=1, skipTurns=0,
-                      getFullSpectrum=False, window=1)
-    naffy = _pnf.naff(Ay, turns=len(Ay), nterms=1, skipTurns=0,
-                      getFullSpectrum=False, window=1)
+    if n_points is not None:
+        turns = n_points
+    else:
+        turns = len(Ax)-1
+
+    if window_param is not None:
+        window = window_param
+    else:
+        window = 1
+
+    naffx = _pnf.naff(Ax, turns=turns, nterms=1, skipTurns=0,
+                      getFullSpectrum=False, window=window)
+    naffy = _pnf.naff(Ay, turns=turns, nterms=1, skipTurns=0,
+                      getFullSpectrum=False, window=window)
 
     if naffx.size == 0:
         tune1 = 0
