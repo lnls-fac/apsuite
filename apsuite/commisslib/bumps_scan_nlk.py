@@ -263,4 +263,5 @@ class BumpNLK(_BaseClass):
     @staticmethod
     def _reshape_vec(vec, dim):
         new_vec = _np.array(vec).reshape((dim, -1))
-        return new_vec[1::2, ::-1]
+        new_vec[1::2, :] = new_vec[1::2, ::-1]
+        return new_vec
