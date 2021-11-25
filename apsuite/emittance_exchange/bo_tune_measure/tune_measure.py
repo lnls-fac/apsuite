@@ -3,8 +3,7 @@
 import numpy as _np
 import pyaccel as _pa
 import pymodels as _pm
-import PyNAFF as _pnf
-from numpy.fft import fft, fftfreq
+from numpy.fft import rfft, rfftfreq
 from scipy.signal import find_peaks
 
 
@@ -91,10 +90,8 @@ def DFT(betatron_osc):
     N = _np.size(betatron_osc)
 
     # Fourier Transform
-    yf = _np.abs(fft(betatron_osc))
-    tunes = fftfreq(N)
-    mask = tunes > 0
-    tunes, yf = tunes[mask], yf[mask]
+    yf = _np.abs(rfft(betatron_osc))
+    tunes = rfftfreq(N)
 
     yf_normalized = yf/(yf.max() - yf.min())
     # signal processing: finding proeminent peaks
@@ -127,7 +124,7 @@ def tune_by_DFT(x_measures, y_measures):
     return tunesx.mean(), tunesy.mean()
 
 
-def tune_by_NAFF(x_measures, y_measures, n_points=None, window_param=None):
+def tune_by_NAFF(x_measures, y_measures, window_param=None, decimal_only=True):
     """Estimates tunes using mixed BPM data and Numerical Analysis
     of Fundamental Frequencies"""
 
@@ -136,32 +133,27 @@ def tune_by_NAFF(x_measures, y_measures, n_points=None, window_param=None):
     beta_osc_x = x_measures - _np.mean(x_measures, axis=0)
     beta_osc_y = y_measures - _np.mean(y_measures, axis=0)
 
-    Ax = beta_osc_x.flatten()
-    Ay = beta_osc_y.flatten()
+    Ax = beta_osc_x.ravel()
+    Ay = beta_osc_y.ravel()
 
-    if n_points is not None:
-        turns = n_points
+    # May we could include the below lines at naff code:
+    px = Ax.size//6
+    if Ax.size % 6 < 1:
+        px -= 1
+    px = 6*px+1
+    Ax = Ax[:px]
+    Ay = Ay[:px]
+
+    freqx, _ = _pa.naff.naff_general(Ax, is_real=True, nr_ff=2, window=1)
+    freqy, _ = _pa.naff.naff_general(Ay, is_real=True, nr_ff=2, window=1)
+    tunex, tuney = M*freqx[0], M*freqy[0]
+
+    if decimal_only is False:
+        return tunex, tuney
     else:
-        turns = len(Ax)-1
-
-    if window_param is not None:
-        window = window_param
-    else:
-        window = 1
-
-    naffx = _pnf.naff(Ax, turns=turns, nterms=1, skipTurns=0,
-                      getFullSpectrum=False, window=window)
-    naffy = _pnf.naff(Ay, turns=turns, nterms=1, skipTurns=0,
-                      getFullSpectrum=False, window=window)
-
-    if naffx.size == 0:
-        tune1 = 0
-    else:
-        tune1 = M*naffx[0][1]
-
-    if naffy.size == 0:
-        tune2 = 0
-    else:
-        tune2 = M*naffy[0][1]
-
-    return tune1, tune2
+        tunex, tuney = _np.abs(tunex % 1), _np.abs(tuney % 1)
+        if tunex > 0.5:
+            tunex = _np.abs(1-tunex)
+        if tuney > 0.5:
+            tuney = _np.abs(1-tuney)
+        return tunex, tuney
