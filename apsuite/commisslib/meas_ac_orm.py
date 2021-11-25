@@ -98,7 +98,7 @@ class MeasACORM(_ThreadBaseClass):
     def fitting_matrix(cls, tim, freqs, num_cycles):
         """Create the matrix used for fitting of fourier components.
 
-        The ordering of the matriz is the following:
+        The ordering of the matrix is the following:
            mat[i, 2*j] = cos(2*pi*freqs[j]*tim[i])
            mat[i, 2*j+1] = sin(2*pi*freqs[j]*tim[i])
 
@@ -264,6 +264,7 @@ class MeasACORM(_ThreadBaseClass):
                 freq = _np.fft.rfftfreq(orbx.shape[0], d=dtim)
                 idcs = (freq < min_freq) | (freq > max_freq)
                 dftx[idcs] = 0
+                orbx = _np.fft.irfft(dftx, axis=0)
                 orby = _np.fft.irfft(dfty, axis=0)
             anly['min_freq'] = min_freq
             anly['max_freq'] = max_freq
