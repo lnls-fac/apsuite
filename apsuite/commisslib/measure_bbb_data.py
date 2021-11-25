@@ -713,7 +713,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             self.devices['bbb'] = BunchbyBunch(devname)
 
     def get_property(self, propty):
-        """Get a given property saves in `data` or `analysis` dictionary.
+        """Get a given property saved in `data` or `analysis` dictionary.
 
         Args:
             propty (str): Comma concatenated string of nested dictionary keys
