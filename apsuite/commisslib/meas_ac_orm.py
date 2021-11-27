@@ -269,7 +269,7 @@ class MeasACORM(_ThreadBaseClass):
 
         anl = self.analysis['rf']
         mat[:sofb.nr_bpms, -1] = anl['mat_colx']
-        mat[sofb.nr_bpms:, -1] = anl['mat_colx']
+        mat[sofb.nr_bpms:, -1] = anl['mat_coly']
         return mat
 
     def process_data(
