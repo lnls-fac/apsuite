@@ -382,11 +382,17 @@ class LOCOConfig:
     def update_weight(self):
         """."""
         # bpm
-        if self.weight_bpm is None:
-            self.weight_bpm = _np.ones(2*self.nr_bpm)
-        elif isinstance(self.weight_bpm, (int, float)):
-            self.weight_bpm = _np.ones(2*self.nr_bpm) * \
-                self.weight_bpm / 2 / self.nr_bpm
+        bpmw = self.weight_bpm
+        if bpmw is None:
+            bpmw = _np.ones((2*self.nr_bpm, self.nr_corr))
+        elif isinstance(bpmw, (int, float)):
+            weight_bpm = _np.ones((2*self.nr_bpm, self.nr_corr))
+            weight_bpm *= bpmw / 2 / self.nr_bpm
+            bpmw = weight_bpm
+        elif isinstance(bpmw, _np.ndarray) and bpmw.ndim == 1:
+            bpmw = _np.tile(bpmw[:, None], self.nr_corr)
+        self.weight_bpm = bpmw
+
         # corr
         if self.weight_corr is None:
             self.weight_corr = _np.ones(self.nr_corr + 1)
