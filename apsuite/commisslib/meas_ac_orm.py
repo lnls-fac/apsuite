@@ -349,7 +349,9 @@ class MeasACORM(_ThreadBaseClass):
             data['cv_num_cycles'].append(cm.cycle_num_cycles)
             data['cv_cycle_type'].append(cm.cycle_type_str)
 
-        data['corrs_trig_delay_raw'] = self.devices['trigcorrs'].delay_raw
+        trig = self.devices['trigcorrs']
+        data['corrs_trig_delay_raw'] = trig.delay_raw
+        data['corrs_trig_delta_delay_raw'] = trig.delta_delay_raw
         return data
 
     def get_bpms_data(self):
