@@ -275,7 +275,22 @@ class MeasACORM(_ThreadBaseClass):
     def process_data(
             self, mag_idx_ini=None, mag_min_freq=None, mag_max_freq=None,
             rf_transition_length=10):
-        """."""
+        """Process measured data.
+
+        Args:
+            mag_idx_ini ([type], optional): initial index of orbit waveform
+                where magnets excitation start. Defaults to None.
+            mag_min_freq ([type], optional): Frequencies below this value will
+                be filtered out before fitting of magnets excitation.`None`
+                means no high pass filter will be applied. Defaults to `None`.
+            mag_max_freq ([type], optional): Frequencies above this value will
+                be filtered out before fitting of magnets excitation. `None`
+                means no low pass filter will be applied. Defaults to `None`.
+            rf_transition_length (int, optional): Number of indices to ignore
+                right before or after RF frequency changes in RF line
+                measurements. Defaults to 10.
+
+        """
         self.analysis['magnets'] = self._process_data_magnets(
             self.data['magnets'], mag_idx_ini, mag_min_freq, mag_max_freq)
         rf_data = self.data.get('rf')
