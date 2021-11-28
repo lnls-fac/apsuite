@@ -866,7 +866,9 @@ class MeasACORM(_ThreadBaseClass):
 
             tim = _np.arange(orbx.shape[0]) * dtim
             if idx_ini is None:
-                idx_ini = (tim >= self.params.delay_corrs).nonzero()[0][0]
+                delay = 4/data['rf_frequency']
+                delay *= data['corrs_trig_delay_raw']
+                idx_ini = (tim >= delay).nonzero()[0][0]
             anly['time'] = tim
             anly['idx_ini'] = idx_ini
 
