@@ -1,12 +1,14 @@
 """Main module."""
 import time as _time
 from threading import Event as _Flag
+from copy import deepcopy as _dcopy
 
 import numpy as _np
 import scipy.optimize as _scyopt
 
 from mathphys.functions import save_pickle as _save_pickle
 
+from siriuspy.namesys import SiriusPVName as _PVName
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 from siriuspy.devices import StrengthConv, PowerSupply, BPM, CurrInfoSI, \
     Trigger, Event, EVG, RFGen, Tune
@@ -35,6 +37,7 @@ class ACORMParams(_ParamsBaseClass):
         freqs = self.find_primes(16, start=120)
         self.ch_freqs = freqs[1::2][:6]
         self.cv_freqs = freqs[::2][:8]
+        self.nr_sectors_per_acq = 1
         self.sectors_to_measure = _np.arange(1, 21)
         self.meas_bpms_noise = True
         self.meas_rf_line = True
@@ -56,6 +59,7 @@ class ACORMParams(_ParamsBaseClass):
         stg += ftmp('exc_duration', self.exc_duration, '[s]')
         stg += stmp('ch_freqs', str(self.ch_freqs), '[Hz]')
         stg += stmp('cv_freqs', str(self.cv_freqs), '[Hz]')
+        stg += dtmp('nr_sectors_per_acq', self.nr_sectors_per_acq, '')
         stg += stmp('sectors_to_measure', str(self.sectors_to_measure), '')
         stg += stmp('meas_bpms_noise', str(self.meas_bpms_noise), '')
         stg += stmp('meas_rf_line', str(self.meas_rf_line), '')
@@ -480,7 +484,7 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         print('    Configuring BPMs...', end='')
-        self._config_bpms(self.params.nr_points, self.params.acq_rate)
+        self._config_bpms(self.params.nr_points)
         self._config_timing(self.params.delay_corrs)
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -514,7 +518,7 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         print('    Configuring BPMs...', end='')
-        self._config_bpms(self.params.nr_points, self.params.acq_rate)
+        self._config_bpms(self.params.nr_points)
         self._config_timing(self.params.delay_corrs)
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -571,12 +575,6 @@ class MeasACORM(_ThreadBaseClass):
 
         print('Measuring Magnets:')
 
-        t00 = _time.time()
-        print('Configuring BPMs...', end='')
-        self._config_bpms(self.params.nr_points, self.params.acq_rate)
-        self._config_timing(self.params.delay_corrs)
-        print(f'Done! ET: {_time.time()-t00:.2f}s')
-
         # Shift correctors so first corrector is 01M1
         chs_shifted = self._shift_list(self.sofb_data.ch_names, 1)
         cvs_shifted = self._shift_list(self.sofb_data.cv_names, 1)
@@ -591,22 +589,44 @@ class MeasACORM(_ThreadBaseClass):
         cv_kick = self.params.cv_kick
         freqh = self.params.ch_freqs
         freqv = self.params.cv_freqs
+        nr_points = self.params.nr_points
+        nr_secs_acq = self.params.nr_sectors_per_acq
+        secs_to_meas = self.params.sectors_to_measure
+        nr_secs = len(secs_to_meas)
 
         self.data = []
-        for sector in self.params.sectors_to_measure:
+        loop_size = nr_secs // nr_secs_acq
+        loop_size += 1 if nr_secs % nr_secs_acq else 0
+        for iter in range(loop_size):
             elt = _time.time()
 
-            print(f'Sector {sector:02d}:')
-            slch = slice((sector-1)*6, sector*6)
-            slcv = slice((sector-1)*8, sector*8)
-            chs_slc = chs_shifted[slch]
-            cvs_slc = cvs_shifted[slcv]
+            secs = secs_to_meas[iter*nr_secs_acq:nr_secs_acq*(iter+1)]
+            if len(list(set(secs))) < len(secs):
+                print('Problem: Same sectors in same acquisition.')
+                break
+
+            print(f'Sectors: '+', '.join(f'{s:02d}:' for s in secs))
+            chs_slc, cvs_slc = [], []
+            freqhe, freqve = [], []
+            for sec in secs:
+                chs_slc.extend(chs_shifted[(sec-1)*6:sec*6])
+                cvs_slc.extend(cvs_shifted[(sec-1)*8:sec*8])
+                freqhe.extend(freqh)
+                freqve.extend(freqv)
+
+            t00 = _time.time()
+            print('    Configuring BPMs and timing...', end='')
+            # No need to configure BPMs when they are already configured
+            if not iter or len(secs) != nr_secs_acq:
+                self._config_bpms(nr_points * len(secs))
+            self._config_timing(self.params.delay_corrs, secs)
+            print(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # configure correctors
             t00 = _time.time()
             print('    Configuring Correctors...', end='')
-            self._config_correctors(chs_slc, ch_kick, freqh, exc_duration)
-            self._config_correctors(cvs_slc, cv_kick, freqv, exc_duration)
+            self._config_correctors(chs_slc, ch_kick, freqhe, exc_duration)
+            self._config_correctors(cvs_slc, cv_kick, freqve, exc_duration)
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # set operation mode to cycle
@@ -627,17 +647,26 @@ class MeasACORM(_ThreadBaseClass):
             # Wait BPMs PV to update with new data
             t00 = _time.time()
             print('    Waiting BPMs to update...', end='')
-            if not self._wait_bpms_update(timeout=self.params.timeout_bpms):
+            if not self._wait_bpms_update(
+                    timeout=self.params.timeout_bpms*len(secs)):
                 print('Problem: timed out waiting BPMs update.')
                 break
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
-            # get data
+            # get data for each sector separately:
             data = self.get_general_data()
             data.update(self.get_bpms_data())
-            data.update(self.get_magnets_data(
-                chs_used=chs_slc, cvs_used=cvs_slc))
-            self.data.append(data)
+            orbx = data.pop('orbx')
+            orby = data.pop('orby')
+            for i, _ in enumerate(secs):
+                datas = _dcopy(data)
+                datas['orbx'] = orbx[i*nr_points:(i+1)*nr_points]
+                datas['orby'] = orby[i*nr_points:(i+1)*nr_points]
+                chs_s = chs_slc[i*6:(i+1)*6]
+                cvs_s = cvs_slc[i*8:(i+1)*8]
+                datas.update(self.get_magnets_data(
+                    chs_used=chs_s, cvs_used=cvs_s))
+            self.data.append(datas)
 
             # set operation mode to slowref
             t00 = _time.time()
@@ -675,7 +704,8 @@ class MeasACORM(_ThreadBaseClass):
 
         anly = dict()
 
-        fsamp = self._get_sampling_frequency(rf_data)
+        fsamp = self._get_sampling_frequency(
+            rf_data['rf_frequency'], rf_data['bpms_acq_rate'])
         dtim = 1/fsamp
         anly['fsamp'] = fsamp
         anly['dtim'] = dtim
@@ -735,7 +765,8 @@ class MeasACORM(_ThreadBaseClass):
         sofb = self.sofb_data
         anly = dict()
 
-        fsamp = self._get_sampling_frequency(bpms_data)
+        fsamp = self._get_sampling_frequency(
+            bpms_data['rf_frequency'], bpms_data['bpms_acq_rate'])
         dtim = 1/fsamp
         freqs0 = _np.r_[self.params.ch_freqs, self.params.cv_freqs]
         anly['fsamp'] = fsamp
@@ -801,7 +832,8 @@ class MeasACORM(_ThreadBaseClass):
         analysis = []
         for data in magnets_data:
             anly = dict()
-            fsamp = self._get_sampling_frequency(data)
+            fsamp = self._get_sampling_frequency(
+                data['rf_frequency'], data['bpms_acq_rate'])
             dtim = 1/fsamp
             ch_freqs = _np.array(data['ch_frequency'])
             cv_freqs = _np.array(data['cv_frequency'])
@@ -878,16 +910,17 @@ class MeasACORM(_ThreadBaseClass):
         return analysis
 
     @staticmethod
-    def _get_sampling_frequency(data):
-        fsamp = data['rf_frequency'] / 864 / 23
-        if data['bpms_acq_rate'].lower().startswith('monit'):
+    def _get_sampling_frequency(rf_freq, acq_rate):
+        fsamp = rf_freq / 864 / 23
+        if acq_rate.lower().startswith('monit'):
             fsamp /= 25
         return fsamp
 
     # ----------------- BPMs related methods -----------------------
 
-    def _config_bpms(self, nr_points, acq_rate=None):
-        if acq_rate is None or acq_rate.lower().startswith('monit1'):
+    def _config_bpms(self, nr_points):
+        acq_rate = self.params.acq_rate
+        if acq_rate.lower().startswith('monit1'):
             acq_rate = self.csbpm.AcqChan.Monit1
         else:
             acq_rate = self.csbpm.AcqChan.FOFB
@@ -955,7 +988,8 @@ class MeasACORM(_ThreadBaseClass):
 
     # ----------------- Timing related methods -----------------------
 
-    def _config_timing(self, cm_delay):
+    def _config_timing(self, cm_delay, sectors):
+
         print('Configuring Timing...', end='')
         trigbpm = self.devices['trigbpms']
         trigcorr = self.devices['trigcorrs']
@@ -966,9 +1000,29 @@ class MeasACORM(_ThreadBaseClass):
         trigbpm.nr_pulses = 1
         trigbpm.source = 'Study'
 
-        trigcorr.delay = cm_delay * 1e6  # [us]
         trigcorr.nr_pulses = 1
         trigcorr.source = 'Study'
+
+        ftim = self.devices['rfgen'].frequency / 4  # timing base frequency
+        trigcorr.delay_raw = int(cm_delay * ftim)
+
+        # Calculate delta_delay for correctors to be as close as possible to a
+        # multiple of the the sampling period to ensure repeatability of
+        # experiment along the sectors excited during single acquisition:
+        fsamp = self._get_sampling_frequency(
+            self.devices['rfgen'].frequency, self.params.acq_rate)
+        secs_delta_dly = _np.arange(len(sectors), dtype=float)
+        secs_delta_dly *= self.params.nr_points / fsamp
+        secs_delta_dlyr = _np.round(secs_delta_dly * ftim)
+
+        delta_delay_raw = _np.zeros(trigcorr.delta_delay_raw.size)
+        low_level = [_PVName(n) for n in trigcorr.low_level_triggers]
+        for sec, ddlyr in zip(sectors, secs_delta_dlyr):
+            # Find all low level triggers of this sector and set their delay:
+            for j, llt in enumerate(low_level):
+                if llt.sub.startswith(f'{sec:02d}'):
+                    delta_delay_raw[j] = ddlyr
+        trigcorr.delta_delay_raw = delta_delay_raw
 
         # configure event Study to be in External mode
         evt_study.delay = 0
