@@ -384,13 +384,13 @@ class LOCOConfig:
         # bpm
         bpmw = self.weight_bpm
         if bpmw is None:
-            bpmw = _np.ones((2*self.nr_bpm, self.nr_corr))
+            bpmw = _np.ones((2*self.nr_bpm, self.nr_corr + 1))
         elif isinstance(bpmw, (int, float)):
-            weight_bpm = _np.ones((2*self.nr_bpm, self.nr_corr))
+            weight_bpm = _np.ones((2*self.nr_bpm, self.nr_corr + 1))
             weight_bpm *= bpmw / 2 / self.nr_bpm
             bpmw = weight_bpm
         elif isinstance(bpmw, _np.ndarray) and bpmw.ndim == 1:
-            bpmw = _np.tile(bpmw[:, None], self.nr_corr)
+            bpmw = _np.tile(bpmw[:, None], self.nr_corr + 1)
         self.weight_bpm = bpmw
 
         # corr
