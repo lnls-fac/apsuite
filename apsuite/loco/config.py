@@ -394,11 +394,14 @@ class LOCOConfig:
         self.weight_bpm = bpmw
 
         # corr
-        if self.weight_corr is None:
-            self.weight_corr = _np.ones(self.nr_corr + 1)
-        elif isinstance(self.weight_corr, (int, float)):
-            self.weight_corr = _np.ones(self.nr_corr + 1) * \
-                self.weight_corr / (self.nr_corr + 1)
+        corrw = self.weight_corr
+        if corrw is None:
+            corrw = _np.ones(self.nr_corr + 1)
+        elif isinstance(corrw, (int, float)):
+            weight_corr = _np.ones(self.nr_corr + 1)
+            weight_corr *= corrw / (self.nr_corr + 1)
+            corrw = weight_corr
+        self.weight_corr = corrw
 
         nknb = 0
         if self.fit_quadrupoles:
