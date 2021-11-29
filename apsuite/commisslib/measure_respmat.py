@@ -139,7 +139,8 @@ class MeasureRespMat(_BaseClass):
 
         orbx = np.array(orbx_mon)
         orby = np.array(orby_mon)
-        orb_var = np.array([np.std(orbx, axis=0), np.std(orby, axis=0)])
+        orb_var = np.r_[np.std(orbx, axis=0), np.std(orby, axis=0)]
+        orb_var = np.tile(orb_var[:, None], 281)
         return orb_var
 
     @staticmethod
