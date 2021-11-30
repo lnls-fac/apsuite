@@ -541,6 +541,7 @@ class MeasACORM(_ThreadBaseClass):
 
         # RF generator still doesn't have a trigger fot it:
         _time.sleep(self.params.delay_corrs)
+        rfgen.cmd_freq_opmode_to_sweep()
         rfgen.cmd_freq_sweep_start()
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -596,13 +597,13 @@ class MeasACORM(_ThreadBaseClass):
         secs_to_meas = self.params.sectors_to_measure
         nr_secs = len(secs_to_meas)
 
-        self.data = []
+        data_mags = []
         loop_size = nr_secs // nr_secs_acq
         loop_size += 1 if nr_secs % nr_secs_acq else 0
-        for iter in range(loop_size):
+        for itr in range(loop_size):
             elt = _time.time()
 
-            secs = secs_to_meas[iter*nr_secs_acq:nr_secs_acq*(iter+1)]
+            secs = secs_to_meas[itr*nr_secs_acq:nr_secs_acq*(itr+1)]
             if len(list(set(secs))) < len(secs):
                 print('Problem: Same sectors in same acquisition.')
                 break
@@ -668,7 +669,7 @@ class MeasACORM(_ThreadBaseClass):
                 cvs_s = cvs_slc[i*8:(i+1)*8]
                 datas.update(self.get_magnets_data(
                     chs_used=chs_s, cvs_used=cvs_s))
-            self.data.append(datas)
+                data_mags.append(datas)
 
             # set operation mode to slowref
             t00 = _time.time()
@@ -693,6 +694,7 @@ class MeasACORM(_ThreadBaseClass):
         elt0 -= _time.time()
         elt0 *= -1
         print(f'Finished!!  ET: {elt0/60:.2f}min')
+        return data_mags
 
     # ---------------- Data Processing methods ----------------
 
@@ -992,7 +994,7 @@ class MeasACORM(_ThreadBaseClass):
 
     # ----------------- Timing related methods -----------------------
 
-    def _config_timing(self, cm_delay, sectors):
+    def _config_timing(self, cm_delay, sectors=None):
 
         print('Configuring Timing...', end='')
         trigbpm = self.devices['trigbpms']
@@ -1006,10 +1008,19 @@ class MeasACORM(_ThreadBaseClass):
 
         trigcorr.nr_pulses = 1
         trigcorr.source = 'Study'
-
         ftim = self.devices['rfgen'].frequency / 4  # timing base frequency
         trigcorr.delay_raw = int(cm_delay * ftim)
 
+        # configure event Study to be in External mode
+        evt_study.delay = 0
+        evt_study.mode = 'External'
+
+        # update event configurations in EVG
+        evg.cmd_update_events()
+
+        if sectors is None:
+            print('Done!')
+            return
         # Calculate delta_delay for correctors to be as close as possible to a
         # multiple of the the sampling period to ensure repeatability of
         # experiment along the sectors excited during single acquisition:
@@ -1028,12 +1039,6 @@ class MeasACORM(_ThreadBaseClass):
                     delta_delay_raw[j] = ddlyr
         trigcorr.delta_delay_raw = delta_delay_raw
 
-        # configure event Study to be in External mode
-        evt_study.delay = 0
-        evt_study.mode = 'External'
-
-        # update event configurations in EVG
-        evg.cmd_update_events()
         print('Done!')
 
     # ----------------- Correctors related methods -----------------------
