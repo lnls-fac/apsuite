@@ -5,6 +5,9 @@ import pyaccel as _pa
 import pymodels as _pm
 from numpy.fft import rfft, rfftfreq
 from scipy.signal import find_peaks
+import pandas as _pd
+import matplotlib.pyplot as _plt
+import seaborn as _sns
 
 
 class BPMeasure:
@@ -15,12 +18,16 @@ class BPMeasure:
         self._Ay = Ay
         self._QF_KL_default = 0.18862733  # Default KL of QF quadrupoles
 
-    def create_booster(self, QF_KL=None, KsL=None):
+    def create_booster(self, rad=True, QF_KL=None, KsL=None):
         """."""
         self._bo = _pm.bo.create_accelerator(energy=3e9)
-        self._bo.cavity_on = True
-        self._bo.radiation_on = True
         self._bo.vchamber_on = True
+        if rad:
+            self._bo.cavity_on = True
+            self._bo.radiation_on = True
+        else:
+            self._bo.cavity_on = False
+            self._bo.radiation_on = False
 
         self._famdata = _pm.bo.get_family_data(self._bo)
 
@@ -62,6 +69,11 @@ class BPMeasure:
         co = _pa.tracking.find_orbit6(accelerator=self._bo, indices='closed')
         self._bunch += co[:, [0]] + offset
 
+    def change_QF(self, KL):
+        qf_idx = _np.array(self._famdata['QF']['index']).flatten()
+        for qf in qf_idx:
+            self._bo[qf].KL = KL
+
     def tracking_and_get_bpmdata(self, N_turns=40):
         """."""
         bpm_idx = self._famdata['BPM']['index']
@@ -85,6 +97,7 @@ class BPMeasure:
 
 
 # ----- Functions to estimates tune by BPM data --------- #
+
 def DFT(betatron_osc):
     """."""
     N = _np.size(betatron_osc)
@@ -98,6 +111,7 @@ def DFT(betatron_osc):
     peaks, _ = find_peaks(yf_normalized)
     y_peaks = yf_normalized[peaks]
     tune_peaks = tunes[peaks]
+
     if tune_peaks.size != 0:
         maxpeak = _np.argmax(y_peaks)
     else:
@@ -107,7 +121,8 @@ def DFT(betatron_osc):
 
 
 def tune_by_DFT(x_measures, y_measures):
-    """Estimates tunes using mixed BPM data and Fourier Transform"""
+    """Estimates tunes using the mean of the Fourier Transforms applied in single
+    BPM measures separately"""
 
     M = x_measures.shape[1]
 
@@ -122,6 +137,30 @@ def tune_by_DFT(x_measures, y_measures):
         tunesy[j] = DFT(beta_osc_y[:, j])
 
     return tunesx.mean(), tunesy.mean()
+
+
+def tune_by_DFT2(x_measures, y_measures):
+    """Estimates tunes using the Fourier Transform applied in the mixed BPM
+    data"""
+
+    M = x_measures.shape[1]
+
+    beta_osc_x = x_measures - _np.mean(x_measures, axis=0)
+    beta_osc_y = y_measures - _np.mean(y_measures, axis=0)
+
+    Ax = beta_osc_x.ravel()
+    Ay = beta_osc_y.ravel()
+
+    tunex = DFT(Ax)*M
+    tuney = DFT(Ay)*M
+
+    tunex, tuney = _np.abs(tunex % 1), _np.abs(tuney % 1)
+
+    if tunex > 0.5:
+        tunex = _np.abs(1-tunex)
+    if tuney > 0.5:
+        tuney = _np.abs(1-tuney)
+    return tunex, tuney
 
 
 def tune_by_NAFF(x_measures, y_measures, window_param=None, decimal_only=True):
@@ -157,3 +196,52 @@ def tune_by_NAFF(x_measures, y_measures, window_param=None, decimal_only=True):
         if tuney > 0.5:
             tuney = _np.abs(1-tuney)
         return tunex, tuney
+
+
+def spectrum_evolution(x_m, y_m, dn=None):
+    """Computes a heatmap with the spectrum evolution along the turns using
+    DFT and mixed BPM data"
+    Args:
+    x_m, ym (array): Must to be a mixed BPM array, with BPM measures
+    distributed following the shape (N_turns x BPMs)
+
+    dn (int, optional): Interval of analysis, the algorithm computs the
+    spectrum at a revolution N doing the a DFT at the sign in an interval
+    [N:N+dn]. For this, dn must obey dn < N_turns= x.shape[0]. If None is
+    passed, dn=N//10 is assumed.
+
+    Returns:
+        freqs(numpy.array): Array with frequency domain
+        tune1_matrix, tune2_matrix (numpy.array): Matrices with tune spectrum
+        that compose the heatmap"""
+
+    M = x_m.shape[1]
+    N = x_m.shape[0]
+
+    if dn is None:
+        dn = N//10
+
+    freqs = rfftfreq(dn)*M
+    tune1_matrix = _np.zeros([freqs.size, N-dn])
+    tune2_matrix = tune1_matrix.copy()
+    signalx = x_m.ravel()
+    signaly = y_m.ravel()
+
+    for n in range(N-dn):
+        sub_signalx = signalx[n:n+dn]
+        espectrum_x = _np.abs(rfft(sub_signalx))*2*_np.pi/dn
+        tune1_matrix[:, n] = espectrum_x
+
+        sub_signaly = signaly[n:n+dn]
+        espectrum_y = _np.abs(rfft(sub_signaly))*2*_np.pi/dn
+        tune2_matrix[:, n] = espectrum_y
+
+    tune_matrix = tune1_matrix + tune2_matrix
+
+    tune_df = _pd.DataFrame(data=tune_matrix, columns=_np.arange(N-dn),
+                            index=_np.round(freqs, 2))
+    _sns.heatmap(tune_df)
+    _plt.xlabel('Turns')
+    _plt.ylabel("Q")
+
+    return freqs, tune1_matrix, tune2_matrix
