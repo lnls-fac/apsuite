@@ -530,7 +530,7 @@ class MeasACORM(_ThreadBaseClass):
         rf_kick = self.params.rf_kick
         freq0 = rfgen.frequency
         rf_kick = rfgen.configure_freq_sweep(
-            rf_kick, 3, exc_duration, sawtooth=True, centered=True,
+            rf_kick, 2, exc_duration, sawtooth=True, centered=True,
             increasing=True, retrace=False)
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -539,7 +539,7 @@ class MeasACORM(_ThreadBaseClass):
         self._reset_flags()
         self.devices['evt_study'].cmd_external_trigger()
 
-        # RF generator still doesn't have a trigger fot it:
+        # RF generator still doesn't have a trigger from timing:
         _time.sleep(self.params.delay_corrs)
         rfgen.cmd_freq_opmode_to_sweep()
         rfgen.cmd_freq_sweep_start()
