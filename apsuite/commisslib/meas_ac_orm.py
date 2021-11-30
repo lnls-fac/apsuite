@@ -410,39 +410,49 @@ class MeasACORM(_ThreadBaseClass):
 
     def _create_devices(self):
         # Create objects to convert kicks to current
+        t00 = _time.time()
+        print('Creating kick converters  -> ', end='')
         self.devices.update({
             n+':StrengthConv': StrengthConv(n, 'Ref-Mon')
             for n in self.sofb_data.ch_names})
         self.devices.update({
             n+':StrengthConv': StrengthConv(n, 'Ref-Mon')
             for n in self.sofb_data.cv_names})
+        print(f'ET: = {_time.time()-t00:.2f}s')
 
         # Create objects to interact with correctors
+        t00 = _time.time()
+        print('Creating correctors       -> ', end='')
         self.devices.update({
             nme: PowerSupply(nme) for nme in self.sofb_data.ch_names})
         self.devices.update({
             nme: PowerSupply(nme) for nme in self.sofb_data.cv_names})
+        print(f'ET: = {_time.time()-t00:.2f}s')
 
         # Create object to get stored current
+        t00 = _time.time()
+        print('Creating General Devices  -> ', end='')
         self.devices['currinfo'] = CurrInfoSI()
+        # Create RF generator object
+        self.devices['rfgen'] = RFGen()
+        # Create Tune object:
+        self.devices['tune'] = Tune(Tune.DEVICES.SI)
+        print(f'ET: = {_time.time()-t00:.2f}s')
 
         # Create BPMs trigger:
+        t00 = _time.time()
+        print('Creating Timing           -> ', end='')
         self.devices['trigbpms'] = Trigger('SI-Fam:TI-BPM')
-
         # Create Correctors Trigger:
         self.devices['trigcorrs'] = Trigger('SI-Glob:TI-Mags-Corrs')
-
         # Create event to start data acquisition sinchronously:
         self.devices['evt_study'] = Event('Study')
         self.devices['evg'] = EVG()
-
-        # Create RF generator object
-        self.devices['rfgen'] = RFGen()
-
-        # Create Tune object:
-        self.devices['tune'] = Tune(Tune.DEVICES.SI)
+        print(f'ET: = {_time.time()-t00:.2f}s')
 
         # Create BPMs
+        t00 = _time.time()
+        print('Creating BPMs             -> ', end='')
         self.bpms = dict()
         name = self.sofb_data.bpm_names[0]
         self.bpms[name] = BPM(name)
@@ -467,6 +477,7 @@ class MeasACORM(_ThreadBaseClass):
                 self._flags[pvo.pvname] = _Flag()
                 pvo.add_callback(self._set_flag)
         self.devices.update(self.bpms)
+        print(f'ET: = {_time.time()-t00:.2f}s')
 
     # ---------------- Data Measurement methods ----------------
 
