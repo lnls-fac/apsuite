@@ -96,7 +96,7 @@ class MeasACORM(_ThreadBaseClass):
         super().__init__(
             params=params, target=self._do_measure, isonline=isonline)
         self.bpms = dict()
-        self._flags = dict()
+        # self._flags = dict()
 
         self.sofb_data = SOFBFactory.create('SI')
         self.configdb = _ConfigDBClient(config_type='si_orbcorr_respm')
@@ -467,16 +467,16 @@ class MeasACORM(_ThreadBaseClass):
             bpm.wait_for_connection()
         print(f'ET: = {_time.time()-t00:.2f}s')
 
-        t00 = _time.time()
-        print('Setting auto monitor      -> ', end='')
-        propties_to_keep = ['GEN_XArrayData', 'GEN_YArrayData']
-        for bpm in self.bpms.values():
-            for propty in propties_to_keep:
-                bpm.set_auto_monitor(propty, True)
-                pvo = bpm.pv_object(propty)
-                self._flags[pvo.pvname] = _Flag()
-                pvo.add_callback(self._set_flag)
-        print(f'ET: = {_time.time()-t00:.2f}s')
+        # t00 = _time.time()
+        # print('Setting auto monitor      -> ', end='')
+        # propties_to_keep = ['GEN_XArrayData', 'GEN_YArrayData']
+        # for bpm in self.bpms.values():
+        #     for propty in propties_to_keep:
+        #         bpm.set_auto_monitor(propty, True)
+        #         pvo = bpm.pv_object(propty)
+        #         self._flags[pvo.pvname] = _Flag()
+        #         pvo.add_callback(self._set_flag)
+        # print(f'ET: = {_time.time()-t00:.2f}s')
 
     # ---------------- Data Measurement methods ----------------
 
@@ -502,14 +502,17 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         print('    Sending Trigger signal...', end='')
-        self._reset_flags()
+        # self._reset_flags()
         self.devices['evt_study'].cmd_external_trigger()
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         print('    Waiting BPMs to update...', end='')
-        if not self._wait_bpms_update(timeout=self.params.timeout_bpms):
+        fsamp = self._get_sampling_frequency(
+            self.devices['rfgen'].frequency, self.params.acq_rate)
+        mint = self.params.nr_points / fsamp
+        if not self._wait_bpms_update(mint, timeout=self.params.timeout_bpms):
             print('Problem: timed out waiting BPMs update.')
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -546,7 +549,7 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         print('    Sending Trigger signal...', end='')
-        self._reset_flags()
+        # self._reset_flags()
         self.devices['evt_study'].cmd_external_trigger()
 
         # RF generator still doesn't have a trigger from timing:
@@ -569,7 +572,7 @@ class MeasACORM(_ThreadBaseClass):
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         print('    Waiting BPMs to update...', end='')
-        if not self._wait_bpms_update(timeout=self.params.timeout_bpms):
+        if not self._wait_bpms_update(0.0, timeout=self.params.timeout_bpms):
             print('Problem: timed out waiting BPMs update.')
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -653,15 +656,18 @@ class MeasACORM(_ThreadBaseClass):
             # send event through timing system to start acquisitions
             t00 = _time.time()
             print('    Sending Timing signal...', end='')
-            self._reset_flags()
+            # self._reset_flags()
             self.devices['evt_study'].cmd_external_trigger()
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # Wait BPMs PV to update with new data
             t00 = _time.time()
             print('    Waiting BPMs to update...', end='')
+            fsamp = self._get_sampling_frequency(
+                self.devices['rfgen'].frequency, self.params.acq_rate)
+            mint = nr_points * len(secs) / fsamp
             if not self._wait_bpms_update(
-                    timeout=self.params.timeout_bpms*len(secs)):
+                    mint, timeout=self.params.timeout_bpms):
                 print('Problem: timed out waiting BPMs update.')
                 break
             print(f'Done! ET: {_time.time()-t00:.2f}s')
@@ -972,25 +978,26 @@ class MeasACORM(_ThreadBaseClass):
             if not boo:
                 print('Timed out waiting start.')
 
-    def _set_flag(self, pvname, **kwargs):
-        _ = kwargs
-        self._flags[pvname].set()
+    # def _set_flag(self, pvname, **kwargs):
+    #     _ = kwargs
+    #     self._flags[pvname].set()
 
-    def _reset_flags(self):
-        for flag in self._flags.values():
-            flag.clear()
+    # def _reset_flags(self):
+    #     for flag in self._flags.values():
+    #         flag.clear()
 
-    def _wait_bpms_update(self, timeout=10):
+    def _wait_bpms_update(self, min_time, timeout=10):
         """."""
         orbx0, orby0 = self.get_orbit()
-        for name, flag in self._flags.items():
-            t00 = _time.time()
-            if not flag.wait(timeout=timeout):
-                print(f'Timed out in PV {name:s}')
-                return False
-            timeout -= _time.time() - t00
-            timeout = max(timeout, 0)
+        # for name, flag in self._flags.items():
+        #     t00 = _time.time()
+        #     if not flag.wait(timeout=timeout):
+        #         print(f'Timed out in PV {name:s}')
+        #         return False
+        #     timeout -= _time.time() - t00
+        #     timeout = max(timeout, 0)
 
+        _time.sleep(min_time)
         while timeout > 0:
             t00 = _time.time()
             orbx, orby = self.get_orbit()
