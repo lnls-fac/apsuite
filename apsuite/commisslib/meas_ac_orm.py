@@ -454,29 +454,28 @@ class MeasACORM(_ThreadBaseClass):
         t00 = _time.time()
         print('Creating BPMs             -> ', end='')
         self.bpms = dict()
+        for name in self.sofb_data.bpm_names:
+            self.bpms[name] = BPM(name, auto_mon=False)
         name = self.sofb_data.bpm_names[0]
-        self.bpms[name] = BPM(name)
         self.csbpm = self.bpms[name].csdata
+        self.devices.update(self.bpms)
+        print(f'ET: = {_time.time()-t00:.2f}s')
 
-        propties_not_interested = self.bpms[name].auto_monitor_status
+        t00 = _time.time()
+        print('Waiting BPMs connect      -> ', end='')
+        for bpm in self.bpms.values():
+            bpm.wait_for_connection()
+        print(f'ET: = {_time.time()-t00:.2f}s')
+
+        t00 = _time.time()
+        print('Setting auto monitor      -> ', end='')
         propties_to_keep = ['GEN_XArrayData', 'GEN_YArrayData']
-        for ppt in propties_to_keep:
-            propties_not_interested.pop(ppt)
-
-        for i, name in enumerate(self.sofb_data.bpm_names):
-            if not i:
-                bpm = self.bpms[name]
-            else:
-                bpm = BPM(name)
-                self.bpms[name] = bpm
-            for propty in propties_not_interested:
-                bpm.set_auto_monitor(propty, False)
+        for bpm in self.bpms.values():
             for propty in propties_to_keep:
                 bpm.set_auto_monitor(propty, True)
                 pvo = bpm.pv_object(propty)
                 self._flags[pvo.pvname] = _Flag()
                 pvo.add_callback(self._set_flag)
-        self.devices.update(self.bpms)
         print(f'ET: = {_time.time()-t00:.2f}s')
 
     # ---------------- Data Measurement methods ----------------
