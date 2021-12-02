@@ -1,6 +1,6 @@
 """Main module."""
 import time as _time
-from threading import Event as _Flag
+from threading import Event as _Flag, Thread as _Thread
 from copy import deepcopy as _dcopy
 
 import numpy as _np
@@ -32,7 +32,9 @@ class ACORMParams(_ParamsBaseClass):
         self.cv_kick = 5  # [urad]
         self.rf_kick = 5  # [Hz]
         self.delay_corrs = 50e-3  # [s]
+        self.delay_rf = 200e-3  # [s]
         self.exc_duration = 5  # [s]
+        self.exc_rf = 4  # [s]
 
         freqs = self.find_primes(16, start=120)
         self.ch_freqs = freqs[1::2][:6]
@@ -56,7 +58,9 @@ class ACORMParams(_ParamsBaseClass):
         stg += ftmp('cv_kick', self.cv_kick, '[urad]')
         stg += ftmp('rf_kick', self.rf_kick, '[Hz]')
         stg += ftmp('delay_corrs', self.delay_corrs, '[s]')
+        stg += ftmp('delay_rf', self.delay_rf, '[s]')
         stg += ftmp('exc_duration', self.exc_duration, '[s]')
+        stg += ftmp('exc_rf', self.exc_rf, '[s]')
         stg += stmp('ch_freqs', str(self.ch_freqs), '[Hz]')
         stg += stmp('cv_freqs', str(self.cv_freqs), '[Hz]')
         stg += dtmp('nr_sectors_per_acq', self.nr_sectors_per_acq, '')
@@ -146,7 +150,7 @@ class MeasACORM(_ThreadBaseClass):
         return mat
 
     @classmethod
-    def fit_fourier_components(cls, data, freqs, dtim, num_cycles):
+    def fit_fourier_components(cls, data, freqs, dtim, num_cycles=None):
         """Fit Fourier components in signal for the given frequencies.
 
         Args:
@@ -155,6 +159,7 @@ class MeasACORM(_ThreadBaseClass):
             freqs (numpy.ndarray, K): K frequencies to fit Fourier components.
             dtim (numpy.ndarray, N): time vector for data columns.
             num_cycles (num.ndarray, K): number of cycles of each frequency.
+                If not provided, all data range will be considered.
 
         Returns:
             numpy.ndarray, KxM: Fourier amplitudes.
@@ -718,8 +723,8 @@ class MeasACORM(_ThreadBaseClass):
         def _fitting_model(tim, *params):
             idx1, idx2, idx3, amp1, amp2 = params
             y = _np.zeros(tim.size)
-            y[idx1:idx2] = amp1
-            y[idx2:idx3] = amp2
+            y[int(idx1):int(idx2)] = amp1
+            y[int(idx2):int(idx3)] = amp2
             return y
 
         anly = dict()
@@ -739,18 +744,23 @@ class MeasACORM(_ThreadBaseClass):
         anly['time'] = tim
 
         # fit average horizontal orbit to find transition indices
-        exc_dur = self.params.exc_duration
+        exc_dur = self.params.exc_rf
+        dly = self.params.delay_rf
         rf_kick = rf_data['rf_kick']
-        idx1 = (tim > exc_dur/100).nonzero()[0][0]
-        idx2 = (tim > exc_dur*(1/100+1/2)).nonzero()[0][0]
-        idx3 = (tim > exc_dur*(1/100+1)).nonzero()[0][0]
+        idx1 = (tim > dly).nonzero()[0][0]
+        idx2 = (tim > (exc_dur/2+dly)).nonzero()[0][0]
+        idx3 = (tim > (exc_dur+dly)).nonzero()[0][0]
         etax_avg = 0.033e6  # average dispersion function, in [um]
-        amp1 = -rf_kick * etax_avg
-        amp2 = rf_kick * etax_avg
+        amp1 = -rf_kick * etax_avg / 1.7e-4 / 499665400
+        amp2 = rf_kick * etax_avg / 1.7e-4 / 499665400
         par0 = [idx1, idx2, idx3, amp1, amp2]
         par, _ = _scyopt.curve_fit(
             _fitting_model, tim, orbx.mean(axis=1), p0=par0)
         idx1, idx2, idx3, amp1, amp2 = par
+        idx1 = int(idx1)
+        idx2 = int(idx2)
+        idx3 = int(idx3)
+        par = idx1, idx2, idx3, amp1, amp2
         anly['params_fit_init'] = par0
         anly['params_fit'] = par
         anly['idx1'] = idx1
@@ -811,16 +821,16 @@ class MeasACORM(_ThreadBaseClass):
 
         ampx_ch = ampx[:sch].T
         ampy_ch = ampy[:sch].T
-        ampx_cv = ampx[scv:].T
-        ampy_cv = ampy[scv:].T
+        ampx_cv = ampx[sch:].T
+        ampy_cv = ampy[sch:].T
 
         anly['noisex_ch'] = ampx_ch
         anly['noisey_ch'] = ampy_ch
         anly['noisex_cv'] = ampx_cv
         anly['noisey_cv'] = ampy_cv
 
-        match = _np.zeros((sofb.nr_bpms, sch))
-        matcv = _np.zeros((sofb.nr_bpms, scv))
+        match = _np.zeros((2*sofb.nr_bpms, sch))
+        matcv = _np.zeros((2*sofb.nr_bpms, scv))
         match[:sofb.nr_bpms] = ampx_ch
         match[sofb.nr_bpms:] = ampy_ch
         matcv[:sofb.nr_bpms] = ampx_cv
