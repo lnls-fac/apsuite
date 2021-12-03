@@ -542,9 +542,7 @@ class MeasACORM(_ThreadBaseClass):
 
     def _do_measure_rf_line(self):
         elt = _time.time()
-
         print('Measuring RF Line:')
-        rfgen = self.devices['rfgen']
 
         t00 = _time.time()
         print('    Configuring BPMs...', end='')
@@ -553,35 +551,19 @@ class MeasACORM(_ThreadBaseClass):
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         t00 = _time.time()
-        print('    Configuring RF...', end='')
-        exc_duration = self.params.exc_duration
-        rf_kick = self.params.rf_kick
-        freq0 = rfgen.frequency
-        rf_kick = rfgen.configure_freq_sweep(
-            rf_kick, 2, exc_duration, sawtooth=True, centered=True,
-            increasing=True, retrace=False)
-        print(f'Done! ET: {_time.time()-t00:.2f}s')
-
-        t00 = _time.time()
         print('    Sending Trigger signal...', end='')
         # self._reset_flags()
         self.devices['evt_study'].cmd_external_trigger()
 
-        # RF generator still doesn't have a trigger from timing:
-        _time.sleep(self.params.delay_corrs)
-        rfgen.cmd_freq_opmode_to_sweep()
-        rfgen.cmd_freq_sweep_start()
-        print(f'Done! ET: {_time.time()-t00:.2f}s')
-
-        # Configure RF back to continuous operation mode.
         t00 = _time.time()
-        print('    Waiting RF to finish...', end='')
-        if rfgen.wait_freq_sweep_to_finish(timeout=1.1*exc_duration):
-            print('Timed out!. Reseting...', end='')
-            rfgen.freq_sweep_reset()
-            rfgen.wait_freq_sweep_to_finish(timeout=1)
-        rfgen.cmd_freq_opmode_to_continuous_wave()
-        rfgen.frequency = freq0
+        print('    Sweep RF...', end='')
+        thr = _Thread(
+            target=self._sweep_rf,
+            args=(self.params.rf_kick, self.params.exc_rf),
+            daemon=True)
+
+        _time.sleep(self.params.delay_rf)
+        thr.start()
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # Wait BPMs PV to update with new data
@@ -594,12 +576,21 @@ class MeasACORM(_ThreadBaseClass):
         # get data
         data = self.get_general_data()
         data.update(self.get_bpms_data())
-        data['rf_kick'] = rf_kick
+        data['rf_kick'] = self.params.rf_kick
 
         elt -= _time.time()
         elt *= -1
         print(f'    Elapsed Time: {elt:.2f}s')
         return data
+
+    def _sweep_rf(self, rf_kick, exc_duration):
+        rfgen = self.devices['rfgen']
+        freq0 = rfgen.frequency
+        rfgen.frequency = freq0 - rf_kick
+        _time.sleep(exc_duration/2)
+        rfgen.frequency = freq0 + rf_kick
+        _time.sleep(exc_duration/2)
+        rfgen.frequency = freq0
 
     def _do_measure_magnets(self):
         elt0 = _time.time()
