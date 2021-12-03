@@ -958,7 +958,6 @@ class MeasACORM(_ThreadBaseClass):
         else:
             acq_rate = self.csbpm.AcqChan.FOFB
 
-        print('Configuring BPMs...', end='')
         self._cmd_bpms_acq_abort()
 
         for bpm in self.bpms.values():
@@ -969,7 +968,6 @@ class MeasACORM(_ThreadBaseClass):
             bpm.acq_nrsamples_post = nr_points
 
         self._cmd_bpms_acq_start()
-        print('Done!')
 
     def _cmd_bpms_acq_abort(self):
         for bpm in self.bpms.values():
@@ -997,7 +995,7 @@ class MeasACORM(_ThreadBaseClass):
     #     for flag in self._flags.values():
     #         flag.clear()
 
-    def _wait_bpms_update(self, min_time, timeout=10):
+    def _wait_bpms_update(self, timeout=10):
         """."""
         orbx0, orby0 = self.get_orbit()
         # for name, flag in self._flags.items():
@@ -1008,13 +1006,21 @@ class MeasACORM(_ThreadBaseClass):
         #     timeout -= _time.time() - t00
         #     timeout = max(timeout, 0)
 
-        _time.sleep(min_time)
         while timeout > 0:
             t00 = _time.time()
             orbx, orby = self.get_orbit()
-            cond = _np.any(_np.all(_np.isclose(orbx0, orbx), axis=0))
-            cond |= _np.any(_np.all(_np.isclose(orby0, orby), axis=0))
-            if not cond:
+            sizx = min(orbx.shape[0], orbx0.shape[0])
+            sizy = min(orby.shape[0], orby0.shape[0])
+
+            try:
+                continue_ = sizx != sizy
+                continue_ |= _np.any(_np.all(
+                    _np.isclose(orbx0[:sizx], orbx[:sizx]), axis=0))
+                continue_ |= _np.any(_np.all(
+                    _np.isclose(orby0[:sizy], orby[:sizy]), axis=0))
+            except TypeError:
+                continue_ = True
+            if not continue_:
                 return True
             _time.sleep(0.1)
             timeout -= _time.time() - t00
