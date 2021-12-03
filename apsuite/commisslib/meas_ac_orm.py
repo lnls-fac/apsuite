@@ -405,10 +405,20 @@ class MeasACORM(_ThreadBaseClass):
 
         """
         orbx, orby = [], []
+        mini = None
         for bpm_name in self.sofb_data.bpm_names:
             bpm = self.devices[bpm_name]
-            orbx.append(bpm.mt_posx)
-            orby.append(bpm.mt_posy)
+            mtx = bpm.mt_posx
+            mty = bpm.mt_posy
+            orbx.append(mtx)
+            orby.append(mty)
+            if mini is None:
+                mini = mtx.size
+            mini = _np.min([mini, mtx.size, mty.size])
+
+        for i in range(len(orbx)):
+            orbx[i] = orbx[i][:mini]
+            orby[i] = orby[i][:mini]
         return _np.array(orbx).T, _np.array(orby).T
 
     # ------------------ Auxiliary Methods ------------------
