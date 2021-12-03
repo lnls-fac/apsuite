@@ -3,6 +3,7 @@ import time as _time
 import numpy as _np
 from siriuspy.devices import PowerSupply, CurrInfoSI, Tune, TuneCorr, SOFB
 from siriuspy.sofb.csdev import SOFBFactory
+from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
@@ -50,17 +51,21 @@ class TurnOffCorr(_ThreadBaseClass):
         super().__init__(
             params=params, target=self._do_measure, isonline=isonline)
         self.sofb_data = SOFBFactory.create('SI')
-        self.chs_subset = self.sofb_data.ch_names[self.params.chs_idx]
-        self.cvs_subset = self.sofb_data.cv_names[self.params.cvs_idx]
+        # self.chs_subset = self.sofb_data.ch_names[self.params.chs_idx]
+        # self.cvs_subset = self.sofb_data.cv_names[self.params.cvs_idx]
+        client = _ConfigDBClient(config_type='si_orbcorr_respm')
+        respmat = _np.array(client.get_config_value(name='ref_respmat'))
+        respmat = _np.reshape(respmat, (320, 281))
+        self.respmat = respmat
         self.tunex0, self.tuney0 = None, None
         if self.isonline:
             self._create_devices()
 
     def _create_devices(self):
         self.devices.update({
-            nme: PowerSupply(nme) for nme in self.chs_subset})
-        self.devices.update({
-            nme: PowerSupply(nme) for nme in self.cvs_subset})
+            nme: PowerSupply(nme) for nme in self.sofb_data.ch_names})
+        # self.devices.update({
+        #     nme: PowerSupply(nme) for nme in self.sofb_data.cv_names})
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self.devices['tunecorr'] = TuneCorr(TuneCorr.DEVICES.SI)
@@ -125,6 +130,7 @@ class TurnOffCorr(_ThreadBaseClass):
         kickstep = prms.max_kick_step if kick0 < 0 else -prms.max_kick_step
         rampdown = _np.r_[_np.arange(kick0, 0, kickstep)[1:], 0]
         self.apply_corr_ramp(corr_dev, rampdown)
+        # To turn on and off the PSSOFB mode must be disabled
         corr_dev.cmd_turn_off()
         # Measure Orbit
         # data = self.get_orbit_data()
@@ -136,6 +142,42 @@ class TurnOffCorr(_ThreadBaseClass):
         else:
             sofb.cvenbl = enbllist0
         # return data
+
+    def calc_delta_orbit(self):
+        """."""
+        chnames = self.sofb_data.ch_names
+        nr_chs = len(chnames)
+        kicks = _np.zeros(nr_chs)
+        for idx in self.params.chs_idx:
+            name = chnames[idx]
+            # Do not get kicks from device, get and set from SOFB
+            # PSSOFB will be on, timing event must be set
+            kicks = self.devices[name].kick
+        # delta_kicks = - kicks
+        delta_orbit = self.respmat[:, :nr_chs] @ (-kicks)
+        return delta_orbit, kicks
+
+    def _calc_reduction_factor(self, delta_orbit):
+        return self.params.max_delta_orbit/_np.max(abs(delta_orbit))
+
+    def _calc_corrs_compensation(self):
+        delta_orbit, kicks = self.calc_delta_orbit()
+        factor = self._calc_reduction_factor(self, delta_orbit)
+        if factor < 1:
+            dkicks = (1 - factor) * kicks
+        else:
+            dkicks = -kicks
+        nr_chs = len(self.sofb_data.ch_names)
+        # to be implemented in SOFB device
+        irespmat = self.sofb.irespmat
+        dorbit = self.respmat[:, :nr_chs] @ dkicks
+        dkicks_comp = -(irespmat @ dorbit)[:nr_chs-len(self.params.chs_idx)]
+
+        dkicks_all = _np.zeros(nr_chs)
+        dkicks_all[self.params.chs_idx] = dkicks
+        comp = list(set(range(nr_chs)) - set(self.params.ch_idx))
+        dkicks_all[comp] = dkicks_comp
+        return dkicks_all
 
     def _do_measure(self):
         tune, tunecorr = self.devices['tune'], self.devices['tunecorr']
@@ -149,6 +191,7 @@ class TurnOffCorr(_ThreadBaseClass):
             _time.sleep(prms.wait_tunecorr)
 
         self.tunex0, self.tuney0 = tune.tunex, tune.tuney
+
         for chname in self.chs_subset:
             print(chname)
             # this method will return the data set
