@@ -11,12 +11,11 @@ import seaborn as _sns
 
 
 class BPMeasure:
-    def __init__(self, bo=None, Ax=None, Ay=None):
+    def __init__(self, bo=None):
         """."""
         self._bo = bo
-        self._Ax = Ax
-        self._Ay = Ay
-        self._QF_KL_default = 0.18862733  # Default KL of QF quadrupoles
+        self._QF_KL_default = 0.18862733  # Default KL of QF quadrupoles at
+        # high energy
 
     def create_booster(self, rad=True, QF_KL=None, KsL=None):
         """."""
@@ -33,14 +32,11 @@ class BPMeasure:
 
         # Introducing coupling:
         if KsL is not None:
-            qs_idx = self._famdata['QS']['index']
-            self._bo[qs_idx[0][0]].KsL = KsL
+            self.change_QS(KsL=KsL)
 
         # Changing QF quadrupole forces:
         if QF_KL is not None:
-            qf_idx = _np.array(self._famdata['QF']['index']).flatten()
-            for qf in qf_idx:
-                self._bo[qf].KL = QF_KL
+            self.change_QF(KL=QF_KL)
 
         # Getting optics information about the machine
         self._et, _ = _pa.optics.calc_edwards_teng(self._bo)
@@ -70,9 +66,17 @@ class BPMeasure:
         self._bunch += co[:, [0]] + offset
 
     def change_QF(self, KL):
+        """."""
         qf_idx = _np.array(self._famdata['QF']['index']).flatten()
         for qf in qf_idx:
             self._bo[qf].KL = KL
+
+    def change_QS(self, KsL):
+        """."""
+        qs_idx = self._famdata['QS']['index']
+        self._bo[qs_idx[0][0]].KsL = KsL
+
+# ------ The above class methods performs specific types of tracking ------ #
 
     def tracking_and_get_bpmdata(self, N_turns=40):
         """."""
@@ -94,6 +98,34 @@ class BPMeasure:
             self._bunch = part_out[:, :, -1]
 
         return x_measures, y_measures
+
+    def emit_exchange_simulation(self, N, KL_crossing):
+        """."""
+        KL_default = self._QF_KL_default
+        step = (KL_crossing - KL_default)/N
+        KL_list = _np.arange(KL_default, 2*KL_crossing, step)
+
+        emit1_list = _np.zeros(2*N)
+        emit2_list = emit1_list.copy()
+        tune1_list, tune2_list = emit1_list.copy(), emit1_list.copy()
+        bunch0 = self._bunch
+
+        for i in range(2*N):
+            self.change_QF(KL=KL_list[i])
+            bunch0, *_ = _pa.tracking.ring_pass(
+                accelerator=self._bo, particles=bunch0,
+                nr_turns=1, parallel=True)
+
+            # Computing the RMS emittance
+            emit1_list[i] = _np.sqrt(_np.linalg.det(_np.cov(bunch0[:2, :])))
+            emit2_list[i] = _np.sqrt(_np.linalg.det(_np.cov(bunch0[2:4, :])))
+
+            # Computing Tunes
+            eqparams = _pa.optics.EqParamsFromBeamEnvelope(self._bo)
+            tune1_list[i], tune2_list[i] = eqparams.tune1, eqparams.tune2
+
+        self._bunch = bunch0
+        return emit1_list, emit2_list, tune1_list, tune2_list
 
 
 # ----- Functions to estimates tune by BPM data --------- #
@@ -175,14 +207,6 @@ def tune_by_NAFF(x_measures, y_measures, window_param=None, decimal_only=True):
     Ax = beta_osc_x.ravel()
     Ay = beta_osc_y.ravel()
 
-    # May we could include the below lines at naff code:
-    px = Ax.size//6
-    if Ax.size % 6 < 1:
-        px -= 1
-    px = 6*px+1
-    Ax = Ax[:px]
-    Ay = Ay[:px]
-
     freqx, _ = _pa.naff.naff_general(Ax, is_real=True, nr_ff=2, window=1)
     freqy, _ = _pa.naff.naff_general(Ay, is_real=True, nr_ff=2, window=1)
     tunex, tuney = M*freqx[0], M*freqy[0]
@@ -198,7 +222,19 @@ def tune_by_NAFF(x_measures, y_measures, window_param=None, decimal_only=True):
         return tunex, tuney
 
 
-def spectrum_evolution(x_m, y_m, dn=None):
+def NAFF_tune_evolution(x_m, y_m, dn):
+    """."""
+    N = x_m.shape[0]
+    tunex_list = _np.zeros(N-dn)
+    tuney_list = tunex_list.copy()
+    for n in range(dn/2, N-dn/2):
+        sub_x_m = x_m[n-dn/2:n+dn/2, :]
+        sub_y_m = y_m[n-dn/2:n+dn/2, :]
+        tunex_list[n], tuney_list[n] = tune_by_NAFF(sub_x_m, sub_y_m)
+    return tunex_list, tuney_list
+
+
+def spectrum_evolution_mixed(x_m, y_m, dn=None):
     """Computes a heatmap with the spectrum evolution along the turns using
     DFT and mixed BPM data"
     Args:
@@ -237,6 +273,47 @@ def spectrum_evolution(x_m, y_m, dn=None):
         tune2_matrix[:, n] = espectrum_y
 
     tune_matrix = tune1_matrix + tune2_matrix
+
+    tune_df = _pd.DataFrame(data=tune_matrix, columns=_np.arange(N-dn),
+                            index=_np.round(freqs, 2))
+    _sns.heatmap(tune_df)
+    _plt.xlabel('Turns')
+    _plt.ylabel("Q")
+
+    return freqs, tune1_matrix, tune2_matrix
+
+
+def spectrum_evolution_mean(x_m, y_m, dn=None):
+    """."""
+    M = x_m.shape[1]
+    N = x_m.shape[0]
+
+    if dn is None:
+        dn = N//10
+
+    freqs = rfftfreq(dn)
+    tune1_matrix = _np.zeros([freqs.size, N-dn])
+    tune2_matrix = tune1_matrix.copy()
+    tune_tensor = _np.zeros([tune1_matrix.shape[0], tune1_matrix.shape[1], M])
+
+    for m in range(M):
+
+        signalx = x_m[:, m]
+        signaly = y_m[:, m]
+
+        for n in range(N-dn):
+            sub_signalx = signalx[n:n+dn]
+            espectrum_x = _np.abs(rfft(sub_signalx))*2*_np.pi/dn
+            tune1_matrix[:, n] = espectrum_x
+
+            sub_signaly = signaly[n:n+dn]
+            espectrum_y = _np.abs(rfft(sub_signaly))*2*_np.pi/dn
+            tune2_matrix[:, n] = espectrum_y
+
+        tune_matrix = tune1_matrix + tune2_matrix
+        tune_tensor[:, :, m] = tune_matrix
+
+    tune_matrix = _np.mean(tune_tensor, axis=2)
 
     tune_df = _pd.DataFrame(data=tune_matrix, columns=_np.arange(N-dn),
                             index=_np.round(freqs, 2))
