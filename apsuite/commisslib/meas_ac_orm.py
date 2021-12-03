@@ -1029,8 +1029,6 @@ class MeasACORM(_ThreadBaseClass):
     # ----------------- Timing related methods -----------------------
 
     def _config_timing(self, cm_delay, sectors=None):
-
-        print('Configuring Timing...', end='')
         trigbpm = self.devices['trigbpms']
         trigcorr = self.devices['trigcorrs']
         evt_study = self.devices['evt_study']
@@ -1043,7 +1041,7 @@ class MeasACORM(_ThreadBaseClass):
         trigcorr.nr_pulses = 1
         trigcorr.source = 'Study'
         ftim = self.devices['rfgen'].frequency / 4  # timing base frequency
-        trigcorr.delay_raw = int(cm_delay * ftim)
+        dly = int(cm_delay * ftim)
 
         # configure event Study to be in External mode
         evt_study.delay = 0
@@ -1053,8 +1051,11 @@ class MeasACORM(_ThreadBaseClass):
         evg.cmd_update_events()
 
         if sectors is None:
+            trigcorr.delay_raw = dly
             print('Done!')
             return
+
+        trigcorr.delay_raw = 0
         # Calculate delta_delay for correctors to be as close as possible to a
         # multiple of the the sampling period to ensure repeatability of
         # experiment along the sectors excited during single acquisition:
@@ -1070,10 +1071,8 @@ class MeasACORM(_ThreadBaseClass):
             # Find all low level triggers of this sector and set their delay:
             for j, llt in enumerate(low_level):
                 if llt.sub.startswith(f'{sec:02d}'):
-                    delta_delay_raw[j] = ddlyr
+                    delta_delay_raw[j] = ddlyr + dly
         trigcorr.delta_delay_raw = delta_delay_raw
-
-        print('Done!')
 
     # ----------------- Correctors related methods -----------------------
 
