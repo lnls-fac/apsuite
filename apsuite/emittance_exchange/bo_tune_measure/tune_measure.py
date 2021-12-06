@@ -78,15 +78,36 @@ class BPMeasure:
 
 # ------ The above class methods performs specific types of tracking ------ #
 
-    def tracking_and_get_bpmdata(self, N_turns=40):
-        """."""
+    def tracking_and_get_bpmdata(self, N_turns=40, KL_crossing=None,
+                                 out_tunes=False):
+        """Outputs the position coordinates at BPMs locations, if KL_crossing
+        is passed, the emittance exchange is simulated."""
+
         bpm_idx = self._famdata['BPM']['index']
         M = len(bpm_idx)
 
         x_measures = _np.zeros([N_turns, M])   # (Turn x BPM)
         y_measures = _np.zeros(x_measures.shape)
 
+        if KL_crossing is not None:
+            N_crossing = N_turns/2
+            KL_default = self._QF_KL_default
+            step = (KL_crossing - KL_default)/N_crossing
+            KL_list = _np.arange(KL_default, 2*KL_crossing, step)
+
+        if out_tunes:
+            tunes = _np.zeros([2, N_turns])
+
         for n in range(N_turns):
+
+            if KL_crossing is not None:
+                self.change_QF(KL=KL_list[n])
+
+            if out_tunes:
+                self._eqparams = _pa.optics.EqParamsFromBeamEnvelope(self._bo)
+                tunes[0, n] = self._eqparams.tune1
+                tunes[1, n] = self._eqparams.tune2
+
             part_out, *_ = _pa.tracking.line_pass(
                 accelerator=self._bo, particles=self._bunch, indices='closed',
                 parallel=True
@@ -97,7 +118,10 @@ class BPMeasure:
             y_measures[n, :] = bpm_measures[2, :]  # Selects  y at all BpM's
             self._bunch = part_out[:, :, -1]
 
-        return x_measures, y_measures
+        if out_tunes:
+            return x_measures, y_measures, tunes
+        else:
+            return x_measures, y_measures
 
     def emit_exchange_simulation(self, N, KL_crossing):
         """."""
@@ -225,11 +249,12 @@ def tune_by_NAFF(x_measures, y_measures, window_param=None, decimal_only=True):
 def NAFF_tune_evolution(x_m, y_m, dn):
     """."""
     N = x_m.shape[0]
-    tunex_list = _np.zeros(N-dn)
+    tunex_list = _np.zeros(N)
     tuney_list = tunex_list.copy()
-    for n in range(dn/2, N-dn/2):
-        sub_x_m = x_m[n-dn/2:n+dn/2, :]
-        sub_y_m = y_m[n-dn/2:n+dn/2, :]
+    a = int(dn/2)
+    for n in range(a, N-a):
+        sub_x_m = x_m[n-a:n+a, :]
+        sub_y_m = y_m[n-a:n+a, :]
         tunex_list[n], tuney_list[n] = tune_by_NAFF(sub_x_m, sub_y_m)
     return tunex_list, tuney_list
 
