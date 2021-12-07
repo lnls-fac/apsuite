@@ -20,7 +20,6 @@ class TurnOffCorrParams(_ParamsBaseClass):
         self.max_tunex_var = 0.005
         self.max_tuney_var = 0.005
         self.chs_idx = []
-        self.cvs_idx = []
         self.nr_orbcorrs = 5
         self.wait_tunecorr = 3  # [s]
 
@@ -36,7 +35,6 @@ class TurnOffCorrParams(_ParamsBaseClass):
         stg += ftmp('max_tunex_var', self.max_tunex_var, '')
         stg += ftmp('max_tuney_var', self.max_tuney_var, '')
         stg += stmp('chs_idx', str(self.chs_idx), '')
-        stg += stmp('cvs_idx', str(self.chs_idx), '')
         stg += dtmp('nr_orbcorrs', self.nr_orbcorrs, '')
         stg += ftmp('wait_tunecorr', self.wait_tunecorr, '[s]')
         return stg
@@ -52,7 +50,6 @@ class TurnOffCorr(_ThreadBaseClass):
             params=params, target=self._do_measure, isonline=isonline)
         self.sofb_data = SOFBFactory.create('SI')
         # self.chs_subset = self.sofb_data.ch_names[self.params.chs_idx]
-        # self.cvs_subset = self.sofb_data.cv_names[self.params.cvs_idx]
         client = _ConfigDBClient(config_type='si_orbcorr_respm')
         respmat = _np.array(client.get_config_value(name='ref_respmat'))
         respmat = _np.reshape(respmat, (320, 281))
@@ -64,8 +61,6 @@ class TurnOffCorr(_ThreadBaseClass):
     def _create_devices(self):
         self.devices.update({
             nme: PowerSupply(nme) for nme in self.sofb_data.ch_names})
-        # self.devices.update({
-        #     nme: PowerSupply(nme) for nme in self.sofb_data.cv_names})
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self.devices['tunecorr'] = TuneCorr(TuneCorr.DEVICES.SI)
@@ -112,20 +107,14 @@ class TurnOffCorr(_ThreadBaseClass):
         """."""
         sofb, prms = self.devices['sofb'], self.params
         corr_dev = self.devices[corr_name]
-        if 'CH' in corr_name:
-            names = self.sofb_data.ch_names
-            enbllist0 = sofb.chenbl.copy()
-        else:
-            names = self.sofb_data.cv_names
-            enbllist0 = sofb.cvenbl.copy()
+        names = self.sofb_data.ch_names
+        enbllist0 = sofb.chenbl.copy()
 
         corr_idx = names.index(corr_name)
         corr_enbl = enbllist0.copy()
         corr_enbl[corr_idx] = 0
-        if 'CH' in corr_name:
-            sofb.chenbl = corr_enbl
-        else:
-            sofb.cvenbl = corr_enbl
+        sofb.chenbl = corr_enbl
+
         kick0 = corr_dev.kick
         kickstep = prms.max_kick_step if kick0 < 0 else -prms.max_kick_step
         rampdown = _np.r_[_np.arange(kick0, 0, kickstep)[1:], 0]
@@ -137,10 +126,7 @@ class TurnOffCorr(_ThreadBaseClass):
         corr_dev.cmd_turn_on()
         rampup = _np.r_[rampdown[::-1][1:], kick0]
         self.apply_corr_ramp(corr_dev, rampup)
-        if 'CH' in corr_name:
-            sofb.chenbl = enbllist0
-        else:
-            sofb.cvenbl = enbllist0
+        sofb.chenbl = enbllist0
         # return data
 
     def calc_delta_orbit(self):
@@ -168,8 +154,7 @@ class TurnOffCorr(_ThreadBaseClass):
         else:
             dkicks = -kicks
         nr_chs = len(self.sofb_data.ch_names)
-        # to be implemented in SOFB device
-        irespmat = self.sofb.irespmat
+        irespmat = self.sofb.invrespmat
         dorbit = self.respmat[:, :nr_chs] @ dkicks
         dkicks_comp = -(irespmat @ dorbit)[:nr_chs-len(self.params.chs_idx)]
 
@@ -196,11 +181,6 @@ class TurnOffCorr(_ThreadBaseClass):
             print(chname)
             # this method will return the data set
             self.do_single_corr(chname)
-
-        for cvname in self.cvs_subset:
-            print(cvname)
-            # this method will return the data set
-            self.do_single_corr(cvname)
 
         if not excx0:
             tune.cmd_disablex()
