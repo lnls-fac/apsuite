@@ -1,7 +1,8 @@
 """."""
 import time as _time
 import numpy as _np
-from siriuspy.devices import PowerSupply, CurrInfoSI, Tune, TuneCorr, SOFB
+from siriuspy.devices import PowerSupply, CurrInfoSI, Tune, TuneCorr, \
+    SOFB, FamBPMs, Trigger, Event, EVG, RFGen
 from siriuspy.sofb.csdev import SOFBFactory
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 
@@ -15,13 +16,16 @@ class TurnOffCorrParams(_ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
-        self.max_kick_step = 30  # [urad]
+        self.max_delta_orbit = 500  # [um]
         self.min_orbres = 5  # [um]
         self.max_tunex_var = 0.005
         self.max_tuney_var = 0.005
         self.chs_idx = []
         self.nr_orbcorrs = 5
         self.wait_tunecorr = 3  # [s]
+        self.wait_iter = 3  # [s]
+        self.nr_points_bpm_acq = 10000
+        self.bpms_timeout = 30  # [s]
 
     def __str__(self):
         """."""
@@ -30,13 +34,16 @@ class TurnOffCorrParams(_ParamsBaseClass):
         stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
 
         stg = ''
-        stg += ftmp('max_kick_step', self.max_kick_step, '')
-        stg += ftmp('min_orbres', self.min_orbres, '')
+        stg += ftmp('max_delta_orbit', self.max_delta_orbit, '[um]')
+        stg += ftmp('min_orbres', self.min_orbres, '[um]')
         stg += ftmp('max_tunex_var', self.max_tunex_var, '')
         stg += ftmp('max_tuney_var', self.max_tuney_var, '')
         stg += stmp('chs_idx', str(self.chs_idx), '')
         stg += dtmp('nr_orbcorrs', self.nr_orbcorrs, '')
         stg += ftmp('wait_tunecorr', self.wait_tunecorr, '[s]')
+        stg += ftmp('wait_iter', self.wait_iter, '[s]')
+        stg += dtmp('nr_points_bpm_acq', self.nr_points_bpm_acq, '')
+        stg += ftmp('bpms_timeout', self.bpms_timeout, '[s]')
         return stg
 
 
@@ -54,22 +61,53 @@ class TurnOffCorr(_ThreadBaseClass):
         respmat = _np.array(client.get_config_value(name='ref_respmat'))
         respmat = _np.reshape(respmat, (320, 281))
         self.respmat = respmat
-        self.tunex0, self.tuney0 = None, None
+        # self.tunex0, self.tuney0 = None, None
         if self.isonline:
             self._create_devices()
 
     def _create_devices(self):
-        self.devices.update({
-            nme: PowerSupply(nme) for nme in self.sofb_data.ch_names})
+        self.devices.update(
+            {nme: PowerSupply(nme) for nme in self.sofb_data.ch_names})
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        self.devices['tunecorr'] = TuneCorr(TuneCorr.DEVICES.SI)
-        self.devices['tunecorr'].cmd_update_reference()
+        # self.devices['tunecorr'] = TuneCorr(TuneCorr.DEVICES.SI)
         self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+        self.devices['sibpms'] = FamBPMs(FamBPMs.DEVICES.SI)
+        self.devices['event'] = Event('Study')
+        self.devices['trigger'] = Trigger('SI-Fam:TI-BPM')
+        self.devices['evg'] = EVG()
+        self.devices['rfgen'] = RFGen()
 
     def get_orbit_data(self):
         """."""
-        return NotImplementedError
+        prms = self.params
+        tune = self.devices['tune']
+        sibpms = self.devices['sibpms']
+        sibpms.mturn_config_acquisition(
+            nr_points_after=prms.nr_points_bpm_acq, nr_points_before=0,
+            acq_rate='Monit1', repeat=False, external=True)
+
+        sibpms.mturn_reset_flags()
+        # self.devices['trigger'].source = 'Study'
+        # self.devices['event'].mode = 'External'
+        # self.devices['evg'].cmd_update_events()
+        self.devices['event'].cmd_external_trigger()
+        ret = sibpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
+        if ret != 0:
+            print(f'Problem waiting BPMs update. Error code: {ret:d}')
+            return dict()
+
+        orbx, orby = sibpms.get_mturn_orbit()
+        chs_names = [self.sofb_data.ch_names[idx] for idx in prms.chs_idx]
+        data = dict()
+        data['timestamp'] = _time.time()
+        data['chs_off'] = chs_names
+        data['stored_current'] = self.devices['currinfo'].current
+        data['orbx'], data['orby'] = orbx, orby
+        data['tunex'], data['tuney'] = tune.tunex, tune.tuney
+        data['mt_acq_rate'] = 'Monit1'
+        data['rf_frequency'] = self.devices['rfgen'].frequency
+        self.data = data
 
     def check_tunes(self):
         """."""
@@ -90,7 +128,7 @@ class TurnOffCorr(_ThreadBaseClass):
             tunecorr.cmd_apply_delta()
             _time.sleep(prms.wait_tune_corr)
             sofb.correct_orbit_manually(
-                        nr_iters=prms.nr_orbcorrs, res=prms.min_orbres)
+                nr_iters=prms.nr_orbcorrs, residue=prms.min_orbres)
 
     @staticmethod
     def apply_corr_ramp(self, corr, ramp):
@@ -100,7 +138,7 @@ class TurnOffCorr(_ThreadBaseClass):
         for kick in ramp:
             corr.kick = kick
             sofb.correct_orbit_manually(
-                nr_iters=prms.nr_orbcorrs, res=prms.min_orbres)
+                nr_iters=prms.nr_orbcorrs, residue=prms.min_orbres)
             self.check_tunes()
 
     def do_single_corr(self, corr_name):
@@ -129,68 +167,92 @@ class TurnOffCorr(_ThreadBaseClass):
         sofb.chenbl = enbllist0
         # return data
 
-    def calc_delta_orbit(self):
-        """."""
+    def _calc_delta_orbit(self):
         chnames = self.sofb_data.ch_names
         nr_chs = len(chnames)
+        app_kicks = self.devices['sofb'].kickch
+        chs_idx = self.params.chs_idx
         kicks = _np.zeros(nr_chs)
-        for idx in self.params.chs_idx:
-            name = chnames[idx]
-            # Do not get kicks from device, get and set from SOFB
-            # PSSOFB will be on, timing event must be set
-            kicks = self.devices[name].kick
-        # delta_kicks = - kicks
+        kicks[chs_idx] = app_kicks[chs_idx]
         delta_orbit = self.respmat[:, :nr_chs] @ (-kicks)
         return delta_orbit, kicks
 
     def _calc_reduction_factor(self, delta_orbit):
-        return self.params.max_delta_orbit/_np.max(abs(delta_orbit))
+        factor = self.params.max_delta_orbit/_np.max(_np.abs(delta_orbit))
+        return min(1, factor)
+
+    def _select_chs(self):
+        sofb, prms = self.devices['sofb'], self.params
+        enbllist0 = sofb.chenbl
+        corr_enbl = enbllist0.copy()
+        corr_enbl[prms.chs_idx] = 0
+        sofb.chenbl = corr_enbl
+        return enbllist0, corr_enbl
 
     def _calc_corrs_compensation(self):
-        delta_orbit, kicks = self.calc_delta_orbit()
-        factor = self._calc_reduction_factor(self, delta_orbit)
-        if factor < 1:
-            dkicks = (1 - factor) * kicks
-        else:
-            dkicks = -kicks
+        delta_orbit, kicks = self._calc_delta_orbit()
+        factor = self._calc_reduction_factor(delta_orbit)
+        dkicks = -factor * kicks
         nr_chs = len(self.sofb_data.ch_names)
-        irespmat = self.sofb.invrespmat
-        dorbit = self.respmat[:, :nr_chs] @ dkicks
-        dkicks_comp = -(irespmat @ dorbit)[:nr_chs-len(self.params.chs_idx)]
 
-        dkicks_all = _np.zeros(nr_chs)
-        dkicks_all[self.params.chs_idx] = dkicks
-        comp = list(set(range(nr_chs)) - set(self.params.ch_idx))
-        dkicks_all[comp] = dkicks_comp
-        return dkicks_all
+        irespmat = self.devices['sofb'].invrespmat
+        dorbit = self.respmat[:, :nr_chs] @ dkicks
+        dkicks_all = -(irespmat @ dorbit)[:nr_chs]
+        dkicks_all[self.params.chs_idx] = dkicks[self.params.chs_idx]
+        return dkicks_all, factor
+
+    def _turn_off_corrs(self):
+        names = self.sofb_data.ch_names
+        print('Turning off CHs...')
+        for idx in self.params.chs_idx:
+            name = names[idx]
+            print(f'  {name:s}')
+            self.devices[name].cmd_turn_off()
 
     def _do_measure(self):
-        tune, tunecorr = self.devices['tune'], self.devices['tunecorr']
+        # tune, tunecorr = self.devices['tune'], self.devices['tunecorr']
         sofb, prms = self.devices['sofb'], self.params
-        excx0, excy0 = tune.enablex, tune.enabley
-        if not excx0:
-            tune.cmd_enablex()
-            _time.sleep(prms.wait_tunecorr)
-        if not excy0:
-            tune.cmd_enabley()
-            _time.sleep(prms.wait_tunecorr)
+        # excx0, excy0 = tune.enablex, tune.enabley
+        # if not excx0:
+        #     tune.cmd_enablex()
+        #     _time.sleep(prms.wait_tunecorr)
+        # if not excy0:
+        #     tune.cmd_enabley()
+        #     _time.sleep(prms.wait_tunecorr)
 
-        self.tunex0, self.tuney0 = tune.tunex, tune.tuney
+        # self.tunex0, self.tuney0 = tune.tunex, tune.tuney
+        _ = self._select_chs()
+        factor = 0
+        iter_idx = 1
+        while factor < 1:
+            delta_kicks, factor = self._calc_corrs_compensation()
+            print(f'Iter: {iter_idx:02d}, factor: {factor:.3f}')
+            sofb.deltakickch = delta_kicks
+            sofb.cmd_applycorr_ch()
+            sofb.wait_apply_delta_kick()
+            print('  Correcting the orbit...')
+            sofb.correct_orbit_manually(
+                nr_iters=prms.nr_orbcorrs, residue=prms.min_orbres)
+            _time.sleep(prms.wait_iter)
+            iter_idx += 1
 
-        for chname in self.chs_subset:
-            print(chname)
-            # this method will return the data set
-            self.do_single_corr(chname)
-
-        if not excx0:
-            tune.cmd_disablex()
-        if not excy0:
-            tune.cmd_disabley()
-
-        print('Restoring Quadrupoles Configuration...')
-        tunecorr.delta_tunex = 0
-        tunecorr.delta_tuney = 0
-        tunecorr.cmd_apply_delta()
-        _time.sleep(prms.wait_tune_corr)
+        self._turn_off_corrs()
+        print('  Correcting the orbit...')
         sofb.correct_orbit_manually(
-                    nr_iters=prms.nr_orbcorrs, res=prms.min_orbres)
+            nr_iters=prms.nr_orbcorrs, residue=prms.min_orbres)
+
+        print('Done!')
+        # if not excx0:
+        #     tune.cmd_disablex()
+        # if not excy0:
+        #     tune.cmd_disabley()
+
+        # print('Restoring Quadrupoles Configuration...')
+        # tunecorr.delta_tunex = 0
+        # tunecorr.delta_tuney = 0
+        # tunecorr.cmd_apply_delta()
+        # _time.sleep(prms.wait_tune_corr)
+
+        # sofb.chenbl = enbllist0
+        # sofb.correct_orbit_manually(
+        #     nr_iters=prms.nr_orbcorrs, residue=prms.min_orbres)
