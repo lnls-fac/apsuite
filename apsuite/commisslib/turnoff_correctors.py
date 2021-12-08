@@ -50,6 +50,8 @@ class TurnOffCorrParams(_ParamsBaseClass):
 class TurnOffCorr(_ThreadBaseClass):
     """."""
 
+    MIN_CURRENT = 0.1
+
     def __init__(self, params=None, isonline=True):
         """."""
         params = TurnOffCorrParams() if params is None else params
@@ -57,20 +59,22 @@ class TurnOffCorr(_ThreadBaseClass):
             params=params, target=self._do_measure, isonline=isonline)
         self.sofb_data = SOFBFactory.create('SI')
         # self.chs_subset = self.sofb_data.ch_names[self.params.chs_idx]
-        client = _ConfigDBClient(config_type='si_orbcorr_respm')
-        respmat = _np.array(client.get_config_value(name='ref_respmat'))
-        respmat = _np.reshape(respmat, (320, 281))
-        self.respmat = respmat
-        # self.tunex0, self.tuney0 = None, None
+        # client = _ConfigDBClient(config_type='si_orbcorr_respm')
+        # respmat = _np.array(client.get_config_value(name='ref_respmat'))
+        # respmat = _np.reshape(respmat, (320, 281))
+        # self.respmat = respmat
+        self.tunex0, self.tuney0 = None, None
+        self.initial_kicks = None
         if self.isonline:
             self._create_devices()
+            self.respmat = self.devices['sofb'].respmat
 
     def _create_devices(self):
         self.devices.update(
             {nme: PowerSupply(nme) for nme in self.sofb_data.ch_names})
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        # self.devices['tunecorr'] = TuneCorr(TuneCorr.DEVICES.SI)
+        self.devices['tunecorr'] = TuneCorr(TuneCorr.DEVICES.SI)
         self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
         self.devices['sibpms'] = FamBPMs(FamBPMs.DEVICES.SI)
         self.devices['event'] = Event('Study')
@@ -112,7 +116,6 @@ class TurnOffCorr(_ThreadBaseClass):
     def check_tunes(self):
         """."""
         tunecorr, tune = self.devices['tunecorr'], self.devices['tune']
-        sofb = self.devices['sofb']
         prms = self.params
 
         dnux0, dnuy0 = tunecorr.delta_tunex, tunecorr.delta_tuney
@@ -121,14 +124,17 @@ class TurnOffCorr(_ThreadBaseClass):
         cond = abs(dnux) > prms.max_tunex_var
         cond |= abs(dnuy) > prms.max_tuney_var
         if cond:
-            print('Tune Correction...')
-            print(f'DeltaTunex: {dnux0:.4f}, DeltaTuneY: {dnuy0:.4f}')
+            print('  Tune Correction...')
+            print(
+                f'    Initial Tunes x: {tune.tunex:.4f}, y: {tune.tuney:.4f}')
+            print(
+                f'    DeltaTunex: {dnux:.4f}, DeltaTuneY: {dnuy:.4f}')
             tunecorr.delta_tunex = dnux0 + dnux
             tunecorr.delta_tuney = dnuy0 + dnuy
             tunecorr.cmd_apply_delta()
-            _time.sleep(prms.wait_tune_corr)
-            sofb.correct_orbit_manually(
-                nr_iters=prms.nr_orbcorrs, residue=prms.min_orbres)
+            _time.sleep(prms.wait_tunecorr)
+            print(
+                f'    Final Tunes x: {tune.tunex:.4f}, y: {tune.tuney:.4f}')
 
     @staticmethod
     def apply_corr_ramp(self, corr, ramp):
@@ -157,10 +163,7 @@ class TurnOffCorr(_ThreadBaseClass):
         kickstep = prms.max_kick_step if kick0 < 0 else -prms.max_kick_step
         rampdown = _np.r_[_np.arange(kick0, 0, kickstep)[1:], 0]
         self.apply_corr_ramp(corr_dev, rampdown)
-        # To turn on and off the PSSOFB mode must be disabled
         corr_dev.cmd_turn_off()
-        # Measure Orbit
-        # data = self.get_orbit_data()
         corr_dev.cmd_turn_on()
         rampup = _np.r_[rampdown[::-1][1:], kick0]
         self.apply_corr_ramp(corr_dev, rampup)
@@ -209,50 +212,76 @@ class TurnOffCorr(_ThreadBaseClass):
             print(f'  {name:s}')
             self.devices[name].cmd_turn_off()
 
-    def _do_measure(self):
-        # tune, tunecorr = self.devices['tune'], self.devices['tunecorr']
-        sofb, prms = self.devices['sofb'], self.params
-        # excx0, excy0 = tune.enablex, tune.enabley
-        # if not excx0:
-        #     tune.cmd_enablex()
-        #     _time.sleep(prms.wait_tunecorr)
-        # if not excy0:
-        #     tune.cmd_enabley()
-        #     _time.sleep(prms.wait_tunecorr)
+    def _turn_on_corrs(self):
+        names = self.sofb_data.ch_names
+        print('Turning on CHs...')
+        for idx in self.params.chs_idx:
+            name = names[idx]
+            print(f'  {name:s}')
+            self.devices[name].cmd_turn_on()
 
-        # self.tunex0, self.tuney0 = tune.tunex, tune.tuney
+    def _do_measure(self):
+        tune, tunecorr = self.devices['tune'], self.devices['tunecorr']
+        sofb, prms = self.devices['sofb'], self.params
+        excx0, excy0 = tune.enablex, tune.enabley
+        if not excx0:
+            tune.cmd_enablex()
+            _time.sleep(prms.wait_tunecorr)
+        if not excy0:
+            tune.cmd_enabley()
+            _time.sleep(prms.wait_tunecorr)
+
+        self.initial_kicks = sofb.kickch
+        tunecorr.cmd_update_reference()
+        self.tunex0, self.tuney0 = tune.tunex, tune.tuney
         _ = self._select_chs()
         factor = 0
         iter_idx = 1
-        while factor < 1:
+        beam_dump = False
+        while factor < 1 and not self._stopevt.is_set():
+            if self.devices['currinfo'].current < self.MIN_CURRENT:
+                beam_dump = True
+                print('Beam dump, exiting...')
+                break
             delta_kicks, factor = self._calc_corrs_compensation()
             print(f'Iter: {iter_idx:02d}, factor: {factor:.3f}')
             sofb.deltakickch = delta_kicks
             sofb.cmd_applycorr_ch()
             sofb.wait_apply_delta_kick()
+            self.check_tunes()
             print('  Correcting the orbit...')
             sofb.correct_orbit_manually(
                 nr_iters=prms.nr_orbcorrs, residue=prms.min_orbres)
             _time.sleep(prms.wait_iter)
             iter_idx += 1
 
-        self._turn_off_corrs()
-        print('  Correcting the orbit...')
-        sofb.correct_orbit_manually(
-            nr_iters=prms.nr_orbcorrs, residue=prms.min_orbres)
+        if not beam_dump and not self._stopevt.is_set():
+            self._turn_off_corrs()
+            print('  Correcting the orbit...')
+            sofb.correct_orbit_manually(
+                nr_iters=prms.nr_orbcorrs, residue=prms.min_orbres)
+            print('Done!')
+        elif self._stopevt.is_set():
+            print('Stop was set, exiting...')
 
+        if not excx0:
+            tune.cmd_disablex()
+        if not excy0:
+            tune.cmd_disabley()
+
+    def restore_initial_state(self):
+        """."""
+        tunecorr, sofb = self.devices['tunecorr'], self.devices['sofb']
+        tunecorr.cmd_update_reference()
+
+        self._turn_on_corrs()
+
+        enbllist0 = sofb.chenbl
+        sofb.chenbl = [1]*len(enbllist0)
+        diff = _np.max(_np.abs(sofb.kickch - self.initial_kicks))
+        while diff > 10:
+            print(f'Max. Diff in CHs: {diff:.2f} [urad]')
+            sofb.correct_orbit_manually(nr_iters=1)
+            self.check_tunes()
+            diff = _np.max(_np.abs(sofb.kickch - self.initial_kicks))
         print('Done!')
-        # if not excx0:
-        #     tune.cmd_disablex()
-        # if not excy0:
-        #     tune.cmd_disabley()
-
-        # print('Restoring Quadrupoles Configuration...')
-        # tunecorr.delta_tunex = 0
-        # tunecorr.delta_tuney = 0
-        # tunecorr.cmd_apply_delta()
-        # _time.sleep(prms.wait_tune_corr)
-
-        # sofb.chenbl = enbllist0
-        # sofb.correct_orbit_manually(
-        #     nr_iters=prms.nr_orbcorrs, residue=prms.min_orbres)
