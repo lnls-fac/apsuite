@@ -3,6 +3,7 @@ import numpy as np
 import pyaccel as pa
 import pymodels as pm
 from plots import plot_phase_diagram, plot_phase_diagram2, plot_xtrajectories
+from nlk import si_nlk_kick
 import matplotlib.pyplot as plt
 
 
@@ -246,7 +247,7 @@ class Injection:
         # I dont implement the above line because I think that the actual
         # Sirius model has the vaacum chamber with true dimensions at all ring.
 
-    def sets_nlk_and_kicks_beam(self):
+    def sets_nlk_and_kicks_beam(self, plot):
 
         # Calcs stored beam and acceptance
         co = pa.tracking.find_orbit6(self._si, indices=[0])
@@ -260,14 +261,24 @@ class Injection:
                                                   indices=[0])
         bunch = pa.tracking.generate_bunch(n_part=self._nparticles,
                                            envelope=si_envelope)
-        self.si_estored_bunch = bunch[0] + co
+        self.si_estored_bunch = bunch + co
 
         # gets nlk pulse parameters
         self._si_nlk_pulse = np.concatenate(
             [self._si_nlk_pulse,
              np.zeros(self._nturns - len(self._si_nlk_pulse))]
             )
-    
+        x, integ_field, kickx, self.LPolyB = si_nlk_kick(
+            strength=self._si_nlk_strength, plot_flag=plot)
+
+        # sets nlk
+        pass
+
+    def sets_nlk(self, old_si, nlk_idx, strength, LPolyB):
+        # I think that we dont need all of above parameters
+        si = old_si
+        # si_nlk_len =
+
     def vary_si_nlk_strength(self):
         pass
 
