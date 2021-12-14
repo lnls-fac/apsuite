@@ -263,8 +263,8 @@ class TurnOffCorr(_ThreadBaseClass):
         maximum orbit distortion given by params.max_delta_orbit.
         The actual COD after each kick reduction is always smaller than
         params.max_delta_orbit since the compensation with the remaining CHs
-        is applied at the same time. Therefore some params.max_delta_orbit
-        admits some flexibility.
+        is applied at the same time. Therefore params.max_delta_orbit admits
+        some flexibility.
 
         Once CHs kicks reach zero, then its power supplies are turned off.
         If a beam dump occurs during the process, it will be aborted.
