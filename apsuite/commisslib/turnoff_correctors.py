@@ -40,6 +40,7 @@ class TurnOffCorrParams(_ParamsBaseClass):
         stg += ftmp('max_tuney_var', self.max_tuney_var, '')
         stg += stmp('chs_idx', str(self.chs_idx), '')
         stg += dtmp('nr_orbcorrs', self.nr_orbcorrs, '')
+        stg += dtmp('nr_tunecorrs', self.nr_tunecorrs, '')
         stg += ftmp('wait_tunecorr', self.wait_tunecorr, '[s]')
         stg += ftmp('wait_iter', self.wait_iter, '[s]')
         stg += dtmp('nr_points_bpm_acq', self.nr_points_bpm_acq, '')
@@ -159,22 +160,26 @@ class TurnOffCorr(_ThreadBaseClass):
         prms = self.params
 
         dnux0, dnuy0 = tunecorr.delta_tunex, tunecorr.delta_tuney
-        dnux = self.tunex0 - tune.tunex
-        dnuy = self.tuney0 - tune.tuney
+        dnux = dnux0 + self.initial_tunex - tune.tunex
+        dnuy = dnuy0 + self.initial_tuney - tune.tuney
         cond = abs(dnux) > prms.max_tunex_var
         cond |= abs(dnuy) > prms.max_tuney_var
         if cond:
             print('  Tune Correction...')
-            print(
-                f'    Initial Tunes x: {tune.tunex:.4f}, y: {tune.tuney:.4f}')
-            print(
-                f'    DeltaTunex: {dnux:.4f}, DeltaTuneY: {dnuy:.4f}')
-            tunecorr.delta_tunex = dnux0 + dnux
-            tunecorr.delta_tuney = dnuy0 + dnuy
-            tunecorr.cmd_apply_delta()
-            _time.sleep(prms.wait_tunecorr)
-            print(
-                f'    Final Tunes x: {tune.tunex:.4f}, y: {tune.tuney:.4f}')
+
+            stg = '   Tunes Before Corr.: '
+            print(stg + f'x: {tune.tunex:.4f}, y: {tune.tuney:.4f}')
+            stg = '   Delta Tunes: '
+            for _ in range(prms.nr_tunecorrs):
+                print(stg + f'x: {dnux:.4f}, y: {dnuy:.4f}')
+                tunecorr.delta_tunex = dnux
+                tunecorr.delta_tuney = dnuy
+                tunecorr.cmd_apply_delta()
+                _time.sleep(prms.wait_tunecorr)
+                dnux += self.initial_tunex - tune.tunex
+                dnuy += self.initial_tuney - tune.tuney
+            stg = '   Tunes After Corr.: '
+            print(stg + f'x: {tune.tunex:.4f}, y: {tune.tuney:.4f}')
 
     @staticmethod
     def apply_corr_ramp(self, corr, ramp):
@@ -273,8 +278,7 @@ class TurnOffCorr(_ThreadBaseClass):
 
         self.initial_kicks = sofb.kickch
         tunecorr.cmd_update_reference()
-        self.tunex0, self.tuney0 = tune.tunex, tune.tuney
-        _ = self._select_chs()
+        self.initial_tunex, self.initial_tuney = tune.tunex, tune.tuney
         factor = 0
         iter_idx = 1
         beam_dump = False
