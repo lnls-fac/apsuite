@@ -51,24 +51,28 @@ class TurnOffCorrParams(_ParamsBaseClass):
 class TurnOffCorr(_ThreadBaseClass):
     """."""
 
-    MIN_CURRENT = 0.1
+    MIN_CURRENT = 0.1  # [mA]
+    MAX_KICK_TOL_TO_RECOVER = 10  # [urad]
 
-    def __init__(self, params=None, isonline=True):
+    def __init__(self, params=None, isonline=True, use_sofb_respmat=True):
         """."""
         params = TurnOffCorrParams() if params is None else params
         super().__init__(
-            params=params, target=self._do_measure, isonline=isonline)
+            params=params, target=self._do_process, isonline=isonline)
         self.sofb_data = SOFBFactory.create('SI')
-        # self.chs_subset = self.sofb_data.ch_names[self.params.chs_idx]
-        # client = _ConfigDBClient(config_type='si_orbcorr_respm')
-        # respmat = _np.array(client.get_config_value(name='ref_respmat'))
-        # respmat = _np.reshape(respmat, (320, 281))
-        # self.respmat = respmat
-        self.tunex0, self.tuney0 = None, None
-        self.initial_kicks = None
+        self._initial_tunex, self._initial_tuney = None, None
+        self._initial_kicks = None
+        self._respmat = None
         if self.isonline:
             self._create_devices()
-            self.respmat = self.devices['sofb'].respmat
+            if use_sofb_respmat:
+                self.respmat = self.devices['sofb'].respmat
+            else:
+                client = _ConfigDBClient(config_type='si_orbcorr_respm')
+                respmat = client.get_config_value(name='ref_respmat')
+                respmat = _np.reshape(_np.array(respmat), (320, 281))
+                self.respmat = respmat
+
     @property
     def respmat(self):
         """."""
@@ -181,48 +185,21 @@ class TurnOffCorr(_ThreadBaseClass):
             stg = '   Tunes After Corr.: '
             print(stg + f'x: {tune.tunex:.4f}, y: {tune.tuney:.4f}')
 
-    @staticmethod
-    def apply_corr_ramp(self, corr, ramp):
-        """."""
-        sofb = self.devices['sofb']
-        prms = self.params
-        for kick in ramp:
-            corr.kick = kick
-            sofb.correct_orbit_manually(
-                nr_iters=prms.nr_orbcorrs, residue=prms.min_orbres)
-            self.check_tunes()
-
-    def do_single_corr(self, corr_name):
-        """."""
+    def _select_chs(self):
         sofb, prms = self.devices['sofb'], self.params
-        corr_dev = self.devices[corr_name]
-        names = self.sofb_data.ch_names
-        enbllist0 = sofb.chenbl.copy()
-
-        corr_idx = names.index(corr_name)
+        enbllist0 = sofb.chenbl
         corr_enbl = enbllist0.copy()
-        corr_enbl[corr_idx] = 0
+        corr_enbl[prms.chs_idx] = 0
         sofb.chenbl = corr_enbl
-
-        kick0 = corr_dev.kick
-        kickstep = prms.max_kick_step if kick0 < 0 else -prms.max_kick_step
-        rampdown = _np.r_[_np.arange(kick0, 0, kickstep)[1:], 0]
-        self.apply_corr_ramp(corr_dev, rampdown)
-        corr_dev.cmd_turn_off()
-        corr_dev.cmd_turn_on()
-        rampup = _np.r_[rampdown[::-1][1:], kick0]
-        self.apply_corr_ramp(corr_dev, rampup)
-        sofb.chenbl = enbllist0
-        # return data
 
     def _calc_delta_orbit(self):
         chnames = self.sofb_data.ch_names
         nr_chs = len(chnames)
         app_kicks = self.devices['sofb'].kickch
         chs_idx = self.params.chs_idx
-        kicks = _np.zeros(nr_chs)
+        kicks = _np.zeros(self.nr_chs)
         kicks[chs_idx] = app_kicks[chs_idx]
-        delta_orbit = self.respmat[:, :nr_chs] @ (-kicks)
+        delta_orbit = self.respmat[:, :self.nr_chs] @ (-kicks)
         return delta_orbit, kicks
 
     def _calc_reduction_factor(self, delta_orbit):
@@ -244,8 +221,8 @@ class TurnOffCorr(_ThreadBaseClass):
         nr_chs = len(self.sofb_data.ch_names)
 
         irespmat = self.devices['sofb'].invrespmat
-        dorbit = self.respmat[:, :nr_chs] @ dkicks
-        dkicks_all = -(irespmat @ dorbit)[:nr_chs]
+        dorbit = self.respmat[:, :self.nr_chs] @ dkicks
+        dkicks_all = -(irespmat @ dorbit)[:self.nr_chs]
         dkicks_all[self.params.chs_idx] = dkicks[self.params.chs_idx]
         return dkicks_all, factor
 
@@ -279,6 +256,7 @@ class TurnOffCorr(_ThreadBaseClass):
         self.initial_kicks = sofb.kickch
         tunecorr.cmd_update_reference()
         self.initial_tunex, self.initial_tuney = tune.tunex, tune.tuney
+        self._select_chs()
         factor = 0
         iter_idx = 1
         beam_dump = False
@@ -323,9 +301,14 @@ class TurnOffCorr(_ThreadBaseClass):
         enbllist0 = sofb.chenbl
         sofb.chenbl = [1]*len(enbllist0)
         diff = _np.max(_np.abs(sofb.kickch - self.initial_kicks))
-        while diff > 10:
+        beam_dump = False
+        while diff > self.MAX_KICK_TOL_TO_RECOVER:
+            if self.devices['currinfo'].current < self.MIN_CURRENT:
+                beam_dump = True
+                print('Beam dump, exiting...')
+                break
             print(f'Max. Diff in CHs: {diff:.2f} [urad]')
             sofb.correct_orbit_manually(nr_iters=1)
             self.check_tunes()
             diff = _np.max(_np.abs(sofb.kickch - self.initial_kicks))
-        print('Done!')
+        print('' if beam_dump else 'Done!')
