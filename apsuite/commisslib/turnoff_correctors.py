@@ -68,6 +68,46 @@ class TurnOffCorr(_ThreadBaseClass):
         if self.isonline:
             self._create_devices()
             self.respmat = self.devices['sofb'].respmat
+    @property
+    def respmat(self):
+        """."""
+        return self._respmat
+
+    @respmat.setter
+    def respmat(self, value):
+        self._respmat = value
+
+    @property
+    def initial_kicks(self):
+        """."""
+        return self._initial_kicks
+
+    @initial_kicks.setter
+    def initial_kicks(self, value):
+        self._initial_kicks = value
+
+    @property
+    def initial_tunex(self):
+        """."""
+        return self._initial_tunex
+
+    @initial_tunex.setter
+    def initial_tunex(self, value):
+        self._initial_tunex = value
+
+    @property
+    def initial_tuney(self):
+        """."""
+        return self._initial_tuney
+
+    @initial_tuney.setter
+    def initial_tuney(self, value):
+        self._initial_tuney = value
+
+    @property
+    def nr_chs(self):
+        """."""
+        return len(self.sofb_data.ch_names)
 
     def _create_devices(self):
         self.devices.update(
