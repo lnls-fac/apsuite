@@ -2,7 +2,7 @@
 import time as _time
 import numpy as _np
 from siriuspy.devices import PowerSupply, CurrInfoSI, Tune, TuneCorr, \
-    SOFB, FamBPMs, Trigger, Event, EVG, RFGen
+    SOFB, FamBPMs, Event, RFGen
 from siriuspy.sofb.csdev import SOFBFactory
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 
@@ -22,6 +22,7 @@ class TurnOffCorrParams(_ParamsBaseClass):
         self.max_tuney_var = 0.005
         self.chs_idx = []
         self.nr_orbcorrs = 5
+        self.nr_tunecorrs = 3
         self.wait_tunecorr = 3  # [s]
         self.wait_iter = 3  # [s]
         self.nr_points_bpm_acq = 10000
@@ -123,12 +124,28 @@ class TurnOffCorr(_ThreadBaseClass):
         self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
         self.devices['sibpms'] = FamBPMs(FamBPMs.DEVICES.SI)
         self.devices['event'] = Event('Study')
-        self.devices['trigger'] = Trigger('SI-Fam:TI-BPM')
-        self.devices['evg'] = EVG()
         self.devices['rfgen'] = RFGen()
 
     def get_orbit_data(self):
-        """."""
+        """Get orbit data from BPMs in Monit1 acquisiton rate.
+
+        BPMs must be configure to listen to Study event and the Study event
+        must be in External mode.
+
+        Saves a data dict in self.data with the following keys:
+            - timestamp
+            - chs_off: names of CHs turned off during the measurement
+            - stored_current
+            - orbx: horizontal orbit data - (160, nsamples) array
+            - orby: vertical orbit data - (160, nsamples) array
+            - tunex: horizontal betatron tune
+            - tuney: vertical betatron tune
+            - mt_acq_rate: MultiTurn acquision rate (always Monit1)
+            - rf_frequency
+
+        After running get_orbit_data() the user can save the data to .pickle
+        file with the class method save_data(fname).
+        """
         prms = self.params
         tune = self.devices['tune']
         sibpms = self.devices['sibpms']
@@ -137,9 +154,6 @@ class TurnOffCorr(_ThreadBaseClass):
             acq_rate='Monit1', repeat=False, external=True)
 
         sibpms.mturn_reset_flags()
-        # self.devices['trigger'].source = 'Study'
-        # self.devices['event'].mode = 'External'
-        # self.devices['evg'].cmd_update_events()
         self.devices['event'].cmd_external_trigger()
         ret = sibpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
         if ret != 0:
@@ -193,8 +207,6 @@ class TurnOffCorr(_ThreadBaseClass):
         sofb.chenbl = corr_enbl
 
     def _calc_delta_orbit(self):
-        chnames = self.sofb_data.ch_names
-        nr_chs = len(chnames)
         app_kicks = self.devices['sofb'].kickch
         chs_idx = self.params.chs_idx
         kicks = _np.zeros(self.nr_chs)
@@ -206,19 +218,10 @@ class TurnOffCorr(_ThreadBaseClass):
         factor = self.params.max_delta_orbit/_np.max(_np.abs(delta_orbit))
         return min(1, factor)
 
-    def _select_chs(self):
-        sofb, prms = self.devices['sofb'], self.params
-        enbllist0 = sofb.chenbl
-        corr_enbl = enbllist0.copy()
-        corr_enbl[prms.chs_idx] = 0
-        sofb.chenbl = corr_enbl
-        return enbllist0, corr_enbl
-
     def _calc_corrs_compensation(self):
         delta_orbit, kicks = self._calc_delta_orbit()
         factor = self._calc_reduction_factor(delta_orbit)
         dkicks = -factor * kicks
-        nr_chs = len(self.sofb_data.ch_names)
 
         irespmat = self.devices['sofb'].invrespmat
         dorbit = self.respmat[:, :self.nr_chs] @ dkicks
@@ -242,7 +245,30 @@ class TurnOffCorr(_ThreadBaseClass):
             print(f'  {name:s}')
             self.devices[name].cmd_turn_on()
 
-    def _do_measure(self):
+    def _do_process(self):
+        """Ramp down and turn off CHs subset while keeping stored beam.
+
+        Perform the process of ramping down the kicks for a list of specific
+        horizontal correctors until zero current and then turn off its power
+        supplies, while correcting COD and tunes.
+
+        At each iteration:
+            - calc. expected COD due to reduction in CHs subset
+            - calc. kicks in remaining CHs to compensate the expected COD
+            - apply kicks that reduces the CHs subset and also compensate COD
+            - check betatron tunes drifts and if so, correct the tunes
+            - apply a few orbit corrections to minimize the residual COD
+
+        Kick variations during the CHs ramping down are limited to produce a
+        maximum orbit distortion given by params.max_delta_orbit.
+        The actual COD after each kick reduction is always smaller than
+        params.max_delta_orbit since the compensation with the remaining CHs
+        is applied at the same time. Therefore some params.max_delta_orbit
+        admits some flexibility.
+
+        Once CHs kicks reach zero, then its power supplies are turned off.
+        If a beam dump occurs during the process, it will be aborted.
+        """
         tune, tunecorr = self.devices['tune'], self.devices['tunecorr']
         sofb, prms = self.devices['sofb'], self.params
         excx0, excy0 = tune.enablex, tune.enabley
@@ -292,10 +318,17 @@ class TurnOffCorr(_ThreadBaseClass):
             tune.cmd_disabley()
 
     def restore_initial_state(self):
-        """."""
+        """Include CHs back in orbit correction while keeping stored beam.
+
+        Basically this method does the opposite of _do_process().
+        Turn on power supplies of initially removed CHs subset, include it in
+        SOFB and perform orbit corrections while checking for tune drifs.
+        If the max. difference between applied and initial kicks in CHs are
+        less than self.MAX_KICK_TOL_TO_RECOVER, then it is considered that the
+        initial correctors state was recovered.
+        """
         tunecorr, sofb = self.devices['tunecorr'], self.devices['sofb']
         tunecorr.cmd_update_reference()
-
         self._turn_on_corrs()
 
         enbllist0 = sofb.chenbl
