@@ -52,7 +52,6 @@ class TurnOffCorrParams(_ParamsBaseClass):
 class TurnOffCorr(_ThreadBaseClass):
     """."""
 
-    MIN_CURRENT = 0.1  # [mA]
     MAX_KICK_TOL_TO_RECOVER = 10  # [urad]
 
     def __init__(self, params=None, isonline=True, use_sofb_respmat=True):
@@ -114,6 +113,12 @@ class TurnOffCorr(_ThreadBaseClass):
     def nr_chs(self):
         """."""
         return len(self.sofb_data.ch_names)
+
+    @property
+    def havebeam(self):
+        """."""
+        haveb = self.devices['currinfo']
+        return haveb.connected and haveb.storedbeam
 
     def _create_devices(self):
         self.devices.update(
@@ -285,11 +290,9 @@ class TurnOffCorr(_ThreadBaseClass):
         self._select_chs()
         factor = 0
         iter_idx = 1
-        beam_dump = False
         while factor < 1 and not self._stopevt.is_set():
-            if self.devices['currinfo'].current < self.MIN_CURRENT:
-                beam_dump = True
-                print('Beam dump, exiting...')
+            if not self.havebeam:
+                print('Beam was lost, exiting...')
                 break
             delta_kicks, factor = self._calc_corrs_compensation()
             print(f'Iter: {iter_idx:02d}, factor: {factor:.3f}')
@@ -303,7 +306,7 @@ class TurnOffCorr(_ThreadBaseClass):
             _time.sleep(prms.wait_iter)
             iter_idx += 1
 
-        if not beam_dump and not self._stopevt.is_set():
+        if self.havebeam and not self._stopevt.is_set():
             self._turn_off_corrs()
             print('  Correcting the orbit...')
             sofb.correct_orbit_manually(
@@ -334,14 +337,12 @@ class TurnOffCorr(_ThreadBaseClass):
         enbllist0 = sofb.chenbl
         sofb.chenbl = [1]*len(enbllist0)
         diff = _np.max(_np.abs(sofb.kickch - self.initial_kicks))
-        beam_dump = False
         while diff > self.MAX_KICK_TOL_TO_RECOVER:
-            if self.devices['currinfo'].current < self.MIN_CURRENT:
-                beam_dump = True
-                print('Beam dump, exiting...')
+            if not self.havebeam:
+                print('Beam was lost, exiting...')
                 break
             print(f'Max. Diff in CHs: {diff:.2f} [urad]')
             sofb.correct_orbit_manually(nr_iters=1)
             self.check_tunes()
             diff = _np.max(_np.abs(sofb.kickch - self.initial_kicks))
-        print('' if beam_dump else 'Done!')
+        print('Done!' if self.havebeam else '')
