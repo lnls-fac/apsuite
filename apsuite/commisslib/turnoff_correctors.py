@@ -254,7 +254,7 @@ class TurnOffCorr(_ThreadBaseClass):
         """Ramp down and turn off CHs subset while keeping stored beam.
 
         Perform the process of ramping down the kicks for a list of specific
-        horizontal correctors until zero current and then turn off its power
+        horizontal correctors until zero current and then turn off their power
         supplies, while correcting COD and tunes.
 
         At each iteration:
@@ -271,7 +271,7 @@ class TurnOffCorr(_ThreadBaseClass):
         is applied at the same time. Therefore params.max_delta_orbit admits
         some flexibility.
 
-        Once CHs kicks reach zero, then its power supplies are turned off.
+        Once CHs kicks reach zero, then their power supplies are turned off.
         If a beam dump occurs during the process, it will be aborted.
         """
         tune, tunecorr = self.devices['tune'], self.devices['tunecorr']
