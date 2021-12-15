@@ -3,6 +3,20 @@ from mathphys.beam_optics import beam_rigidity
 import matplotlib.pyplot as plt
 
 
+def polyfit(x, y, n):
+    x = x.reshape([-1, 1])  # transforms into a column vector
+    y = y.reshape([-1, 1])
+    n = np.array(n).reshape([1, -1])  # transforms into a row vector
+
+    xn = x**n
+    b = np.dot(xn.T, y)
+    X = np.dot(xn.T, xn)
+    coeffs = np.linalg.solve(X, b)
+    y_fit = np.dot(xn, coeffs)
+
+    return coeffs, y_fit
+
+
 def si_nlk_kick(strength=None, fit_monomials=None, plot_flag=False, r0=0.0):
 
     if fit_monomials is None:
@@ -65,12 +79,11 @@ def si_nlk_kick(strength=None, fit_monomials=None, plot_flag=False, r0=0.0):
     )
 
     x = maxfield[:, 0]*1e-3
-    brho, *_ = beam_rigidity(energy=3e9)
+    brho, *_ = beam_rigidity(energy=3)  # Energy in GeV
     integ_field = strength * maxfield[:, 1]
     kickx = integ_field / brho
 
-    coeffs = np.polyfit(x=x-r0, y=kickx, deg=np.max(fit_monomials))
-    fit_kickx = np.polyval(coeffs, x)
+    coeffs, fit_kickx = polyfit(x=x-r0, y=kickx, n=fit_monomials)
 
     if plot_flag:
         plt.figure()
@@ -83,6 +96,5 @@ def si_nlk_kick(strength=None, fit_monomials=None, plot_flag=False, r0=0.0):
         plt.legend()
 
     LPolyB = np.zeros([1, 1 + np.max(fit_monomials)])
-    LPolyB[0, fit_monomials] = - np.flip(coeffs)
-
+    LPolyB[0][fit_monomials] = -coeffs[:, 0]
     return x, integ_field, kickx, LPolyB

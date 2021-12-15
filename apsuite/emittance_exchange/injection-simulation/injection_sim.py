@@ -247,17 +247,17 @@ class Injection:
         # I dont implement the above line because I think that the actual
         # Sirius model has the vaacum chamber with true dimensions at all ring.
 
-    def sets_nlk_and_kicks_beam(self, plot):
+    def sets_nlk_and_kicks_beam(self, plot=False):
 
         # Calcs stored beam and acceptance
         co = pa.tracking.find_orbit6(self._si, indices=[0])
         temp_si = self._si
         temp_si.radiation_on = False
         temp_si.cavity_on = False
-        fp = np.concatenate([co[0:4], np.zeros(2)]) \
+        fp = np.concatenate([co[0:4, 0], np.zeros(2)]) \
             + np.concatenate([[-self._si_nlk_physaccp[0]], np.zeros(5)])
         self.si_acceptance_nlk = pa.tracking.ring_pass(temp_si, fp, 1000)
-        si_envelope = pa.optics.calc_beamenvelope(accelerator=self.si,
+        si_envelope = pa.optics.calc_beamenvelope(accelerator=self._si,
                                                   indices=[0])
         bunch = pa.tracking.generate_bunch(n_part=self._nparticles,
                                            envelope=si_envelope)
@@ -268,19 +268,40 @@ class Injection:
             [self._si_nlk_pulse,
              np.zeros(self._nturns - len(self._si_nlk_pulse))]
             )
-        x, integ_field, kickx, self.LPolyB = si_nlk_kick(
-            strength=self._si_nlk_strength, plot_flag=plot)
+        x, integ_field, kickx, self._LPolyB = si_nlk_kick(
+            strength=self._si_nlk_strength,
+            fit_monomials=[2, 3, 4, 5, 6, 7, 8, 9, 10],
+            plot_flag=False)
 
         # sets nlk
-        pass
+        self._si = sets_nlk(self._si, self._si_nlk_pulse[0], self._LPolyB)
 
-    def sets_nlk(self, old_si, nlk_idx, strength, LPolyB):
-        # I think that we dont need all of above parameters
-        si = old_si
-        # si_nlk_len =
+        # plots bunch at si NLK entrance
+        if plot:
+            plot_phase_diagram(self._bunch, title='bunch before NLK')
+            plt.figure()
+            plt.plot(1e3*x, -1e3*kickx, label="kick x")
+            plt.grid(True)
+            plt.legend()   
 
     def vary_si_nlk_strength(self):
         pass
 
     def vary_skewquad(self):
         pass
+
+
+# # #-----------------Aux. Functions---------------------# # #
+
+
+def sets_nlk(old_si, strength, LPolyB):
+    si = old_si
+    nlk_idx = pa.lattice.find_indices(
+        old_si, 'fam_name', 'InjNLKckr')[0]
+    si_nlk_len = si[nlk_idx].length
+    PolynomB = LPolyB/si_nlk_len
+    # si[nlk_idx].polynom_b = strength * PolynomB
+    poly_size = len(si[nlk_idx].polynom_b)
+    for i in range(poly_size):
+        si[nlk_idx].polynom_b[i] = strength * PolynomB[0, i]
+    return si
