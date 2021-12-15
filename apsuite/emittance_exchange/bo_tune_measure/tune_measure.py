@@ -238,12 +238,12 @@ def tune_by_NAFF(x_measures, y_measures, window_param=None, decimal_only=True):
     if decimal_only is False:
         return tunex, tuney
     else:
-        tunex, tuney = _np.abs(tunex % 1), _np.abs(tuney % 1)
-        if tunex > 0.5:
-            tunex = _np.abs(1-tunex)
-        if tuney > 0.5:
-            tuney = _np.abs(1-tuney)
-        return tunex, tuney
+        # tunex, tuney = _np.abs(tunex % 1), _np.abs(tuney % 1)
+        # if tunex > 0.5:
+        #     tunex = _np.abs(1-tunex)
+        # if tuney > 0.5:
+        #     tuney = _np.abs(1-tuney)
+        return tunex % 1, tuney % 1
 
 
 def NAFF_tune_evolution(x_m, y_m, dn):
