@@ -129,15 +129,15 @@ class TurnOffCorr(_ThreadBaseClass):
     def get_orbit_data(self):
         """Get orbit data from BPMs in Monit1 acquisiton rate.
 
-        BPMs must be configure to listen to Study event and the Study event
+        BPMs must be configured to listen Study event and the Study event
         must be in External mode.
 
-        Saves a data dict in self.data with the following keys:
+        Saves a dict data in self.data with the following keys:
             - timestamp
             - chs_off: names of CHs turned off during the measurement
             - stored_current
-            - orbx: horizontal orbit data - (160, nsamples) array
-            - orby: vertical orbit data - (160, nsamples) array
+            - orbx: horizontal orbit (nsamples x 160)
+            - orby: vertical orbit (nsamples x 160)
             - tunex: horizontal betatron tune
             - tuney: vertical betatron tune
             - mt_acq_rate: MultiTurn acquision rate (always Monit1)
