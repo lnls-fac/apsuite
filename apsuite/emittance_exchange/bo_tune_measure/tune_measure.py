@@ -5,9 +5,8 @@ import pyaccel as _pa
 import pymodels as _pm
 from numpy.fft import rfft, rfftfreq
 from scipy.signal import find_peaks
-import pandas as _pd
 import matplotlib.pyplot as _plt
-import seaborn as _sns
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 class BPMeasure:
@@ -238,28 +237,44 @@ def tune_by_NAFF(x_measures, y_measures, window_param=None, decimal_only=True):
     if decimal_only is False:
         return tunex, tuney
     else:
-        # tunex, tuney = _np.abs(tunex % 1), _np.abs(tuney % 1)
-        # if tunex > 0.5:
-        #     tunex = _np.abs(1-tunex)
-        # if tuney > 0.5:
-        #     tuney = _np.abs(1-tuney)
+        tunex, tuney = _np.abs(tunex % 1), _np.abs(tuney % 1)
+        if tunex > 0.5:
+            tunex = _np.abs(1-tunex)
+        if tuney > 0.5:
+            tuney = _np.abs(1-tuney)
         return tunex % 1, tuney % 1
 
 
 def NAFF_tune_evolution(x_m, y_m, dn):
-    """."""
+    """Computes the tune evolution from the BPMs matrix xm and ym
+    with a moving window of length dn"""
     N = x_m.shape[0]
-    tunex_list = _np.zeros(N)
-    tuney_list = tunex_list.copy()
-    a = int(dn/2)
-    for n in range(a, N-a):
-        sub_x_m = x_m[n-a:n+a, :]
-        sub_y_m = y_m[n-a:n+a, :]
-        tunex_list[n], tuney_list[n] = tune_by_NAFF(sub_x_m, sub_y_m)
-    return tunex_list, tuney_list
+
+    # tune1_list = _np.zeros(N)
+    # tune2_list = tune1_list.copy()
+    # a = int(dn/2)
+    # for n in range(a, N-a):
+    #     sub_x_m = x_m[n-a:n+a, :]
+    #     sub_y_m = y_m[n-a:n+a, :]
+    #     nux, nuy = tune_by_NAFF(sub_x_m, sub_y_m)
+    #     tune1_list[n] = nux
+    #     tune2_list[n] = nuy
+
+    tune1_list = []
+    tune2_list = []
+    slices = _np.arange(0, N, dn)
+    for idx in range(len(slices)-1):
+        idx1, idx2 = slices[idx], slices[idx+1]
+        sub_x_m = x_m[idx1:idx2, :]
+        sub_y_m = y_m[idx1:idx2, :]
+        nux, nuy = tune_by_NAFF(sub_x_m, sub_y_m)
+        tune1_list.append(nux)
+        tune2_list.append(nuy)
+
+    return _np.array(tune1_list), _np.array(tune2_list)
 
 
-def spectrum_evolution_mixed(x_m, y_m, dn=None):
+def spectrogram_mixed(x_m, y_m, dn=None):
     """Computes a heatmap with the spectrum evolution along the turns using
     DFT and mixed BPM data"
     Args:
@@ -299,16 +314,15 @@ def spectrum_evolution_mixed(x_m, y_m, dn=None):
 
     tune_matrix = tune1_matrix + tune2_matrix
 
-    tune_df = _pd.DataFrame(data=tune_matrix, columns=_np.arange(N-dn),
-                            index=_np.round(freqs, 2))
-    _sns.heatmap(tune_df)
-    _plt.xlabel('Turns')
-    _plt.ylabel("Q")
+    tune_matrix = (tune_matrix - tune_matrix.min()) / \
+        (tune_matrix.max() - tune_matrix.min())
+
+    plot_heatmap(tune_matrix, freqs)
 
     return freqs, tune1_matrix, tune2_matrix
 
 
-def spectrum_evolution_mean(x_m, y_m, dn=None):
+def spectrogram_mean(x_m, y_m, dn=None):
     """."""
     M = x_m.shape[1]
     N = x_m.shape[0]
@@ -340,10 +354,24 @@ def spectrum_evolution_mean(x_m, y_m, dn=None):
 
     tune_matrix = _np.mean(tune_tensor, axis=2)
 
-    tune_df = _pd.DataFrame(data=tune_matrix, columns=_np.arange(N-dn),
-                            index=_np.round(freqs, 2))
-    _sns.heatmap(tune_df)
-    _plt.xlabel('Turns')
-    _plt.ylabel("Q")
+    # normalizing this matrix to get a better heatmap plot:
+    tune_matrix = (tune_matrix - tune_matrix.min()) / \
+        (tune_matrix.max() - tune_matrix.min())
+
+    # plots spectogram
+    plot_heatmap(tune_matrix, freqs)
 
     return freqs, tune1_matrix, tune2_matrix
+
+
+def plot_heatmap(tune_matrix, freqs):
+    ax = _plt.subplot()
+    extent = [freqs[1:].min(), freqs[1:].max(), 0, tune_matrix.shape[1]]
+    im = ax.imshow(tune_matrix[1:, :].T, cmap='hot', aspect='auto',
+                   extent=extent)
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    _plt.colorbar(im, cax=cax)
+    ax.set_ylabel('Turns')
+    ax.set_xlabel('Frac. Freq')
+    _plt.show()
