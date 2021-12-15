@@ -68,7 +68,7 @@ class LOCOUtils:
     @staticmethod
     def apply_bpm_weight(matrix, weight_bpm):
         """."""
-        return weight_bpm[:, None] * matrix
+        return weight_bpm * matrix
 
     @staticmethod
     def apply_corr_weight(matrix, weight_corr):
@@ -616,7 +616,7 @@ class LOCOUtils:
     @staticmethod
     def jloco_apply_weight(jloco, weight_bpm, weight_corr):
         """."""
-        weight = (weight_bpm[:, None] * weight_corr[None, :]).ravel()
+        weight = (weight_bpm * weight_corr[None, :]).ravel()
         return weight[:, None] * jloco
 
     @staticmethod

@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from collections import namedtuple
 
 import numpy as np
 

@@ -11,7 +11,7 @@ import scipy.optimize as _scy_opt
 import scipy.integrate as _scy_int
 
 from siriuspy.devices import BPM, CurrInfoSI, EGun, RFCav, Tune, Trigger, \
-    Event, EVG
+    Event, EVG, SOFB
 from siriuspy.search import BPMSearch
 from siriuspy.epics import PV
 
@@ -39,8 +39,8 @@ class MeasTouschekParams(_ParamsBaseClass):
         self.mask_end_bunch_b = 240
         self.bucket_bunch_a = 1
         self.bucket_bunch_b = 550
-        self.acq_nrsamples_pre = 10000
-        self.acq_nrsamples_post = 10000
+        self.acq_nrsamples_pre = 0
+        self.acq_nrsamples_post = 20000
         self.filename = ''
 
     def __str__(self):
@@ -77,15 +77,21 @@ class MeasTouschekLifetime(_BaseClass):
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
     FILTER_OUTLIER = 0.2  # Relative error data/fitting
 
-    # calibration curves measured during machine shift in 2021/09/21:
-    EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
-    EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
-    OFFSET_DCCT = 8.4e-3  # [mA]
+    # # calibration curves measured during machine shift in 2021/09/21:
+    # EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
+    # EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
+    # OFFSET_DCCT = 8.4e-3  # [mA]
+
+    # calibration curves measured with BPM switching off (direct mode) during
+    # machine shift in 2021/11/01:
+    EXCCURVE_SUMA = [1.22949e-3, 1.9433e-4]  # BPM Sum [counts] -> Current [mA]
+    EXCCURVE_SUMB = [2.55117e-3, 1.9519e-4]  # BPM Sum [counts] -> Current [mA]
+    OFFSET_DCCT = 12.64e-3  # [mA]
 
     def __init__(self, isonline=True):
         """."""
-        _BaseClass.__init__(
-            self, params=MeasTouschekParams(), target=self._do_measure,
+        super().__init__(
+            params=MeasTouschekParams(), target=self._do_measure,
             isonline=isonline)
 
         self._recursion = 0
@@ -111,6 +117,7 @@ class MeasTouschekLifetime(_BaseClass):
             self.devices['egun'] = EGun()
             self.devices['rfcav'] = RFCav(RFCav.DEVICES.SI)
             self.devices['tune'] = Tune(Tune.DEVICES.SI)
+            self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
             self.pvs['avg_pressure'] = PV(MeasTouschekLifetime.AVG_PRESSURE_PV)
 
     def set_bpms_attenuation(self, value_att=RFFEAttSB):
@@ -636,7 +643,8 @@ class MeasTouschekLifetime(_BaseClass):
     def _do_measure(self):
         meas = dict(
             sum_a=[], sum_b=[], nan_a=[], nan_b=[], tim_a=[], tim_b=[],
-            current=[], rf_voltage=[], avg_pressure=[], tunex=[], tuney=[])
+            current=[], rf_voltage=[], avg_pressure=[],
+            tunex=[], tuney=[], dorbx=[], dorby=[])
         parms = self.params
 
         curr = self.devices['currinfo']
@@ -648,6 +656,9 @@ class MeasTouschekLifetime(_BaseClass):
 
         excx0 = tune.enablex
         excy0 = tune.enabley
+        # Ensures that tune excitation is off before measurement.
+        tune.cmd_disablex()
+        tune.cmd_disabley()
 
         pvsum = bpm.pv_object('GEN_SUMArrayData')
         pvsum.auto_monitor = True
@@ -657,7 +668,7 @@ class MeasTouschekLifetime(_BaseClass):
         self.devices['event'].mode = 'Continuous'
         self.devices['evg'].cmd_update_events()
 
-        swtch0 = bpm.switching
+        swtch0 = bpm.switching_mode
         bpm.cmd_turn_off_switching()
         bpm.cmd_acq_abort()
         bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
@@ -681,8 +692,9 @@ class MeasTouschekLifetime(_BaseClass):
             bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
             self._updated_evt.wait(timeout=parms.acquisition_timeout)
             suma = bpm.mt_possum
-            # Use median to remove influence of bad points:
-            meas['sum_a'].append(_np.nanmedian(suma))
+            # Use mean to remove influence of bad points
+            # (maybe consider using median):
+            meas['sum_a'].append(_np.nanmean(suma))
             meas['nan_a'].append(_np.sum(_np.isnan(suma)))
             meas['tim_a'].append(_time.time())
 
@@ -697,8 +709,9 @@ class MeasTouschekLifetime(_BaseClass):
             bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
             self._updated_evt.wait(timeout=parms.acquisition_timeout)
             sumb = bpm.mt_possum
-            # Use median to remove influence of bad points:
-            meas['sum_b'].append(_np.nanmedian(sumb))
+            # Use mean to remove influence of bad points
+            # (maybe consider using median):
+            meas['sum_b'].append(_np.nanmean(sumb))
             meas['nan_b'].append(_np.sum(_np.isnan(sumb)))
             meas['tim_b'].append(_time.time())
 
@@ -708,9 +721,23 @@ class MeasTouschekLifetime(_BaseClass):
             meas['avg_pressure'].append(press.value)
 
             if not idx % 100 and parms.save_partial:
-                # Only get the tune at every 100 iterations not to disturb the
-                # beam too much with the tune shaker
-                tunex, tuney = self._get_tunes()
+                # 5 iterations of orbit correction.
+                # SOFB must be properly configured:
+                # 1) SOFBMode: SlowOrb with Num. Pts.: 50;
+                # 2) BPMs nearby RF cavity (around 02M1 and 02M2 ) should be
+                # removed from correction;
+                # 3) the BPM used to acquire sum data also should be removed
+                # (since switching mode is off);
+                # 4) singular values should be removed until the delta kicks
+                # are reasonable (about 120 out of 281 SVs are sufficient);
+                dorbx, dorby = self._correct_and_get_cod()
+                meas['dorbx'].append(dorbx)
+                meas['dorby'].append(dorby)
+
+                # Turn on tune excitation and get the tune only at every 100
+                # iterations not to disturb the beam too much with the tune
+                # shaker.
+                tunex, tuney = self._excite_and_get_tunes()
                 meas['tunex'].append(tunex)
                 meas['tuney'].append(tuney)
 
@@ -728,8 +755,7 @@ class MeasTouschekLifetime(_BaseClass):
             tune.cmd_enablex()
         if excy0:
             tune.cmd_enabley()
-        if swtch0:
-            bpm.cmd_turn_on_switching()
+        bpm.switching_mode = swtch0
 
         self.devices['trigger'].source = 'DigSI'
         self.devices['event'].mode = 'External'
@@ -743,16 +769,21 @@ class MeasTouschekLifetime(_BaseClass):
         _ = args, kwargs
         self._updated_evt.set()
 
-    def _get_tunes(self):
+    def _excite_and_get_tunes(self):
         tune = self.devices['tune']
         tune.cmd_enablex()
         tune.cmd_enabley()
-        _time.sleep(1)
+        _time.sleep(self.params.acquisition_period)
         tunex = tune.tunex
         tuney = tune.tuney
         tune.cmd_disablex()
         tune.cmd_disabley()
         return tunex, tuney
+
+    def _correct_and_get_cod(self):
+        sofb = self.devices['sofb']
+        sofb.correct_orbit_manually(nr_iters=5)
+        return sofb.orbx-sofb.refx, sofb.orby-sofb.refy
 
     @staticmethod
     def _linear_fun(tim, *coeff):

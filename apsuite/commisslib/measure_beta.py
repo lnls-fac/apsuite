@@ -2,7 +2,7 @@
 import time as _time
 import math
 from copy import deepcopy as _dcopy
-from collections import namedtuple as _namedtuple
+from mathphys.functions import get_namedtuple as _get_namedtuple
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -99,9 +99,9 @@ class BetaParams(_ParamsBaseClass):
 class MeasBeta(_BaseClass):
     """."""
 
-    METHODS = _namedtuple('Methods', ['Analytic', 'Numeric'])(0, 1)
-    MEASUREMENT = _namedtuple('Process', ['Current', 'KL'])(0, 1)
-    ANALYSIS = _namedtuple('Analysis', ['IMA', 'Excdata'])(0, 1)
+    METHODS = _get_namedtuple('Methods', ['Analytic', 'Numeric'])
+    MEASUREMENT = _get_namedtuple('Process', ['Current', 'KL'])
+    ANALYSIS = _get_namedtuple('Analysis', ['IMA', 'Excdata'])
     _DEF_TIMEOUT = 60 * 60  # [s]
 
     def __init__(
