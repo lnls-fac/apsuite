@@ -57,8 +57,6 @@ class BumpNLK(_BaseClass):
     """."""
 
     DEFAULT_SS = '01SA'
-    BPMS_TRIGGER = 'SI-Fam:TI-BPM'
-    STUDY_EVENT = 'Study'
 
     def __init__(self, isonline=True):
         """."""
@@ -205,7 +203,7 @@ class BumpNLK(_BaseClass):
         anly['tbt_trajy_std'] = self._reshape_vec(trajy, dim=nsteps)
         self.analysis = anly
 
-    def plot_bbb_mag(self, plane='HV'):
+    def plot_bbb_mag(self, plane='HV', shading='auto', cmap='jet'):
         """."""
         fig = _mplt.figure(figsize=(8, 6))
         gs = _mgs.GridSpec(1, 1)
@@ -224,7 +222,7 @@ class BumpNLK(_BaseClass):
         else:
             raise Exception('plane argument must be HV, H or V.')
 
-        pcm = ax1.pcolormesh(posx, posy, mag, shading='gouraud')
+        pcm = ax1.pcolormesh(posx, posy, mag, shading=shading, cmap=cmap)
         ax1.set_xlabel(r'Bump x [$\mu$m]')
         ax1.set_ylabel(r'Bump y [$\mu$m]')
         cbar = fig.colorbar(pcm, ax=ax1)
@@ -233,7 +231,7 @@ class BumpNLK(_BaseClass):
         _mplt.tight_layout(True)
         return fig, ax1
 
-    def plot_tbt_traj(self, plane='HV'):
+    def plot_tbt_traj(self, plane='HV', shading='auto', cmap='jet'):
         """."""
         fig = _mplt.figure(figsize=(8, 6))
         gs = _mgs.GridSpec(1, 1)
@@ -251,11 +249,11 @@ class BumpNLK(_BaseClass):
         else:
             raise Exception('plane argument must be HV, H or V.')
 
-        pcm = ax1.pcolormesh(posx, posy, traj, shading='gouraud')
+        pcm = ax1.pcolormesh(posx, posy, traj, shading=shading, cmap=cmap)
         ax1.set_xlabel(r'Bump x [$\mu$m]')
         ax1.set_ylabel(r'Bump y [$\mu$m]')
         cbar = fig.colorbar(pcm, ax=ax1)
-        cbar.set_label(plane + r' TbT Traj std. [$\mu$m]')
+        cbar.set_label(plane + r'. TbT std distortion [$\mu$m]')
         ax1.set_title('')
         _mplt.tight_layout(True)
         return fig, ax1
@@ -263,4 +261,5 @@ class BumpNLK(_BaseClass):
     @staticmethod
     def _reshape_vec(vec, dim):
         new_vec = _np.array(vec).reshape((dim, -1))
-        return new_vec[1::2, ::-1]
+        new_vec[1::2, :] = new_vec[1::2, ::-1]
+        return new_vec
