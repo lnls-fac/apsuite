@@ -1,0 +1,1030 @@
+"""Main module."""
+import time as _time
+from threading import Event as _Flag
+
+import numpy as _np
+import scipy.optimize as _scyopt
+
+from mathphys.functions import save_pickle as _save_pickle
+
+from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
+from siriuspy.devices import StrengthConv, PowerSupply, BPM, CurrInfoSI, \
+    Trigger, Event, EVG, RFGen, Tune
+from siriuspy.sofb.csdev import SOFBFactory
+import pyaccel as _pyaccel
+
+from ..utils import ParamsBaseClass as _ParamsBaseClass, \
+    ThreadedMeasBaseClass as _ThreadBaseClass
+
+
+class ACORMParams(_ParamsBaseClass):
+    """."""
+
+    def __init__(self):
+        """."""
+        super().__init__()
+        self.nr_points = 5500
+        self.acq_rate = 'Monit1'
+        self.timeout_bpms = 10  # [s]
+        self.ch_kick = 5  # [urad]
+        self.cv_kick = 5  # [urad]
+        self.rf_kick = 5  # [Hz]
+        self.delay_corrs = 50e-3  # [s]
+        self.exc_duration = 5  # [s]
+
+        freqs = self.find_primes(16, start=120)
+        self.ch_freqs = freqs[1::2][:6]
+        self.cv_freqs = freqs[::2][:8]
+        self.sectors_to_measure = _np.arange(1, 21)
+        self.meas_bpms_noise = True
+        self.meas_rf_line = True
+
+    def __str__(self):
+        """."""
+        ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
+        dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
+        stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
+
+        stg = ''
+        stg += dtmp('nr_points', self.nr_points, '')
+        stg += stmp('acq_rate', self.acq_rate, '')
+        stg += ftmp('timeout_bpms', self.timeout_bpms, '[s]')
+        stg += ftmp('ch_kick', self.ch_kick, '[urad]')
+        stg += ftmp('cv_kick', self.cv_kick, '[urad]')
+        stg += ftmp('rf_kick', self.rf_kick, '[Hz]')
+        stg += ftmp('delay_corrs', self.delay_corrs, '[s]')
+        stg += ftmp('exc_duration', self.exc_duration, '[s]')
+        stg += stmp('ch_freqs', str(self.ch_freqs), '[Hz]')
+        stg += stmp('cv_freqs', str(self.cv_freqs), '[Hz]')
+        stg += stmp('sectors_to_measure', str(self.sectors_to_measure), '')
+        stg += stmp('meas_bpms_noise', str(self.meas_bpms_noise), '')
+        stg += stmp('meas_rf_line', str(self.meas_rf_line), '')
+        return stg
+
+    @staticmethod
+    def find_primes(n_primes, start=3):
+        """."""
+        primes = []
+        i = start
+        while True:
+            for j in range(3, int(_np.sqrt(i))+1, 2):
+                if not i % j:
+                    break
+            else:
+                if i % 2:
+                    primes.append(i)
+            i += 1
+            if len(primes) >= n_primes:
+                break
+        return _np.array(primes)
+
+
+# TODO: Ideas for analisys:
+# - try to use naff with prior filtering of data,  and making an algorithm to
+#   find the frequencies closest to the desired ones
+# -
+class MeasACORM(_ThreadBaseClass):
+    """."""
+
+    def __init__(self, params=None, isonline=True):
+        """."""
+        params = ACORMParams() if params is None else params
+        super().__init__(
+            params=params, target=self._do_measure, isonline=isonline)
+        self.bpms = dict()
+        self._flags = dict()
+
+        self.sofb_data = SOFBFactory.create('SI')
+        self.configdb = _ConfigDBClient(config_type='si_orbcorr_respm')
+        if self.isonline:
+            self._create_devices()
+
+    def load_and_apply(self, fname: str):
+        """Load and apply `data` and `params` from pickle file.
+
+        Args:
+            fname (str): name of the pickle file. Extension is not needed.
+
+        """
+        super().load_and_apply(fname)
+        if isinstance(self.data, list):
+            self.data = {'magnets': self.data}
+
+    @staticmethod
+    def fitting_matrix(tim, freqs, num_cycles=None):
+        """Create the matrix used for fitting of fourier components.
+
+        The ordering of the matrix is the following:
+           mat[i, 2*j] = cos(2*pi*freqs[j]*tim[i])
+           mat[i, 2*j+1] = sin(2*pi*freqs[j]*tim[i])
+
+        Args:
+            tim (numpy.ndarray): array with times
+            freqs (numpy.ndarray): array with frequencies to fit.
+            num_cycles (numpy.ndarray, optional): number of cycles of each
+                frequency. If not provided, all data range will be considered.
+
+        Returns:
+            numpy.ndarray: fitting matrix (len(tim), 2*len(freqs))
+
+        """
+        mat = _np.zeros((tim.size, 2*freqs.size))
+        arg = 2*_np.pi*freqs[None, :]*tim[:, None]
+        cos = _np.cos(arg)
+        sin = _np.sin(arg)
+
+        if num_cycles is not None:
+            cond = arg > 2*_np.pi*num_cycles[None, :]
+            cos[cond] = 0
+            sin[cond] = 0
+        mat[:, ::2] = cos
+        mat[:, 1::2] = sin
+        return mat
+
+    @classmethod
+    def fit_fourier_components(cls, data, freqs, dtim, num_cycles):
+        """Fit Fourier components in signal for the given frequencies.
+
+        Args:
+            data (numpy.ndarray, NxM): signal to be fitted consisting of M
+                columns of data.
+            freqs (numpy.ndarray, K): K frequencies to fit Fourier components.
+            dtim (numpy.ndarray, N): time vector for data columns.
+            num_cycles (num.ndarray, K): number of cycles of each frequency.
+
+        Returns:
+            numpy.ndarray, KxM: Fourier amplitudes.
+            numpy.ndarray, KxM: Fourier phases (phase==0 means pure sine).
+            numpy.ndarray, KxM: Fourier cosine coefficients.
+            numpy.ndarray, KxM: Fourier sine coefficients.
+
+        """
+        tim = _np.arange(data.shape[0]) * dtim
+
+        mat = cls.fitting_matrix(tim, freqs, num_cycles)
+        coeffs, *_ = _np.linalg.lstsq(mat, data, rcond=None)
+
+        cos = coeffs[::2]
+        sin = coeffs[1::2]
+        amps = _np.sqrt(cos**2 + sin**2)
+        phases = _np.arctan2(cos, sin)
+        return amps, phases, cos, sin
+
+    @staticmethod
+    def fit_fourier_components_naff(data, freqs0, dtim):
+        """Not implemented properly yet. Please don't use this."""
+        freqs = _np.zeros((len(freqs0), data.shape[1]))
+        fourier = _np.zeros((len(freqs0), data.shape[1]), dtype=complex)
+
+        for i in range(data.shape[1]):
+            datum = data[:, i]
+            fre, four = _pyaccel.naff.naff_general(
+                datum, nr_ff=len(freqs0), is_real=True)
+            fre = _np.abs(fre)
+            idx = _np.argsort(fre)
+            fre = fre[idx]
+            four = four[idx]
+            freqs[:, i] = fre/dtim
+            fourier[:, i] = four
+
+        amps = _np.abs(fourier)
+        phases = _np.angle(fourier)
+        cos = fourier.real
+        sin = fourier.imag
+
+        return amps, phases, cos, sin
+
+    @staticmethod
+    def calc_correlation(arr1, arr2):
+        """Return the linear correlation between respective columns.
+
+        Args:
+            arr1 (numpy.ndarray, NxM): first array
+            arr2 (numpy.ndarray, NxM): second array
+
+        Returns:
+            numpy.ndarray, M: correlation of the ith column of arr1 with ith
+                column of arr2.
+
+        """
+        corr = (arr1 * arr2).sum(axis=0)
+        corr /= _np.linalg.norm(arr1, axis=0)
+        corr /= _np.linalg.norm(arr2, axis=0)
+        return _np.abs(corr)
+
+    def save_loco_input_data(self, respmat_name: str, overwrite=False):
+        """Save in `.pickle` format a dictionary with all LOCO input data.
+
+        Args:
+            respmat_name (str): Name of the response matrix. A matrix with
+                this name will be saved in configdb.
+            overwrite (bool, optional): whether to overwrite existing files.
+                Defaults to False.
+
+        """
+        bpms_data = self.data['bpms_noise']
+        bpms_anly = self.analysis['bpms_noise']
+        data = dict()
+        data['timestamp'] = bpms_data['timestamp']
+        data['rf_frequency'] = bpms_data['rf_frequency']
+        data['tunex'] = bpms_data['tunex']
+        data['tuney'] = bpms_data['tuney']
+        data['stored_current'] = bpms_data['stored_current']
+        data['bpm_variation'] = bpms_anly['bpm_variation']
+        data['orbmat_name'] = respmat_name
+        mat = self.save_respmat_to_configdb(respmat_name)
+        data['respmat'] = mat
+
+        _save_pickle(data, f'loco_input_{respmat_name:s}', overwrite=overwrite)
+
+    def save_respmat_to_configdb(self, name: str):
+        """Save response matrix to ConfigDb Server.
+
+        Args:
+            name (str): name of the matrix to saved.
+
+        Returns:
+            numpy.ndarray, 320x281: response matrix. Missing data is filled
+                with zeros.
+
+        """
+        mat = self.build_respmat()
+        self.configdb.insert_config(name, mat)
+        return mat
+
+    def build_respmat(self):
+        """Build response matrix from previously analysed data.
+
+        Returns:
+            numpy.ndarray, 320x281: response matrix. Missing data is filled
+                with zeros.
+
+        """
+        sofb = self.sofb_data
+        mat = _np.zeros((2*sofb.nr_bpms, sofb.nr_corrs), dtype=float)
+        anls = self.analysis['magnets']
+        for anly in anls:
+            mat[:sofb.nr_bpms, anly['mat_idcs']] = anly['mat_colsx']
+            mat[sofb.nr_bpms:, anly['mat_idcs']] = anly['mat_colsy']
+
+        anl = self.analysis['rf']
+        mat[:sofb.nr_bpms, -1] = anl['mat_colx']
+        mat[sofb.nr_bpms:, -1] = anl['mat_coly']
+        return mat
+
+    def process_data(
+            self, mag_idx_ini=None, mag_min_freq=None, mag_max_freq=None,
+            rf_transition_length=10):
+        """Process measured data.
+
+        Args:
+            mag_idx_ini ([type], optional): initial index of orbit waveform
+                where magnets excitation start. Defaults to None.
+            mag_min_freq ([type], optional): Frequencies below this value will
+                be filtered out before fitting of magnets excitation.`None`
+                means no high pass filter will be applied. Defaults to `None`.
+            mag_max_freq ([type], optional): Frequencies above this value will
+                be filtered out before fitting of magnets excitation. `None`
+                means no low pass filter will be applied. Defaults to `None`.
+            rf_transition_length (int, optional): Number of indices to ignore
+                right before or after RF frequency changes in RF line
+                measurements. Defaults to 10.
+
+        """
+        self.analysis['magnets'] = self._process_data_magnets(
+            self.data['magnets'], mag_idx_ini, mag_min_freq, mag_max_freq)
+        rf_data = self.data.get('rf')
+        if rf_data is not None:
+            self.analysis['rf'] = self._process_data_rf(
+                rf_data, rf_transition_length)
+        bpms_data = self.data.get('bpms_noise')
+        if bpms_data is not None:
+            self.analysis['bpms_noise'] = self._process_data_bpms_noise(
+                bpms_data)
+
+    def get_magnets_data(self, chs_used, cvs_used):
+        """Get magnet related data.
+
+        Args:
+            chs_used (list, tuple): CHs used in excitation.
+            cvs_used (list, tuple): CVs used in excitation.
+
+        Returns:
+            dict: `chs_used` and `cvs_used` related data.
+
+        """
+        data = {
+            'ch_names': [], 'ch_amplitudes': [], 'ch_offsets': [],
+            'ch_kick_amplitudes': [], 'ch_kick_offsets': [],
+            'ch_frequency': [], 'ch_num_cycles': [], 'ch_cycle_type': [],
+            'cv_names': [], 'cv_amplitudes': [], 'cv_offsets': [],
+            'cv_kick_amplitudes': [], 'cv_kick_offsets': [],
+            'cv_frequency': [], 'cv_num_cycles': [], 'cv_cycle_type': [],
+            }
+        for cmn in chs_used:
+            data['ch_names'].append(cmn)
+            cm = self.devices[cmn]
+            conv = self.devices[cmn+':StrengthConv'].conv_current_2_strength
+            data['ch_amplitudes'].append(cm.cycle_ampl)
+            data['ch_offsets'].append(cm.cycle_offset)
+            data['ch_kick_amplitudes'].append(conv(cm.cycle_ampl))
+            data['ch_kick_offsets'].append(conv(cm.cycle_offset))
+            data['ch_frequency'].append(cm.cycle_freq)
+            data['ch_num_cycles'].append(cm.cycle_num_cycles)
+            data['ch_cycle_type'].append(cm.cycle_type_str)
+
+        for cmn in cvs_used:
+            data['cv_names'].append(cmn)
+            cm = self.devices[cmn]
+            conv = self.devices[cmn+':StrengthConv'].conv_current_2_strength
+            data['cv_amplitudes'].append(cm.cycle_ampl)
+            data['cv_offsets'].append(cm.cycle_offset)
+            data['cv_kick_amplitudes'].append(conv(cm.cycle_ampl))
+            data['cv_kick_offsets'].append(conv(cm.cycle_offset))
+            data['cv_frequency'].append(cm.cycle_freq)
+            data['cv_num_cycles'].append(cm.cycle_num_cycles)
+            data['cv_cycle_type'].append(cm.cycle_type_str)
+
+        data['corrs_trig_delay_raw'] = self.devices['trigcorrs'].delay_raw
+        return data
+
+    def get_bpms_data(self):
+        """Get all BPM related data relevant for the measurements.
+
+        Returns:
+            dict: BPMs data.
+
+        """
+        orbx, orby = self.get_orbit()
+        bpm0 = list(self.bpms.values())[0]
+        csbpm = self.csbpm
+
+        data = dict()
+        data['orbx'] = orbx
+        data['orby'] = orby
+        data['bpms_acq_rate'] = csbpm.AcqChan._fields[bpm0.acq_channel]
+        data['bpms_nrsamples_pre'] = bpm0.acq_nrsamples_pre
+        data['bpms_nrsamples_post'] = bpm0.acq_nrsamples_post
+        data['bpms_trig_delay_raw'] = self.devices['trigbpms'].delay_raw
+        data['bpms_switching_mode'] = csbpm.SwModes._fields[
+            bpm0.switching_mode]
+        return data
+
+    def get_general_data(self):
+        """Get general purpose data.
+
+        Returns:
+            dict: general purpose data.
+
+        """
+        data = dict()
+        data['timestamp'] = _time.time()
+        data['rf_frequency'] = self.devices['rfgen'].frequency
+        data['stored_current'] = self.devices['currinfo'].current
+        data['tunex'] = self.devices['tune'].tunex
+        data['tuney'] = self.devices['tune'].tuney
+        return data
+
+    def get_orbit(self):
+        """Get Multiturn orbit matrices.
+
+        Returns:
+            orbx (numpy.ndarray, Nx160): Horizontal Orbit.
+            orby (numpy.ndarray, Nx160): Vertical Orbit.
+
+        """
+        orbx, orby = [], []
+        for bpm_name in self.sofb_data.bpm_names:
+            bpm = self.devices[bpm_name]
+            orbx.append(bpm.mt_posx)
+            orby.append(bpm.mt_posy)
+        return _np.array(orbx).T, _np.array(orby).T
+
+    # ------------------ Auxiliary Methods ------------------
+
+    def _create_devices(self):
+        # Create objects to convert kicks to current
+        self.devices.update({
+            n+':StrengthConv': StrengthConv(n, 'Ref-Mon')
+            for n in self.sofb_data.ch_names})
+        self.devices.update({
+            n+':StrengthConv': StrengthConv(n, 'Ref-Mon')
+            for n in self.sofb_data.cv_names})
+
+        # Create objects to interact with correctors
+        self.devices.update({
+            nme: PowerSupply(nme) for nme in self.sofb_data.ch_names})
+        self.devices.update({
+            nme: PowerSupply(nme) for nme in self.sofb_data.cv_names})
+
+        # Create object to get stored current
+        self.devices['currinfo'] = CurrInfoSI()
+
+        # Create BPMs trigger:
+        self.devices['trigbpms'] = Trigger('SI-Fam:TI-BPM')
+
+        # Create Correctors Trigger:
+        self.devices['trigcorrs'] = Trigger('SI-Glob:TI-Mags-Corrs')
+
+        # Create event to start data acquisition sinchronously:
+        self.devices['evt_study'] = Event('Study')
+        self.devices['evg'] = EVG()
+
+        # Create RF generator object
+        self.devices['rfgen'] = RFGen()
+
+        # Create Tune object:
+        self.devices['tune'] = Tune(Tune.DEVICES.SI)
+
+        # Create BPMs
+        self.bpms = dict()
+        name = self.sofb_data.bpm_names[0]
+        self.bpms[name] = BPM(name)
+        self.csbpm = self.bpms[name].csdata
+
+        propties_not_interested = self.bpms[name].auto_monitor_status
+        propties_to_keep = ['GEN_XArrayData', 'GEN_YArrayData']
+        for ppt in propties_to_keep:
+            propties_not_interested.pop(ppt)
+
+        for i, name in enumerate(self.sofb_data.bpm_names):
+            if not i:
+                bpm = self.bpms[name]
+            else:
+                bpm = BPM(name)
+                self.bpms[name] = bpm
+            for propty in propties_not_interested:
+                bpm.set_auto_monitor(propty, False)
+            for propty in propties_to_keep:
+                bpm.set_auto_monitor(propty, True)
+                pvo = bpm.pv_object(propty)
+                self._flags[pvo.pvname] = _Flag()
+                pvo.add_callback(self._set_flag)
+        self.devices.update(self.bpms)
+
+    # ---------------- Data Measurement methods ----------------
+
+    def _do_measure(self):
+        if self.params.meas_bpms_noise:
+            self.data['bpms_noise'] = self._do_measure_bpms_noise()
+
+        if self.params.meas_rf_line:
+            self.data['rf'] = self._do_measure_rf_line()
+
+        self.data['magnets'] = self._do_measure_magnets()
+
+    def _do_measure_bpms_noise(self):
+        elt = _time.time()
+
+        print('Measuring BPMs Noise:')
+
+        t00 = _time.time()
+        print('    Configuring BPMs...', end='')
+        self._config_bpms(self.params.nr_points, self.params.acq_rate)
+        self._config_timing(self.params.delay_corrs)
+        print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+        t00 = _time.time()
+        print('    Sending Trigger signal...', end='')
+        self._reset_flags()
+        self.devices['evt_study'].cmd_external_trigger()
+        print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+        # Wait BPMs PV to update with new data
+        t00 = _time.time()
+        print('    Waiting BPMs to update...', end='')
+        if not self._wait_bpms_update(timeout=self.params.timeout_bpms):
+            print('Problem: timed out waiting BPMs update.')
+        print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+        # get data
+        data = self.get_general_data()
+        data.update(self.get_bpms_data())
+
+        elt -= _time.time()
+        elt *= -1
+        print(f'    Elapsed Time: {elt:.2f}s')
+        return data
+
+    def _do_measure_rf_line(self):
+        elt = _time.time()
+
+        print('Measuring RF Line:')
+        rfgen = self.devices['rfgen']
+
+        t00 = _time.time()
+        print('    Configuring BPMs...', end='')
+        self._config_bpms(self.params.nr_points, self.params.acq_rate)
+        self._config_timing(self.params.delay_corrs)
+        print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+        t00 = _time.time()
+        print('    Configuring RF...', end='')
+        exc_duration = self.params.exc_duration
+        rf_kick = self.params.rf_kick
+        freq0 = rfgen.frequency
+        rf_kick = rfgen.configure_freq_sweep(
+            rf_kick, 3, exc_duration, sawtooth=True, centered=True,
+            increasing=True, retrace=False)
+        print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+        t00 = _time.time()
+        print('    Sending Trigger signal...', end='')
+        self._reset_flags()
+        self.devices['evt_study'].cmd_external_trigger()
+
+        # RF generator still doesn't have a trigger fot it:
+        _time.sleep(self.params.delay_corrs)
+        rfgen.cmd_freq_sweep_start()
+        print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+        # Configure RF back to continuous operation mode.
+        t00 = _time.time()
+        print('    Waiting RF to finish...', end='')
+        if rfgen.wait_freq_sweep_to_finish(timeout=1.1*exc_duration):
+            print('Timed out!. Reseting...', end='')
+            rfgen.freq_sweep_reset()
+            rfgen.wait_freq_sweep_to_finish(timeout=1)
+        rfgen.cmd_freq_opmode_to_continuous_wave()
+        rfgen.frequency = freq0
+        print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+        # Wait BPMs PV to update with new data
+        t00 = _time.time()
+        print('    Waiting BPMs to update...', end='')
+        if not self._wait_bpms_update(timeout=self.params.timeout_bpms):
+            print('Problem: timed out waiting BPMs update.')
+        print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+        # get data
+        data = self.get_general_data()
+        data.update(self.get_bpms_data())
+        data['rf_kick'] = rf_kick
+
+        elt -= _time.time()
+        elt *= -1
+        print(f'    Elapsed Time: {elt:.2f}s')
+        return data
+
+    def _do_measure_magnets(self):
+        elt0 = _time.time()
+
+        print('Measuring Magnets:')
+
+        t00 = _time.time()
+        print('Configuring BPMs...', end='')
+        self._config_bpms(self.params.nr_points, self.params.acq_rate)
+        self._config_timing(self.params.delay_corrs)
+        print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+        # Shift correctors so first corrector is 01M1
+        chs_shifted = self._shift_list(self.sofb_data.ch_names, 1)
+        cvs_shifted = self._shift_list(self.sofb_data.cv_names, 1)
+
+        # set operation mode to slowref
+        if not self._change_corrs_opmode('slowref'):
+            print('Problem: Correctors not in SlowRef mode.')
+            return
+
+        exc_duration = self.params.exc_duration
+        ch_kick = self.params.ch_kick
+        cv_kick = self.params.cv_kick
+        freqh = self.params.ch_freqs
+        freqv = self.params.cv_freqs
+
+        self.data = []
+        for sector in self.params.sectors_to_measure:
+            elt = _time.time()
+
+            print(f'Sector {sector:02d}:')
+            slch = slice((sector-1)*6, sector*6)
+            slcv = slice((sector-1)*8, sector*8)
+            chs_slc = chs_shifted[slch]
+            cvs_slc = cvs_shifted[slcv]
+
+            # configure correctors
+            t00 = _time.time()
+            print('    Configuring Correctors...', end='')
+            self._config_correctors(chs_slc, ch_kick, freqh, exc_duration)
+            self._config_correctors(cvs_slc, cv_kick, freqv, exc_duration)
+            print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+            # set operation mode to cycle
+            t00 = _time.time()
+            print('    Changing Correctors to Cycle...', end='')
+            if not self._change_corrs_opmode('cycle', chs_slc + cvs_slc):
+                print('Problem: Correctors not in Cycle mode.')
+                break
+            print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+            # send event through timing system to start acquisitions
+            t00 = _time.time()
+            print('    Sending Timing signal...', end='')
+            self._reset_flags()
+            self.devices['evt_study'].cmd_external_trigger()
+            print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+            # Wait BPMs PV to update with new data
+            t00 = _time.time()
+            print('    Waiting BPMs to update...', end='')
+            if not self._wait_bpms_update(timeout=self.params.timeout_bpms):
+                print('Problem: timed out waiting BPMs update.')
+                break
+            print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+            # get data
+            data = self.get_general_data()
+            data.update(self.get_bpms_data())
+            data.update(self.get_magnets_data(
+                chs_used=chs_slc, cvs_used=cvs_slc))
+            self.data.append(data)
+
+            # set operation mode to slowref
+            t00 = _time.time()
+            print('    Changing Correctors to SlowOrb...', end='')
+            if not self._change_corrs_opmode('slowref', chs_slc + cvs_slc):
+                print('Problem: Correctors not in SlowRef mode.')
+                break
+            print(f'Done! ET: {_time.time()-t00:.2f}s')
+
+            elt -= _time.time()
+            elt *= -1
+            print(f'    Elapsed Time: {elt:.2f}s')
+            if self._stopevt.is_set():
+                print('Stopping...')
+                break
+
+        # set operation mode to slowref
+        if not self._change_corrs_opmode('slowref'):
+            print('Problem: Correctors not in SlowRef mode.')
+            return
+
+        elt0 -= _time.time()
+        elt0 *= -1
+        print(f'Finished!!  ET: {elt0/60:.2f}min')
+
+    # ---------------- Data Processing methods ----------------
+
+    def _process_data_rf(self, rf_data, transition_length=10):
+        def _fitting_model(tim, *params):
+            idx1, idx2, idx3, amp1, amp2 = params
+            y = _np.zeros(tim.size)
+            y[idx1:idx2] = amp1
+            y[idx2:idx3] = amp2
+            return y
+
+        anly = dict()
+
+        fsamp = self._get_sampling_frequency(rf_data)
+        dtim = 1/fsamp
+        anly['fsamp'] = fsamp
+        anly['dtim'] = dtim
+
+        orbx = rf_data['orbx'].copy()
+        orby = rf_data['orby'].copy()
+        orbx -= orbx.mean(axis=0)
+        orby -= orby.mean(axis=0)
+
+        tim = _np.arange(orbx.shape[0]) * dtim
+        anly['time'] = tim
+
+        # fit average horizontal orbit to find transition indices
+        exc_dur = self.params.exc_duration
+        rf_kick = rf_data['rf_kick']
+        idx1 = (tim > exc_dur/100).nonzero()[0][0]
+        idx2 = (tim > exc_dur*(1/100+1/2)).nonzero()[0][0]
+        idx3 = (tim > exc_dur*(1/100+1)).nonzero()[0][0]
+        etax_avg = 0.033e6  # average dispersion function, in [um]
+        amp1 = -rf_kick * etax_avg
+        amp2 = rf_kick * etax_avg
+        par0 = [idx1, idx2, idx3, amp1, amp2]
+        par, _ = _scyopt.curve_fit(
+            _fitting_model, tim, orbx.mean(axis=1), p0=par0)
+        idx1, idx2, idx3, amp1, amp2 = par
+        anly['params_fit_init'] = par0
+        anly['params_fit'] = par
+        anly['idx1'] = idx1
+        anly['idx2'] = idx2
+        anly['idx3'] = idx3
+        anly['amp1'] = amp1
+        anly['amp2'] = amp2
+        anly['transition_length'] = transition_length
+
+        sec1_ini = idx1 + transition_length
+        sec1_fin = idx2 - transition_length
+        sec2_ini = idx2 + transition_length
+        sec2_fin = idx3 - transition_length
+        anly['sec1_ini'] = sec1_ini
+        anly['sec1_fin'] = sec1_fin
+        anly['sec2_ini'] = sec2_ini
+        anly['sec2_fin'] = sec2_fin
+
+        orbx_neg = orbx[sec1_ini:sec1_fin].mean(axis=0)
+        orby_neg = orby[sec1_ini:sec1_fin].mean(axis=0)
+        orbx_pos = orbx[sec2_ini:sec2_fin].mean(axis=0)
+        orby_pos = orby[sec2_ini:sec2_fin].mean(axis=0)
+        anly['orbx_neg'] = orbx_neg
+        anly['orby_neg'] = orby_neg
+        anly['orbx_pos'] = orbx_pos
+        anly['orby_pos'] = orby_pos
+        anly['mat_colx'] = (orbx_pos - orbx_neg) / rf_kick / 2
+        anly['mat_coly'] = (orby_pos - orby_neg) / rf_kick / 2
+        return anly
+
+    def _process_data_bpms_noise(self, bpms_data):
+        sofb = self.sofb_data
+        anly = dict()
+
+        fsamp = self._get_sampling_frequency(bpms_data)
+        dtim = 1/fsamp
+        freqs0 = _np.r_[self.params.ch_freqs, self.params.cv_freqs]
+        anly['fsamp'] = fsamp
+        anly['dtim'] = dtim
+        anly['freqs0'] = freqs0
+
+        orbx = bpms_data['orbx'].copy()
+        orby = bpms_data['orby'].copy()
+        orbx -= orbx.mean(axis=0)
+        orby -= orby.mean(axis=0)
+
+        tim = _np.arange(orbx.shape[0]) * dtim
+        anly['time'] = tim
+
+        ampx, *_ = self.fit_fourier_components(orbx, freqs0, dtim)
+        ampy, *_ = self.fit_fourier_components(orby, freqs0, dtim)
+        anly['noisex'] = ampx
+        anly['noisey'] = ampy
+
+        sch = len(self.params.ch_freqs)
+        scv = len(self.params.cv_freqs)
+
+        ampx_ch = ampx[:sch].T
+        ampy_ch = ampy[:sch].T
+        ampx_cv = ampx[scv:].T
+        ampy_cv = ampy[scv:].T
+
+        anly['noisex_ch'] = ampx_ch
+        anly['noisey_ch'] = ampy_ch
+        anly['noisex_cv'] = ampx_cv
+        anly['noisey_cv'] = ampy_cv
+
+        match = _np.zeros((sofb.nr_bpms, sch))
+        matcv = _np.zeros((sofb.nr_bpms, scv))
+        match[:sofb.nr_bpms] = ampx_ch
+        match[sofb.nr_bpms:] = ampy_ch
+        matcv[:sofb.nr_bpms] = ampx_cv
+        matcv[sofb.nr_bpms:] = ampy_cv
+
+        match = _np.roll(_np.tile(match, 20), -1)
+        matcv = _np.roll(_np.tile(matcv, 20), -1)
+        mat = _np.zeros((2*sofb.nr_bpms, sofb.nr_corrs))
+        mat[:, :sofb.nr_ch] = match
+        mat[:, sofb.nr_ch:sofb.nr_chcv] = matcv
+
+        ampx_rf = orbx.std(axis=0)
+        ampy_rf = orby.std(axis=0)
+        anly['noisex_rf'] = ampx_rf
+        anly['noisey_rf'] = ampy_rf
+        mat[:sofb.nr_bpms, -1] = ampx_rf
+        mat[sofb.nr_bpms:, -1] = ampy_rf
+
+        anly['bpm_variation'] = mat
+        return anly
+
+    def _process_data_magnets(
+            self, magnets_data, idx_ini=None, min_freq=None, max_freq=None):
+        """."""
+        sofb = self.sofb_data
+        corr2idx = {name: i for i, name in enumerate(sofb.ch_names)}
+        corr2idx.update({name: 120+i for i, name in enumerate(sofb.cv_names)})
+
+        analysis = []
+        for data in magnets_data:
+            anly = dict()
+            fsamp = self._get_sampling_frequency(data)
+            dtim = 1/fsamp
+            ch_freqs = _np.array(data['ch_frequency'])
+            cv_freqs = _np.array(data['cv_frequency'])
+            freqs0 = _np.r_[ch_freqs, cv_freqs]
+            anly['fsamp'] = fsamp
+            anly['dtim'] = dtim
+            anly['freqs0'] = freqs0
+
+            ch_ncycles = _np.array(data['ch_num_cycles'])
+            cv_ncycles = _np.array(data['cv_num_cycles'])
+            num_cycles = _np.r_[ch_ncycles, cv_ncycles]
+            anly['num_cycles'] = num_cycles
+
+            ch_amps = _np.array(data['ch_kick_amplitudes'])
+            cv_amps = _np.array(data['cv_kick_amplitudes'])
+            kicks = _np.r_[ch_amps, cv_amps]
+            anly['kicks'] = kicks
+
+            ch_idcs = _np.array([corr2idx[name] for name in data['ch_names']])
+            cv_idcs = _np.array([corr2idx[name] for name in data['cv_names']])
+            idcs = _np.r_[ch_idcs, cv_idcs]
+            anly['mat_idcs'] = idcs
+
+            orbx = data['orbx'].copy()
+            orby = data['orby'].copy()
+            orbx -= orbx.mean(axis=0)
+            orby -= orby.mean(axis=0)
+
+            tim = _np.arange(orbx.shape[0]) * dtim
+            if idx_ini is None:
+                idx_ini = (tim >= self.params.delay_corrs).nonzero()[0][0]
+            anly['time'] = tim
+            anly['idx_ini'] = idx_ini
+
+            orbx = orbx[idx_ini:]
+            orby = orby[idx_ini:]
+
+            if min_freq is not None and max_freq is not None:
+                min_freq = min_freq or 0
+                max_freq = max_freq or fsamp/2
+                dftx = _np.fft.rfft(orbx, axis=0)
+                dfty = _np.fft.rfft(orby, axis=0)
+                freq = _np.fft.rfftfreq(orbx.shape[0], d=dtim)
+                idcs = (freq < min_freq) | (freq > max_freq)
+                dftx[idcs] = 0
+                orbx = _np.fft.irfft(dftx, axis=0)
+                orby = _np.fft.irfft(dfty, axis=0)
+            anly['min_freq'] = min_freq
+            anly['max_freq'] = max_freq
+
+            ampx, phasex, cosx, sinx = self.fit_fourier_components(
+                orbx, freqs0, dtim, num_cycles)
+            ampy, phasey, cosy, siny = self.fit_fourier_components(
+                orby, freqs0, dtim, num_cycles)
+
+            signx = _np.ones(ampx.shape)
+            signx[_np.abs(phasex) > (_np.pi/2)] = -1
+            signy = _np.ones(ampy.shape)
+            signy[_np.abs(phasey) > (_np.pi/2)] = -1
+
+            anly['ampx'] = ampx
+            anly['ampy'] = ampy
+            anly['phasex'] = phasex
+            anly['phasey'] = phasey
+            anly['cosx'] = cosx
+            anly['cosy'] = cosy
+            anly['sinx'] = sinx
+            anly['siny'] = siny
+            anly['signx'] = signx
+            anly['signy'] = signy
+            anly['mat_colsx'] = (signx * ampx / kicks[:, None]).T
+            anly['mat_colsy'] = (signy * ampy / kicks[:, None]).T
+            analysis.append(anly)
+        return analysis
+
+    @staticmethod
+    def _get_sampling_frequency(data):
+        fsamp = data['rf_frequency'] / 864 / 23
+        if data['bpms_acq_rate'].lower().startswith('monit'):
+            fsamp /= 25
+        return fsamp
+
+    # ----------------- BPMs related methods -----------------------
+
+    def _config_bpms(self, nr_points, acq_rate=None):
+        if acq_rate is None or acq_rate.lower().startswith('monit1'):
+            acq_rate = self.csbpm.AcqChan.Monit1
+        else:
+            acq_rate = self.csbpm.AcqChan.FOFB
+
+        print('Configuring BPMs...', end='')
+        self._cmd_bpms_acq_abort()
+
+        for bpm in self.bpms.values():
+            bpm.acq_repeat = self.csbpm.AcqRepeat.Repetitive
+            bpm.acq_channel = acq_rate
+            bpm.acq_trigger = self.csbpm.AcqTrigTyp.External
+            bpm.acq_nrsamples_pre = 0
+            bpm.acq_nrsamples_post = nr_points
+
+        self._cmd_bpms_acq_start()
+        print('Done!')
+
+    def _cmd_bpms_acq_abort(self):
+        for bpm in self.bpms.values():
+            bpm.acq_ctrl = self.csbpm.AcqEvents.Abort
+
+        for bpm in self.bpms.values():
+            boo = bpm.wait_acq_finish()
+            if not boo:
+                print('Timed out waiting abort.')
+
+    def _cmd_bpms_acq_start(self):
+        for bpm in self.bpms.values():
+            bpm.acq_ctrl = self.csbpm.AcqEvents.Start
+
+        for bpm in self.bpms.values():
+            boo = bpm.wait_acq_start()
+            if not boo:
+                print('Timed out waiting start.')
+
+    def _set_flag(self, pvname, **kwargs):
+        _ = kwargs
+        self._flags[pvname].set()
+
+    def _reset_flags(self):
+        for flag in self._flags.values():
+            flag.clear()
+
+    def _wait_bpms_update(self, timeout=10):
+        """."""
+        orbx0, orby0 = self.get_orbit()
+        for name, flag in self._flags.items():
+            t00 = _time.time()
+            if not flag.wait(timeout=timeout):
+                print(f'Timed out in PV {name:s}')
+                return False
+            timeout -= _time.time() - t00
+            timeout = max(timeout, 0)
+
+        while timeout > 0:
+            t00 = _time.time()
+            orbx, orby = self.get_orbit()
+            cond = _np.any(_np.all(_np.isclose(orbx0, orbx), axis=0))
+            cond |= _np.any(_np.all(_np.isclose(orby0, orby), axis=0))
+            if not cond:
+                return True
+            _time.sleep(0.1)
+            timeout -= _time.time() - t00
+        return False
+
+    # ----------------- Timing related methods -----------------------
+
+    def _config_timing(self, cm_delay):
+        print('Configuring Timing...', end='')
+        trigbpm = self.devices['trigbpms']
+        trigcorr = self.devices['trigcorrs']
+        evt_study = self.devices['evt_study']
+        evg = self.devices['evg']
+
+        trigbpm.delay = 0.0
+        trigbpm.nr_pulses = 1
+        trigbpm.source = 'Study'
+
+        trigcorr.delay = cm_delay * 1e6  # [us]
+        trigcorr.nr_pulses = 1
+        trigcorr.source = 'Study'
+
+        # configure event Study to be in External mode
+        evt_study.delay = 0
+        evt_study.mode = 'External'
+
+        # update event configurations in EVG
+        evg.cmd_update_events()
+        print('Done!')
+
+    # ----------------- Correctors related methods -----------------------
+
+    def _config_correctors(self, corr_names, kick, freq_vector, exc_duration):
+        """."""
+        for i, cmn in enumerate(corr_names):
+            cmo = self.devices[cmn]
+            conv = self.devices[cmn+':StrengthConv'].conv_strength_2_current
+            cmo.cycle_type = cmo.CYCLETYPE.Sine
+            cmo.cycle_freq = freq_vector[i]
+            cmo.cycle_ampl = conv(kick)
+            cmo.cycle_offset = cmo.currentref_mon
+            cmo.cycle_theta_begin = 0
+            cmo.cycle_theta_end = 0
+            cmo.cycle_num_cycles = int(exc_duration * freq_vector[i])
+
+    def _change_corrs_opmode(self, mode, corr_names=None, timeout=10):
+        """."""
+        opm_sel = PowerSupply.OPMODE_SEL
+        opm_sts = PowerSupply.OPMODE_STS
+        mode_sel = opm_sel.Cycle if mode == 'cycle' else opm_sel.SlowRef
+        mode_sts = opm_sts.Cycle if mode == 'cycle' else opm_sts.SlowRef
+
+        if corr_names is None:
+            corr_names = self.sofb_data.ch_names + self.sofb_data.cv_names
+
+        for cmn in corr_names:
+            cmo = self.devices[cmn]
+            cmo.opmode = mode_sel
+
+        interval = 0.2
+        for _ in range(int(timeout/interval)):
+            okk = True
+            corrname = ''
+            for cmn in corr_names:
+                cmo = self.devices[cmn]
+                oki = cmo.opmode == mode_sts
+                if not oki:
+                    corrname = cmn
+                okk &= oki
+            if okk:
+                return True
+            _time.sleep(interval)
+
+        print(corrname)
+        return False
+
+    @staticmethod
+    def _shift_list(lst, num):
+        """."""
+        return lst[-num:] + lst[:-num]

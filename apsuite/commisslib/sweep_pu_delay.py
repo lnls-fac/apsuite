@@ -54,16 +54,18 @@ class DelaysPMBeamBasedSearch(_BaseClass):
     PULSED_MAGNETS = PowerSupplyPU.DEVICES
     SCREENS = Screen.DEVICES
 
-    def __init__(self, pulsed_mag, screen, sofb_acc='BO'):
+    def __init__(self, pulsed_mag, screen, sofb_acc='BO', isonline=True):
         """."""
-        super().__init__(params=Params(), target=self._findmax_thread)
+        super().__init__(
+            params=Params(), target=self._findmax_thread, isonline=isonline)
         self._magname = _PVName(pulsed_mag)
         self._scrname = _PVName(screen)
-        self.devices[self._magname] = PowerSupplyPU(self._magname)
-        self.devices[screen] = Screen(self._scrname)
-        self.devices['sofb'] = SOFB(sofb_acc.upper() + '-Glob:AP-SOFB')
         self.data = dict(
             delay=[], trajx=[], trajy=[], posx=[], posy=[], sizex=[], sizey=[])
+        if self.isonline:
+            self.devices[self._magname] = PowerSupplyPU(self._magname)
+            self.devices[screen] = Screen(self._scrname)
+            self.devices['sofb'] = SOFB(sofb_acc.upper() + '-Glob:AP-SOFB')
 
     @property
     def magnet_name(self):

@@ -35,11 +35,12 @@ class SOFBDriveParams(_ParamsBaseClass):
 class SOFBDriveData(_BaseClass):
     """."""
 
-    def __init__(self):
+    def __init__(self, isonline=True):
         """."""
-        super().__init__(params=SOFBDriveParams())
-        self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
-        self.cssofb = self.devices['sofb'].data
+        super().__init__(params=SOFBDriveParams(), isonline=isonline)
+        if self.isonline:
+            self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+            self.cssofb = self.devices['sofb'].data
 
     def get_data(self):
         """Get Raw data to file."""
