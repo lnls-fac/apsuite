@@ -1,6 +1,6 @@
 """."""
 
-from collections import namedtuple as _namedtuple
+from mathphys.functions import get_namedtuple as _get_namedtuple
 from copy import deepcopy as _dcopy
 
 import numpy as _np
@@ -24,12 +24,12 @@ class LOCOConfig:
 
     FAMNAME_RF = 'SRFCav'
 
-    INVERSION = _namedtuple(
-        'Methods', ['Normal', 'Transpose'])(0, 1)
-    MINIMIZATION = _namedtuple(
-        'Methods', ['GaussNewton', 'LevenbergMarquardt'])(0, 1)
-    SVD = _namedtuple(
-        'Methods', ['Selection', 'Threshold'])(0, 1)
+    INVERSION = _get_namedtuple(
+        'Methods', ['Normal', 'Transpose'])
+    MINIMIZATION = _get_namedtuple(
+        'Methods', ['GaussNewton', 'LevenbergMarquardt'])
+    SVD = _get_namedtuple(
+        'Methods', ['Selection', 'Threshold'])
 
     def __init__(self, **kwargs):
         """."""
@@ -382,17 +382,26 @@ class LOCOConfig:
     def update_weight(self):
         """."""
         # bpm
-        if self.weight_bpm is None:
-            self.weight_bpm = _np.ones(2*self.nr_bpm)
-        elif isinstance(self.weight_bpm, (int, float)):
-            self.weight_bpm = _np.ones(2*self.nr_bpm) * \
-                self.weight_bpm / 2 / self.nr_bpm
+        bpmw = self.weight_bpm
+        if bpmw is None:
+            bpmw = _np.ones((2*self.nr_bpm, self.nr_corr + 1))
+        elif isinstance(bpmw, (int, float)):
+            weight_bpm = _np.ones((2*self.nr_bpm, self.nr_corr + 1))
+            weight_bpm *= bpmw / 2 / self.nr_bpm
+            bpmw = weight_bpm
+        elif isinstance(bpmw, _np.ndarray) and bpmw.ndim == 1:
+            bpmw = _np.tile(bpmw[:, None], self.nr_corr + 1)
+        self.weight_bpm = bpmw
+
         # corr
-        if self.weight_corr is None:
-            self.weight_corr = _np.ones(self.nr_corr + 1)
-        elif isinstance(self.weight_corr, (int, float)):
-            self.weight_corr = _np.ones(self.nr_corr + 1) * \
-                self.weight_corr / (self.nr_corr + 1)
+        corrw = self.weight_corr
+        if corrw is None:
+            corrw = _np.ones(self.nr_corr + 1)
+        elif isinstance(corrw, (int, float)):
+            weight_corr = _np.ones(self.nr_corr + 1)
+            weight_corr *= corrw / (self.nr_corr + 1)
+            corrw = weight_corr
+        self.weight_corr = corrw
 
         nknb = 0
         if self.fit_quadrupoles:

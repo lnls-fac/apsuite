@@ -1,6 +1,6 @@
 """."""
 
-from collections import namedtuple as _namedtuple
+from mathphys.functions import get_namedtuple as _get_namedtuple
 from copy import deepcopy as _dcopy
 import numpy as _np
 
@@ -23,9 +23,9 @@ class BaseCorr():
     """."""
 
     _STRENGTH_TYPE = ''
-    METHODS = _namedtuple('Methods', ['Additional', 'Proportional'])(0, 1)
-    GROUPING = _namedtuple('Grouping', ['Individual', 'TwoKnobs'])(0, 1)
-    CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
+    METHODS = _get_namedtuple('Methods', ['Additional', 'Proportional'])
+    GROUPING = _get_namedtuple('Grouping', ['Individual', 'TwoKnobs'])
+    CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
 
     def __init__(self, model, acc=None, method=None, grouping=None):
         """."""

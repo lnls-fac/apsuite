@@ -8,6 +8,7 @@ import matplotlib.gridspec as _mgs
 
 import pyaccel
 from siriuspy.devices import SOFB as _SOFB, RFGen as _RFGen, EVG as _EVG
+from siriuspy.search import BPMSearch as _BPMSearch
 from apsuite.utils import MeasBaseClass as _MeasBaseClass, \
     ParamsBaseClass as _ParamsBaseClass
 from pymodels import ts as _pyts, si as _pysi, bo as _pybo
@@ -33,14 +34,15 @@ class MeasDispTS(_MeasBaseClass):
     BO must be in Monit1 Rate with the index at the end of the ramp.
     """
 
-    def __init__(self):
+    def __init__(self, isonline=True):
         """."""
-        super().__init__(params=Params())
-        self.devices['si_sofb'] = _SOFB(_SOFB.DEVICES.SI)
-        self.devices['bo_sofb'] = _SOFB(_SOFB.DEVICES.BO)
-        self.devices['ts_sofb'] = _SOFB(_SOFB.DEVICES.TS)
-        self.devices['evg'] = _EVG()
-        self.devices['rfgen'] = _RFGen()
+        super().__init__(params=Params(), isonline=isonline)
+        if self.isonline:
+            self.devices['si_sofb'] = _SOFB(_SOFB.DEVICES.SI)
+            self.devices['bo_sofb'] = _SOFB(_SOFB.DEVICES.BO)
+            self.devices['ts_sofb'] = _SOFB(_SOFB.DEVICES.TS)
+            self.devices['evg'] = _EVG()
+            self.devices['rfgen'] = _RFGen()
 
         bomod = _pybo.create_accelerator()
         idx = pyaccel.lattice.find_indices(bomod, 'fam_name', 'EjeSeptF')[0]
@@ -49,7 +51,8 @@ class MeasDispTS(_MeasBaseClass):
 
         famdata = _pybo.get_family_data(bomod)
         bpm0 = famdata['BPM']['devnames'][0]
-        idx = self.devices['bo_sofb'].data.bpm_names.index(bpm0)
+        _bpm_names = _BPMSearch.get_names({'sec': 'BO', 'dev': 'BPM'})
+        idx = _bpm_names.index(bpm0)
         self._idx_shift_bodata = idx
 
         simod = _pysi.create_accelerator()
