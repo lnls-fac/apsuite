@@ -1,6 +1,6 @@
 """Main module."""
 import time as _time
-from math import _log10, _floor
+from math import log10 as _log10, floor as _floor
 
 import numpy as _np
 import matplotlib.pyplot as _plt
