@@ -1,14 +1,14 @@
 """Main module."""
 import time as _time
-from math import log10, floor
+from math import _log10, _floor
 
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as mpl_gs
+import numpy as _np
+import matplotlib.pyplot as _plt
+import matplotlib.gridspec as _mpl_gs
 
-from siriuspy.devices import SOFB, RFGen, Tune
-from pymodels import si
-import pyaccel
+from siriuspy.devices import SOFB, RFGen, Tune, BunchbyBunch
+from pymodels import si as _si
+import pyaccel as _pyacc
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
@@ -16,8 +16,6 @@ from ..utils import ThreadedMeasBaseClass as _BaseClass, \
 
 class MeasParams(_ParamsBaseClass):
     """."""
-
-    MOM_COMPACT = 1.68e-4
 
     def __init__(self):
         """."""
@@ -162,18 +160,18 @@ class MeasDispChrom(_BaseClass):
         orby = data['orby'][usepts, :]
 
         if tunex.size > fitorder + 1:
-            chromx, chromxcov = np.polyfit(den, tunex, deg=fitorder, cov=True)
-            chromy, chromycov = np.polyfit(den, tuney, deg=fitorder, cov=True)
-            dispx, dispxcov = np.polyfit(den, orbx, deg=fitorder, cov=True)
-            dispy, dispycov = np.polyfit(den, orby, deg=fitorder, cov=True)
+            chromx, chromxcov = _np.polyfit(den, tunex, deg=fitorder, cov=True)
+            chromy, chromycov = _np.polyfit(den, tuney, deg=fitorder, cov=True)
+            dispx, dispxcov = _np.polyfit(den, orbx, deg=fitorder, cov=True)
+            dispy, dispycov = _np.polyfit(den, orby, deg=fitorder, cov=True)
         else:
-            chromx = np.polyfit(den, tunex, deg=fitorder, cov=False)
-            chromy = np.polyfit(den, tuney, deg=fitorder, cov=False)
-            dispx = np.polyfit(den, orbx, deg=fitorder, cov=False)
-            dispy = np.polyfit(den, orby, deg=fitorder, cov=False)
-            chromxcov = chromycov = np.zeros(
+            chromx = _np.polyfit(den, tunex, deg=fitorder, cov=False)
+            chromy = _np.polyfit(den, tuney, deg=fitorder, cov=False)
+            dispx = _np.polyfit(den, orbx, deg=fitorder, cov=False)
+            dispy = _np.polyfit(den, orby, deg=fitorder, cov=False)
+            chromxcov = chromycov = _np.zeros(
                 (fitorder+1, fitorder+1), dtype=float)
-            dispxcov = dispycov = np.zeros(
+            dispxcov = dispycov = _np.zeros(
                 (fitorder+1, fitorder+1, orbx.shape[1]), dtype=float)
 
         um2m = 1e-6
@@ -182,20 +180,20 @@ class MeasDispChrom(_BaseClass):
         self.analysis['orby'] = orby
         self.analysis['dispx'] = dispx * um2m
         self.analysis['dispy'] = dispy * um2m
-        self.analysis['dispx_err'] = np.sqrt(np.diagonal(dispxcov)) * um2m
-        self.analysis['dispy_err'] = np.sqrt(np.diagonal(dispycov)) * um2m
+        self.analysis['dispx_err'] = _np.sqrt(_np.diagonal(dispxcov)) * um2m
+        self.analysis['dispy_err'] = _np.sqrt(_np.diagonal(dispycov)) * um2m
 
         self.analysis['tunex'] = tunex
         self.analysis['tuney'] = tuney
         self.analysis['chromx'] = chromx
         self.analysis['chromy'] = chromy
-        self.analysis['chromx_err'] = np.sqrt(np.diagonal(chromxcov))
-        self.analysis['chromy_err'] = np.sqrt(np.diagonal(chromycov))
+        self.analysis['chromx_err'] = _np.sqrt(_np.diagonal(chromxcov))
+        self.analysis['chromy_err'] = _np.sqrt(_np.diagonal(chromycov))
 
     def make_figure_chrom(self, analysis=None, title='', fname=''):
         """."""
-        fig = plt.figure(figsize=(10, 5))
-        grid = mpl_gs.GridSpec(1, 1)
+        fig = _plt.figure(figsize=(10, 5))
+        grid = _mpl_gs.GridSpec(1, 1)
         grid.update(
             left=0.12, right=0.95, bottom=0.15, top=0.9,
             hspace=0.5, wspace=0.35)
@@ -215,10 +213,10 @@ class MeasDispChrom(_BaseClass):
         chromy_err = self.analysis['chromy_err']
         dtunex = tunex - chromx[-1]
         dtuney = tuney - chromy[-1]
-        dtunex_fit = np.polyval(chromx, den) - chromx[-1]
-        dtuney_fit = np.polyval(chromy, den) - chromy[-1]
+        dtunex_fit = _np.polyval(chromx, den) - chromx[-1]
+        dtuney_fit = _np.polyval(chromy, den) - chromy[-1]
 
-        axx = plt.subplot(grid[0, 0])
+        axx = _plt.subplot(grid[0, 0])
         axx.plot(den*100, dtunex*1000, '.b', label='horizontal')
         axx.plot(den*100, dtunex_fit*1000, '-b')
         axx.plot(den*100, dtuney*1000, '.r', label='vertical')
@@ -226,10 +224,10 @@ class MeasDispChrom(_BaseClass):
         axx.set_xlabel(r'$\delta$ [%]')
         axx.set_ylabel(r'$\Delta \nu \times 1000$')
 
-        chromx = np.flip(chromx)
-        chromx_err = np.flip(chromx_err)
-        chromy = np.flip(chromy)
-        chromy_err = np.flip(chromy_err)
+        chromx = _np.flip(chromx)
+        chromx_err = _np.flip(chromx_err)
+        chromy = _np.flip(chromy)
+        chromy_err = _np.flip(chromy_err)
 
         stx = MeasDispChrom.polynomial_to_latex(chromx, chromx_err)
         sty = MeasDispChrom.polynomial_to_latex(chromy, chromy_err)
@@ -245,14 +243,14 @@ class MeasDispChrom(_BaseClass):
 
         if fname:
             fig.savefig(fname+'.svg')
-            plt.close()
+            _plt.close()
         else:
             fig.show()
 
     def make_figure_disp(self, analysis=None, disporder=1, title='', fname=''):
         """."""
-        fig = plt.figure(figsize=(10, 5))
-        grid = mpl_gs.GridSpec(1, 1)
+        fig = _plt.figure(figsize=(10, 5))
+        grid = _mpl_gs.GridSpec(1, 1)
         grid.update(
             left=0.12, right=0.95, bottom=0.15, top=0.9,
             hspace=0.5, wspace=0.35)
@@ -263,10 +261,10 @@ class MeasDispChrom(_BaseClass):
         if analysis is None:
             analysis = self.analysis
 
-        simod = si.create_accelerator()
-        fam = si.get_family_data(simod)
-        spos = pyaccel.lattice.find_spos(simod, indices='open')
-        bpmidx = np.array(fam['BPM']['index']).ravel()
+        simod = _si.create_accelerator()
+        fam = _si.get_family_data(simod)
+        spos = _pyacc.lattice.find_spos(simod, indices='open')
+        bpmidx = _np.array(fam['BPM']['index']).ravel()
         sposbpm = spos[bpmidx]
 
         fitorder_anlys = analysis['dispx'].shape[0] - 1
@@ -281,7 +279,7 @@ class MeasDispChrom(_BaseClass):
         dispy_err = analysis['dispy_err'][:, fitidx]
 
         m2cm = 100
-        axx = plt.subplot(grid[0, 0])
+        axx = _plt.subplot(grid[0, 0])
         axx.errorbar(
             sposbpm, dispx*m2cm, dispx_err*m2cm, None, '.-b',
             label='horizontal')
@@ -296,7 +294,7 @@ class MeasDispChrom(_BaseClass):
 
         if fname:
             fig.savefig(fname+'.svg')
-            plt.close()
+            _plt.close()
         else:
             fig.show()
 
@@ -309,12 +307,12 @@ class MeasDispChrom(_BaseClass):
     def polynomial_to_latex(poly, error):
         """ Small function to print nicely the polynomial p as we write it in
             maths, in LaTeX code."""
-        poly = np.poly1d(poly)
+        poly = _np.poly1d(poly)
         coefs = poly.coef  # List of coefficient, sorted by increasing degrees
         res = ''  # The resulting string
         for idx, coef_idx in enumerate(coefs):
             err = error[idx]
-            sig_fig = int(floor(log10(abs(err))))
+            sig_fig = int(_floor(_log10(abs(err))))
             err = round(err, -sig_fig)
             coef_idx = round(coef_idx, -sig_fig)
             if int(coef_idx) == coef_idx:  # Remove the trailing .0
