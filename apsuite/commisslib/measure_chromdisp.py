@@ -141,7 +141,7 @@ class MeasDispChrom(_BaseClass):
             sofb.cmd_turn_on_autocorr()
         print('Finished!')
 
-    def process_data(self, fitorder=1, discardpoints=None):
+    def process_data(self, fitorder=1, discardpoints=None, tunes_from='spec'):
         """."""
         data = self.data
 
@@ -151,10 +151,13 @@ class MeasDispChrom(_BaseClass):
         usepts = sorted(usepts)
 
         freq0 = data['freq0']
-        den = -(data['freq'] - freq0)/freq0/self.params.MOM_COMPACT
+        den = -(data['freq'] - freq0)/freq0/self.MOM_COMPACT
         den = den[usepts]
-        tunex = data['tunex'][usepts]
-        tuney = data['tuney'][usepts]
+        suffix = ''
+        if tunes_from.lower() == 'bbb':
+            suffix = '_bbb'
+        tunex = data['tunex' + suffix][usepts]
+        tuney = data['tuney' + suffix][usepts]
         orbx = data['orbx'][usepts, :]
         orby = data['orby'][usepts, :]
 
