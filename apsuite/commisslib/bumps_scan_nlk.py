@@ -108,13 +108,13 @@ class BumpNLK(_BaseClass):
             'spech_mag': bbbh.sram.spec_mag,
             'spech_freq': bbbh.sram.spec_freq,
             'spech_mk1_mag': bbbh.sram.spec_marker1_mag,
-            'spech_mk1_freq': bbbh.sram.spec_marker1_freq,
+            'spech_mk1_tune': bbbh.sram.spec_marker1_tune,
             'trajx': trajx,
 
             'specv_magv': bbbv.sram.spec_mag,
             'specv_freqv': bbbv.sram.spec_freq,
             'specv_mk1_mag': bbbv.sram.spec_marker1_mag,
-            'specv_mk1_freq': bbbv.sram.spec_marker1_freq,
+            'specv_mk1_tune': bbbv.sram.spec_marker1_tune,
             'trajy': trajy,
             }
         return data
