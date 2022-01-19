@@ -20,22 +20,22 @@ class BPMeasure:
         """."""
         self._bo = _pm.bo.create_accelerator(energy=3e9)
         self._bo.vchamber_on = True
+        self._bo.cavity_on = True
+
         if rad:
-            self._bo.cavity_on = True
             self._bo.radiation_on = True
         else:
-            self._bo.cavity_on = False
             self._bo.radiation_on = False
 
         self._famdata = _pm.bo.get_family_data(self._bo)
 
         # Introducing coupling:
         if KsL is not None:
-            self.change_QS(KsL=KsL)
+            self.change_QS_KsL(KsL=KsL)
 
         # Changing QF quadrupole forces:
         if QF_KL is not None:
-            self.change_QF(KL=QF_KL)
+            self.change_QF_KL(KL=QF_KL)
 
         # Getting optics information about the machine
         self._et, _ = _pa.optics.calc_edwards_teng(self._bo)
@@ -55,8 +55,8 @@ class BPMeasure:
         if offset is None:
             offset = _np.array([[0], [0], [0], [0], [0], [0]])
 
-        emit1, emit2 = self._eqparams.emit1, _np.abs(self._eqparams.emit2)
-        sigmae, sigmal = self._eqparams.espread0, self._eqparams.bunlen
+        emit1, emit2 = self.eqparams.emit1, _np.abs(self.eqparams.emit2)
+        sigmae, sigmal = self.eqparams.espread0, self.eqparams.bunlen
         self._bunch = _pa.tracking.generate_bunch(n_part=n_part, emit1=emit1,
                                                   emit2=emit2,
                                                   optics=self._et[0],
@@ -64,16 +64,33 @@ class BPMeasure:
         co = _pa.tracking.find_orbit6(accelerator=self._bo, indices='closed')
         self._bunch += co[:, [0]] + offset
 
-    def change_QF(self, KL):
+    @property
+    def eqparams(self):
+        self._eqparams = _pa.optics.EqParamsFromBeamEnvelope(self._bo)
+        return self._eqparams
+
+    def change_QF_KL(self, KL):
         """."""
         qf_idx = _np.array(self._famdata['QF']['index']).flatten()
         for qf in qf_idx:
             self._bo[qf].KL = KL
 
-    def change_QS(self, KsL):
+    def get_QF_KL(self):
+        """."""
+        qf_idx = _np.array(self._famdata['QF']['index']).flatten()
+
+        return self._bo[qf_idx[0]].KL
+
+    def change_QS_KsL(self, KsL):
         """."""
         qs_idx = self._famdata['QS']['index']
         self._bo[qs_idx[0][0]].KsL = KsL
+
+    def get_QS_KsL(self):
+        """."""
+        qs_idx = self._famdata['QS']['index']
+
+        return self._bo[qs_idx[0][0]].KsL
 
 # ------ The above class methods performs specific types of tracking ------ #
 
@@ -100,7 +117,7 @@ class BPMeasure:
         for n in range(N_turns):
 
             if KL_crossing is not None:
-                self.change_QF(KL=KL_list[n])
+                self.change_QF_KL(KL=KL_list[n])
 
             if out_tunes:
                 self._eqparams = _pa.optics.EqParamsFromBeamEnvelope(self._bo)
@@ -122,7 +139,7 @@ class BPMeasure:
         else:
             return x_measures, y_measures
 
-    def emit_exchange_simulation(self, N, KL_crossing):
+    def emit_exchange_simulation(self, N, KL_crossing, initial_delta=None, stop_delta=None):
         """."""
         KL_default = self._QF_KL_default
         step = (KL_crossing - KL_default)/N
@@ -134,7 +151,7 @@ class BPMeasure:
         bunch0 = self._bunch
 
         for i in range(2*N):
-            self.change_QF(KL=KL_list[i])
+            self.change_QF_KL(KL=KL_list[i])
             bunch0, *_ = _pa.tracking.ring_pass(
                 accelerator=self._bo, particles=bunch0,
                 nr_turns=1, parallel=True)
@@ -366,8 +383,8 @@ def spectrogram_mean(x_m, y_m, dn=None):
 
 def plot_heatmap(tune_matrix, freqs):
     ax = _plt.subplot()
-    extent = [freqs[1:].min(), freqs[1:].max(), 0, tune_matrix.shape[1]]
-    im = ax.imshow(tune_matrix[1:, :].T, cmap='hot', aspect='auto',
+    extent = [0, tune_matrix.shape[1], freqs[1:].min(), freqs[1:].max()]
+    im = ax.imshow(tune_matrix[1:, :], cmap='hot', aspect='auto',
                    extent=extent)
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.1)
