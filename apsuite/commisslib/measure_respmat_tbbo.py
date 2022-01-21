@@ -146,7 +146,7 @@ def calc_model_respmatTBBO(
     """."""
     bpms = np.array(pyaccel.lattice.find_indices(model, 'fam_name', 'BPM'))[1:]
     _, cumulmat = pyaccel.tracking.find_m44(
-        model, indices='open', closed_orbit=[0, 0, 0, 0])
+        model, indices='open', fixed_point=[0, 0, 0, 0])
 
     matrix = np.zeros((len(corr_names), 2*bpms.size))
     for idx, corr in enumerate(corr_names):
