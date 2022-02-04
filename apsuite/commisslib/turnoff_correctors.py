@@ -132,7 +132,7 @@ class TurnOffCorr(_ThreadBaseClass):
         self.devices['rfgen'] = RFGen()
 
     def get_orbit_data(self):
-        """Get orbit data from BPMs in Monit1 acquisiton rate.
+        """Get orbit data from BPMs in Monit1 acquisition rate.
 
         BPMs must be configured to listen Study event and the Study event
         must be in External mode.
@@ -145,7 +145,7 @@ class TurnOffCorr(_ThreadBaseClass):
             - orby: vertical orbit (nsamples x 160)
             - tunex: horizontal betatron tune
             - tuney: vertical betatron tune
-            - mt_acq_rate: MultiTurn acquision rate (always Monit1)
+            - mt_acq_rate: MultiTurn acquisition rate (always Monit1)
             - rf_frequency
 
         After running get_orbit_data() the user can save the data to .pickle
@@ -325,7 +325,7 @@ class TurnOffCorr(_ThreadBaseClass):
 
         Basically this method does the opposite of _do_process().
         Turn on power supplies of initially removed CHs subset, include it in
-        SOFB and perform orbit corrections while checking for tune drifs.
+        SOFB and perform orbit corrections while checking for tune drifts.
         If the max. difference between applied and initial kicks in CHs are
         less than self.MAX_KICK_TOL_TO_RECOVER, then it is considered that the
         initial correctors state was recovered.
