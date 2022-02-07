@@ -3,7 +3,7 @@
 import numpy as _np
 import time as _time
 import pyaccel as _pa
-from numpy.fft import rfft, rfftfreq
+from numpy.fft import rfft, rfftfreq, rfftn
 import matplotlib.pyplot as _plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
@@ -149,36 +149,27 @@ class BPMeasure(_ThreadBaseClass):
         """."""
         x = self.data['orbx'] - self.data['orbx'].mean(axis=0)
         y = self.data['orby'] - self.data['orby'].mean(axis=0)
-        M = x.shape[1]
         N = x.shape[0]
 
         if dn is None:
             dn = N//50
 
+        dn = int(dn)
+
         freqs = rfftfreq(dn)
         tune1_matrix = _np.zeros([freqs.size, N-dn])
         tune2_matrix = tune1_matrix.copy()
-        tune_tensor = _np.zeros([tune1_matrix.shape[0], tune1_matrix.shape[1],
-                                 M])
 
-        for m in range(M):
+        for n in range(N-dn):
+            sub_x = x[n:n+dn, :]
+            espectra_by_bpm_x = _np.abs(rfftn(sub_x, axes=[0]))
 
-            signalx = x[:, m]
-            signaly = y[:, m]
+            sub_y = y[n:n+dn, :]
+            espectra_by_bpm_y = _np.abs(rfftn(sub_y, axes=[0]))
 
-            for n in range(N-dn):
-                sub_signalx = signalx[n:n+dn]
-                espectrum_x = _np.abs(rfft(sub_signalx))*2*_np.pi/dn
-                tune1_matrix[:, n] = espectrum_x
-
-                sub_signaly = signaly[n:n+dn]
-                espectrum_y = _np.abs(rfft(sub_signaly))*2*_np.pi/dn
-                tune2_matrix[:, n] = espectrum_y
-
-            tune_matrix = tune1_matrix + tune2_matrix
-            tune_tensor[:, :, m] = tune_matrix
-
-        tune_matrix = _np.mean(tune_tensor, axis=2)
+            tune1_matrix[:, n] = _np.mean(espectra_by_bpm_x, axis=1)
+            tune2_matrix[:, n] = _np.mean(espectra_by_bpm_y, axis=1)
+        tune_matrix = tune1_matrix + tune2_matrix
 
         # normalizing this matrix to get a better heatmap plot:
         tune_matrix = (tune_matrix - tune_matrix.min()) / \
