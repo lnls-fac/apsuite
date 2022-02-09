@@ -5,7 +5,6 @@ import time as _time
 import pyaccel as _pa
 from numpy.fft import rfft, rfftfreq, rfftn
 import matplotlib.pyplot as _plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from siriuspy.sofb.csdev import SOFBFactory
 
@@ -26,7 +25,7 @@ class BPMeasureParams(_ParamsBaseClass):
         self.nr_points_after = 0
         self.nr_points_before = 10000
         self.bpms_timeout = 30  # [s] (?)
-        self.DigBOmode = 'Extraction'  # or 'Injection'
+        self.DigBOmode = 'Injection'  # or 'Injection'
 
 
 class BPMeasure(_ThreadBaseClass):
@@ -57,19 +56,22 @@ class BPMeasure(_ThreadBaseClass):
         """Get orbit data from BPMs in TbT acquisition rate
 
         BPMs must be configured to listen DigBO event and the DigBO
-        event must be in Injection mode."""
+        event must be in extraction mode."""
 
         prms = self.params
         bobpms = self.devices['bobpms']
         bobpms.mturn_config_acquisition(
             nr_points_after=prms.nr_points_after,
             nr_points_before=prms.nr_points_before,
-            acq_rate='TbT', repeat=False, external=False)
-        # I put external=False because DigBO must be in Injection mode
+            acq_rate='TbT', repeat=False, external=True)
+        #    acq_rate='TbT', repeat=False, external=False)
+        # I put external=False because DigBO must be in extraction mode
         # This make sense?
+
         bobpms.mturn_reset_flags()
         # DigBO putted in Extraction mode
         self.devices['event'].mode = prms.DigBOmode
+        self.devices['event'].cmd_external_trigger()
         ret = bobpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
         if ret != 0:
             print(f'Problem waiting BPMs update. Error code: {ret:d}')
@@ -197,7 +199,7 @@ class BPMeasure(_ThreadBaseClass):
         tune1, tune2 = M*freqx, M*freqy
 
         if decimal_only is False:
-            return tune1, tune2
+            return _np.abs(tune1), _np.abs(tune2)
         else:
             tune1, tune2 = _np.abs(tune1 % 1), _np.abs(tune2 % 1)
             if tune1 > 0.5:
@@ -208,13 +210,13 @@ class BPMeasure(_ThreadBaseClass):
 
 
 def _plot_heatmap(tune_matrix, freqs):
-    ax = _plt.subplot()
-    extent = [0, tune_matrix.shape[1], freqs[1:].min(), freqs[1:].max()]
-    im = ax.imshow(tune_matrix[1:, :], cmap='hot', aspect='auto',
-                   extent=extent)
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="5%", pad=0.1)
-    _plt.colorbar(im, cax=cax)
-    ax.set_ylabel('Frac. Freq')
-    ax.set_xlabel('Turns')
+    N = tune_matrix.shape[1]
+    N_list = _np.arange(N)
+    N_mesh, freqs_mesh = _np.meshgrid(N_list, freqs)
+    _plt.pcolormesh(N_mesh, freqs_mesh, tune_matrix,
+                    shading='auto', cmap='hot')
+    _plt.colorbar().set_label(label="Relative Amplitude")
+    _plt.ylabel('Frac. Frequency')
+    _plt.xlabel('Turns')
+    _plt.tight_layout()
     _plt.show()
