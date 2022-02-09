@@ -33,7 +33,6 @@ class BPMeasure(_ThreadBaseClass):
     def __init__(self, params=None, isonline=True):
         """."""
         params = BPMeasureParams() if params is None else params
-        # Do I need to set a target in the below line?
         super().__init__(params=params, isonline=isonline)
         self.sofb_data = SOFBFactory.create('BO')
         if self.isonline:
@@ -64,9 +63,6 @@ class BPMeasure(_ThreadBaseClass):
             nr_points_after=prms.nr_points_after,
             nr_points_before=prms.nr_points_before,
             acq_rate='TbT', repeat=False, external=True)
-        #    acq_rate='TbT', repeat=False, external=False)
-        # I put external=False because DigBO must be in extraction mode
-        # This make sense?
 
         bobpms.mturn_reset_flags()
         # DigBO putted in Extraction mode
@@ -147,7 +143,7 @@ class BPMeasure(_ThreadBaseClass):
 
         return _np.array(tune1_list), _np.array(tune2_list)
 
-    def spectrogram(self, dn=None):
+    def spectrogram(self, dn=None, overlap=True):
         """."""
         x = self.data['orbx'] - self.data['orbx'].mean(axis=0)
         y = self.data['orby'] - self.data['orby'].mean(axis=0)
@@ -162,15 +158,30 @@ class BPMeasure(_ThreadBaseClass):
         tune1_matrix = _np.zeros([freqs.size, N-dn])
         tune2_matrix = tune1_matrix.copy()
 
-        for n in range(N-dn):
-            sub_x = x[n:n+dn, :]
-            espectra_by_bpm_x = _np.abs(rfftn(sub_x, axes=[0]))
+        if not overlap:
+            slices = _np.arange(0, N, dn)
+            for idx in range(len(slices)-1):
+                idx1, idx2 = slices[idx], slices[idx+1]
+                sub_x = x[idx1:idx2, :]
+                sub_y = y[idx1:idx2, :]
 
-            sub_y = y[n:n+dn, :]
-            espectra_by_bpm_y = _np.abs(rfftn(sub_y, axes=[0]))
+                espectra_by_bpm_x = _np.abs(rfftn(sub_x, axes=[0]))
+                espectra_by_bpm_y = _np.abs(rfftn(sub_y, axes=[0]))
+                tune1_matrix[:, idx1:idx2] = _np.mean(espectra_by_bpm_x,
+                                                      axis=1)[:, None]
+                tune2_matrix[:, idx1:idx2] = _np.mean(espectra_by_bpm_y,
+                                                      axis=1)[:, None]
+        else:
+            for n in range(N-dn):
+                sub_x = x[n:n+dn, :]
+                espectra_by_bpm_x = _np.abs(rfftn(sub_x, axes=[0]))
 
-            tune1_matrix[:, n] = _np.mean(espectra_by_bpm_x, axis=1)
-            tune2_matrix[:, n] = _np.mean(espectra_by_bpm_y, axis=1)
+                sub_y = y[n:n+dn, :]
+                espectra_by_bpm_y = _np.abs(rfftn(sub_y, axes=[0]))
+
+                tune1_matrix[:, n] = _np.mean(espectra_by_bpm_x, axis=1)
+                tune2_matrix[:, n] = _np.mean(espectra_by_bpm_y, axis=1)
+
         tune_matrix = tune1_matrix + tune2_matrix
 
         # normalizing this matrix to get a better heatmap plot:
