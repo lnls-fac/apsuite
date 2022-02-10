@@ -17,7 +17,6 @@ from apsuite.utils import ParamsBaseClass as _ParamsBaseClass, \
 
 class BPMeasureParams(_ParamsBaseClass):
     """."""
-
     def __init__(self):
         """."""
         super().__init__()
@@ -26,6 +25,7 @@ class BPMeasureParams(_ParamsBaseClass):
         self.nr_points_before = 10000
         self.bpms_timeout = 30  # [s] (?)
         self.DigBOmode = 'Injection'  # or 'Injection'
+        self.extra_delay = 0
 
 
 class BPMeasure(_ThreadBaseClass):
@@ -59,22 +59,33 @@ class BPMeasure(_ThreadBaseClass):
 
         prms = self.params
         bobpms = self.devices['bobpms']
+        trigbpm = self.devices['trigbpm']
+
+        # Configure acquisition rate and doing bpms listen external trigger
         bobpms.mturn_config_acquisition(
             nr_points_after=prms.nr_points_after,
             nr_points_before=prms.nr_points_before,
             acq_rate='TbT', repeat=False, external=True)
-
         bobpms.mturn_reset_flags()
-        # DigBO putted in Extraction mode
+
+        # Configure BPMs trigger to listen to DigBO event
+        delay0 = trigbpm.delay
+        trigbpm.delay = delay0 + prms.extra_delay
+        trigbpm.nr_pulses = 1
+        trigbpm.source = 'DigBO'
         self.devices['event'].mode = prms.DigBOmode
-        self.devices['event'].cmd_external_trigger()
+
+        # Start acquisition and inject
+        bobpms.cmd_mturn_acq_start()
+        # self.devices['event'].cmd_external_trigger()
+        self.devices['evg'].cmd_turn_on_injection()
+        _time.sleep(2)
         ret = bobpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
         if ret != 0:
             print(f'Problem waiting BPMs update. Error code: {ret:d}')
             return dict()
-
         orbx, orby = bobpms.get_mturn_orbit()
-        # I am not sure if i really need to store sofb data
+
         chs_names = [self.sofb_data.ch_names[idx] for idx in prms.chs_idx]
         data = dict()
         data['timestamp'] = _time.time()
@@ -174,9 +185,8 @@ class BPMeasure(_ThreadBaseClass):
         else:
             for n in range(N-dn):
                 sub_x = x[n:n+dn, :]
-                espectra_by_bpm_x = _np.abs(rfftn(sub_x, axes=[0]))
-
                 sub_y = y[n:n+dn, :]
+                espectra_by_bpm_x = _np.abs(rfftn(sub_x, axes=[0]))
                 espectra_by_bpm_y = _np.abs(rfftn(sub_y, axes=[0]))
 
                 tune1_matrix[:, n] = _np.mean(espectra_by_bpm_x, axis=1)
