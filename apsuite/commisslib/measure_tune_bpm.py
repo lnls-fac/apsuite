@@ -111,10 +111,24 @@ class BPMeasure(_ThreadBaseClass):
         if orby is not None:
             self.data['orby'] = orby
 
-    def dft(self, bpm_index=0):
-        "Apply a dft in a single bpm"
-        orbx = self.data['orbx'][:, bpm_index]
-        orby = self.data['orby'][:, bpm_index]
+    def dft(self, bpm_indices=None):
+        """Apply a dft at bpms.
+
+        Args:
+        - bpm_indices (int, list or np.array): BPM indices whose dft will
+        be applied. Default is return the dft of all bpms.
+
+        Returns:
+         - spectrumx, spectrumy, freqs: The first two are spectra np.arrays
+         of dimension #freqs x #bpm_indices, and freqs is a np.array with
+         the frequency domain values.
+        """
+        if bpm_indices is not None:
+            orbx = self.data['orbx'][:, bpm_indices]
+            orby = self.data['orby'][:, bpm_indices]
+        else:
+            orbx = self.data['orbx']
+            orby = self.data['orby']
 
         x_beta = orbx - orbx.mean(axis=0)
         y_beta = orby - orby.mean(axis=0)
@@ -122,8 +136,12 @@ class BPMeasure(_ThreadBaseClass):
         N = x_beta.shape[0]
         freqs = rfftfreq(N)
 
-        spectrumx = _np.abs(rfft(x_beta))*2*_np.pi/N
-        spectrumy = _np.abs(rfft(y_beta))*2*_np.pi/N
+        if isinstance(bpm_indices, int):
+            spectrumx = _np.abs(rfft(x_beta))
+            spectrumy = _np.abs(rfft(y_beta))
+        else:
+            spectrumx = _np.abs(rfftn(x_beta, axes=[0]))
+            spectrumy = _np.abs(rfftn(y_beta, axes=[0]))
 
         return spectrumx, spectrumy, freqs
 
