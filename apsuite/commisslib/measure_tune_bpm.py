@@ -184,8 +184,8 @@ class BPMeasure(_ThreadBaseClass):
             x = self.data['orbx']
             y = self.data['orby']
 
-        x = self.data['orbx'] - self.data['orbx'].mean(axis=0)
-        y = self.data['orby'] - self.data['orby'].mean(axis=0)
+        x = x - x.mean(axis=0)
+        y = y - y.mean(axis=0)
         N = x.shape[0]
 
         if dn is None:
