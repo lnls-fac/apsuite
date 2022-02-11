@@ -145,18 +145,21 @@ class BPMeasure(_ThreadBaseClass):
 
         return spectrumx, spectrumy, freqs
 
-    def naff_tunes(self, dn=None, window_param=1):
+    def naff_tunes(self, dn=None, window_param=1, bpm_indices=None):
         """Computes the tune evolution from the BPMs matrix with a moving
             window of length dn.
            If dn is not passed, the tunes are computed using all points."""
 
-        x = self.data['orbx']
-        y = self.data['orby']
+        if bpm_indices is not None:
+            x = self.data['orbx'][:, bpm_indices]
+            y = self.data['orby'][:, bpm_indices]
+        else:
+            x = self.data['orbx']
+            y = self.data['orby']
         N = x.shape[0]
 
         if dn is None:
             return self.tune_by_naff(x, y)
-
         else:
             tune1_list = []
             tune2_list = []
@@ -172,8 +175,15 @@ class BPMeasure(_ThreadBaseClass):
 
         return _np.array(tune1_list), _np.array(tune2_list)
 
-    def spectrogram(self, dn=None, overlap=True):
+    def spectrogram(self, dn=None, overlap=True, bpm_indices=None):
         """."""
+        if bpm_indices is not None:
+            x = self.data['orbx'][:, bpm_indices]
+            y = self.data['orby'][:, bpm_indices]
+        else:
+            x = self.data['orbx']
+            y = self.data['orby']
+
         x = self.data['orbx'] - self.data['orbx'].mean(axis=0)
         y = self.data['orby'] - self.data['orby'].mean(axis=0)
         N = x.shape[0]
