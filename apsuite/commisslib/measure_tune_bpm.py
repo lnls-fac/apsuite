@@ -23,9 +23,12 @@ class BPMeasureParams(_ParamsBaseClass):
         # self.n_bpms = 50  # Numbers of BPMs
         self.nr_points_after = 0
         self.nr_points_before = 10000
-        self.bpms_timeout = 30  # [s] (?)
-        self.DigBOmode = 'Injection'  # or 'Injection'
+        self.bpms_timeout = 30  # [s]
+        self.trigger_source = 'DigBO'
+        self.trigger_source_mode = 'Injection'
         self.extra_delay = 0
+        self.nr_pulses = 1
+        
 
 
 class BPMeasure(_ThreadBaseClass):
@@ -51,12 +54,8 @@ class BPMeasure(_ThreadBaseClass):
         self.devices['ejekckr'] = PowerSupplyPU(PowerSupplyPU.
                                                 DEVICES.BO_EJE_KCKR)
 
-    def get_orbit_data(self):
-        """Get orbit data from BPMs in TbT acquisition rate
-
-        BPMs must be configured to listen DigBO event and the DigBO
-        event must be in extraction mode."""
-
+    def configure_bpms(self):
+        """."""
         prms = self.params
         bobpms = self.devices['bobpms']
         trigbpm = self.devices['trigbpm']
@@ -69,16 +68,29 @@ class BPMeasure(_ThreadBaseClass):
         bobpms.mturn_reset_flags()
 
         # Configure BPMs trigger to listen to DigBO event
+        trigbpm.source = prms.trigger_source
+        trigbpm.nr_pulses = prms.nr_pulses
         delay0 = trigbpm.delay
         trigbpm.delay = delay0 + prms.extra_delay
-        trigbpm.nr_pulses = 1
-        trigbpm.source = 'DigBO'
-        self.devices['event'].mode = prms.DigBOmode
+        self.devices['event'].mode = prms.trigger_source_mode
 
-        # Start acquisition and inject
+    def get_orbit_data(self, injection=False, external_trigger=False):
+        """Get orbit data from BPMs in TbT acquisition rate
+        BPMs must be configured to listen DigBO event and the DigBO
+        event must be in Injection mode.
+        If injection is True, then injection is turned on before the measure.
+        If external_trigger is True, the event will listen a external trigger.
+        """
+        prms = self.params
+        bobpms = self.devices['bobpms']
+        trigbpm = self.devices['trigbpm']
+
+        # Inject and start acquisition
         bobpms.cmd_mturn_acq_start()
-        # self.devices['event'].cmd_external_trigger()
-        self.devices['evg'].cmd_turn_on_injection()
+        if external_trigger:
+            self.devices['event'].cmd_external_trigger()
+        if injection:
+            self.devices['evg'].cmd_turn_on_injection()
         _time.sleep(2)
         ret = bobpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
         if ret != 0:
@@ -86,14 +98,23 @@ class BPMeasure(_ThreadBaseClass):
             return dict()
         orbx, orby = bobpms.get_mturn_orbit()
 
-        chs_names = [self.sofb_data.ch_names[idx] for idx in prms.chs_idx]
+        # Store data
+        bpm0 = bobpms[0]
+        csbpm = bpm0.csdata
         data = dict()
         data['timestamp'] = _time.time()
-        data['chs_off'] = chs_names
-        data['stored_current'] = self.devices['currinfo'].current
-        data['orbx'], data['orby'] = orbx, orby
-        data['mt_acq_rate'] = 'TbT'
         data['rf_frequency'] = self.devices['rfgen'].frequency
+        data['current_150mev'] = self.devices['currinfo'].current150mev
+        data['current_1gev'] = self.devices['currinfo'].current1gev
+        data['current_2gev'] = self.devices['currinfo'].current2gev
+        data['current_3gev'] = self.devices['currinfo'].current3gev
+        data['orbx'], data['orby'] = orbx, orby
+        data['mt_acq_rate'] = csbpm.AcqChan._fields[bpm0.acq_channel]
+        data['bpms_nrsamples_pre'] = bpm0.acq_nrsamples_pre
+        data['bpms_nrsamples_post'] = bpm0.acq_nrsamples_post
+        data['bpms_trig_delay_raw'] = trigbpm.delay_raw
+        data['bpms_switching_mode'] = csbpm.SwModes._fields[
+                                        bpm0.switching_mode]
         self.data = data
 
     def load_orbit(self, data=None, orbx=None, orby=None):
