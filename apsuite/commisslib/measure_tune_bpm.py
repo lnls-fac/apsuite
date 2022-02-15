@@ -9,7 +9,7 @@ import matplotlib.pyplot as _plt
 from siriuspy.sofb.csdev import SOFBFactory
 
 from siriuspy.devices import CurrInfoBO, \
-    Trigger, Event, EVG, RFGen, SOFB, PowerSupplyPU, FamBPMs
+    Trigger, Event, EVG, RFGen, FamBPMs
 
 from apsuite.utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
@@ -20,7 +20,6 @@ class BPMeasureParams(_ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
-        # self.n_bpms = 50  # Numbers of BPMs
         self.nr_points_after = 0
         self.nr_points_before = 10000
         self.bpms_timeout = 30  # [s]
@@ -43,15 +42,10 @@ class BPMeasure(_ThreadBaseClass):
     def _create_devices(self):
         self.devices['currinfo'] = CurrInfoBO()
         self.devices['bobpms'] = FamBPMs(FamBPMs.DEVICES.BO)
-        # self.devices['event'] = Event('Study')
         self.devices['event'] = Event('DigBO')
         self.devices['evg'] = EVG()
-        self.devices['sofb'] = SOFB(SOFB.DEVICES.BO)
         self.devices['trigbpm'] = Trigger('BO-Fam:TI-BPM')
-        self.devices['evg'] = EVG()
         self.devices['rfgen'] = RFGen()
-        self.devices['ejekckr'] = PowerSupplyPU(PowerSupplyPU.
-                                                DEVICES.BO_EJE_KCKR)
 
     def configure_bpms(self):
         """."""
@@ -59,14 +53,11 @@ class BPMeasure(_ThreadBaseClass):
         bobpms = self.devices['bobpms']
         trigbpm = self.devices['trigbpm']
 
-        # Configure acquisition rate and doing bpms listen external trigger
         bobpms.mturn_config_acquisition(
             nr_points_after=prms.nr_points_after,
             nr_points_before=prms.nr_points_before,
             acq_rate='TbT', repeat=False, external=True)
         bobpms.mturn_reset_flags()
-
-        # Make BPMs trigger list DigBO event
         trigbpm.source = prms.trigger_source
         trigbpm.nr_pulses = prms.nr_pulses
 
