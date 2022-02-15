@@ -31,13 +31,13 @@ def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6):
     for i, idx in enumerate(idcs):
         gorb = orb0.copy()
         orbcorr.set_kicks(kicks0)
-        gorb[idx] = deltax/2
+        gorb[idx] += deltax/2
         orbcorr.correct_orbit(goal_orbit=gorb)
         orbp = orbcorr.get_orbit()[idcs]
         bcp = pyaccel.tracking.find_orbit6(
             orbcorr.respm.model, indices='open')[0:4, mci]
 
-        gorb[idx] = -deltax/2
+        gorb[idx] -= deltax
         orbcorr.correct_orbit(goal_orbit=gorb)
         orbn = orbcorr.get_orbit()[idcs]
         bcn = pyaccel.tracking.find_orbit6(
