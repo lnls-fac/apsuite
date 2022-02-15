@@ -28,7 +28,6 @@ class BPMeasureParams(_ParamsBaseClass):
         self.trigger_source_mode = 'Injection'
         self.extra_delay = 0
         self.nr_pulses = 1
-        
 
 
 class BPMeasure(_ThreadBaseClass):
@@ -67,12 +66,9 @@ class BPMeasure(_ThreadBaseClass):
             acq_rate='TbT', repeat=False, external=True)
         bobpms.mturn_reset_flags()
 
-        # Configure BPMs trigger to listen to DigBO event
+        # Make BPMs trigger list DigBO event
         trigbpm.source = prms.trigger_source
         trigbpm.nr_pulses = prms.nr_pulses
-        delay0 = trigbpm.delay
-        trigbpm.delay = delay0 + prms.extra_delay
-        self.devices['event'].mode = prms.trigger_source_mode
 
     def get_orbit_data(self, injection=False, external_trigger=False):
         """Get orbit data from BPMs in TbT acquisition rate
@@ -85,18 +81,24 @@ class BPMeasure(_ThreadBaseClass):
         bobpms = self.devices['bobpms']
         trigbpm = self.devices['trigbpm']
 
+        self.delay0 = trigbpm.delay
+        trigbpm.delay = self.delay0 + prms.extra_delay
+        self.devices['event'].mode = prms.trigger_source_mode
+
         # Inject and start acquisition
-        bobpms.cmd_mturn_acq_start()
+        bobpms.mturn_reset_flags()
         if external_trigger:
             self.devices['event'].cmd_external_trigger()
         if injection:
             self.devices['evg'].cmd_turn_on_injection()
-        _time.sleep(2)
         ret = bobpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
         if ret != 0:
             print(f'Problem waiting BPMs update. Error code: {ret:d}')
+            trigbpm.delay = self.delay0
             return dict()
         orbx, orby = bobpms.get_mturn_orbit()
+        bobpms.cmd_mturn_acq_abort()
+        trigbpm.delay = self.delay0
 
         # Store data
         bpm0 = bobpms[0]
@@ -115,6 +117,7 @@ class BPMeasure(_ThreadBaseClass):
         data['bpms_trig_delay_raw'] = trigbpm.delay_raw
         data['bpms_switching_mode'] = csbpm.SwModes._fields[
                                         bpm0.switching_mode]
+        data['init_delay'] = self.delay0
         self.data = data
 
     def load_orbit(self, data=None, orbx=None, orby=None):
@@ -280,6 +283,7 @@ class BPMeasure(_ThreadBaseClass):
 
 
 def _plot_heatmap(tune_matrix, freqs):
+    _plt.figure()
     N = tune_matrix.shape[1]
     N_list = _np.arange(N)
     N_mesh, freqs_mesh = _np.meshgrid(N_list, freqs)
