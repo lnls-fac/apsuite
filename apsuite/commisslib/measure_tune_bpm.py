@@ -3,7 +3,7 @@
 import numpy as _np
 import time as _time
 import pyaccel as _pa
-from numpy.fft import rfft, rfftfreq, rfftn
+from numpy.fft import rfft as _rfft,  rfftfreq as _rfftfreq
 import matplotlib.pyplot as _plt
 
 from siriuspy.sofb.csdev import SOFBFactory
@@ -149,14 +149,10 @@ class BPMeasure(_ThreadBaseClass):
         y_beta = orby - orby.mean(axis=0)
 
         N = x_beta.shape[0]
-        freqs = rfftfreq(N)
+        freqs = _rfftfreq(N)
 
-        if isinstance(bpm_indices, int):
-            spectrumx = _np.abs(rfft(x_beta))
-            spectrumy = _np.abs(rfft(y_beta))
-        else:
-            spectrumx = _np.abs(rfftn(x_beta, axes=[0]))
-            spectrumy = _np.abs(rfftn(y_beta, axes=[0]))
+        spectrumx = _np.abs(_rfft(x_beta, axis=0))
+        spectrumy = _np.abs(_rfft(y_beta, axis=0))
 
         return spectrumx, spectrumy, freqs
 
@@ -183,8 +179,8 @@ class BPMeasure(_ThreadBaseClass):
                 idx1, idx2 = slices[idx], slices[idx+1]
                 sub_x = x[idx1:idx2, :]
                 sub_y = y[idx1:idx2, :]
-                tune1, tune2 = self.tune_by_naff(sub_x, sub_y, window_param=1,
-                                                 decimal_only=True)
+                tune1, tune2 = self.tune_by_naff(
+                    sub_x, sub_y, window_param=1, decimal_only=True)
                 tune1_list.append(tune1)
                 tune2_list.append(tune2)
 
@@ -208,7 +204,7 @@ class BPMeasure(_ThreadBaseClass):
 
         dn = int(dn)
 
-        freqs = rfftfreq(dn)
+        freqs = _rfftfreq(dn)
         tune1_matrix = _np.zeros([freqs.size, N-dn])
         tune2_matrix = tune1_matrix.copy()
 
@@ -219,18 +215,18 @@ class BPMeasure(_ThreadBaseClass):
                 sub_x = x[idx1:idx2, :]
                 sub_y = y[idx1:idx2, :]
 
-                espectra_by_bpm_x = _np.abs(rfftn(sub_x, axes=[0]))
-                espectra_by_bpm_y = _np.abs(rfftn(sub_y, axes=[0]))
-                tune1_matrix[:, idx1:idx2] = _np.mean(espectra_by_bpm_x,
-                                                      axis=1)[:, None]
-                tune2_matrix[:, idx1:idx2] = _np.mean(espectra_by_bpm_y,
-                                                      axis=1)[:, None]
+                espectra_by_bpm_x = _np.abs(_rfft(sub_x, axis=0))
+                espectra_by_bpm_y = _np.abs(_rfft(sub_y, axis=0))
+                tune1_matrix[:, idx1:idx2] = _np.mean(
+                    espectra_by_bpm_x, axis=1)[:, None]
+                tune2_matrix[:, idx1:idx2] = _np.mean(
+                    espectra_by_bpm_y, axis=1)[:, None]
         else:
             for n in range(N-dn):
                 sub_x = x[n:n+dn, :]
                 sub_y = y[n:n+dn, :]
-                espectra_by_bpm_x = _np.abs(rfftn(sub_x, axes=[0]))
-                espectra_by_bpm_y = _np.abs(rfftn(sub_y, axes=[0]))
+                espectra_by_bpm_x = _np.abs(_rfft(sub_x, axis=0))
+                espectra_by_bpm_y = _np.abs(_rfft(sub_y, axis=0))
 
                 tune1_matrix[:, n] = _np.mean(espectra_by_bpm_x, axis=1)
                 tune2_matrix[:, n] = _np.mean(espectra_by_bpm_y, axis=1)
@@ -238,8 +234,8 @@ class BPMeasure(_ThreadBaseClass):
         tune_matrix = tune1_matrix + tune2_matrix
 
         # normalizing this matrix to get a better heatmap plot:
-        tune_matrix = (tune_matrix - tune_matrix.min()) / \
-            (tune_matrix.max() - tune_matrix.min())
+        tune_matrix -= tune_matrix.min()
+        tune_matrix /= tune_matrix.max()
 
         # plots spectogram
         _plot_heatmap(tune_matrix, freqs)
@@ -256,10 +252,10 @@ class BPMeasure(_ThreadBaseClass):
         Ax = beta_osc_x.ravel()
         Ay = beta_osc_y.ravel()
 
-        freqx, _ = _pa.naff.naff_general(Ax, is_real=True, nr_ff=1,
-                                         window=window_param)
-        freqy, _ = _pa.naff.naff_general(Ay, is_real=True, nr_ff=1,
-                                         window=window_param)
+        freqx, _ = _pa.naff.naff_general(
+            Ax, is_real=True, nr_ff=1, window=window_param)
+        freqy, _ = _pa.naff.naff_general(
+            Ay, is_real=True, nr_ff=1, window=window_param)
         tune1, tune2 = M*freqx, M*freqy
 
         if decimal_only is False:
