@@ -86,7 +86,7 @@ def test_matrices():
     mplt.show()
 
 
-def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0):
+def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, mb2idx=0):
     """."""
     _, _, mful = calc_matrices(minsingval=0.2, mb2idx=0)
 
@@ -98,15 +98,19 @@ def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0):
     orbcorr.params.minsingval = 0.2
 
     mci = pyaccel.lattice.find_indices(
-        orbcorr.respm.model, 'fam_name', 'mb2')[bcidx]
+        orbcorr.respm.model, 'fam_name', 'mb2')[2*mb2idx]
 
     idcs = np.array([2, 3, 160+2, 160+3])
-    idcs += 8*bcidx
+    idcs += 8*mb2idx
 
     idcs_ignore = np.array([0, 1, 4, 5])
     idcs_ignore = np.r_[idcs_ignore, 160 + idcs_ignore]
-    idcs_ignore += 8*bcidx
+    idcs_ignore += 8*mb2idx
     orbcorr.params.enbllistbpm[idcs_ignore] = False
+    # remove corrs between BPMs
+    orbcorr.params.enbllistch[mb2idx*6 + 2] = False
+    orbcorr.params.enbllistcv[mb2idx*8 + 2] = False
+    orbcorr.params.enbllistcv[mb2idx*8 + 3] = False
 
     gorb = orbcorr.get_orbit()
 
@@ -114,7 +118,7 @@ def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0):
     gorb[idcs] = x
     orbcorr.correct_orbit(goal_orbit=gorb)
     xres = pyaccel.tracking.find_orbit6(
-        orbcorr.respm.model, indices='open')[0:4, mci]
+        orbcorr.respm.model, indices='open')[0:4, mci - 10]
 
     fig = mplt.figure(figsize=(6, 9))
     gs = mgs.GridSpec(3, 1)
@@ -123,8 +127,8 @@ def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0):
     ay = fig.add_subplot(gs[1, 0])
     az = fig.add_subplot(gs[2, 0])
 
-    ax.plot(vec, '-o')
-    ax.plot(xres, '-o')
+    ax.plot(1e6*vec, '-o')
+    ax.plot(1e6*xres, '-o')
 
     ay.plot(orbcorr.get_kicks()[:-1]*1e6)
     az.plot(orbcorr.get_orbit()*1e6)

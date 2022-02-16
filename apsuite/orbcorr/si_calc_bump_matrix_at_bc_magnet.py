@@ -114,8 +114,8 @@ def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0):
     ay = fig.add_subplot(gs[1, 0])
     az = fig.add_subplot(gs[2, 0])
 
-    ax.plot(vec, '-o')
-    ax.plot(xres, '-o')
+    ax.plot(1e6*vec, '-o')
+    ax.plot(1e6*xres, '-o')
 
     ay.plot(orbcorr.get_kicks()[:-1]*1e6)
     az.plot(orbcorr.get_orbit()*1e6)
