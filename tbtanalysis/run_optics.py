@@ -114,6 +114,9 @@ def optics_naff(optics, save_flag, print_flag, plot_flag=False):
         else:
             _, tune[bpm], tunes[bpm] = tbt.calc_fft(data, peak_frac=0.99)
 
+    print(tune)
+    print(tunes)
+    
     tune_avg, tune_std, outliers, insiders = _calc_stats(tune)
     tunes_avg, tunes_std, _, _ = _calc_stats(tunes)
     
@@ -410,7 +413,6 @@ def optics_fit(folder, fname, kicktype, kickidx, save_flag, print_flag, plot_fla
         _save_pickle(optics, fname, True)
 
 
-
 def run():
 
     folder = '2021-06-01-SI_commissioning-equilibrium_parameters_tbt_single_bunch/4000_turns/'
@@ -421,7 +423,6 @@ def run():
 
     tbt = _create_newtbt(folder+fname, 'CHROMX')
     return tbt
-
 
 
 if __name__ == "__main__":
@@ -440,9 +441,9 @@ if __name__ == "__main__":
     # fname = 'tbt_data_horizontal_m100urad_after_cycle.pickle'
     # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
-    # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
-    # fname = 'tbt_data_horizontal_m150urad_after_cycle.pickle'
-    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
+    folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
+    fname = 'tbt_data_horizontal_m150urad_after_cycle.pickle'
+    optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # folder = '2021-05-03-SI_commissioning-equilibrium_parameters_tbt/'
     # fname = 'tbt_data_horizontal_m200urad_after_cycle.pickle'
@@ -530,10 +531,9 @@ if __name__ == "__main__":
     # fname = 'tbt_single_bunch_pingh_m100urad_pingv_p0urad.pickle'
     # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
-    folder = '2021-06-01-SI_commissioning-equilibrium_parameters_tbt_single_bunch/4000_turns/'
-    fname = 'tbt_single_bunch_pingh_m150urad_pingv_p0urad.pickle'
-    optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
-
+    # folder = '2021-06-01-SI_commissioning-equilibrium_parameters_tbt_single_bunch/4000_turns/'
+    # fname = 'tbt_single_bunch_pingh_m150urad_pingv_p0urad.pickle'
+    # optics_fit(folder, fname, kicktype='CHROMX', kickidx=0, save_flag=save_flag, print_flag=print_flag, plot_flag=plot_flag)
 
     # --- single-bunch horizontal ---
 
