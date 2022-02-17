@@ -4,6 +4,7 @@ import numpy as _np
 import time as _time
 import pyaccel as _pa
 from numpy.fft import rfft as _rfft,  rfftfreq as _rfftfreq
+from scipy.signal import spectrogram as _spectrogram
 import matplotlib.pyplot as _plt
 
 from siriuspy.sofb.csdev import SOFBFactory
@@ -127,16 +128,18 @@ class BPMeasure(_ThreadBaseClass):
             self.data['orby'] = orby
 
     def dft(self, bpm_indices=None):
-        """Apply a dft at bpms.
+        """Apply a dft at BPMs data.
 
         Args:
         - bpm_indices (int, list or np.array): BPM indices whose dft will
-        be applied. Default is return the dft of all bpms.
+        be applied. Default is return the dft of all BPMs.
 
         Returns:
-         - spectrumx, spectrumy, freqs: The first two are spectra np.arrays
-         of dimension #freqs x #bpm_indices, and freqs is a np.array with
-         the frequency domain values.
+         - spectrumx, spectrumy (np.arrays): Two matrices of dimension #freqs x
+         #bpm_indices containing the spectra of each BPM for the horizontal and
+         vertical, respectively.
+
+         - freqs (np.array):  with the frequency domain values.
         """
         if bpm_indices is not None:
             orbx = self.data['orbx'][:, bpm_indices]
@@ -186,8 +189,45 @@ class BPMeasure(_ThreadBaseClass):
 
         return _np.array(tune1_list), _np.array(tune2_list)
 
-    def spectrogram(self, dn=None, overlap=True, bpm_indices=None):
-        """."""
+    def spectrogram(
+            self, bpm_indices=None, dn=None, overlap=None,
+            window=('tukey', 0.25)
+            ):
+        """Compute a spectrogram with consecutive Fourier transforms in segments
+        of length dn. You also can set a window and control the overlap between
+        the segments. If more than one BPMs is used, the outputted spectrogram
+        is a normalized mean of the individual BPMs spectrograms. This method
+        is a adaptation of scipy.signal.spectrogram function, see the below
+        link for more information:
+        https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.spectrogram.html
+
+        Args:
+            - bpm_indices (list, optional) = Indices of the BPMs that will be
+            used for compute the spectogram
+
+            - dn (int, optional): Length of each segment. Defaults is 256 if
+            window is str or tuple and len(window) if window is an array.
+
+            - overlap (int, optional): Number of points to overlap between
+            segments. Default is dn//8.
+
+            - window (str, tuple or array): Desired window to use. If window
+            is a string or tuple, it is passed to scipy.signal.get_window to
+            generate the desidered window. See the below link to consult the
+            avaliable windows:
+            https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.get_window.html
+            You also can pass an array describing the desirable window. Default
+            is a Tukey window with shape parameter equal to 0.25.
+
+        Returns:
+            - tune1_matrix, tune2_matrix: Spectrograms of the tunes x and y,
+            respectively.
+
+            - freqs: Array of sample frequencies.
+
+            - revs : Array of segmented number of revolutions.
+        """
+
         if bpm_indices is not None:
             x = self.data['orbx'][:, bpm_indices]
             y = self.data['orby'][:, bpm_indices]
@@ -197,40 +237,14 @@ class BPMeasure(_ThreadBaseClass):
 
         x = x - x.mean(axis=0)
         y = y - y.mean(axis=0)
-        N = x.shape[0]
 
-        if dn is None:
-            dn = N//50
+        freqs, revs, Sx = _spectrogram(
+            x.T, nperseg=dn, noverlap=overlap, window=window)
+        _, _, Sy = _spectrogram(
+            y.T, nperseg=dn, noverlap=overlap, window=window)
 
-        dn = int(dn)
-
-        freqs = _rfftfreq(dn)
-        tune1_matrix = _np.zeros([freqs.size, N-dn])
-        tune2_matrix = tune1_matrix.copy()
-
-        if not overlap:
-            slices = _np.arange(0, N, dn)
-            for idx in range(len(slices)-1):
-                idx1, idx2 = slices[idx], slices[idx+1]
-                sub_x = x[idx1:idx2, :]
-                sub_y = y[idx1:idx2, :]
-
-                espectra_by_bpm_x = _np.abs(_rfft(sub_x, axis=0))
-                espectra_by_bpm_y = _np.abs(_rfft(sub_y, axis=0))
-                tune1_matrix[:, idx1:idx2] = _np.mean(
-                    espectra_by_bpm_x, axis=1)[:, None]
-                tune2_matrix[:, idx1:idx2] = _np.mean(
-                    espectra_by_bpm_y, axis=1)[:, None]
-        else:
-            for n in range(N-dn):
-                sub_x = x[n:n+dn, :]
-                sub_y = y[n:n+dn, :]
-                espectra_by_bpm_x = _np.abs(_rfft(sub_x, axis=0))
-                espectra_by_bpm_y = _np.abs(_rfft(sub_y, axis=0))
-
-                tune1_matrix[:, n] = _np.mean(espectra_by_bpm_x, axis=1)
-                tune2_matrix[:, n] = _np.mean(espectra_by_bpm_y, axis=1)
-
+        tune1_matrix = Sx.mean(axis=0)
+        tune2_matrix = Sy.mean(axis=0)
         tune_matrix = tune1_matrix + tune2_matrix
 
         # normalizing this matrix to get a better heatmap plot:
@@ -238,9 +252,9 @@ class BPMeasure(_ThreadBaseClass):
         tune_matrix /= tune_matrix.max()
 
         # plots spectogram
-        _plot_heatmap(tune_matrix, freqs)
+        _plot_heatmap(freqs, revs, tune_matrix)
 
-        return tune1_matrix, tune2_matrix, freqs
+        return tune1_matrix, tune2_matrix, freqs, revs
 
     @staticmethod
     def tune_by_naff(x, y, window_param=1, decimal_only=True):
@@ -269,13 +283,10 @@ class BPMeasure(_ThreadBaseClass):
             return tune1 % 1, tune2 % 1
 
 
-def _plot_heatmap(tune_matrix, freqs):
+def _plot_heatmap(freqs, revs, tune_matrix):
     _plt.figure()
-    N = tune_matrix.shape[1]
-    N_list = _np.arange(N)
-    N_mesh, freqs_mesh = _np.meshgrid(N_list, freqs)
-    _plt.pcolormesh(N_mesh, freqs_mesh, tune_matrix,
-                    shading='auto', cmap='hot')
+    _plt.pcolormesh(revs, freqs, tune_matrix,
+                    shading='gouraud', cmap='hot')
     _plt.colorbar().set_label(label="Relative Amplitude")
     _plt.ylabel('Frac. Frequency')
     _plt.xlabel('Turns')
