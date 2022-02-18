@@ -105,8 +105,9 @@ class BOTunebyBPM(_ThreadBaseClass):
             self.devices['evg'].cmd_turn_on_injection()
         ret = bobpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
         if ret:
-            print(f'Problem waiting BPMs update. Error code: {ret:d}')
             trigbpm.delay = self.delay0
+            self.data = dict()
+            raise AssertionError(f'Problem waiting BPMs update. Error code: {ret:d}')
         orbx, orby = bobpms.get_mturn_orbit()
         bobpms.cmd_mturn_acq_abort()
         trigbpm.delay = self.delay0
