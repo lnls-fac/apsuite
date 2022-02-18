@@ -16,34 +16,54 @@ from apsuite.utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
 
 
-class BPMeasureParams(_ParamsBaseClass):
+class BOTunebyBPMParams(_ParamsBaseClass):
     """."""
     def __init__(self):
         """."""
         super().__init__()
-        self.nr_points_after = 0
-        self.nr_points_before = 10000
-        self.bpms_timeout = 30  # [s]
+        self.event = 'DigBO'
         self.trigger_source = 'DigBO'
         self.trigger_source_mode = 'Injection'
         self.extra_delay = 0
         self.nr_pulses = 1
+        self.nr_points_after = 10000
+        self.nr_points_before = 0
+        self.bpms_timeout = 30  # [s]
+
+    def __str__(self):
+        """."""
+        ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
+        dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
+        stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
+
+        stg = ''
+        stg += stmp('event', self.event, '')
+        stg += stmp('trigger_source', self.trigger_source, '')
+        stg += stmp('trigger_source_mode', self.trigger_source_mode, '')
+        stg += ftmp('extra_delay', self.extra_delay, '[us]')
+        stg += dtmp('nr_pulses', self.nr_pulses, '')
+        stg += dtmp('nr_points_after', self.nr_points_after, '')
+        stg += dtmp('nr_points_before', self.nr_points_before, '')
+        stg += ftmp('bpms_timeout', self.bpms_timeout, '[s]')
+
+        return stg
 
 
-class BPMeasure(_ThreadBaseClass):
+class BOTunebyBPM(_ThreadBaseClass):
     """."""
     def __init__(self, params=None, isonline=True):
         """."""
-        params = BPMeasureParams() if params is None else params
+        params = BOTunebyBPMParams() if params is None else params
         super().__init__(params=params, isonline=isonline)
         self.sofb_data = SOFBFactory.create('BO')
         if self.isonline:
             self._create_devices()
 
     def _create_devices(self):
+        """."""
         self.devices['currinfo'] = CurrInfoBO()
         self.devices['bobpms'] = FamBPMs(FamBPMs.DEVICES.BO)
-        self.devices['event'] = Event('DigBO')
+        self.devices['event'] = Event(self.params.event)
         self.devices['evg'] = EVG()
         self.devices['trigbpm'] = Trigger('BO-Fam:TI-BPM')
         self.devices['rfgen'] = RFGen()
@@ -84,10 +104,9 @@ class BPMeasure(_ThreadBaseClass):
         if injection:
             self.devices['evg'].cmd_turn_on_injection()
         ret = bobpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
-        if ret != 0:
+        if ret:
             print(f'Problem waiting BPMs update. Error code: {ret:d}')
             trigbpm.delay = self.delay0
-            return dict()
         orbx, orby = bobpms.get_mturn_orbit()
         bobpms.cmd_mturn_acq_abort()
         trigbpm.delay = self.delay0
