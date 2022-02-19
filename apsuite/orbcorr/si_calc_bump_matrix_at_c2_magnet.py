@@ -11,7 +11,12 @@ from . import OrbitCorr
 
 def calc_matrices(minsingval=0.2, mb2idx=0, deltax=10e-6):
     """."""
-    # NOTE: valid only for first B2 in sector!
+    # NOTE: valid only for first B2 in sector, the one in subsec C2!
+
+    bpm1_sec_index = 2
+    bpm2_sec_index = 3
+    srcpnt_seg_offset_from_cmarker = 10
+
     mod = si.create_accelerator()
     orbcorr = OrbitCorr(mod, 'SI')
     orbcorr.params.tolerance = 1e-9
@@ -24,8 +29,9 @@ def calc_matrices(minsingval=0.2, mb2idx=0, deltax=10e-6):
     orb0 = orbcorr.get_orbit()
     kicks0 = orbcorr.get_kicks()
 
-    # idcs = np.array([1, 2, 160+1, 160+2])
-    idcs = np.array([2, 3, 160+2, 160+3])
+    idcs = np.array(
+        [bpm1_sec_index, bpm2_sec_index,
+         160+bpm1_sec_index, 160+bpm2_sec_index])
     idcs += 8*mb2idx
 
     # remove corrs between BPMs
@@ -38,22 +44,24 @@ def calc_matrices(minsingval=0.2, mb2idx=0, deltax=10e-6):
     for i, idx in enumerate(idcs):
         gorb = orb0.copy()
         orbcorr.set_kicks(kicks0)
+
         gorb[idx] += deltax/2
         orbcorr.correct_orbit(goal_orbit=gorb)
         orbp = orbcorr.get_orbit()[idcs]
         b2p = pyaccel.tracking.find_orbit6(
-            orbcorr.respm.model, indices='open')[0:4, mb2i - 10]
+            orbcorr.respm.model, indices='open')
+        b2p = b2p[0:4, mb2i - srcpnt_seg_offset_from_cmarker]
 
         gorb[idx] -= deltax
         orbcorr.correct_orbit(goal_orbit=gorb)
         orbn = orbcorr.get_orbit()[idcs]
         b2n = pyaccel.tracking.find_orbit6(
-            orbcorr.respm.model, indices='open')[0:4, mb2i - 10]
+            orbcorr.respm.model, indices='open')
+        b2n = b2n[0:4, mb2i - srcpnt_seg_offset_from_cmarker]
+
         matb2[:, i] = (b2p - b2n) / deltax
         mator[:, i] = (orbp - orbn) / deltax
 
-    print(matb2)
-    print(mator)
     matful = np.linalg.solve(matb2.T, mator.T).T
     return matb2, mator, matful
 
