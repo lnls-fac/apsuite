@@ -9,29 +9,37 @@ import pyaccel
 from . import OrbitCorr
 
 
-def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6):
+def calc_matrices(minsingval=0.2, mb2idx=0, deltax=10e-6):
     """."""
-    bpm1_sec_index = 3
-    bpm2_sec_index = 4
+    # NOTE: valid only for first B2 in sector, the one in subsec C2!
+
+    bpm1_sec_index = 2
+    bpm2_sec_index = 3
+    srcpnt_seg_offset_from_cmarker = 10
 
     mod = si.create_accelerator()
     orbcorr = OrbitCorr(mod, 'SI')
     orbcorr.params.tolerance = 1e-9
     orbcorr.params.minsingval = minsingval
 
-    mcidx = max(min(mcidx, 19), 0)
-    mci = pyaccel.lattice.find_indices(
-        orbcorr.respm.model, 'fam_name', 'mc')[mcidx]
+    mb2idx = max(min(mb2idx, 19), 0)
+    mb2i = pyaccel.lattice.find_indices(
+        orbcorr.respm.model, 'fam_name', 'mb2')[2*mb2idx]
 
     orb0 = orbcorr.get_orbit()
     kicks0 = orbcorr.get_kicks()
 
     idcs = np.array(
         [bpm1_sec_index, bpm2_sec_index,
-        160+bpm1_sec_index, 160+bpm2_sec_index])
-    idcs += 8*mcidx
+         160+bpm1_sec_index, 160+bpm2_sec_index])
+    idcs += 8*mb2idx
 
-    matbc = np.zeros((4, 4), dtype=float)
+    # remove corrs between BPMs
+    orbcorr.params.enbllistch[mb2idx*6 + 2] = False
+    orbcorr.params.enbllistcv[mb2idx*8 + 2] = False
+    orbcorr.params.enbllistcv[mb2idx*8 + 3] = False
+
+    matb2 = np.zeros((4, 4), dtype=float)
     mator = np.zeros((4, 4), dtype=float)
     for i, idx in enumerate(idcs):
         gorb = orb0.copy()
@@ -40,29 +48,29 @@ def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6):
         gorb[idx] += deltax/2
         orbcorr.correct_orbit(goal_orbit=gorb)
         orbp = orbcorr.get_orbit()[idcs]
-        bcp = pyaccel.tracking.find_orbit6(
+        b2p = pyaccel.tracking.find_orbit6(
             orbcorr.respm.model, indices='open')
-        bcp = bcp[0:4, mci]
+        b2p = b2p[0:4, mb2i - srcpnt_seg_offset_from_cmarker]
 
         gorb[idx] -= deltax
         orbcorr.correct_orbit(goal_orbit=gorb)
         orbn = orbcorr.get_orbit()[idcs]
-        bcn = pyaccel.tracking.find_orbit6(
+        b2n = pyaccel.tracking.find_orbit6(
             orbcorr.respm.model, indices='open')
-        bcn = bcn[0:4, mci]
+        b2n = b2n[0:4, mb2i - srcpnt_seg_offset_from_cmarker]
 
-        matbc[:, i] = (bcp - bcn) / deltax
+        matb2[:, i] = (b2p - b2n) / deltax
         mator[:, i] = (orbp - orbn) / deltax
 
-    matful = np.linalg.solve(matbc.T, mator.T).T
-    return matbc, mator, matful
+    matful = np.linalg.solve(matb2.T, mator.T).T
+    return matb2, mator, matful
 
 
 def test_matrices():
     """."""
-    mbc0, mor0, mful0 = calc_matrices(minsingval=0.2, mcidx=0)
-    mbc1, mor1, mful1 = calc_matrices(minsingval=2, mcidx=0)
-    mbc2, mor2, mful2 = calc_matrices(minsingval=20, mcidx=0)
+    mbc0, mor0, mful0 = calc_matrices(minsingval=0.2, mb2idx=0)
+    mbc1, mor1, mful1 = calc_matrices(minsingval=2, mb2idx=0)
+    mbc2, mor2, mful2 = calc_matrices(minsingval=20, mb2idx=0)
 
     fig = mplt.figure(figsize=(6, 9))
     gs = mgs.GridSpec(3, 1)
@@ -86,9 +94,9 @@ def test_matrices():
     mplt.show()
 
 
-def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0):
+def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, mb2idx=0):
     """."""
-    _, _, mful = calc_matrices(minsingval=0.2, mcidx=0)
+    _, _, mful = calc_matrices(minsingval=0.2, mb2idx=0)
 
     vec = np.array([posx, angx, posy, angy])
 
@@ -98,15 +106,19 @@ def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0):
     orbcorr.params.minsingval = 0.2
 
     mci = pyaccel.lattice.find_indices(
-        orbcorr.respm.model, 'fam_name', 'mc')[bcidx]
+        orbcorr.respm.model, 'fam_name', 'mb2')[2*mb2idx]
 
-    idcs = np.array([3, 4, 160+3, 160+4])
-    idcs += 8*bcidx
+    idcs = np.array([2, 3, 160+2, 160+3])
+    idcs += 8*mb2idx
 
-    idcs_ignore = np.array([1, 2, 5, 6])
+    idcs_ignore = np.array([0, 1, 4, 5])
     idcs_ignore = np.r_[idcs_ignore, 160 + idcs_ignore]
-    idcs_ignore += 8*bcidx
+    idcs_ignore += 8*mb2idx
     orbcorr.params.enbllistbpm[idcs_ignore] = False
+    # remove corrs between BPMs
+    orbcorr.params.enbllistch[mb2idx*6 + 2] = False
+    orbcorr.params.enbllistcv[mb2idx*8 + 2] = False
+    orbcorr.params.enbllistcv[mb2idx*8 + 3] = False
 
     gorb = orbcorr.get_orbit()
 
@@ -114,7 +126,7 @@ def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0):
     gorb[idcs] = x
     orbcorr.correct_orbit(goal_orbit=gorb)
     xres = pyaccel.tracking.find_orbit6(
-        orbcorr.respm.model, indices='open')[0:4, mci]
+        orbcorr.respm.model, indices='open')[0:4, mci - 10]
 
     fig = mplt.figure(figsize=(6, 9))
     gs = mgs.GridSpec(3, 1)
