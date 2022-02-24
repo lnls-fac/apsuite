@@ -1139,7 +1139,8 @@ class MeasTuneShift(_ThreadBaseClass):
 
     def plot_spectrum(
             self, plane, freq_min=None, freq_max=None, title=None,
-            fname=None):
+            fit_sync_freq=1.8, fit_bet_freq=43, fit_max_curr=0.6,
+            cut_spec=None, fname=None):
         """plane: must be 'H' or 'V'."""
         plane = plane.upper()
         if plane == 'H':
@@ -1153,6 +1154,21 @@ class MeasTuneShift(_ThreadBaseClass):
         else:
             raise Exception("plane input must be 'H' or 'V'.")
 
+        def model(coefs, mag, freq, curr):
+            lin_c = coefs[:3][:, None]
+            ang_c = coefs[3:][:, None]
+
+            mag = mag.ravel()
+            freq = freq.ravel()[None, :]
+            curr = curr.ravel()[None, :]
+
+            mod = ang_c * curr
+            mod += lin_c
+            mod -= freq
+            mod = _np.abs(mod)
+            mod = _np.min(mod, axis=0) * mag
+            return mod
+
         curr = _np.array(self.data['stored_current'])
         mag = [dta['spec_mag'] for dta in data]
         mag = _np.array(mag, dtype=float)
@@ -1164,22 +1180,51 @@ class MeasTuneShift(_ThreadBaseClass):
         curr = curr[idx]
         mag = mag[idx, :]
         mag = mag[:, idcs]
+        freq_, curr_ = _np.meshgrid(freq, curr)
 
-        freq, curr = _np.meshgrid(freq, curr)
-        freq, curr, mag = freq.T, curr.T, mag.T
+        # Transform from dB to amplitude
+        mag = 10**(mag/10)
+        # Normalize data from each current to one:
+        mag /= mag.max(axis=1)[:, None]
 
-        fig = _mplt.figure(figsize=(8, 6))
-        gs = _mgs.GridSpec(1, 1)
-        ax = fig.add_subplot(gs[0, 0])
-        ax.pcolormesh(curr, freq, mag)
+        if cut_spec:
+            mag[mag < cut_spec] = 0
+
+        idx = curr < fit_max_curr
+        mag_fit = mag[idx, :]
+        freq_fit = freq_[idx, :]
+        curr_fit = curr_[idx, :]
+        lin_c0 = _np.arange(-1, 2) * fit_sync_freq + fit_bet_freq
+        ang_c0 = _np.zeros(3)
+        x0 = _np.r_[lin_c0, ang_c0]
+        opt = _scyopt.least_squares(
+            fun=model, x0=x0, method='lm', args=(mag_fit, freq_fit, curr_fit))
+        lin_c = opt.x[:3]
+        ang_c = opt.x[3:]
+
+        tunes_fit = ang_c[:, None] * curr[None, :] + lin_c[:, None]
+
+        fig, ax = _mplt.subplots(figsize=(8, 6))
+
+        ax.pcolormesh(curr_, freq_, 10*_np.log10(mag), shading='auto')
+        lines = ax.plot(curr, tunes_fit.T, 'k')
+        lss = ('--', '-', '-.')
+        for i, (line, ls_) in enumerate(zip(lines, lss)):
+            line.set_label(
+                f'm={i-1:2d} -> '
+                f'f = {ang_c[i]:5.2f}*I + {lin_c[i]:6.2f}')
+            line.set_ls(ls_)
+        ax.legend(loc='best', fontsize='xx-small')
         ax.set_ylabel('Frequency [kHz]')
         ax.set_xlabel('Current [mA]')
         ax.set_title(title)
+        fig.tight_layout()
+
         if fname:
             if not fname.endswith('.png'):
                 fname += '.png'
             fig.savefig(fname, dpi=300)
-        return fig
+        return fig, mag, opt.x
 
     def plot_time_evolution(self, plane, title=None, fname=None):
         """plane: must be 'H' or 'V'."""
