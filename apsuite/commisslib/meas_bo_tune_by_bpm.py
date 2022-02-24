@@ -87,14 +87,12 @@ class BOTunebyBPM(_ThreadBaseClass):
         If injection is True, then injection is turned on before the measure.
         If external_trigger is True, the event will listen a external trigger.
         """
-        if not hasattr(self, 'data'):
-            self.data = dict()
         prms = self.params
         bobpms = self.devices['bobpms']
         trigbpm = self.devices['trigbpm']
 
-        self.delay0 = trigbpm.delay
-        trigbpm.delay = self.delay0 + prms.extra_delay
+        delay0 = trigbpm.delay
+        trigbpm.delay = delay0 + prms.extra_delay
         self.devices['event'].mode = prms.trigger_source_mode
 
         # Inject and start acquisition
@@ -105,21 +103,19 @@ class BOTunebyBPM(_ThreadBaseClass):
             self.devices['evg'].cmd_turn_on_injection()
         ret = bobpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
         if ret:
-            trigbpm.delay = self.delay0
+            trigbpm.delay = delay0
             self.data = dict()
             raise AssertionError(
                 f'Problem waiting BPMs update. Error code: {ret:d}')
         orbx, orby = bobpms.get_mturn_orbit()
         bobpms.cmd_mturn_acq_abort()
-        trigbpm.delay = self.delay0
+        trigbpm.delay = delay0
 
         self.data['orbx'], self.data['orby'] = orbx, orby
         self.data['timestamp'] = _time.time()
 
     def get_data(self, delta=''):
         """."""
-        if not hasattr(self, 'data'):
-            self.data = dict()
 
         # Store data
         bobpms = self.devices['bobpms']
@@ -142,8 +138,6 @@ class BOTunebyBPM(_ThreadBaseClass):
                                         bpm0.switching_mode]
         data['qf_wave_form'] = PV('BO-Fam:PS-QF:Wfm-RB').get()
         data['qd_wave_form'] = PV('BO-Fam:PS-QD:Wfm-RB').get()
-        if hasattr(self, 'delay0'):
-            data['init_delay'] = self.delay0
 
         self.data.update(data)
 
@@ -152,8 +146,6 @@ class BOTunebyBPM(_ThreadBaseClass):
         intire data dictionary or just the orbits. If data argument
         is provided, orbx and orby become optional"""
 
-        if not hasattr(self, 'data'):
-            self.data = dict()
         if data is not None:
             self.data = data
         if orbx is not None:
