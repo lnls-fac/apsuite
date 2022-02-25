@@ -58,6 +58,11 @@ class BOTunebyBPM(_ThreadBaseClass):
         self.sofb_data = SOFBFactory.create('BO')
         if self.isonline:
             self._create_devices()
+            self._create_pvs()
+
+    def _create_pvs(self):
+        self.pvs['bo-qf-wfm'] = PV('BO-Fam:PS-QF:Wfm-RB')
+        self.pvs['bo-qd-wfm'] = PV('BO-Fam:PS-QD:Wfm-RB')
 
     def _create_devices(self):
         """."""
@@ -114,13 +119,18 @@ class BOTunebyBPM(_ThreadBaseClass):
         self.data['orbx'], self.data['orby'] = orbx, orby
         self.data['timestamp'] = _time.time()
 
-    def get_data(self, delta=''):
+    def get_data(
+            self, delta='', injection=False, external_trigger=False,
+            orbit=True):
         """."""
+        # Store orbit
+        if orbit:
+            self.get_orbit(
+                injection=injection, external_trigger=external_trigger)
 
-        # Store data
+        # Store auxiliar data
         bobpms = self.devices['bobpms']
         trigbpm = self.devices['trigbpm']
-
         bpm0 = bobpms[0]
         csbpm = bpm0.csdata
         data = dict()
@@ -136,8 +146,8 @@ class BOTunebyBPM(_ThreadBaseClass):
         data['bpms_trig_delay_raw'] = trigbpm.delay_raw
         data['bpms_switching_mode'] = csbpm.SwModes._fields[
                                         bpm0.switching_mode]
-        data['qf_wave_form'] = PV('BO-Fam:PS-QF:Wfm-RB').get()
-        data['qd_wave_form'] = PV('BO-Fam:PS-QD:Wfm-RB').get()
+        data['qf_wfm'] = self.pvs['bo-qf-wfm'].get()
+        data['qd_wfm'] = self.pvs['bo-qd-wfm'].get()
 
         self.data.update(data)
 
