@@ -1004,7 +1004,7 @@ class TuneShiftParams(_ParamsBaseClass):
         self.kickh = -25/1000  # mrad
         self.kickv = +20/1000  # mrad
         self.wait_bbb = 9  # s
-        self.currents = _np.arange(0.05, 2.1, 0.1)
+        self.currents = _np.arange(0.05, 2.1, 0.1)  # mA
 
     def __str__(self):
         """."""
@@ -1017,7 +1017,7 @@ class TuneShiftParams(_ParamsBaseClass):
         stg += dtmp('wait_bbb', self.wait_bbb, '[s]')
         stg += f"{'currents':10s} = ("
         stg += ''.join(map(ltmp, self.currents))
-        stg += ' ) mA \n'
+        stg += ' ) [mA] \n'
         return stg
 
 
