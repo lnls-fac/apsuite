@@ -8,7 +8,7 @@ from scipy.signal import spectrogram as _spectrogram
 import matplotlib.pyplot as _plt
 
 from siriuspy.sofb.csdev import SOFBFactory
-
+from siriuspy.epics import PV
 from siriuspy.devices import CurrInfoBO, \
     Trigger, Event, EVG, RFGen, FamBPMs
 
@@ -58,6 +58,11 @@ class BOTunebyBPM(_ThreadBaseClass):
         self.sofb_data = SOFBFactory.create('BO')
         if self.isonline:
             self._create_devices()
+            self._create_pvs()
+
+    def _create_pvs(self):
+        self.pvs['bo-qf-wfm'] = PV('BO-Fam:PS-QF:Wfm-RB')
+        self.pvs['bo-qd-wfm'] = PV('BO-Fam:PS-QD:Wfm-RB')
 
     def _create_devices(self):
         """."""
@@ -82,10 +87,8 @@ class BOTunebyBPM(_ThreadBaseClass):
         trigbpm.source = prms.trigger_source
         trigbpm.nr_pulses = prms.nr_pulses
 
-    def get_orbit_data(self, injection=False, external_trigger=False):
-        """Get orbit data from BPMs in TbT acquisition rate
-        BPMs must be configured to listen DigBO event and the DigBO
-        event must be in Injection mode.
+    def get_orbit(self, injection=False, external_trigger=False):
+        """Get orbit data from BPMs in TbT acquisition rate..
         If injection is True, then injection is turned on before the measure.
         If external_trigger is True, the event will listen a external trigger.
         """
@@ -93,8 +96,8 @@ class BOTunebyBPM(_ThreadBaseClass):
         bobpms = self.devices['bobpms']
         trigbpm = self.devices['trigbpm']
 
-        self.delay0 = trigbpm.delay
-        trigbpm.delay = self.delay0 + prms.extra_delay
+        delay0 = trigbpm.delay
+        trigbpm.delay = delay0 + prms.extra_delay
         self.devices['event'].mode = prms.trigger_source_mode
 
         # Inject and start acquisition
@@ -105,40 +108,53 @@ class BOTunebyBPM(_ThreadBaseClass):
             self.devices['evg'].cmd_turn_on_injection()
         ret = bobpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
         if ret:
-            trigbpm.delay = self.delay0
+            trigbpm.delay = delay0
             self.data = dict()
-            raise AssertionError(f'Problem waiting BPMs update. Error code: {ret:d}')
+            raise AssertionError(
+                f'Problem waiting BPMs update. Error code: {ret:d}')
         orbx, orby = bobpms.get_mturn_orbit()
         bobpms.cmd_mturn_acq_abort()
-        trigbpm.delay = self.delay0
+        trigbpm.delay = delay0
 
-        # Store data
+        self.data['orbx'], self.data['orby'] = orbx, orby
+        self.data['timestamp'] = _time.time()
+
+    def get_data(
+            self, delta='', injection=False, external_trigger=False,
+            orbit=True):
+        """."""
+        # Store orbit
+        if orbit:
+            self.get_orbit(
+                injection=injection, external_trigger=external_trigger)
+
+        # Store auxiliar data
+        bobpms = self.devices['bobpms']
+        trigbpm = self.devices['trigbpm']
         bpm0 = bobpms[0]
         csbpm = bpm0.csdata
         data = dict()
-        data['timestamp'] = _time.time()
+        data['delta'] = delta
         data['rf_frequency'] = self.devices['rfgen'].frequency
         data['current_150mev'] = self.devices['currinfo'].current150mev
         data['current_1gev'] = self.devices['currinfo'].current1gev
         data['current_2gev'] = self.devices['currinfo'].current2gev
         data['current_3gev'] = self.devices['currinfo'].current3gev
-        data['orbx'], data['orby'] = orbx, orby
         data['mt_acq_rate'] = csbpm.AcqChan._fields[bpm0.acq_channel]
         data['bpms_nrsamples_pre'] = bpm0.acq_nrsamples_pre
         data['bpms_nrsamples_post'] = bpm0.acq_nrsamples_post
         data['bpms_trig_delay_raw'] = trigbpm.delay_raw
         data['bpms_switching_mode'] = csbpm.SwModes._fields[
                                         bpm0.switching_mode]
-        data['init_delay'] = self.delay0
-        self.data = data
+        data['qf_wfm'] = self.pvs['bo-qf-wfm'].get()
+        data['qd_wfm'] = self.pvs['bo-qd-wfm'].get()
+
+        self.data.update(data)
 
     def load_orbit(self, data=None, orbx=None, orby=None):
         """Load orbit data into the object. You can pass the
         intire data dictionary or just the orbits. If data argument
         is provided, orbx and orby become optional"""
-
-        if not hasattr(self, 'data'):
-            self.data = dict()
 
         if data is not None:
             self.data = data
@@ -159,7 +175,7 @@ class BOTunebyBPM(_ThreadBaseClass):
          #bpm_indices containing the spectra of each BPM for the horizontal and
          vertical, respectively.
 
-         - freqs (np.array):  with the frequency domain values.
+         - freqs (np.array):  frequency domain values.
         """
         if bpm_indices is not None:
             orbx = self.data['orbx'][:, bpm_indices]
