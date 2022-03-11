@@ -7,63 +7,73 @@ from mathphys.beam_optics import beam_rigidity
 class Wire:
     """."""
     def __init__(self, position, current):
-        self.pos = position  # Column vector
-        self.curr = current
+        self.position = position  # Column vector
+        self.current = current
 
-    def Bfield(self, x, y):
+    def calc_magnetic_field(self, r):
+        if r.shape[0] != 2:
+            raise ValueError(
+                "The input position vector r must have shape of type (2, N)")
+        r = r.reshape(2, -1)
         mu0 = vacuum_permeability
-        r_w = self.pos  # Wire positions
-        r = _np.array([x, y])[:, None]  # Target position
+        r_w = self.position[:, None]  # Wire positions
         rc = r - r_w  # Cursive r
-        theta = _np.arctan2(rc[1], rc[0])[0]
-        theta_vec = _np.array([-_np.sin(theta), _np.cos(theta)])[:, None]
-        B = mu0 * self.curr/(2*_np.pi*_np.linalg.norm(rc))*theta_vec + r_w
-        return B
-
-    def include_pos_error(self, sigma):
-        self.error = _np.random.normal(loc=0, scale=sigma)
-        self.pos = self.pos + self.error
+        theta = _np.arctan2(rc[1, :], rc[0, :])
+        theta_vec = _np.array([-_np.sin(theta), _np.cos(theta)])
+        rc_norm = _np.linalg.norm(rc, axis=0)[None, :]
+        mag_field = \
+            mu0 * self.current/(2*_np.pi*rc_norm)*theta_vec + r_w
+        return mag_field
 
     @property
-    def pos(self):
+    def position(self):
         return self._pos
 
-    @pos.setter
-    def pos(self, position):
+    @position.setter
+    def position(self, position):
+        position = self._check_r_size(position)
         self._pos = position
 
     @property
-    def curr(self):
+    def current(self):
         return self._curr
 
-    @curr.setter
-    def curr(self, current):
+    @current.setter
+    def current(self, current):
         self._curr = current
+
+    @staticmethod
+    def _check_r_size(r):
+        if r.size == 2:
+            return r.ravel()
+        else:
+            raise ValueError('r must be a numpy array of size 2.')
 
 
 class NLK:
     """."""
-    def __init__(self, curr=1850, errors=False, sigma_errors=1e-5):
-        # Setting wire positions
-        wire_positions = []
-        wire_positions.append(_np.array([7.0,  5.21])[:, None]*1e-3)
-        wire_positions.append(_np.array([10.,  5.85])[:, None]*1e-3)
-        wire_positions.append(_np.array([-7.,  5.21])[:, None]*1e-3)
-        wire_positions.append(_np.array([-10,  5.85])[:, None]*1e-3)
-        wire_positions.append(_np.array([7.0, -5.21])[:, None]*1e-3)
-        wire_positions.append(_np.array([10., -5.85])[:, None]*1e-3)
-        wire_positions.append(_np.array([-7., -5.21])[:, None]*1e-3)
-        wire_positions.append(_np.array([-10, -5.85])[:, None]*1e-3)
-        self._positions = wire_positions
+    def __init__(self, positions=None, curr=1850):
+
+        if positions is not None:
+            wire_positions = positions
+        else:
+            wire_positions = _np.zeros([8, 2])
+            s1 = _np.array([1, -1, 1, -1])
+            s2 = _np.array([1, 1, -1, -1])
+            for i in range(0, wire_positions.shape[0], 2):
+                j = int(i/2)
+                wire_positions[i] = \
+                    _np.array([s1[j]*7.0,  s2[j]*5.21])[None, :]*1e-3
+                wire_positions[i+1] = \
+                    _np.array([s1[j]*10., s2[j]*5.85])[None, :]*1e-3
 
         # Setting wire currents
-        currents = []
-        for i in range(8):
+        currents = _np.zeros(8)
+        for i in range(currents.size):
             if i % 2:
-                currents.append(-curr)
+                currents[i] = -curr
             else:
-                currents.append(curr)
-        self._currents = currents
+                currents[i] = curr
 
         # Creating wires
         self._wires = []
@@ -71,8 +81,6 @@ class NLK:
             pos = wire_positions[i]
             curr = currents[i]
             wire = Wire(pos, curr)
-            if errors:
-                wire.include_pos_error(sigma=sigma_errors)
             self._wires.append(wire)
 
     @property
@@ -86,36 +94,45 @@ class NLK:
     @property
     def positions(self):
         "Return positions of all wires"
-        return self._positions
+        wires_positions = _np.zeros([2, 8])
+        for i in range(wires_positions.shape[1]):
+            wires_positions[:, [i]] = self._wires[i].position[:, None]
+        return wires_positions
 
-    @positions.setter
+    @positions.setter  # Thinking in a good setter for this...
     def positions(self, wires_positions):
-        self._positions = wires_positions
+        for i in range(wires_positions.shape[1]):
+            self._wires[i].position = wires_positions[:, i]
 
     @property
     def currents(self):
-        "Return currents of all wires"
-        return self._currents
+        "Return the currents of all wires"
+        wires_currents = _np.zeros(len(self._wires))
+        for i in range(len(self._wires)):
+            wires_currents[i] = self._wires[i].current
+        return wires_currents
 
     @currents.setter
     def currents(self, wires_currents):
-        self._currents = wires_currents
+        for i, current in enumerate(wires_currents):
+            self._wires[i].current = current
 
-    def Bfield(self, x, y):
-        field = _np.zeros([2, 1])
+    def calc_magnetic_field(self, r):
+        if r.shape[0] != 2:
+            raise ValueError(
+                "The input position vector r must have shape of type (2, N)")
+        mag_field = _np.zeros(r.shape)
         for wire in self.wires:
-            field += wire.Bfield(x, y)
-        return field
+            mag_field += wire.calc_magnetic_field(r)
+        return mag_field
 
-    def include_pos_error(self, sigma_errors):
-        for wire in self.wires:
-            wire.include_pos_error(sigma_errors)
-
-    def nlk_profile(self):
+    def get_magnetic_field_on_axis(self):
         "NLK vertical field at y=0 for x ∈ [-12, 12] mm."
-        x_space = _np.linspace(-12, 12)*1e-3
-        fieldy = _np.array([self.Bfield(x, 0)[1] for x in x_space])
-        return x_space, fieldy
+        x_space = _np.linspace(-12, 12)[None, :]*1e-3
+        y_space = _np.zeros(x_space.shape)
+        r = _np.concatenate([x_space, y_space], axis=0)
+        fieldy = self.calc_magnetic_field(r)[1, :]
+        return x_space[0], fieldy
 
 
 def polyfit(x, y, n):
@@ -143,11 +160,11 @@ def si_nlk_kick(
     if strength is None:
         strength = 0.27358145
 
-    nlk = NLK(errors=errors, sigma_errors=sigma_errors)
-    x, B = nlk.nlk_profile()
+    nlk = NLK()
+    x, mag_field = nlk.get_magnetic_field_on_axis()
 
     brho, *_ = beam_rigidity(energy=3)  # Energy in GeV
-    integ_field = strength * B
+    integ_field = strength * mag_field
     kickx = integ_field / brho
 
     coeffs, fit_kickx = polyfit(x=x-r0, y=kickx, n=fit_monomials)
