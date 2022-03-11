@@ -24,7 +24,11 @@ class OrbitAnalysis:
     MONIT1_DOWNSAMPLING = 25
 
     def __init__(self, filename=''):
-        """."""
+        """Analysis of orbit over time at BPMs for a given acquisition rate.
+
+        Args:
+            filename (str, optional): pickle file with orbit data.
+        """
         self.fname = filename
         self._data = None
         self._etax, self._etay = None, None
@@ -162,8 +166,10 @@ class OrbitAnalysis:
 
     def remove_switching_freq(self, orbx=None, orby=None):
         """."""
-        orbx = orbx or self.orbx
-        orby = orby or self.orby
+        if orbx is None:
+            orbx = self.orbx.copy()
+        if orby is None:
+            orby = self.orby.copy()
         fs = self.sampling_freq
         fil_orbx, freq = self.filter_matrix(
             orbx, fmin=0, fmax=self.BPM_SWITCHING_FREQ*0.9, fs=fs)
@@ -174,6 +180,10 @@ class OrbitAnalysis:
     def filter_around_freq(
             self, orbx=None, orby=None, central_freq=24*64, window=5):
         """."""
+        if orbx is None:
+            orbx = self.orbx.copy()
+        if orby is None:
+            orby = self.orby.copy()
         fmin = central_freq - window/2
         fmax = central_freq + window/2
         fs = self.sampling_freq
@@ -183,7 +193,29 @@ class OrbitAnalysis:
 
     def energy_stability_analysis(
             self, central_freq=24*64, window=5, inverse=True):
-        """."""
+        """Calculate energy deviation and dispersion function from orbit
+            acquisitions.
+
+        1) Filter orbit array around synchrotron frequency with some frequency
+             window to obtain a filtered orbit array.
+        2) Apply SVD in the filtered orbit array.
+        3) Find the singular mode whose spacial signature has maximum
+            correlation with a reference dispersion function (measured or
+            model). Let this mode be the dispersion spacial mode.
+        4) The measured dispersion function can also be obtained from
+            least-squares minimization of the difference between the reference
+            dispersion function and the dispersion spacial mode.
+        5) Calculate energy deviation over time by projecting the unfiltered
+            orbit data in the direction of dispersion spacial mode.
+
+        Args:
+            central_freq (float, optional): harmonic where synchrotron
+                oscillations are excited. Units [Hz].
+            window (int, optional): frequency window to filter the data.
+                Units [Hz].
+            inverse (bool, optional): calculate the integrated PSD with from
+                lower to higher frequencies (inverse=False) or the contrary.
+        """
         orbx_ns, orby_ns, _ = self.remove_switching_freq()
         orbx, orby = self.filter_around_freq(
             orbx=orbx_ns, orby=orby_ns,
@@ -203,10 +235,12 @@ class OrbitAnalysis:
         vheta = vhmat[maxcorr_idx]
         vheta -= _np.mean(vheta)
 
+        # scale obtained by least-squares minimization
         gamma = _np.dot(etaxy, vheta)/_np.dot(etaxy, etaxy)
         orbxy = _np.hstack((orbx_ns, orby_ns))
         orbxy -= _np.mean(orbxy, axis=1)[:, None]
         eta_meas = vheta/gamma
+        # projecting orbit data the dispersion space mode direction
         denergy = _np.dot(orbxy, vheta) * gamma
 
         energy_spec, freq = self.calc_spectrum(denergy, fs=self.sampling_freq)
@@ -219,19 +253,28 @@ class OrbitAnalysis:
         self.analysis['energy_spectrum'] = energy_spec
         self.analysis['energy_freq'] = freq
         self.analysis['energy_ipsd'] = intpsd
-        return eta_meas, denergy
 
     def orbit_stability_analysis(
             self, central_freq=60, window=10, inverse=False):
-        """."""
-        orbx, orby, _ = self.filter_around_freq(
+        """Calculate orbit spectrum, integrated PSD and apply SVD in orbit
+            data by filtering around a center frequency with a window.
+
+        Args:
+            central_freq (float, optional): harmonic of interested to be
+                analyzed in [Hz]. Defaults to 60Hz. Units [Hz].
+            window (int, optional): frequency window to filter the data.
+                Units [Hz].
+            inverse (bool, optional): calculate the integrated PSD with from
+                lower to higher frequencies (inverse=False) or the contrary.
+        """
+        orbx_fil, orby_fil = self.filter_around_freq(
             central_freq=central_freq, window=window)
-        orbx_spec, freqx = self.calc_spectrum(orbx, fs=self.sampling_freq)
-        orby_spec, freqy = self.calc_spectrum(orby, fs=self.sampling_freq)
+        orbx_spec, freqx = self.calc_spectrum(orbx_fil, fs=self.sampling_freq)
+        orby_spec, freqy = self.calc_spectrum(orby_fil, fs=self.sampling_freq)
         ipsdx = self.calc_integrated_spectrum(orbx_spec, inverse=inverse)
         ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
-        umatx, svalsx, vhmatx = self.calc_pca(orbx)
-        umaty, svalsy, vhmaty = self.calc_pca(orby)
+        umatx, svalsx, vhmatx = self._calc_pca(orbx_fil)
+        umaty, svalsy, vhmaty = self._calc_pca(orby_fil)
         self.analysis['orb_freqmax'] = central_freq + window/2
         self.analysis['orb_freqmin'] = central_freq - window/2
         self.analysis['orbx_spectrum'] = orbx_spec
@@ -247,62 +290,65 @@ class OrbitAnalysis:
         self.analysis['orby_svals'] = svalsy
         self.analysis['orby_vhmat'] = vhmaty
 
+    # plotting methods
     def plot_orbit_spectrum(
             self, bpmidx=0, orbx=None, orby=None,
-            title='', label='', figname=''):
+            title='', label='', figname='', fig=None, axs=None, color='C0'):
         """."""
-        if orbx:
-            orbx_spec, freqx = self.calc_spectrum(orbx, fs=self.sampling_freq)
-        else:
-            orbx_spec = self.analysis['orbx_spectrum']
+        if orbx is None:
             freqx = self.analysis['orbx_freq']
-        if orby:
-            orby_spec, freqx = self.calc_spectrum(orby, fs=self.sampling_freq)
+            orbx_spec = self.analysis['orbx_spectrum']
         else:
-            orby_spec = self.analysis['orby_spectrum']
+            orbx_spec, freqx = self.calc_spectrum(orbx, fs=self.sampling_freq)
+        if orby is None:
             freqy = self.analysis['orby_freq']
-        fig, axs = _plt.subplots(2, 1, figsize=(10, 6))
-        axs[0].plot(freqx, orbx_spec[:, bpmidx], label=label)
-        axs[1].plot(freqy, orby_spec[:, bpmidx], label=label)
-        axs[0].set_title(title)
-        axs[1].legend()
-        axs[0].set_ylabel('x [um]')
-        axs[1].set_ylabel('y [um]')
+            orby_spec = self.analysis['orby_spectrum']
+        else:
+            orby_spec, freqx = self.calc_spectrum(orby, fs=self.sampling_freq)
+
+        if fig is None or axs is None:
+            fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
+        axs[0].plot(freqx, orbx_spec[:, bpmidx], label=label, color=color)
+        axs[1].plot(freqy, orby_spec[:, bpmidx], label=label, color=color)
+        if title:
+            axs[0].set_title(title)
+        axs[0].legend(
+            loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
+        axs[0].set_ylabel(r'$x$ [$\mu$m]')
+        axs[1].set_ylabel(r'$y$ [$\mu$m]')
         axs[1].set_xlabel('Frequency [Hz]')
-        axs[0].grid(False)
-        axs[1].grid(False)
         fig.tight_layout()
         if figname:
             fig.savefig(figname, dpi=300, format='pdf')
-        fig.show()
         return fig, axs
 
-    def plot_orbit_integrated_spectrum(
+    def plot_orbit_integrated_psd(
             self, bpmidx=0, orbx=None, orby=None, inverse=False,
-            title='', label='', figname=''):
+            title='', label='', figname='', fig=None, axs=None, color='C0'):
         """."""
-        if orbx:
-            orbx_spec, freqx = self.calc_spectrum(orbx, fs=self.sampling_freq)
-            ipsdx = self.calc_integrated_spectrum(orbx_spec, inverse=inverse)
-        else:
+        if orbx is None:
             ipsdx = self.analysis['orbx_ipsd']
             freqx = self.analysis['orbx_freq']
-        if orby:
-            orby_spec, freqy = self.calc_spectrum(orby, fs=self.sampling_freq)
-            ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
         else:
+            orbx_spec, freqx = self.calc_spectrum(orbx, fs=self.sampling_freq)
+            ipsdx = self.calc_integrated_spectrum(orbx_spec, inverse=inverse)
+        if orby is None:
             ipsdy = self.analysis['orby_ipsd']
             freqy = self.analysis['orby_freq']
-        fig, axs = _plt.subplots(2, 1, figsize=(10, 6))
-        axs[0].plot(freqx, ipsdx[:, bpmidx], label=label)
-        axs[1].plot(freqy, ipsdy[:, bpmidx], label=label)
-        axs[0].set_title(title)
-        axs[1].legend()
-        axs[0].set_ylabel('x [um]')
-        axs[1].set_ylabel('y [um]')
+        else:
+            orby_spec, freqy = self.calc_spectrum(orby, fs=self.sampling_freq)
+            ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
+        if fig is None or axs is None:
+            fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
+        axs[0].plot(freqx, ipsdx[:, bpmidx], label=label, color=color)
+        axs[1].plot(freqy, ipsdy[:, bpmidx], label=label, color=color)
+        if title:
+            axs[0].set_title(title)
+        axs[0].legend(
+            loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
+        axs[0].set_ylabel(r'$x$ [$\mu$m]')
+        axs[1].set_ylabel(r'$y$ [$\mu$m]')
         axs[1].set_xlabel('Frequency [Hz]')
-        axs[0].grid(False)
-        axs[1].grid(False)
         fig.tight_layout()
         if figname:
             fig.savefig(figname, dpi=300, format='pdf')
@@ -310,108 +356,104 @@ class OrbitAnalysis:
 
     def plot_orbit_spacial_modes(
             self, modes=[], orbx=None, orby=None, spacx0=None, spacy0=None,
-            title='', label='', figname=''):
+            title='', label='', figname='', fig=None, axs=None, color='C0'):
         """."""
-        if orbx:
-            umatx, svalsx, vhmatx = self.calc_pca(orbx)
-        else:
+        if orbx is None:
             anly = self.analysis
             umatx, vhmatx = anly['orbx_umat'], anly['orbx_vhmat']
             svalsx = anly['orbx_svals']
-        if orby:
-            umaty, svalsy, vhmaty = self.calc_pca(orby)
         else:
+            umatx, svalsx, vhmatx = self.calc_pca(orbx)
+        if orby is None:
             anly = self.analysis
             umaty, vhmaty = anly['orby_umat'], anly['orby_vhmat']
             svalsy = anly['orby_svals']
+        else:
+            umaty, svalsy, vhmaty = self.calc_pca(orby)
 
         spacx = vhmatx[modes].T*svalsx[modes]/_np.sqrt(umatx.shape[0])
         spacy = vhmaty[modes].T*svalsy[modes]/_np.sqrt(umaty.shape[0])
-        spacx0 = spacx0 or spacx
-        spacy0 = spacy0 or spacy
+        if spacx0 is None:
+            spacx0 = spacx
+        if spacy0 is None:
+            spacy0 = spacy
         spacx *= _np.sign(_np.sum(spacx*spacx0, axis=0))
         spacy *= _np.sign(_np.sum(spacy*spacy0, axis=0))
 
-        fig, axs = _plt.subplots(2, 1, figsize=(12, 6))
-        linesx = axs[0].plot(spacx)
-        linesy = axs[1].plot(spacy)
+        if fig is None or axs is None:
+            fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
+        linesx = axs[0].plot(spacx, color=color)
+        linesy = axs[1].plot(spacy, color=color)
         for mode, linx, liny in zip(modes, linesx, linesy):
-            linx.set_label(label + f'mode = {mode:d}')
-            liny.set_label(label + f'mode = {mode:d}')
-        axs[1].legend(
-            loc='upper center', bbox_to_anchor=(0.5, -0.25),
-            fontsize='x-small')
-        axs[0].set_ylabel('Space Modes X [um]')
-        axs[1].set_ylabel('Space Modes Y [um]')
+            linx.set_label(label + f', mode = {mode:d}')
+            liny.set_label(label + f', mode = {mode:d}')
+        axs[0].legend(
+            loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
+        axs[0].set_ylabel(r'$x$ space modes [$\mu$m]')
+        axs[1].set_ylabel(r'$y$ space modes [$\mu$m]')
         axs[1].set_xlabel('BPM index')
-        axs[0].grid(False)
-        axs[1].grid(False)
-        axs[0].set_title(title)
+        if title:
+            axs[0].set_title(title)
         fig.tight_layout()
         if figname:
             fig.savefig(figname, dpi=300, format='pdf')
         return fig, axs
 
     def plot_energy_spectrum(
-            self, denergy=None, title='', label='', figname=''):
+            self, denergy=None,
+            title='', label='', figname='', fig=None, axs=None, color='C0'):
         """."""
-        if denergy:
-            energy_spec, freq = self.calc_spectrum(
-                denergy, fs=self.sampling_freq)
-        else:
+        if denergy is None:
             energy_spec = self.analysis['energy_spectrum']
             freq = self.analysis['energy_freq']
+        else:
+            energy_spec, freq = self.calc_spectrum(
+                denergy, fs=self.sampling_freq)
 
-        fig, ax = _plt.subplots(1, 1, figsize=(18, 6))
-        ax.plot(freq, energy_spec, label=label)
-        self._plot_ripple_rfjitter_harmonics(freq, ax)
-        ax.set_xlabel('Frequency [Hz]')
-        ax.set_ylabel(r'Amplitude for DFT of $\delta(t)$')
-        ax.legend(
+        if fig is None or axs is None:
+            fig, axs = _plt.subplots(1, 1, figsize=(18, 6))
+        axs.plot(freq, energy_spec*100, label=label, color=color)
+        self._plot_ripple_rfjitter_harmonics(freq, axs)
+        axs.set_xlabel('Frequency [Hz]')
+        axs.set_ylabel(r'Amplitude for DFT of $\delta(t)$')
+        axs.legend(
             loc='upper right', bbox_to_anchor=(1.12, 1.02), prop={'size': 14})
-
-        ax.set_title(title)
-        ax.set_xlim([0, 5000])
-        ax.set_ylim([1e-10, 1e-2])
-        ax.set_yscale('log')
-        ax.grid(False)
+        if title:
+            axs.set_title(title)
+        axs.set_yscale('log')
         fig.tight_layout()
         if figname:
             fig.savefig(figname, dpi=300, format='pdf')
-        fig.show()
-        return fig, ax
+        return fig, axs
 
     def plot_energy_integrated_psd(
-            self, denergy_spec=None, inverse=True,
-            title='', label='', figname=''):
+            self, denergy_spec=None, freq=None, inverse=True,
+            title='', label='', figname='', fig=None, axs=None, color='C0'):
         """."""
-        if denergy_spec:
+        if denergy_spec is None:
+            intpsd = self.analysis['energy_ipsd']
+            freq = self.analysis['energy_freq']
+        else:
             intpsd = self.calc_integrated_spectrum(
                 denergy_spec, inverse=inverse)
-        else:
-            intpsd = self.analysis['energy_ipsd']
-            freq = self.analysis['freq']
+            if freq is None:
+                Exception('Frequency input is missing')
 
-        fig, ax = _plt.subplots(1, 1, figsize=(12, 6))
+        if fig is None or axs is None:
+            fig, axs = _plt.subplots(1, 1, figsize=(12, 6))
         freq = freq/1e3
-        ax.plot(freq, intpsd, label=label)
-        self._plot_ripple_rfjitter_harmonics(freq, ax)
-        ax.axhline(
-            OrbitAnalysis.ENERGY_SPREAD*0.1,
-            ls='--', label=r'10$\%$ of $\sigma_{\delta}$', color='k')
-        ax.legend(
+        axs.plot(freq, intpsd*100, label=label, color=color)
+        self._plot_ripple_rfjitter_harmonics(freq, axs)
+        axs.legend(
             loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
-
-        ax.set_title(title)
-        ax.set_xlabel('Frequency [kHz]')
-        ax.set_ylabel(r'Sqrt of Int. Spec. [$\%$]')
-        ax.set_xlim([0.1, 3])
-        ax.grid(False)
+        if title:
+            axs.set_title(title)
+        axs.set_xlabel('Frequency [kHz]')
+        axs.set_ylabel(r'Sqrt of Int. Spec. [$\%$]')
         fig.tight_layout()
         if figname:
             fig.savefig(figname, dpi=300, format='pdf')
-        fig.show()
-        return fig, ax
+        return fig, axs
 
     # static methods
     @staticmethod
