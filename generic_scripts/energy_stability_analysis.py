@@ -14,8 +14,8 @@ plt.rcParams.update({
 
 def create_data(prefix):
     """."""
-    # folder = prefix + '2021-10-25-SI_orbit_stability_characterization/'
     folder = ''
+    # folder = prefix + '2021-10-25-SI_orbit_stability_characterization/'
     files = os.listdir(folder)
     files = [name for name in files if '.pickle' in name and 'fofb' in name]
     orb_objs = []
@@ -43,41 +43,76 @@ if __name__ == '__main__':
     etas, denergies = [], []
     scurrs = []
     for obj in orb_objs:
-        eta, den = obj.energy_stability_analysis(central_freq=12*64, window=10)
+        obj.orbit_stability_analysis(central_freq=60, window=10)
+        obj.energy_stability_analysis(central_freq=12*64, window=10)
         scurr = obj.data['stored_current']
-        etas.append(etas)
-        denergies.append(den)
         scurrs.append(scurr)
 
     sort_scurr = np.argsort(scurrs)
     scurrs = sorted(scurrs)
-    etas = [etas[idx] for idx in sort_scurr]
-    denergies = [denergies[idx] for idx in sort_scurr]
-
-    plt.figure(figsize=(12, 6))
-    color = cm.rainbow(np.linspace(0, 1, len(denergies)))
-    for idx, den in enumerate(denergies):
-        obj = orb_objs[idx]
-        den_spec, freq = obj.calc_spectrum(den, fs=obj.sampling_freq)
-        intpsd = obj.calc_integrated_spectrum(den_spec, inverse=True)
-        freq = freq/1e3
-        label = f"I = {scurrs[idx]:.1f}mA"
-        plt.plot(freq, intpsd*100, label=label, color=color[idx])
-
-    espread = 0.085*0.1
-    plt.axhline(
-        espread, color='k', ls='--', label=r'10$\%$ of $\sigma_\delta$')
-
-    plt.xlabel('Frequency [kHz]')
-    plt.ylabel(r'Sqrt of Int. Spec. [\%]')
-    plt.xlim([0.1, 3])
-    plt.legend(
-        loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
+    orb_objs = [orb_objs[idx] for idx in sort_scurr]
+    colors = cm.rainbow(np.linspace(0, 1, len(orb_objs)))
 
     title = r'Sqrt of Integrated Spectrum for energy deviation $\delta$'
     title += '\n'
     title += r'Beam response analyzed around 12 $\times$ 64 Hz = 768Hz'
-    plt.title(title)
-    plt.grid(False)
-    plt.tight_layout(True)
+    lab = f"I = {scurrs[0]:.1f}mA"
+    fig, axs = obj.plot_energy_integrated_psd(label=lab, title=title)
+    for idx, obj in enumerate(orb_objs[1:]):
+        lab = f"I = {scurrs[idx+1]:.1f}mA"
+        obj.plot_energy_integrated_psd(
+            label=lab, fig=fig, axs=axs, color=colors[idx+1])
+    axs.axhline(
+        OrbitAnalysis.ENERGY_SPREAD*0.1,
+        ls='--', label=r'10$\%$ of $\sigma_{\delta}$', color='k')
+    axs.legend(
+        loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 12})
+    axs.set_xlim([0.1, 3])
+    fig.savefig('psd_energy.png', dpi=300)
+    plt.show()
+
+    title = 'SI-01M2:DI-BPM - Orbit Integrated PSD'
+    bpmidx = 0
+    lab = f"I = {scurrs[0]:.1f}mA"
+    fig, axs = obj.plot_orbit_integrated_psd(
+        bpmidx=bpmidx, label=lab, title=title)
+    for idx, obj in enumerate(orb_objs[1:]):
+        lab = f"I = {scurrs[idx+1]:.1f}mA"
+        obj.plot_orbit_integrated_psd(
+            bpmidx=bpmidx, label=lab, fig=fig, axs=axs, color=colors[idx+1])
+    axs[0].legend(
+        loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
+    axs[0].set_xlim([55, 65])
+    axs[1].set_xlim([55, 65])
+    fig.savefig('psd_orbit.png', dpi=300)
+    plt.show()
+
+    title = 'SI-01M2:DI-BPM - Orbit Spectrum'
+    bpmidx = 0
+    lab = f"I = {scurrs[0]:.1f}mA"
+    fig, axs = obj.plot_orbit_spectrum(
+        bpmidx=bpmidx, label=lab, title=title)
+    for idx, obj in enumerate(orb_objs[1:]):
+        lab = f"I = {scurrs[idx+1]:.1f}mA"
+        obj.plot_orbit_spectrum(
+            bpmidx=bpmidx, label=lab, fig=fig, axs=axs, color=colors[idx+1])
+    axs[0].legend(
+        loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
+    axs[0].set_xlim([55, 65])
+    axs[1].set_xlim([55, 65])
+    fig.savefig('spectrum_orbit.png', dpi=300)
+    plt.show()
+
+    title = 'SI-01M2:DI-BPM - Space Modes'
+    lab = f"I = {scurrs[0]:.1f}mA"
+    fig, axs = obj.plot_orbit_spacial_modes(
+        modes=[0, ], label=lab, title=title)
+    for idx, obj in enumerate(orb_objs[1:]):
+        lab = f"I = {scurrs[idx+1]:.1f}mA"
+        obj.plot_orbit_spacial_modes(
+            modes=[0, ], label=lab,
+            fig=fig, axs=axs, color=colors[idx+1])
+    axs[0].legend(
+        loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 10})
+    fig.savefig('space_modes_orbit.png', dpi=300)
     plt.show()
