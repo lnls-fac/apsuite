@@ -103,7 +103,7 @@ if __name__ == '__main__':
     fig.savefig('spectrum_orbit.png', dpi=300)
     plt.show()
 
-    title = 'SI-01M2:DI-BPM - Space Modes'
+    title = 'Space Modes'
     lab = f"I = {scurrs[0]:.1f}mA"
     fig, axs = obj.plot_orbit_spacial_modes(
         modes=[0, ], label=lab, title=title)
