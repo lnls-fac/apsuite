@@ -25,7 +25,7 @@ class CollisionSimul:
             cavity_on=True, radiation_on=True,
             vchamber_on=True, ids_vchamber=True)
 
-        # init nominal equilibtrum parameters
+        # init nominal equilibrium parameters
         self._emit0 = 0.25e-9  # [nm.rad]
         self._coup = 2 / 100
         self._emitx = self._emit0 * 1 / (1 + self._coup)  # [nm.rad]
@@ -122,7 +122,7 @@ class CollisionSimul:
         """."""
         return self._kick
 
-    def create_bunch(self, nr_particles):
+    def create_bunch(self, nr_particles, fixed_point=False):
         """."""
         bunch = _np.array([])
         if nr_particles > 1:
@@ -132,7 +132,11 @@ class CollisionSimul:
                 sigmae=self._sigmae, sigmas=self._sigmas,
                 optics=self._twiss[0],
                 cutoff=10)
-        origin = _np.zeros((6, 1))  # NOTE: replace with fixed point?
+        if fixed_point:
+            raise NotImplementedError
+        else:
+            origin = _np.zeros((6, 1))  # NOTE: replace with fixed point?
+
         self._bunch = _np.hstack((origin, bunch))
 
     def run_tracking(self, bunchnr=None, nrturns=1):
@@ -162,6 +166,7 @@ class CollisionSimul:
         rin = self.bunch.copy()
         rout = _np.zeros((nrturns, 6, rin.shape[1], len(self._model)))
         for nidx in range(nrturns):
+            # NOTE: check if parallel runs ok
             rout_, lostflag, lostelem, lostplane = \
                 _pyaccel.tracking.line_pass(
                     self._model, rin, indices='closed', parallel=False)
@@ -172,12 +177,15 @@ class CollisionSimul:
 
     def check_collisions(self):
         """."""
+        if self.traj is None:
+            raise Exception('Pasrticles not tracked!!')
         nrturns, nrcoors, nrparticles, nrelems = self.traj.shape
         _ = nrcoors, nrelems
         lostparticles = dict()
         for nturn in range(nrturns):
             lostparticles[nturn] = dict()
             ptraj = self._traj[nturn]
+            # NOTE: generalize to include verticla case
             ptrajx = _np.isnan(ptraj[0])
             for part in range(nrparticles):
                 elemidx = _np.where(ptrajx[part])[0][0]
@@ -332,6 +340,7 @@ class CollisionSimul:
 
     def _add_delta22_vchamber(self):
         self._update_model()
+        # NOTE: add vcahmber delta22 for any straight?
         # add delta22 vchamber at 16SB
         chamb_side = 6.5e-3 / _np.sqrt(2)  # [m]
         chamb_len = 2.6
@@ -391,8 +400,8 @@ class CollisionSimul:
 def run():
     """."""
     csimul = CollisionSimul('x', refine_max_len=0.01)
-    csimul.create_bunch(nr_particles=500)
-    csimul.run_tracking(bunchnr=250, nrturns=1)
+    csimul.create_bunch(nr_particles=500, fixed_point=False)
+    csimul.run_tracking(bunchnr=0, nrturns=1)
     csimul.plot_traj(nturn=0)
 
 
@@ -440,5 +449,5 @@ def plot_initial_train():
 
 
 if __name__ == "__main__":
-    # run()
-    plot_initial_train()
+    run()
+    # plot_initial_train()
