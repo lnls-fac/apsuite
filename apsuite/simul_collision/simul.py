@@ -121,7 +121,7 @@ class CollisionSimul:
     def kick(self):
         """."""
         return self._kick
-
+ 
     def create_bunch(self, nr_particles, fixed_point=False):
         """."""
         bunch = _np.array([])
@@ -178,7 +178,7 @@ class CollisionSimul:
     def check_collisions(self):
         """."""
         if self.traj is None:
-            raise Exception('Pasrticles not tracked!!')
+            raise Exception('Particles not tracked!!')
         nrturns, nrcoors, nrparticles, nrelems = self.traj.shape
         _ = nrcoors, nrelems
         lostparticles = dict()
@@ -262,6 +262,59 @@ class CollisionSimul:
                     angley_avg=py_avg,
                     angley_std=py_std,
                 )
+
+    def print_lost_particles(self):
+        """."""
+        if self.traj is None:
+            raise Exception('Particles not tracked!!')
+        traj = self.traj
+        nrparticles = traj.shape[2]
+        stg = ''
+        stg = f'# simulation of bunch #{self.bunchnr:03d}\n'
+        stg += f'# kickx: {1e3*self.kick:.3f} mrad\n'
+        stg += f'# nr.particles: {nrparticles:04d}\n'
+        stg += f'#\n'
+        stg += f'# particle_idx turn_idx elem_idx posz[m] energy[GeV] rx[mm] px[mrad] ry[mm] py[mrad]\n'
+        for part in range(nrparticles):
+            ptraj = self.traj[:, :, part, :]
+            for nturn in range(ptraj.shape[0]):
+                # print(part, nturn)
+                isnan_rx = _np.isnan(ptraj[nturn, 0])
+                isnan_px = _np.isnan(ptraj[nturn, 1])
+                isnan_ry = _np.isnan(ptraj[nturn, 2])
+                isnan_py = _np.isnan(ptraj[nturn, 3])
+                allinds = set()
+                allinds.update(_np.where(isnan_rx)[0])
+                allinds.update(_np.where(isnan_px)[0])
+                allinds.update(_np.where(isnan_ry)[0])
+                allinds.update(_np.where(isnan_py)[0])
+                if allinds:
+                    elemidx = min(allinds) - 1  # index of elem prev to loss
+                    pcoord = ptraj[nturn, :, elemidx]
+                    rx_, px_ = pcoord[0], pcoord[1]
+                    ry_, py_ = pcoord[2], pcoord[3]
+                    de_ = pcoord[4]
+                    hmin, hmax = self.hmin, self.hmax
+                    vmin, vmax = self.vmin, self.vmax
+                    limx = hmax[elemidx] if px_ > 0 else hmin[elemidx]
+                    limy = vmax[elemidx] if py_ > 0 else vmin[elemidx]
+                    dposx = (limx - rx_)/px_ if px_ != 0 else float('inf')
+                    dposy = (limy - ry_)/py_ if py_ != 0 else float('inf')
+                    dpos = min(dposx, dposy)
+                    rx_ += dpos * px_
+                    ry_ += dpos * py_
+                    stg += '\n'
+                    stg += f'{part+1:04d} '
+                    stg += f'{nturn+1:04d} '
+                    stg += f'{elemidx+1:04d} '
+                    stg += f' {(self.spos[elemidx] + dpos):010.6f} '
+                    stg += f' {(self._model.energy * (1 + de_))/1e9:.6f} '
+                    stg += f' {1e3*rx_:+05.1f} '
+                    stg += f' {1e3*px_:+08.3f} '
+                    stg += f' {1e3*ry_:+05.1f} '
+                    stg += f' {1e3*py_:+08.3f} '
+                    break
+        print(stg)
 
     def plot_bunch(self):
         """."""
@@ -402,7 +455,10 @@ def run():
     csimul = CollisionSimul('x', refine_max_len=0.01)
     csimul.create_bunch(nr_particles=500, fixed_point=False)
     csimul.run_tracking(bunchnr=0, nrturns=1)
-    csimul.plot_traj(nturn=0)
+    csimul.print_lost_particles()
+    # csimul.check_collisions()
+    # print(csimul.lostparticles)
+    # csimul.plot_traj(nturn=0)
 
 
 def plot_initial_train():
