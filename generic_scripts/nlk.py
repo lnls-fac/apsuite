@@ -269,7 +269,7 @@ class NLK:
         nlk = NLK()
         x, mag_field = nlk.get_magnetic_field_on_axis()
 
-        brho, *_ = beam_rigidity(energy=3)  # energy in GeV
+        brho, *_ = beam_rigidity(energy=3)  # energy in [GeV]
         integ_field = strength * mag_field * nlk_length  # [T.m]
         kickx = integ_field / brho  # [rad]
 
