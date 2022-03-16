@@ -21,7 +21,7 @@ class OrbitAnalysis:
     ENERGY_SPREAD = 0.085  # [%]
     BPM_SWITCHING_FREQ = 12.5e3  # Hz
     FOFB_DOWNSAMPLING = 23
-    MONIT1_DOWNSAMPLING = 25
+    MONIT1_DOWNSAMPLING = 25*FOFB_DOWNSAMPLING
 
     def __init__(self, filename=''):
         """Analysis of orbit over time at BPMs for a given acquisition rate.
@@ -237,9 +237,10 @@ class OrbitAnalysis:
 
         # scale obtained by least-squares minimization
         gamma = _np.dot(etaxy, vheta)/_np.dot(etaxy, etaxy)
+        eta_meas = vheta/gamma
+
         orbxy = _np.hstack((orbx_ns, orby_ns))
         orbxy -= _np.mean(orbxy, axis=1)[:, None]
-        eta_meas = vheta/gamma
         # projecting orbit data the dispersion space mode direction
         denergy = _np.dot(orbxy, vheta) * gamma
 
@@ -363,13 +364,13 @@ class OrbitAnalysis:
             umatx, vhmatx = anly['orbx_umat'], anly['orbx_vhmat']
             svalsx = anly['orbx_svals']
         else:
-            umatx, svalsx, vhmatx = self.calc_pca(orbx)
+            umatx, svalsx, vhmatx = self._calc_pca(orbx)
         if orby is None:
             anly = self.analysis
             umaty, vhmaty = anly['orby_umat'], anly['orby_vhmat']
             svalsy = anly['orby_svals']
         else:
-            umaty, svalsy, vhmaty = self.calc_pca(orby)
+            umaty, svalsy, vhmaty = self._calc_pca(orby)
 
         spacx = vhmatx[modes].T*svalsx[modes]/_np.sqrt(umatx.shape[0])
         spacy = vhmaty[modes].T*svalsy[modes]/_np.sqrt(umaty.shape[0])
@@ -556,7 +557,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """."""
         _BaseClass.__init__(
             self, params=OrbitAcquisitionParams(), isonline=isonline)
-        OrbitAnalysis.__init__()
+        OrbitAnalysis.__init__(self)
 
         if self.isonline:
             self.create_devices()
