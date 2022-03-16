@@ -1,9 +1,10 @@
 #!/usr/bin/env python-sirius
+
+from attr import attributes
 import numpy as _np
 import matplotlib.pyplot as _plt
 import pyaccel as _pyaccel
 from pymodels import si as _si
-from zmq import proxy
 
 _plt.rcParams.update({'font.size': 16})
 
@@ -51,8 +52,8 @@ class CollisionSimul:
 
         # add delta22 vchamber
         self._delta22_vchamber_side, \
-            self._delta22_vchamber_len, \
-            self._delta22_idx = self._add_delta22_vchamber()
+        self._delta22_vchamber_len, \
+        self._delta22_idx = self._add_delta22_vchamber()
 
         self._update_model()
 
@@ -157,15 +158,13 @@ class CollisionSimul:
             bunch_spacing = 2e-9
             pulse_duration = 1.5e-6
             time = bunchnr * bunch_spacing
-            kick = CollisionSimul.MAX_KICK * \
-                _np.cos((_np.pi/2)*time/pulse_duration)
+            kick = CollisionSimul.MAX_KICK * _np.cos((_np.pi/2)*time/pulse_duration)
 
         # set pinger kick
         self._bunchnr = bunchnr
         self._kick = kick
         pinger_ind = self._pinger_ind
-        lens = _np.sum(_pyaccel.lattice.get_attribute(
-            self._model, 'length', pinger_ind))
+        lens = _np.sum(_pyaccel.lattice.get_attribute(self._model, 'length', pinger_ind))
         for idx in pinger_ind:
             elem = self._model[idx]
             if self._plane == 'x':
@@ -177,10 +176,10 @@ class CollisionSimul:
         rin = self.bunch.copy()
         rout = _np.zeros((nrturns, 6, rin.shape[1], len(self._model)))
         for nidx in range(nrturns):
-            # NOTE: check if parallel runs ok (Solved)
+            # NOTE: check if parallel runs ok
             rout_, lostflag, lostelem, lostplane = \
                 _pyaccel.tracking.line_pass(
-                    self._model, rin, indices='closed', parallel=True)
+                    self._model, rin, indices='closed', parallel=False)
             rin = rout_[:, :, -1]
             rout[nidx, :, :, :] = rout_[:, :, :-1]
             _ = lostflag, lostelem, lostplane
@@ -202,28 +201,27 @@ class CollisionSimul:
                 elemidx = _np.where(ptrajx[part])[0][0]
                 prx = ptraj[0, part, elemidx-1]  # posx
                 ppx = ptraj[1, part, elemidx-1]  # angx
-                pry = ptraj[2, part, elemidx-1]
-                ppy = ptraj[3, part, elemidx-1]
-                hmin, hmax = self.hmin, self.hmax
-                vmin, vmax = self.vmin, self.vmax
-                limx = hmax[elemidx] if ppx > 0 else hmin[elemidx]
-                limy = vmax[elemidx] if ppy > 0 else vmin[elemidx]
-                dposx = (limx - prx)/ppx if ppx != 0 else float('inf')
-                dposy = (limy - pry)/ppy if ppy != 0 else float('inf')
-
                 if ppx > 0:
                     # loss at upper vchamber
                     dpos = (self.hmax[elemidx] - prx)/ppx
                 else:
                     # loss at lower vchamber
                     dpos = (self.hmin[elemidx] - prx)/ppx
-                dpos = min(dposx, dposy)
                 lpos = self.spos[elemidx-1] + dpos  # extrapolated spos at loss
                 if elemidx not in lostparticles[nturn]:
                     lostparticles[nturn][elemidx] = [(part, lpos), ]
                 else:
                     lostparticles[nturn][elemidx].append((part, lpos))
         self._lostparticles = lostparticles
+
+        # for nturn in lostparticles:
+        #     for elem in lostparticles[nturn]:
+        #         part, lpos = zip(*lostparticles[nturn][elem])
+        #         stg = ''
+        #         stg += f'nturn:{nturn:02d} elem:{elem:04d} '
+        #         stg += f'nrpart:{len(part):04d} '
+        #         stg += f'lpos_avg:{_np.mean(lpos):} lpos_std:{_np.std(lpos)}'
+        #         print(stg)
 
         self._group_adjacent_loss_points()
 
@@ -275,7 +273,7 @@ class CollisionSimul:
                     angley_std=py_std,
                 )
 
-    def save_lost_particles_data(self, fname, print=False, full=None):
+    def print_lost_particles(self):
         """."""
         if self.traj is None:
             raise Exception('Particles not tracked!!')
@@ -285,8 +283,8 @@ class CollisionSimul:
         stg = f'# simulation of bunch #{self.bunchnr:03d}\n'
         stg += f'# kickx: {1e3*self.kick:.3f} mrad\n'
         stg += f'# nr.particles: {nrparticles:04d}\n'
-        stg += '#\n'
-        stg += '# particle_idx turn_idx elem_idx posz[m] energy[GeV] rx[mm] px[mrad] ry[mm] py[mrad]\n'
+        stg += f'#\n'
+        stg += f'# particle_idx turn_idx elem_idx posz[m] energy[GeV] rx[mm] px[mrad] ry[mm] py[mrad]\n'
         for part in range(nrparticles):
             ptraj = self.traj[:, :, part, :]
             for nturn in range(ptraj.shape[0]):
@@ -326,11 +324,7 @@ class CollisionSimul:
                     stg += f' {1e3*ry_:+05.1f} '
                     stg += f' {1e3*py_:+08.3f} '
                     break
-        text_file = open(fname, "w")
-        n = text_file.write(stg)
-        text_file.close()
-        if print:
-            print(stg)
+        print(stg)
 
     def plot_bunch(self):
         """."""
@@ -344,14 +338,8 @@ class CollisionSimul:
             self.check_collisions()
         if self._collision_distro is None:
             self.calc_collision_distro()
-        if self.plane == 'x':
-            coord = 0
-            wallsmax = self.hmax
-            wallsmin = self.hmin
-        else:
-            wallsmax = self.vmax
-            wallsmin = self.vmin
-            coord = 2
+
+        coord = 0
         spos = self.spos
         traj = self.traj[nturn]
 
@@ -361,38 +349,34 @@ class CollisionSimul:
             lost_elemidx = len(self._model)
 
         fig, axs = _plt.subplots(1, 1, figsize=(10, 5))
-        # ploting trajectory 
         axs.plot(
             spos, 1e3 * traj[coord, :, :].T, '-', lw=1, alpha=0.1,
             color='tab:blue')
-        # plotting Vchamber
-        axs.plot(spos, 1e3 * wallsmax, color='k', ls='--')
-        axs.plot(spos, 1e3 * wallsmin, color='k', ls='--')
+        axs.plot(spos, 1e3 * self.hmax, color='k', ls='--')
+        axs.plot(spos, 1e3 * self.hmin, color='k', ls='--')
         _pyaccel.graphics.draw_lattice(
             self._model, gca=axs, height=3, offset=0)
         axs.set_ylim([-18, 18])
         axs.set_xlim([0, spos[lost_elemidx]*1.5])
 
-        pingstr = self.model[self.pinger_ind[0]].fam_name
         stat = self._collision_distro[nturn]
         stg = ''
         stg += f'Bunch Nr.: {self.bunchnr}, '
-        stg += pingstr + f' = {1e3*self.kick:.3f} mrad, '
+        stg += f'DipKick = {1e3*self.kick:.3f} mrad, '
         stg += rf'Lost {stat["nrpart"]}/{self.nr_particles} at s = {stat["lpos_avg"]:.4f} m $\pm$ {1e3*stat["lpos_std"]:.2f} mm'
         stg += '\n'
-        stg += f'At {1e2*stat["dist"]:.2f} cm from vchamber: '
+        stg += f'At {1e2*stat["dist"]:.2f} cm from vchamber: '    
         stg += r'$\sigma_x$ = '
         stg += f'{1e6*stat["sigmax"]:.1f} um, '
         stg += r'$\sigma_y$ = '
         stg += f'{1e6*stat["sigmay"]:.1f} um\n'
         stg += rf'angX = ({1e3*stat["anglex_avg"]:.3f} $\pm$ {1e3*stat["anglex_std"]:.3f}) mrad, '
-        stg += rf'angY = ({1e3*stat["angley_avg"]:.2f} $\pm$ {1e3*stat["angley_std"]:.3f}) mrad '
+        stg += rf'angY = ({1e6*stat["angley_avg"]:.2f} $\pm$ {1e6*stat["angley_std"]:.2f}) urad '
         axs.set_title(stg, fontsize=12)
         axs.set_xlabel('s [m]')
-        axs.set_ylabel(self.plane + '[mm]')
+        axs.set_ylabel('x [mm]')
         _plt.tight_layout()
-        _plt.savefig(
-            f'beam_collision_kickx_bunch_{self.bunchnr:03d}.png', dpi=300)
+        _plt.savefig(f'beam_collision_kickx_bunch_{self.bunchnr:03d}.png', dpi=300)
         _plt.show()
 
     def _create_model(self,
@@ -413,8 +397,7 @@ class CollisionSimul:
         famname = 'InjDpKckr' if self._plane == 'x' else 'PingV'
         pinger_ind = _pyaccel.lattice.find_indices(model, 'fam_name', famname)
         model = _pyaccel.lattice.shift(model, start=pinger_ind[0])
-        self._pinger_ind = _pyaccel.lattice.find_indices(
-            model, 'fam_name', famname)
+        self._pinger_ind = _pyaccel.lattice.find_indices(model, 'fam_name', famname)
 
         return model
 
@@ -479,13 +462,13 @@ class CollisionSimul:
 
 def run():
     """."""
-    csimul = CollisionSimul('y', refine_max_len=0.2)
+    csimul = CollisionSimul('x', refine_max_len=0.01)
     csimul.create_bunch(nr_particles=500, fixed_point=False)
-    csimul.run_tracking(bunchnr=250, nrturns=1)
-    csimul.save_lost_particles_data('vertical output.txt')
+    csimul.run_tracking(bunchnr=0, nrturns=1)
+    csimul.print_lost_particles()
     # csimul.check_collisions()
     # print(csimul.lostparticles)
-    csimul.plot_traj(nturn=0)
+    # csimul.plot_traj(nturn=0)
 
 
 def plot_initial_train():
@@ -506,16 +489,17 @@ def plot_initial_train():
     }
 
     for label, gaussm in data.items():
-        _plt.vlines(
-            int(label), gaussm[0] - gaussm[1]/1000, gaussm[0] + gaussm[1]/1000)
+        _plt.vlines(int(label), gaussm[0] - gaussm[1]/1000, gaussm[0] + gaussm[1]/1000)
         _plt.plot([int(label)], [gaussm[0]], 'o', color='C0')
     _plt.xlabel('Bunch Number')
     _plt.ylabel('Impact Position [m]')
     _plt.grid()
     stg = 'Impact Position of Kicked Bunches on Vacuum Chamber\n'
-    stg += '(vertical bars represent 1-sigma beam distribution)'
+    stg += '(vertical bars represent 1-sigma beam distribution)' 
     _plt.title(stg)
     _plt.show()
+
+
 
     s = _np.linspace(1.6998-10/1000, 2.0257+10/1000, 100)
     for label, gaussm in data.items():
