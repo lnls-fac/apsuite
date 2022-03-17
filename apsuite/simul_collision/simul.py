@@ -1,11 +1,13 @@
 #!/usr/bin/env python-sirius
 
+from attr import attributes
 import numpy as _np
 import matplotlib.pyplot as _plt
 import pyaccel as _pyaccel
 from pymodels import si as _si
 
 _plt.rcParams.update({'font.size': 16})
+
 
 class CollisionSimul:
     """."""
@@ -118,6 +120,11 @@ class CollisionSimul:
         return self._pinger_ind
 
     @property
+    def model(self):
+        """."""
+        return self._model
+
+    @property
     def kick(self):
         """."""
         return self._kick
@@ -133,11 +140,14 @@ class CollisionSimul:
                 optics=self._twiss[0],
                 cutoff=10)
         if fixed_point:
-            raise NotImplementedError
+            fixed_point_at_pinger = _pyaccel.tracking.find_orbit(
+                accelerator=self.model, indices=self.pinger_ind)
+            origin = fixed_point_at_pinger[:, [0]]
         else:
-            origin = _np.zeros((6, 1))  # NOTE: replace with fixed point?
+            origin = _np.zeros((6, 1))
 
-        self._bunch = _np.hstack((origin, bunch))
+        # self._bunch = _np.hstack((origin, bunch))
+        self._bunch = bunch + origin
 
     def run_tracking(self, bunchnr=None, nrturns=1):
         """."""
