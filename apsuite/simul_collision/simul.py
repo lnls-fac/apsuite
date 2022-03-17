@@ -146,8 +146,8 @@ class CollisionSimul:
         else:
             origin = _np.zeros((6, 1))
 
-        # self._bunch = _np.hstack((origin, bunch))
-        self._bunch = bunch + origin
+        self._bunch = _np.hstack((origin, bunch))
+        # self._bunch = origin + bunch
 
     def run_tracking(self, bunchnr=None, nrturns=1):
         """."""
@@ -195,7 +195,6 @@ class CollisionSimul:
         for nturn in range(nrturns):
             lostparticles[nturn] = dict()
             ptraj = self._traj[nturn]
-            # NOTE: generalize to include verticla case
             ptrajx = _np.isnan(ptraj[0])
             for part in range(nrparticles):
                 elemidx = _np.where(ptrajx[part])[0][0]
@@ -374,7 +373,7 @@ class CollisionSimul:
             stg += f'DipKick = {1e3*self.kick:.3f} mrad, '
             stg += rf'Lost {stat["nrpart"]}/{self.nr_particles} at s = {stat["lpos_avg"]:.4f} m $\pm$ {1e3*stat["lpos_std"]:.2f} mm'
             stg += '\n'
-            stg += f'At {1e2*stat["dist"]:.2f} cm from vchamber: '    
+            stg += f'At {1e2*stat["dist"]:.2f} cm from vchamber: '
             stg += r'$\sigma_x$ = '
             stg += f'{1e6*stat["sigmax"]:.1f} um, '
             stg += r'$\sigma_y$ = '
@@ -474,11 +473,10 @@ def run():
     """."""
     csimul = CollisionSimul('x', refine_max_len=0.05)
     csimul.create_bunch(nr_particles=2000, fixed_point=False)
-    for bunchnr in range(500-20, 500+20):
+    for bunchnr in range(501, 500+20):
         print(bunchnr)
         csimul.run_tracking(bunchnr=bunchnr, nrturns=1)
         csimul.print_lost_particles()
-    
     # csimul = CollisionSimul('x', refine_max_len=0.1)
     # csimul.create_bunch(nr_particles=50, fixed_point=False)
     # csimul.run_tracking(bunchnr=500, nrturns=1)
