@@ -121,7 +121,7 @@ class CollisionSimul:
     def kick(self):
         """."""
         return self._kick
- 
+
     def create_bunch(self, nr_particles, fixed_point=False):
         """."""
         bunch = _np.array([])
@@ -248,9 +248,8 @@ class CollisionSimul:
                 stg += f'sigmay : {1e6*ry_std:.1f} um\n'
                 stg += f'angley : ({1e6*py_avg:.2f} +/- {1e6*py_std:.2f}) urad\n'
                 print(stg)
-                # NOTE: this will overwrite previous elem data
-                self._collision_distro[nturn] = dict(
-                    elem=elem-1,
+                dictloss = dict(
+                    # elem=elem-1,
                     dist=(lpos_avg - self.spos[elem-1]),
                     nrpart=len(part),
                     lpos_avg=lpos_avg,
@@ -262,6 +261,10 @@ class CollisionSimul:
                     angley_avg=py_avg,
                     angley_std=py_std,
                 )
+                if nturn not in self._collision_distro:
+                    self._collision_distro[nturn] = {elem:dictloss}
+                else:
+                    self._collision_distro[nturn][elem] = dictloss
 
     def print_lost_particles(self):
         """."""
@@ -274,7 +277,8 @@ class CollisionSimul:
         stg += f'# kickx: {1e3*self.kick:.3f} mrad\n'
         stg += f'# nr.particles: {nrparticles:04d}\n'
         stg += f'#\n'
-        stg += f'# particle_idx turn_idx elem_idx posz[m] energy[GeV] rx[mm] px[mrad] ry[mm] py[mrad]\n'
+        stg += (f'# particle_idx turn_idx elem_idx '
+                f'posz[m] energy[GeV] rx[mm] px[mrad] ry[mm] py[mrad]\n')
         for part in range(nrparticles):
             ptraj = self.traj[:, :, part, :]
             for nturn in range(ptraj.shape[0]):
@@ -314,7 +318,10 @@ class CollisionSimul:
                     stg += f' {1e3*ry_:+05.1f} '
                     stg += f' {1e3*py_:+08.3f} '
                     break
-        print(stg)
+        fp = open(f'loss_bunch_{self.bunchnr:04d}.txt', 'w')
+        fp.write(stg)
+        fp.close()
+        # print(stg)
 
     def plot_bunch(self):
         """."""
@@ -338,36 +345,39 @@ class CollisionSimul:
         else:
             lost_elemidx = len(self._model)
 
-        fig, axs = _plt.subplots(1, 1, figsize=(10, 5))
-        axs.plot(
-            spos, 1e3 * traj[coord, :, :].T, '-', lw=1, alpha=0.1,
-            color='tab:blue')
-        axs.plot(spos, 1e3 * self.hmax, color='k', ls='--')
-        axs.plot(spos, 1e3 * self.hmin, color='k', ls='--')
-        _pyaccel.graphics.draw_lattice(
-            self._model, gca=axs, height=3, offset=0)
-        axs.set_ylim([-18, 18])
-        axs.set_xlim([0, spos[lost_elemidx]*1.5])
+        statall = self._collision_distro[nturn]
+        for elemidx in statall:
+            stat = statall[elemidx]
+            _, axs = _plt.subplots(1, 1, figsize=(10, 5))
+            axs.plot(
+                spos, 1e3 * traj[coord, :, :].T, '-', lw=1, alpha=0.1,
+                color='tab:blue')
+            axs.plot(spos, 1e3 * self.hmax, color='k', ls='--')
+            axs.plot(spos, 1e3 * self.hmin, color='k', ls='--')
+            _pyaccel.graphics.draw_lattice(
+                self._model, gca=axs, height=3, offset=0)
+            axs.set_ylim([-18, 18])
+            axs.set_xlim([0, spos[lost_elemidx]*1.5])
 
-        stat = self._collision_distro[nturn]
-        stg = ''
-        stg += f'Bunch Nr.: {self.bunchnr}, '
-        stg += f'DipKick = {1e3*self.kick:.3f} mrad, '
-        stg += rf'Lost {stat["nrpart"]}/{self.nr_particles} at s = {stat["lpos_avg"]:.4f} m $\pm$ {1e3*stat["lpos_std"]:.2f} mm'
-        stg += '\n'
-        stg += f'At {1e2*stat["dist"]:.2f} cm from vchamber: '    
-        stg += r'$\sigma_x$ = '
-        stg += f'{1e6*stat["sigmax"]:.1f} um, '
-        stg += r'$\sigma_y$ = '
-        stg += f'{1e6*stat["sigmay"]:.1f} um\n'
-        stg += rf'angX = ({1e3*stat["anglex_avg"]:.3f} $\pm$ {1e3*stat["anglex_std"]:.3f}) mrad, '
-        stg += rf'angY = ({1e6*stat["angley_avg"]:.2f} $\pm$ {1e6*stat["angley_std"]:.2f}) urad '
-        axs.set_title(stg, fontsize=12)
-        axs.set_xlabel('s [m]')
-        axs.set_ylabel('x [mm]')
-        _plt.tight_layout()
-        _plt.savefig(f'beam_collision_kickx_bunch_{self.bunchnr:03d}.png', dpi=300)
-        _plt.show()
+            stg = ''
+            stg += f'Bunch Nr.: {self.bunchnr}, '
+            stg += f'DipKick = {1e3*self.kick:.3f} mrad, '
+            stg += rf'Lost {stat["nrpart"]}/{self.nr_particles} at s = {stat["lpos_avg"]:.4f} m $\pm$ {1e3*stat["lpos_std"]:.2f} mm'
+            stg += '\n'
+            stg += f'At {1e2*stat["dist"]:.2f} cm from vchamber: '    
+            stg += r'$\sigma_x$ = '
+            stg += f'{1e6*stat["sigmax"]:.1f} um, '
+            stg += r'$\sigma_y$ = '
+            stg += f'{1e6*stat["sigmay"]:.1f} um\n'
+            stg += rf'angX = ({1e3*stat["anglex_avg"]:.3f} $\pm$ {1e3*stat["anglex_std"]:.3f}) mrad, '
+            stg += rf'angY = ({1e6*stat["angley_avg"]:.2f} $\pm$ {1e6*stat["angley_std"]:.2f}) urad '
+            axs.set_title(stg, fontsize=12)
+            axs.set_xlabel('s [m]')
+            axs.set_ylabel('x [mm]')
+            _plt.tight_layout()
+            fname = f'beam_collision_kickx_bunch_{self.bunchnr:03d}_nturn_{nturn:04d}_elemidx_{elemidx:04d}.png'
+            _plt.savefig(fname, dpi=300)
+            _plt.show()
 
     def _create_model(self,
                       cavity_on, radiation_on,
@@ -452,12 +462,16 @@ class CollisionSimul:
 
 def run():
     """."""
-    csimul = CollisionSimul('x', refine_max_len=0.01)
-    csimul.create_bunch(nr_particles=500, fixed_point=False)
-    csimul.run_tracking(bunchnr=0, nrturns=1)
-    csimul.print_lost_particles()
-    # csimul.check_collisions()
-    # print(csimul.lostparticles)
+    csimul = CollisionSimul('x', refine_max_len=0.05)
+    csimul.create_bunch(nr_particles=2000, fixed_point=False)
+    for bunchnr in range(500-20, 500+20):
+        print(bunchnr)
+        csimul.run_tracking(bunchnr=bunchnr, nrturns=1)
+        csimul.print_lost_particles()
+    
+    # csimul = CollisionSimul('x', refine_max_len=0.1)
+    # csimul.create_bunch(nr_particles=50, fixed_point=False)
+    # csimul.run_tracking(bunchnr=500, nrturns=1)
     # csimul.plot_traj(nturn=0)
 
 
