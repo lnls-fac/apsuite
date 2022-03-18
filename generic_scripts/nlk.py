@@ -8,16 +8,19 @@ from mathphys.beam_optics import beam_rigidity
 class Wire:
     """Simulates the magnetic field of a infinite wire.
     """
-    def __init__(self, position, current):
+    def __init__(self, position=(0, 0), current=1):
         """ Initialize a Wire object.
         Parameters
         ----------
-        position : numpy.array of size 2
-            Cartesian coordinates [x,y] of the wire position in [m].
+        position : array_like of size 2, optional
+            Cartesian coordinates (x,y) of the wire position in [m], by
+            default (0,0).
 
-        current : float, int
-            Current of the wire, in units of [A].
+        current : float, optional
+            Current of the wire, in units of [A], by default 1.
         """
+        self._pos = None
+        self._curr = None
         self.position = position  # [m]
         self.current = current    # [A]
 
@@ -49,17 +52,17 @@ class Wire:
         mu0 = vacuum_permeability
         r_w = self.position[:, None]  # Wire positions
         rc = r - r_w  # Cursive r
-        theta = _np.arctan2(rc[1, :], rc[0, :])
+        theta = _np.arctan2(rc[1], rc[0])
         theta_vec = _np.array([-_np.sin(theta), _np.cos(theta)])
         rc_norm = _np.linalg.norm(rc, axis=0)[None, :]
         mag_field = \
-            mu0 * self.current/(2*_np.pi*rc_norm)*theta_vec + r_w
+            mu0 * self.current/(2*_np.pi*rc_norm)*theta_vec
         return mag_field
 
     @property
     def position(self):
         """."""
-        return self._pos
+        return self._pos.copy()
 
     @position.setter
     def position(self, position):
@@ -80,6 +83,7 @@ class Wire:
     @staticmethod
     def _check_r_size(r):
         """."""
+        r = _np.asarray(r)
         if r.size == 2:
             return r.ravel()
         else:
@@ -104,41 +108,31 @@ class NLK:
         if positions is not None:
             wire_positions = positions
         else:
-            wire_positions = _np.zeros([8, 2])
+            wire_positions = _np.zeros([2, 8])
             s1 = _np.array([1, -1, 1, -1])
             s2 = _np.array([1, 1, -1, -1])
-            for i in range(0, wire_positions.shape[0], 2):
-                j = int(i/2)
-                wire_positions[i] = \
-                    _np.array([s1[j]*7.0,  s2[j]*5.21])[None, :]*1e-3
-                wire_positions[i+1] = \
-                    _np.array([s1[j]*10., s2[j]*5.85])[None, :]*1e-3
+            wire_positions[:, ::2] = _np.array([s1*7, s2*5.21])
+            wire_positions[:, 1::2] = _np.array([s1*10, s2*5.85])
+            wire_positions *= 1e-3
 
         # Creating wires
-        self._wires = []
-        for i in range(8):
-            if i % 2:
-                curr = -current
-            else:
-                curr = current
-            pos = wire_positions[i]
-            wire = Wire(pos, curr)
-            self._wires.append(wire)
+        currents = _np.zeros(8)
+        currents[::2] = -current
+        currents[1::2] = current
+
+        self._wires = [
+            Wire() for i in range(8)]
+        self.positions = wire_positions
+        self.currents = currents
 
     @property
     def wires(self):
         """List with the Wires objects that compose the NLK.
-
         Returns
         -------
         list of Wires objects.
         """
         return self._wires
-
-    @wires.setter
-    def wires(self, wires_objects):
-        """."""
-        self._wires = wires_objects
 
     @property
     def positions(self):
@@ -149,15 +143,13 @@ class NLK:
         numpy.array
             Returns a numpy.array of shape (2, 8) with the wires coordinates.
         """
-        wires_positions = _np.zeros([2, 8])
-        for i in range(wires_positions.shape[1]):
-            wires_positions[:, [i]] = self._wires[i].position[:, None]
-        return wires_positions
+        return _np.array([wi.position for wi in self.wires]).T
 
-    @positions.setter  # Thinking in a good setter for this...
+    @positions.setter
     def positions(self, wires_positions):
+        """."""
         for i in range(wires_positions.shape[1]):
-            self._wires[i].position = wires_positions[:, i]
+            self.wires[i].position = wires_positions[:, i]
 
     @property
     def currents(self):
@@ -168,10 +160,7 @@ class NLK:
         numpy.array
             Single dimension array with the currents of each wire in NLK.
         """
-        wires_currents = _np.zeros(len(self._wires))
-        for i in range(len(self._wires)):
-            wires_currents[i] = self._wires[i].current
-        return wires_currents
+        return _np.array([wi.current for wi in self._wires])
 
     @currents.setter
     def currents(self, wires_currents):
@@ -206,34 +195,61 @@ class NLK:
             mag_field += wire.calc_magnetic_field(r)
         return mag_field
 
-    def get_magnetic_field_on_axis(self):
-        """NLK vertical field at the plane y=0 for x ∈ [-12, 12] mm.
+    def get_vertical_magnetic_field(self, y0=0):
+        """NLK vertical field at a horizontal plane y=y0 for x ∈ [-12, 12] mm.
+
+        Parameters
+        ----------
+        y0 : float, optional
+            y coordinate of the horizontal plane.
 
         Returns
         -------
-        x_space: numpy.array
+        x_pos: numpy.array
             Values of x where the field was computed.
 
         fieldy: numpy.array
-            Vertical field in [T] at y=0.
+            Vertical field in [T] at the plane y=y0.
         """
-        x_space = _np.linspace(-12, 12)[None, :]*1e-3
-        y_space = _np.zeros(x_space.shape)
-        r = _np.concatenate([x_space, y_space], axis=0)
+        x_pos = _np.linspace(-12, 12)[None, :]*1e-3
+        y_pos = _np.ones(x_pos.shape) * y0
+        r = _np.hstack([x_pos, y_pos])
         fieldy = self.calc_magnetic_field(r)[1, :]
-        return x_space[0], fieldy
+        return x_pos[0], fieldy
+
+    def get_horizontal_magnetic_field(self, x0=0):
+        """NLK horizontal field at a vertical plane x=x0 for y ∈ [-12, 12] mm.
+
+        Parameters
+        ----------
+        x0 : float, optional
+            x coordinate of the horizontal plane.
+
+        Returns
+        -------
+        y_pos: numpy.array
+            Values of y where the field was computed.
+
+        fieldy: numpy.array
+            Horizontal field in [T] at the plane x=x0.
+        """
+        y_pos = _np.linspace(-12, 12)[None, :]*1e-3
+        x_pos = _np.ones(y_pos.shape) * x0
+        r = _np.hstack([x_pos, y_pos])
+        fieldy = self.calc_magnetic_field(r)[0, :]
+        return x_pos[1], fieldy
 
     @staticmethod
     def si_nlk_kick(
-            strength=None, fit_monomials=None, plot_flag=False,
+            scale=1, fit_monomials=None, plot_flag=False,
             r0=0.0):
         """Generates the NLK polynom_b, its horizontal kick and the integrated
         field at y=0. Useful for set the NLK pulse in the Sirius model.
 
         Parameters
         ----------
-        strength : float, optional
-            Multiplier of the NLK max field, by default is 1.
+        scale : float, optional
+            Multiplier of the NLK max field, by default 1.
 
         fit_monomials : array like or list, optional
             The multipoles indices or degrees of the terms included in the
@@ -263,14 +279,12 @@ class NLK:
         nlk_length = 0.45
         if fit_monomials is None:
             fit_monomials = _np.arange(10, dtype=int)
-        if strength is None:
-            strength = 1
 
         nlk = NLK()
-        x, mag_field = nlk.get_magnetic_field_on_axis()
+        x, mag_field = nlk.get_vertical_magnetic_field()
 
         brho, *_ = beam_rigidity(energy=3)  # energy in [GeV]
-        integ_field = strength * mag_field * nlk_length  # [T.m]
+        integ_field = scale * mag_field * nlk_length  # [T.m]
         kickx = integ_field / brho  # [rad]
 
         coeffs = _polyfit(x=x-r0, y=kickx, deg=fit_monomials)
