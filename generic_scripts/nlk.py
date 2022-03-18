@@ -55,8 +55,7 @@ class Wire:
         theta = _np.arctan2(rc[1], rc[0])
         theta_vec = _np.array([-_np.sin(theta), _np.cos(theta)])
         rc_norm = _np.linalg.norm(rc, axis=0)[None, :]
-        mag_field = \
-            mu0 * self.current/(2*_np.pi*rc_norm)*theta_vec
+        mag_field = mu0 * self.current/(2*_np.pi*rc_norm)*theta_vec
         return mag_field
 
     @property
@@ -211,11 +210,11 @@ class NLK:
         fieldy: numpy.array
             Vertical field in [T] at the plane y=y0.
         """
-        x_pos = _np.linspace(-12, 12)[None, :]*1e-3
+        x_pos = _np.linspace(-12, 12)*1e-3
         y_pos = _np.ones(x_pos.shape) * y0
-        r = _np.hstack([x_pos, y_pos])
-        fieldy = self.calc_magnetic_field(r)[1, :]
-        return x_pos[0], fieldy
+        r = _np.vstack([x_pos, y_pos])
+        fieldy = self.calc_magnetic_field(r)[1]
+        return x_pos, fieldy
 
     def get_horizontal_magnetic_field(self, x0=0):
         """NLK horizontal field at a vertical plane x=x0 for y ∈ [-12, 12] mm.
@@ -233,11 +232,11 @@ class NLK:
         fieldy: numpy.array
             Horizontal field in [T] at the plane x=x0.
         """
-        y_pos = _np.linspace(-12, 12)[None, :]*1e-3
+        y_pos = _np.linspace(-12, 12)*1e-3
         x_pos = _np.ones(y_pos.shape) * x0
-        r = _np.hstack([x_pos, y_pos])
-        fieldy = self.calc_magnetic_field(r)[0, :]
-        return x_pos[1], fieldy
+        r = _np.vstack([x_pos, y_pos])
+        fieldy = self.calc_magnetic_field(r)[0]
+        return y_pos, fieldy
 
     @staticmethod
     def si_nlk_kick(
@@ -279,6 +278,8 @@ class NLK:
         nlk_length = 0.45
         if fit_monomials is None:
             fit_monomials = _np.arange(10, dtype=int)
+        else:
+            fit_monomials = _np.asarray(fit_monomials)
 
         nlk = NLK()
         x, mag_field = nlk.get_vertical_magnetic_field()
@@ -299,6 +300,6 @@ class NLK:
             _plt.title("NLK Profile")
             _plt.legend()
 
-        polynom_b = _np.zeros(1 + _np.max(fit_monomials))
+        polynom_b = _np.zeros(1 + fit_monomials.max())
         polynom_b[fit_monomials] = -coeffs/nlk_length
         return x, integ_field, kickx, polynom_b
