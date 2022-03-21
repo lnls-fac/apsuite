@@ -1,5 +1,6 @@
 import numpy as _np
-from numpy.polynomial.polynomial import polyfit as _polyfit
+from numpy.polynomial.polynomial import polyfit as _polyfit, polyval as\
+    _polyval
 import matplotlib.pyplot as _plt
 from mathphys.constants import vacuum_permeability
 from mathphys.beam_optics import beam_rigidity
@@ -119,8 +120,7 @@ class NLK:
         currents[::2] = -current
         currents[1::2] = current
 
-        self._wires = [
-            Wire() for i in range(8)]
+        self._wires = [Wire() for i in range(8)]
         self.positions = wire_positions
         self.currents = currents
 
@@ -239,9 +239,7 @@ class NLK:
         return y_pos, fieldy
 
     @staticmethod
-    def si_nlk_kick(
-            scale=1, fit_monomials=None, plot_flag=False,
-            r0=0.0):
+    def si_nlk_kick(scale=1, fit_monomials=None, plot_flag=False, r0=0.0):
         """Generates the NLK polynom_b, its horizontal kick and the integrated
         field at y=0. Useful for set the NLK pulse in the Sirius model.
 
@@ -289,7 +287,7 @@ class NLK:
         kickx = integ_field / brho  # [rad]
 
         coeffs = _polyfit(x=x-r0, y=kickx, deg=fit_monomials)
-        fit_kickx = (x[:, None]**fit_monomials[None, :]) @ coeffs
+        fit_kickx = _polyval(x=x-r0, c=coeffs)
         if plot_flag:
             _plt.figure()
             _plt.scatter(1e3*(x-r0), 1e3*kickx, label="data points")
