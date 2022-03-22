@@ -299,5 +299,5 @@ class NLK:
             _plt.legend()
 
         polynom_b = _np.zeros(1 + fit_monomials.max())
-        polynom_b[fit_monomials] = -coeffs/nlk_length
+        polynom_b[fit_monomials] = -coeffs[fit_monomials]/nlk_length
         return x, integ_field, kickx, polynom_b
