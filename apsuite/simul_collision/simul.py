@@ -149,7 +149,7 @@ class CollisionSimul:
         self._bunch = _np.hstack((origin, bunch))
         # self._bunch = origin + bunch
 
-    def run_tracking(self, bunchnr=None, nrturns=1):
+    def run_tracking(self, bunchnr=None, nrturns=1, kick=None):
         """."""
         if self.bunch is None:
             raise Exception('Uninitialized bunch!')
@@ -282,12 +282,13 @@ class CollisionSimul:
         traj = self.traj
         nrparticles = traj.shape[2]
         stg = ''
-        stg = f'# simulation of bunch #{self.bunchnr:03d}\n'
+        if self.bunchnr is not None:
+            stg = f'# simulation of bunch #{self.bunchnr:03d}\n'
         stg += f'# kickx: {1e3*self.kick:.3f} mrad\n'
         stg += f'# nr.particles: {nrparticles:04d}\n'
-        stg += f'#\n'
-        stg += (f'# particle_idx turn_idx elem_idx '
-                f'posz[m] energy[GeV] rx[mm] px[mrad] ry[mm] py[mrad]\n')
+        stg += '#\n'
+        stg += ('# particle_idx turn_idx elem_idx '
+                'posz[m] energy[GeV] rx[mm] px[mrad] ry[mm] py[mrad]\n')
         for part in range(nrparticles):
             ptraj = self.traj[:, :, part, :]
             for nturn in range(ptraj.shape[0]):
@@ -327,7 +328,10 @@ class CollisionSimul:
                     stg += f' {1e3*ry_:+05.1f} '
                     stg += f' {1e3*py_:+08.3f} '
                     break
-        fp = open(f'loss_bunch_{self.bunchnr:04d}.txt', 'w')
+        if self.bunchnr is not None:
+            fp = open(f'loss_bunch_{self.bunchnr:04d}.txt', 'w')
+        else:
+            fp = open(f'loss_bunch_kick_{1e3*self.kick:+.3f}_mrad.txt', 'w')
         fp.write(stg)
         fp.close()
         # print(stg)
@@ -384,7 +388,10 @@ class CollisionSimul:
             axs.set_xlabel('s [m]')
             axs.set_ylabel('x [mm]')
             _plt.tight_layout()
-            fname = f'beam_collision_kickx_bunch_{self.bunchnr:03d}_nturn_{nturn:04d}_elemidx_{elemidx:04d}.png'
+            if self.bunchnr is not None:
+                fname = f'beam_collision_kickx_bunch_{self.bunchnr:03d}_nturn_{nturn:04d}_elemidx_{elemidx:04d}.png'
+            else:
+                fname = f'beam_collision_kickx_{1e3*self.kick:+.3f}_mrad_nturn_{nturn:04d}_elemidx_{elemidx:04d}.png'
             _plt.savefig(fname, dpi=300)
             _plt.show()
 
@@ -473,10 +480,13 @@ def run():
     """."""
     csimul = CollisionSimul('x', refine_max_len=0.05)
     csimul.create_bunch(nr_particles=2000, fixed_point=False)
-    for bunchnr in range(501, 500+20):
-        print(bunchnr)
-        csimul.run_tracking(bunchnr=bunchnr, nrturns=1)
-        csimul.print_lost_particles()
+    csimul.run_tracking(bunchnr=0, nrturns=1)
+    # csimul.print_lost_particles()
+    csimul.plot_traj(nturn=0)
+
+    # for bunchnr in range(501, 500+20):
+    #     print(bunchnr)
+        # csimul.run_tracking(bunchnr=bunchnr, nrturns=1)
     # csimul = CollisionSimul('x', refine_max_len=0.1)
     # csimul.create_bunch(nr_particles=50, fixed_point=False)
     # csimul.run_tracking(bunchnr=500, nrturns=1)
