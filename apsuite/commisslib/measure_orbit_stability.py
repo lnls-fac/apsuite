@@ -624,6 +624,8 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """."""
         fambpms = self.devices['fambpms']
         evt_study = self.devices['evt_study']
+        self.prepare_bpms_acquisition()
+        fambpms.mturn_reset_flags()
         evt_study.cmd_external_trigger()
         fambpms.mturn_wait_update_flags(timeout=self.params.orbit_timeout)
         orbx, orby = fambpms.get_mturn_orbit()
