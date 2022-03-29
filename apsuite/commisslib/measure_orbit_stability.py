@@ -224,19 +224,19 @@ class OrbitAnalysis:
         orbxy_fil = _np.hstack((orbx, orby))
         _, _, vhmat = self._calc_pca(orbxy_fil)
         etaxy = _np.hstack((self.etax, self.etay))
-        etaxy -= _np.mean(etaxy)
+        etaxy_nm = etaxy - _np.mean(etaxy)
 
         correls = []
         for mode in range(vhmat.shape[0]):
-            vech_nomean = vhmat[mode] - _np.mean(vhmat[mode])
-            correls.append(abs(self._calc_correlation(vech_nomean, etaxy)))
+            vech_nm = vhmat[mode] - _np.mean(vhmat[mode])
+            correls.append(abs(self._calc_correlation(vech_nm, etaxy_nm)))
 
         maxcorr_idx = _np.argmax(correls)
         vheta = vhmat[maxcorr_idx]
-        vheta -= _np.mean(vheta)
+        vheta_nm = vheta - _np.mean(vheta)
 
         # scale obtained by least-squares minimization
-        gamma = _np.dot(etaxy, vheta)/_np.dot(etaxy, etaxy)
+        gamma = _np.dot(etaxy_nm, vheta_nm)/_np.dot(etaxy_nm, etaxy_nm)
         eta_meas = vheta/gamma
 
         orbxy = _np.hstack((orbx_ns, orby_ns))
