@@ -616,7 +616,6 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """."""
         fambpms = self.devices['fambpms']
         prms = self.params
-        fambpms.cmd_mturn_acq_abort()
         fambpms.mturn_config_acquisition(
             nr_points_after=prms.orbit_nrpoints_after,
             acq_rate=prms.orbit_acq_rate,
