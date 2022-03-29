@@ -268,7 +268,9 @@ class OrbitAnalysis:
             inverse (bool, optional): calculate the integrated PSD with from
                 lower to higher frequencies (inverse=False) or the contrary.
         """
+        orbx_ns, orby_ns, _ = self.remove_switching_freq()
         orbx_fil, orby_fil = self.filter_around_freq(
+            orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
         orbx_spec, freqx = self.calc_spectrum(orbx_fil, fs=self.sampling_freq)
         orby_spec, freqy = self.calc_spectrum(orby_fil, fs=self.sampling_freq)
