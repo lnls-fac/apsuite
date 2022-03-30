@@ -1111,6 +1111,7 @@ class MeasTuneShift(_ThreadBaseClass):
         datah = list()
         datav = list()
         currs = list()
+        self.prepare_pingers()
         for gcurr in self.params.currents:
             t0 = _time.time()
             print('Injecting...')
@@ -1140,6 +1141,7 @@ class MeasTuneShift(_ThreadBaseClass):
     def plot_spectrum(
             self, plane, freq_min=None, freq_max=None, title=None,
             fit_sync_freq=1.8, fit_bet_freq=43, fit_max_curr=0.6,
+            fit_min_curr=0.1,
             cut_spec=None, fname=None):
         """plane: must be 'H' or 'V'."""
         plane = plane.upper()
@@ -1190,7 +1192,7 @@ class MeasTuneShift(_ThreadBaseClass):
         if cut_spec:
             mag[mag < cut_spec] = 0
 
-        idx = curr < fit_max_curr
+        idx = (curr > fit_min_curr) & (curr < fit_max_curr)
         mag_fit = mag[idx, :]
         freq_fit = freq_[idx, :]
         curr_fit = curr_[idx, :]
@@ -1202,6 +1204,10 @@ class MeasTuneShift(_ThreadBaseClass):
         lin_c = opt.x[:3]
         ang_c = opt.x[3:]
 
+        errs = self._calc_fitting_error(opt)
+        err_lin_c = errs[:3]
+        err_ang_c = errs[3:]
+
         tunes_fit = ang_c[:, None] * curr[None, :] + lin_c[:, None]
 
         fig, ax = _mplt.subplots(figsize=(8, 6))
@@ -1212,7 +1218,8 @@ class MeasTuneShift(_ThreadBaseClass):
         for i, (line, ls_) in enumerate(zip(lines, lss)):
             line.set_label(
                 f'm={i-1:2d} -> '
-                f'f = {ang_c[i]:5.2f}*I + {lin_c[i]:6.2f}')
+                f'f = ({ang_c[i]:5.2f} ± {err_ang_c[i]:5.2f})*I'
+                f' + ({lin_c[i]:6.2f} ± {err_lin_c[i]:6.2f})')
             line.set_ls(ls_)
         ax.legend(loc='best', fontsize='xx-small')
         ax.set_ylabel('Frequency [kHz]')
@@ -1224,7 +1231,7 @@ class MeasTuneShift(_ThreadBaseClass):
             if not fname.endswith('.png'):
                 fname += '.png'
             fig.savefig(fname, dpi=300)
-        return fig, mag, opt.x
+        return fig, mag, opt.x, opt
 
     def plot_time_evolution(self, plane, title=None, fname=None):
         """plane: must be 'H' or 'V'."""
@@ -1263,3 +1270,28 @@ class MeasTuneShift(_ThreadBaseClass):
                 fname += '.png'
             fig.savefig(fname, dpi=300)
         return fig
+
+    @staticmethod
+    def _calc_fitting_error(fit_params):
+        # based on fitting error calculation of scipy.optimization.curve_fit
+        # do Moore-Penrose inverse discarding zero singular values.
+        _, smat, vhmat = _np.linalg.svd(
+            fit_params['jac'], full_matrices=False)
+        thre = _np.finfo(float).eps * max(fit_params['jac'].shape)
+        thre *= smat[0]
+        smat = smat[smat > thre]
+        vhmat = vhmat[:smat.size]
+        pcov = _np.dot(vhmat.T / (smat*smat), vhmat)
+
+        # multiply covariance matrix by residue 2-norm
+        ysize = len(fit_params['fun'])
+        cost = 2 * fit_params['cost']  # res.cost is half sum of squares!
+        popt = fit_params['x']
+        if ysize > popt.size:
+            # normalized by degrees of freedom
+            s_sq = cost / (ysize - popt.size)
+            pcov = pcov * s_sq
+        else:
+            pcov.fill(_np.nan)
+            print('# of fitting parameters larger than # of data points!')
+        return _np.sqrt(_np.diag(pcov))
