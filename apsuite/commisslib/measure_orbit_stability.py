@@ -1,4 +1,5 @@
 """."""
+from msilib.schema import Error
 import numpy as _np
 import matplotlib.pyplot as _plt
 import datetime as _datetime
@@ -256,7 +257,7 @@ class OrbitAnalysis:
         self.analysis['energy_ipsd'] = intpsd
 
     def orbit_stability_analysis(
-            self, central_freq=60, window=10, inverse=False):
+            self, central_freq=60, window=10, inverse=False, pca=True):
         """Calculate orbit spectrum, integrated PSD and apply SVD in orbit
             data by filtering around a center frequency with a window.
 
@@ -267,6 +268,8 @@ class OrbitAnalysis:
                 Units [Hz].
             inverse (bool, optional): calculate the integrated PSD with from
                 lower to higher frequencies (inverse=False) or the contrary.
+            pca (bool, optional): calculate SVD of orbit matrices for
+                principal component analysis (PCA). Default is True.
         """
         orbx_ns, orby_ns, _ = self.remove_switching_freq()
         orbx_fil, orby_fil = self.filter_around_freq(
@@ -276,8 +279,6 @@ class OrbitAnalysis:
         orby_spec, freqy = self.calc_spectrum(orby_fil, fs=self.sampling_freq)
         ipsdx = self.calc_integrated_spectrum(orbx_spec, inverse=inverse)
         ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
-        umatx, svalsx, vhmatx = self._calc_pca(orbx_fil)
-        umaty, svalsy, vhmaty = self._calc_pca(orby_fil)
         self.analysis['orb_freqmax'] = central_freq + window/2
         self.analysis['orb_freqmin'] = central_freq - window/2
         self.analysis['orbx_spectrum'] = orbx_spec
@@ -286,12 +287,15 @@ class OrbitAnalysis:
         self.analysis['orby_freq'] = freqy
         self.analysis['orbx_ipsd'] = ipsdx
         self.analysis['orby_ipsd'] = ipsdy
-        self.analysis['orbx_umat'] = umatx
-        self.analysis['orbx_svals'] = svalsx
-        self.analysis['orbx_vhmat'] = vhmatx
-        self.analysis['orby_umat'] = umaty
-        self.analysis['orby_svals'] = svalsy
-        self.analysis['orby_vhmat'] = vhmaty
+        if pca:
+            umatx, svalsx, vhmatx = self._calc_pca(orbx_fil)
+            umaty, svalsy, vhmaty = self._calc_pca(orby_fil)
+            self.analysis['orbx_umat'] = umatx
+            self.analysis['orbx_svals'] = svalsx
+            self.analysis['orbx_vhmat'] = vhmatx
+            self.analysis['orby_umat'] = umaty
+            self.analysis['orby_svals'] = svalsy
+            self.analysis['orby_vhmat'] = vhmaty
 
     # plotting methods
     def plot_orbit_spectrum(
@@ -363,14 +367,22 @@ class OrbitAnalysis:
         """."""
         if orbx is None:
             anly = self.analysis
-            umatx, vhmatx = anly['orbx_umat'], anly['orbx_vhmat']
-            svalsx = anly['orbx_svals']
+            try:
+                umatx, vhmatx = anly['orbx_umat'], anly['orbx_vhmat']
+                svalsx = anly['orbx_svals']
+            except KeyError:
+                print('PCA results of x orbit missing in analysis dict.')
+                return None
         else:
             umatx, svalsx, vhmatx = self._calc_pca(orbx)
         if orby is None:
             anly = self.analysis
-            umaty, vhmaty = anly['orby_umat'], anly['orby_vhmat']
-            svalsy = anly['orby_svals']
+            try:
+                umaty, vhmaty = anly['orby_umat'], anly['orby_vhmat']
+                svalsy = anly['orby_svals']
+            except KeyError:
+                print('PCA results of y orbit missing in analysis dict.')
+                return None
         else:
             umaty, svalsy, vhmaty = self._calc_pca(orby)
 
