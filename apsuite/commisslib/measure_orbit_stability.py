@@ -40,7 +40,7 @@ class OrbitAnalysis:
         if self.fname:
             self.load_orb()
             self.get_closest_orm()
-            self.sampling_freq = self._get_sampling_freq(self.data)
+            self.sampling_freq = self.get_sampling_freq(self.data)
 
     @property
     def fname(self):
@@ -499,7 +499,7 @@ class OrbitAnalysis:
         return spec, freq
 
     @staticmethod
-    def _get_sampling_freq(data):
+    def get_sampling_freq(data):
         """."""
         fs = data['rf_frequency'] / OrbitAnalysis.HARM_NR
         if data['bpms_acq_rate'] == 'FOFB':
@@ -675,7 +675,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """Energy Stability Analysis."""
         self._process_orb()
         self.get_closest_orm()
-        self.sampling_freq = self._get_sampling_freq(self.data)
+        self.sampling_freq = self.get_sampling_freq(self.data)
         self.energy_stability_analysis(
             central_freq=central_freq, window=window, inverse=inverse)
 
@@ -693,3 +693,9 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         orbx -= orbx.mean(axis=0)[None, :]
         orby -= orby.mean(axis=0)[None, :]
         self.orbx, self.orby = orbx, orby
+
+    def load_and_apply(self, fname):
+        """."""
+        super().load_and_apply(fname)
+        self.get_closest_orm()
+        self.sampling_freq = self.get_sampling_freq(self.data)
