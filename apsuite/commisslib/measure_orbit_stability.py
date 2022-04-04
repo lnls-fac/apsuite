@@ -680,12 +680,14 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             central_freq=central_freq, window=window, inverse=inverse)
 
     def process_data_orbit(
-            self, central_freq=60, window=10, inverse=False):
+            self, central_freq=60, window=10,
+            inverse=False, pca=True, split_planes=True):
         """Orbit Stability Analysis."""
         self._process_orb()
-        self.sampling_freq = self._get_sampling_freq(self.data)
+        self.sampling_freq = self.get_sampling_freq(self.data)
         self.orbit_stability_analysis(
-            central_freq=central_freq, window=window, inverse=inverse)
+            central_freq=central_freq, window=window,
+            inverse=inverse, pca=pca, split_planes=split_planes)
 
     def _process_orb(self):
         orbx = self.data['orbx'].copy()
