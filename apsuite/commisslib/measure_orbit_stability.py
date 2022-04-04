@@ -557,7 +557,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         """."""
         ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
         dtmp = '{0:26s} = {1:9d}  {2:s}\n'.format
-        stmp = '{0:15s} = {1:9}  {2:s}\n'.format
+        stmp = '{0:26s} = {1:9}  {2:s}\n'.format
         stg = ''
         stg += ftmp('trigbpm_delay', self.trigbpm_delay, '[us]')
         stg += dtmp('trigbpm_nrpulses', self.trigbpm_nrpulses, '')
