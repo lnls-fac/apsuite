@@ -256,7 +256,8 @@ class OrbitAnalysis:
         self.analysis['energy_ipsd'] = intpsd
 
     def orbit_stability_analysis(
-            self, central_freq=60, window=10, inverse=False, pca=True):
+            self, central_freq=60, window=10,
+            inverse=False, pca=True, split_planes=True):
         """Calculate orbit spectrum, integrated PSD and apply SVD in orbit
             data by filtering around a center frequency with a window.
 
@@ -269,6 +270,7 @@ class OrbitAnalysis:
                 lower to higher frequencies (inverse=False) or the contrary.
             pca (bool, optional): calculate SVD of orbit matrices for
                 principal component analysis (PCA). Default is True.
+            split_planes (bool, optional): perform PCA analysis in x and y planes independently. Default is True. If False, concatenates x and y data.
         """
         orbx_ns, orby_ns, _ = self.remove_switching_freq()
         orbx_fil, orby_fil = self.filter_around_freq(
@@ -287,14 +289,21 @@ class OrbitAnalysis:
         self.analysis['orbx_ipsd'] = ipsdx
         self.analysis['orby_ipsd'] = ipsdy
         if pca:
-            umatx, svalsx, vhmatx = self._calc_pca(orbx_fil)
-            umaty, svalsy, vhmaty = self._calc_pca(orby_fil)
-            self.analysis['orbx_umat'] = umatx
-            self.analysis['orbx_svals'] = svalsx
-            self.analysis['orbx_vhmat'] = vhmatx
-            self.analysis['orby_umat'] = umaty
-            self.analysis['orby_svals'] = svalsy
-            self.analysis['orby_vhmat'] = vhmaty
+            if split_planes:
+                umatx, svalsx, vhmatx = self._calc_pca(orbx_fil)
+                umaty, svalsy, vhmaty = self._calc_pca(orby_fil)
+                self.analysis['orbx_umat'] = umatx
+                self.analysis['orbx_svals'] = svalsx
+                self.analysis['orbx_vhmat'] = vhmatx
+                self.analysis['orby_umat'] = umaty
+                self.analysis['orby_svals'] = svalsy
+                self.analysis['orby_vhmat'] = vhmaty
+            else:
+                orbxy_fil = _np.hstack((orbx_fil, orby_fil))
+                umatxy, svalsxy, vhmatxy = self._calc_pca(orbxy_fil)
+                self.analysis['orbxy_umat'] = umatxy
+                self.analysis['orbxy_svals'] = svalsxy
+                self.analysis['orbxy_vhmat'] = vhmatxy
 
     # plotting methods
     def plot_orbit_spectrum(
