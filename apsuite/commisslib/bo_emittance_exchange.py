@@ -676,7 +676,7 @@ class EmittanceExchangeSimul:
         c = self.coupling_coeff
         tr = self.REV_PERIOD
         time = tr*delta/(s*c**2)
-        time = time - _np.min(time)
+        # time = time - _np.min(time)
         return time
 
     def _time2delta(self, time):
