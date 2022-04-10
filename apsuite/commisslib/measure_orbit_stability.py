@@ -21,8 +21,8 @@ class OrbitAnalysis:
     HARM_NR = _asparams.SI_HARM_NR
     ENERGY_SPREAD = _asparams.SI_ENERGY_SPREAD
     BPM_SWITCHING_FREQ = _asparams.BPM_SWITCHING_FREQ
-    FOFB_DOWNSAMPLING = _asparams.FOFB_DOWNSAMPLING
-    MONIT1_DOWNSAMPLING = _asparams.MONIT1_DOWNSAMPLING
+    BPM_FOFB_DOWNSAMPLING = _asparams.BPM_FOFB_DOWNSAMPLING
+    BPM_MONIT1_DOWNSAMPLING = _asparams.BPM_MONIT1_DOWNSAMPLING
 
     def __init__(self, filename=''):
         """Analysis of orbit over time at BPMs for a given acquisition rate.
@@ -482,9 +482,9 @@ class OrbitAnalysis:
         """."""
         fs = data['rf_frequency'] / OrbitAnalysis.HARM_NR
         if data['bpms_acq_rate'] == 'FOFB':
-            return fs / OrbitAnalysis.FOFB_DOWNSAMPLING
+            return fs / OrbitAnalysis.BPM_FOFB_DOWNSAMPLING
         elif data['bpms_acq_rate'] == 'Monit1':
-            return fs / OrbitAnalysis.MONIT1_DOWNSAMPLING
+            return fs / OrbitAnalysis.BPM_MONIT1_DOWNSAMPLING
 
     @staticmethod
     def _calc_pca(data):
