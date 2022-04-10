@@ -8,7 +8,6 @@ import matplotlib.gridspec as _mgs
 
 from siriuspy.devices import SOFB as _SOFB, RFGen as _RFGen, EVG as _EVG
 from siriuspy.search import BPMSearch as _BPMSearch
-
 import pyaccel
 from pymodels import ts as _pyts, si as _pysi, bo as _pybo
 

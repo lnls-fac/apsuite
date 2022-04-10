@@ -84,7 +84,7 @@ class UtilClass:
     @staticmethod
     def _process_data(data, params, rawdata=None):
         """."""
-        per_rev = params.PER_REV
+        rev_per = params.REV_PER
         calib = params.CALIBRATION_FACTOR
         harm_nr = params.HARM_NR
         current = data.get('stored_current', None)
@@ -110,7 +110,7 @@ class UtilClass:
         data_dft = _np.fft.fft(data_anal, axis=1)
 
         # compensate the different time samplings of each bunch:
-        dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * per_rev
+        dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * rev_per
         comp = _np.exp(-1j*2*_np.pi * freq[None, :]*dts[:, None])
         data_dft *= comp
 
@@ -262,7 +262,7 @@ class BbBLParams(_ParamsBaseClass):
     RF_FREQ = _asparams.RF_FREQ
     HARM_NR = _asparams.SI_HARM_NR
     REV_FREQ = _asparams.SI_REV_FREQ
-    PER_REV = 1 / REV_FREQ
+    REV_PER = 1 / REV_FREQ
 
     def __init__(self):
         """."""
@@ -286,15 +286,15 @@ class BbBLParams(_ParamsBaseClass):
 class BbBHParams(BbBLParams):
     """."""
 
-    DAMPING_RATE = 1/16.9e-3  # [Hz]
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+    CALIBRATION_FACTOR = _asparams.BBBH_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBH_DAMPING_RATE
 
 
 class BbBVParams(BbBLParams):
     """."""
 
-    DAMPING_RATE = 1/22.0e-3  # [Hz]
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+    CALIBRATION_FACTOR = _asparams.BBBV_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBV_DAMPING_RATE
 
 
 class BbBAcqData(_BaseClass, UtilClass):
@@ -527,9 +527,9 @@ class BbBAcqData(_BaseClass, UtilClass):
         if rawdata is None:
             rawdata = self.data['rawdata']
         rawdata = rawdata.astype(float)
-        per_rev = self.params.PER_REV
+        rev_per = self.params.REV_PER
         downsample = self.data['downsample']
-        dtime = per_rev*downsample
+        dtime = rev_per*downsample
 
         if subtract_mean:
             rawdata -= rawdata.mean(axis=1)[:, None]
