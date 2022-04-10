@@ -255,7 +255,7 @@ class UtilClass:
 class BbBLParams(_ParamsBaseClass):
     """."""
 
-    DAC_NBITS = _asparams.BBBL_DAC_NR_BITS
+    DAC_NR_BITS = _asparams.BBBL_DAC_NR_BITS
     SAT_THRES = _asparams.BBBL_SAT_THRES
     CALIBRATION_FACTOR = _asparams.BBBL_CALIBRATION_FACTOR
     DAMPING_RATE = _asparams.BBBL_DAMPING_RATE
