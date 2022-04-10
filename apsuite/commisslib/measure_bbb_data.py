@@ -255,10 +255,10 @@ class UtilClass:
 class BbBLParams(_ParamsBaseClass):
     """."""
 
-    DAC_NBITS = 14
-    SAT_THRES = 2**(DAC_NBITS-1) - 1
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/degree]
-    DAMPING_RATE = 1/13.0  # [Hz]
+    DAC_NBITS = _asparams.BBL_DAC_NBITS
+    SAT_THRES = _asparams.BBL_SAT_THRES
+    CALIBRATION_FACTOR = _asparams.BBL_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBL_DAMPING_RATE
     RF_FREQ = _asparams.RF_FREQ
     HARM_NUM = _asparams.SI_HARM_NR
     REV_FREQ = _asparams.SI_REV_FREQ
