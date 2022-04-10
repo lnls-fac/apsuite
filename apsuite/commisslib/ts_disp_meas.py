@@ -6,12 +6,15 @@ import numpy as _np
 import matplotlib.pyplot as _mplt
 import matplotlib.gridspec as _mgs
 
-import pyaccel
 from siriuspy.devices import SOFB as _SOFB, RFGen as _RFGen, EVG as _EVG
 from siriuspy.search import BPMSearch as _BPMSearch
-from apsuite.utils import MeasBaseClass as _MeasBaseClass, \
-    ParamsBaseClass as _ParamsBaseClass
+
+import pyaccel
 from pymodels import ts as _pyts, si as _pysi, bo as _pybo
+
+from ..utils import MeasBaseClass as _MeasBaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
+from .. import asparams as _asparams
 
 
 class Params(_ParamsBaseClass):
@@ -21,7 +24,7 @@ class Params(_ParamsBaseClass):
         """."""
         super().__init__()
         self.deltarf = 100  # Hz
-        self.bo_mom_compact = 7.2e-4
+        self.bo_mom_compact = _asparams.BO_MOM_COMPACT
         self.ts_optics_mode = 'M1'
 
 
