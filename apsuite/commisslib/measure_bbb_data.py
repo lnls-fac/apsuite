@@ -86,7 +86,7 @@ class UtilClass:
         """."""
         per_rev = params.PER_REV
         calib = params.CALIBRATION_FACTOR
-        harm_num = params.HARM_NUM
+        harm_nr = params.HARM_NR
         current = data.get('stored_current', None)
         if current is None:
             current = data['current']
@@ -96,7 +96,7 @@ class UtilClass:
 
         if rawdata is None:
             dataraw = data['rawdata'].astype(float)
-            dataraw *= 1 / (calib * current / harm_num)
+            dataraw *= 1 / (calib * current / harm_nr)
         else:
             dataraw = rawdata.astype(float)
 
@@ -260,7 +260,7 @@ class BbBLParams(_ParamsBaseClass):
     CALIBRATION_FACTOR = _asparams.BBBL_CALIBRATION_FACTOR
     DAMPING_RATE = _asparams.BBBL_DAMPING_RATE
     RF_FREQ = _asparams.RF_FREQ
-    HARM_NUM = _asparams.SI_HARM_NR
+    HARM_NR = _asparams.SI_HARM_NR
     REV_FREQ = _asparams.SI_REV_FREQ
     PER_REV = 1 / REV_FREQ
 
@@ -351,7 +351,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         data.pop('rf_freq')
         data.pop('harmonic_number')
         data['rawdata'] = _np.array(
-            data.pop('data').reshape((-1, self.params.HARM_NUM)).T,
+            data.pop('data').reshape((-1, self.params.HARM_NR)).T,
             dtype=float)
         data['cavity_data'] = dict(
             temperature={
@@ -383,14 +383,14 @@ class BbBAcqData(_BaseClass, UtilClass):
     def pca_analysis(self, rawdata=None):
         """."""
         calib = self.params.CALIBRATION_FACTOR
-        harm_num = self.params.HARM_NUM
+        harm_nr = self.params.HARM_NR
         current = self.data.get('stored_current', None)
         if current is None:
             current = self.data['current']
 
         if rawdata is None:
             rawdata = self.data['rawdata'].astype(float)
-            rawdata *= 1 / (calib * current / harm_num)
+            rawdata *= 1 / (calib * current / harm_nr)
         else:
             rawdata = rawdata.astype(float)
 
@@ -641,7 +641,7 @@ class DriveDampLParams(BbBLParams):
     def __init__(self):
         """."""
         super().__init__()
-        self.modes_to_measure = _np.arange(1, self.HARM_NUM//2+1)
+        self.modes_to_measure = _np.arange(1, self.HARM_NR//2+1)
         self.drive_num = 0
         self.wait_acquisition = 1  # [s]
         self.wait_pv_update = 0  # [s]
@@ -941,9 +941,9 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         drive = bbb.drive0 if drive_num == 0 else bbb.drive1
         drive = drive if drive_num != 2 else bbb.drive2
 
-        harm_num = bbb.info.harmonic_number
+        harm_nr = bbb.info.harmonic_number
         modes_to_measure = self.params.modes_to_measure
-        bunches = _np.arange(harm_num)
+        bunches = _np.arange(harm_nr)
 
         bbb.sram.cmd_data_dump(pv_update=True)
         _time.sleep(self.params.wait_pv_update)
@@ -958,14 +958,14 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             self.data = dict(infos=[], modes_data=[], modes_measured=[])
         for mode in modes_to_measure:
             elt = _time.time()
-            drive.mask = _np.cos(2*_np.pi*bunches*mode/harm_num) > 0
+            drive.mask = _np.cos(2*_np.pi*bunches*mode/harm_nr) > 0
             _time.sleep(self.params.wait_acquisition)
             bbb.sram.cmd_data_dump(pv_update=True)
             _time.sleep(self.params.wait_pv_update)
 
             infos = self.get_data(bbb, acqtype)
             analysis = self._process_data(infos, self.params)
-            modei = sorted({mode, harm_num - mode})
+            modei = sorted({mode, harm_nr - mode})
             data = analysis['mode_data'][modei]
             infos.pop('rawdata')
 
