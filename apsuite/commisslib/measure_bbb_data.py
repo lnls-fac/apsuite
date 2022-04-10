@@ -261,8 +261,8 @@ class BbBLParams(_ParamsBaseClass):
     DAMPING_RATE = 1/13.0  # [Hz]
     RF_FREQ = _asparams.RF_FREQ
     HARM_NUM = _asparams.SI_HARM_NR
-    FREQ_REV = RF_FREQ / HARM_NUM
-    PER_REV = 1 / FREQ_REV
+    REV_FREQ = _asparams.SI_REV_FREQ
+    PER_REV = 1 / REV_FREQ
 
     def __init__(self):
         """."""
@@ -994,7 +994,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
 class TuneShiftParams(_ParamsBaseClass):
     """."""
 
-    TIME_REV = _asparams.SI_REV_TIME  # s
+    REV_TIME = _asparams.SI_REV_TIME  # s
     WAIT_INJ = 0.2  # s
     DEF_TOL_CURRENT = 0.01  # mA
 
@@ -1248,7 +1248,7 @@ class MeasTuneShift(_ThreadBaseClass):
         mag = _np.array(mag, dtype=float)
         mag -= _np.mean(mag, axis=1)[:, None]
         mag = _np.abs(mag)
-        dtime = _np.arange(0, mag.shape[1]) * TuneShiftParams.TIME_REV
+        dtime = _np.arange(0, mag.shape[1]) * TuneShiftParams.REV_TIME
 
         idx = _np.argsort(curr)
         curr = curr[idx]
