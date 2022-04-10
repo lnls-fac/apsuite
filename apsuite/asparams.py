@@ -38,6 +38,8 @@ del(_BEAMPARAMS_HIGH, _BEAMPARAMS_LOW)
 # --- RF GENERAL ---
 
 RF_FREQ = 499663824.380981 # [Hz] -- compatible with SI nominal model length
+# RF_FREQ = 499666862 - 150  # [Hz] -- compatible with BO nominal model @ 3 Gev
+# RF_FREQ = 499666862        # [Hz] -- in use 2022-04-10
 
 # --- BPMS ---
 
@@ -50,7 +52,7 @@ BPM_MONIT1_DOWNSAMPLING = 25*BPM_FOFB_DOWNSAMPLING
 SI_HARM_NR = 864
 SI_REV_FREQ = RF_FREQ / SI_HARM_NR
 SI_REV_TIME = SI_HARM_NR / RF_FREQ
-# SI_RING_LEN = 518.3899  # [m]
+# SI_RING_LEN = 518.3899  # [m]  model value
 SI_RING_LEN = SI_BEAM_SPEED * SI_REV_TIME
 SI_NR_BPMS = 160
 SI_TUNEX = 49.09619  # NOTE: this is the nominal model value!
@@ -63,7 +65,8 @@ SI_ENERGY_SPREAD = 0.085  # [%]
 BO_HARM_NR = 828
 BO_REV_FREQ = RF_FREQ / BO_HARM_NR
 BO_REV_TIME = BO_HARM_NR / RF_FREQ
-BO_RING_LEN = BO_BEAM_SPEED_LOW * BO_REV_TIME  # NOTE: low energy match!
+# BO_RING_LEN = 496.78745  # [m] model value
+BO_RING_LEN = BO_BEAM_SPEED_HIGH * BO_REV_TIME  # NOTE: high energy match!
 BO_NR_BPMS = 50
 BO_TUNEX = 19.20433  # NOTE: this is the nominal model value!
 BO_TUNEY = 7.31417  # NOTE: this is the nominal model value!
