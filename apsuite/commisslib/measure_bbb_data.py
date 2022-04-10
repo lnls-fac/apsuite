@@ -15,7 +15,7 @@ from siriuspy.devices import BunchbyBunch, PowerSupplyPU, EGTriggerPS
 from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
-
+from .. import asparams as _asparams
 
 class UtilClass:
     """."""
@@ -259,9 +259,9 @@ class BbBLParams(_ParamsBaseClass):
     SAT_THRES = 2**(DAC_NBITS-1) - 1
     CALIBRATION_FACTOR = 1000  # [Counts/mA/degree]
     DAMPING_RATE = 1/13.0  # [Hz]
-    FREQ_RF = 499666000
-    HARM_NUM = 864
-    FREQ_REV = FREQ_RF / HARM_NUM
+    RF_FREQ = _asparams.RF_FREQ
+    HARM_NUM = _asparams.SI_HARM_NR
+    FREQ_REV = RF_FREQ / HARM_NUM
     PER_REV = 1 / FREQ_REV
 
     def __init__(self):
@@ -994,7 +994,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
 class TuneShiftParams(_ParamsBaseClass):
     """."""
 
-    TIME_REV = 864 / 499666000  # s
+    TIME_REV = _asparams.SI_REV_TIME  # s
     WAIT_INJ = 0.2  # s
     DEF_TOL_CURRENT = 0.01  # mA
 

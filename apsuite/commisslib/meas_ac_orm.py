@@ -15,7 +15,7 @@ import pyaccel as _pyaccel
 
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
-
+from .. import asparams as _asparams
 
 class ACORMParams(_ParamsBaseClass):
     """."""
@@ -879,9 +879,11 @@ class MeasACORM(_ThreadBaseClass):
 
     @staticmethod
     def _get_sampling_frequency(data):
-        fsamp = data['rf_frequency'] / 864 / 23
+        fsamp = data['rf_frequency'] / _asparams.SI_HARM_NR
         if data['bpms_acq_rate'].lower().startswith('monit'):
-            fsamp /= 25
+            fsamp /= _asparams.MONIT1_DOWNSAMPLING
+        else:
+            fsamp /= _asparams.FOFB_DOWNSAMPLING
         return fsamp
 
     # ----------------- BPMs related methods -----------------------

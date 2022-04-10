@@ -13,6 +13,7 @@ from pymodels import si as _si, bo as _bo
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
+from .. import asparams as _asparams
 
 
 class Params(_ParamsBaseClass):
@@ -229,7 +230,10 @@ class ControlRF(_BaseClass):
 
         rout = []
         l_speed = 299792458
-        harm = 864 if self.acc == 'SI' else 828
+        if self.acc == 'SI':
+            harm = _asparams.SI_HARM_NR
+        else:
+            harm = _asparams.BO_HARM_NR
         for _ in range(nturns):
             rou, *_ = _pyaccel.tracking.line_pass(mod, inn, indices=None)
             inn = rou[-npart:, :]
