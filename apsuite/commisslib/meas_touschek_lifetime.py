@@ -10,8 +10,8 @@ import matplotlib.gridspec as _mgs
 import scipy.optimize as _scy_opt
 import scipy.integrate as _scy_int
 
-from siriuspy.devices import BPM, CurrInfoSI, EGun, RFCav, Tune, Trigger, \
-    Event, EVG, SOFB
+from siriuspy.devices import BPM, CurrInfoSI, EGun, RFGen, RFCav, \
+    Tune, Trigger, Event, EVG, SOFB, BunchbyBunch
 from siriuspy.search import BPMSearch
 from siriuspy.epics import PV
 
@@ -116,8 +116,10 @@ class MeasTouschekLifetime(_BaseClass):
             self.devices['currinfo'] = CurrInfoSI()
             self.devices['egun'] = EGun()
             self.devices['rfcav'] = RFCav(RFCav.DEVICES.SI)
+            self.devices['rfgen'] = RFGen()
             self.devices['tune'] = Tune(Tune.DEVICES.SI)
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+            self.devices['bbbl'] = BunchbyBunch(BunchbyBunch.DEVICES.L)
             self.pvs['avg_pressure'] = PV(MeasTouschekLifetime.AVG_PRESSURE_PV)
 
     def set_bpms_attenuation(self, value_att=RFFEAttSB):
@@ -644,12 +646,15 @@ class MeasTouschekLifetime(_BaseClass):
         meas = dict(
             sum_a=[], sum_b=[], nan_a=[], nan_b=[], tim_a=[], tim_b=[],
             current=[], rf_voltage=[], avg_pressure=[],
+            rf_frequency=[], sync_frequency=[],
             tunex=[], tuney=[], dorbx=[], dorby=[])
         parms = self.params
 
         curr = self.devices['currinfo']
         rfcav = self.devices['rfcav']
+        rfgen = self.devices['rfgen']
         tune = self.devices['tune']
+        bbbl = self.devices['bbbl']
         press = self.pvs['avg_pressure']
         bpm = self.devices[parms.bpm_name]
         bpm.cmd_sync_tbt()  # Sync TbT BPM acquisition
@@ -718,6 +723,9 @@ class MeasTouschekLifetime(_BaseClass):
             # Get other relevant parameters
             meas['current'].append(curr.current)
             meas['rf_voltage'].append(rfcav.dev_cavmon.gap_voltage)
+            meas['rf_frequency'].append(rfgen.frequency)
+            meas['sync_tune'].append(bbbl.sram.spec_marker1_tune)
+
             meas['avg_pressure'].append(press.value)
 
             if not idx % 100 and parms.save_partial:
