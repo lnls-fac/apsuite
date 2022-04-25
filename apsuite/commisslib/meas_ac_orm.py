@@ -1,6 +1,6 @@
 """Main module."""
 import time as _time
-from threading import Event as _Flag, Thread as _Thread
+from threading import Thread as _Thread
 from copy import deepcopy as _dcopy
 
 import numpy as _np
@@ -10,8 +10,8 @@ from mathphys.functions import save_pickle as _save_pickle
 
 from siriuspy.namesys import SiriusPVName as _PVName
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
-from siriuspy.devices import StrengthConv, PowerSupply, BPM, CurrInfoSI, \
-    Trigger, Event, EVG, RFGen, Tune
+from siriuspy.devices import StrengthConv, PowerSupply, CurrInfoSI, \
+    Trigger, Event, EVG, RFGen, Tune, FamBPMs
 from siriuspy.sofb.csdev import SOFBFactory
 import pyaccel as _pyaccel
 
@@ -100,7 +100,6 @@ class MeasACORM(_ThreadBaseClass):
         super().__init__(
             params=params, target=self._do_measure, isonline=isonline)
         self.bpms = dict()
-        # self._flags = dict()
 
         self.sofb_data = SOFBFactory.create('SI')
         self.configdb = _ConfigDBClient(config_type='si_orbcorr_respm')
@@ -366,9 +365,9 @@ class MeasACORM(_ThreadBaseClass):
             dict: BPMs data.
 
         """
-        orbx, orby = self.get_orbit()
-        bpm0 = list(self.bpms.values())[0]
-        csbpm = self.csbpm
+        orbx, orby = self.bpms.get_mturn_orbit()
+        bpm0 = self.bpms.devices[0]
+        csbpm = bpm0.csbpm
 
         data = dict()
         data['orbx'] = orbx
@@ -468,30 +467,9 @@ class MeasACORM(_ThreadBaseClass):
         # Create BPMs
         t00 = _time.time()
         print('Creating BPMs             -> ', end='')
-        self.bpms = dict()
-        for name in self.sofb_data.bpm_names:
-            self.bpms[name] = BPM(name, auto_mon=False)
-        name = self.sofb_data.bpm_names[0]
-        self.csbpm = self.bpms[name].csdata
-        self.devices.update(self.bpms)
+        self.bpms = FamBPMs(FamBPMs.DEVICES.SI)
+        self.devices['fambpms'] = self.bpms
         print(f'ET: = {_time.time()-t00:.2f}s')
-
-        t00 = _time.time()
-        print('Waiting BPMs connect      -> ', end='')
-        for bpm in self.bpms.values():
-            bpm.wait_for_connection()
-        print(f'ET: = {_time.time()-t00:.2f}s')
-
-        # t00 = _time.time()
-        # print('Setting auto monitor      -> ', end='')
-        # propties_to_keep = ['GEN_XArrayData', 'GEN_YArrayData']
-        # for bpm in self.bpms.values():
-        #     for propty in propties_to_keep:
-        #         bpm.set_auto_monitor(propty, True)
-        #         pvo = bpm.pv_object(propty)
-        #         self._flags[pvo.pvname] = _Flag()
-        #         pvo.add_callback(self._set_flag)
-        # print(f'ET: = {_time.time()-t00:.2f}s')
 
     # ---------------- Data Measurement methods ----------------
 
@@ -517,17 +495,15 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         print('    Sending Trigger signal...', end='')
-        # self._reset_flags()
+        self.bpms.mturn_reset_flags()
         self.devices['evt_study'].cmd_external_trigger()
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         print('    Waiting BPMs to update...', end='')
-        fsamp = self._get_sampling_frequency(
-            self.devices['rfgen'].frequency, self.params.acq_rate)
-        mint = self.params.nr_points / fsamp
-        if not self._wait_bpms_update(mint, timeout=self.params.timeout_bpms):
+        if not self.bpms.mturn_wait_update_flags(
+                timeout=self.params.timeout_bpms):
             print('Problem: timed out waiting BPMs update.')
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -552,7 +528,7 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         print('    Sending Trigger signal...', end='')
-        # self._reset_flags()
+        self.bpms.mturn_reset_flags()
         self.devices['evt_study'].cmd_external_trigger()
 
         t00 = _time.time()
@@ -569,7 +545,8 @@ class MeasACORM(_ThreadBaseClass):
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         print('    Waiting BPMs to update...', end='')
-        if not self._wait_bpms_update(0.0, timeout=self.params.timeout_bpms):
+        if not self.bpms.mturn_wait_update_flags(
+                timeout=self.params.timeout_bpms):
             print('Problem: timed out waiting BPMs update.')
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -594,6 +571,7 @@ class MeasACORM(_ThreadBaseClass):
 
     def _do_measure_magnets(self):
         elt0 = _time.time()
+        data_mags = []
 
         print('Measuring Magnets:')
 
@@ -604,7 +582,7 @@ class MeasACORM(_ThreadBaseClass):
         # set operation mode to slowref
         if not self._change_corrs_opmode('slowref'):
             print('Problem: Correctors not in SlowRef mode.')
-            return
+            return data_mags
 
         exc_duration = self.params.exc_duration
         ch_kick = self.params.ch_kick
@@ -616,7 +594,6 @@ class MeasACORM(_ThreadBaseClass):
         secs_to_meas = self.params.sectors_to_measure
         nr_secs = len(secs_to_meas)
 
-        data_mags = []
         loop_size = nr_secs // nr_secs_acq
         loop_size += 1 if nr_secs % nr_secs_acq else 0
         for itr in range(loop_size):
@@ -662,18 +639,15 @@ class MeasACORM(_ThreadBaseClass):
             # send event through timing system to start acquisitions
             t00 = _time.time()
             print('    Sending Timing signal...', end='')
-            # self._reset_flags()
+            self.bpms.mturn_reset_flags()
             self.devices['evt_study'].cmd_external_trigger()
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # Wait BPMs PV to update with new data
             t00 = _time.time()
             print('    Waiting BPMs to update...', end='')
-            fsamp = self._get_sampling_frequency(
-                self.devices['rfgen'].frequency, self.params.acq_rate)
-            mint = nr_points * len(secs) / fsamp
-            if not self._wait_bpms_update(
-                    mint, timeout=self.params.timeout_bpms):
+            if not self.bpms.mturn_wait_update_flags(
+                    timeout=self.params.timeout_bpms):
                 print('Problem: timed out waiting BPMs update.')
                 break
             print(f'Done! ET: {_time.time()-t00:.2f}s')
@@ -711,7 +685,7 @@ class MeasACORM(_ThreadBaseClass):
         # set operation mode to slowref
         if not self._change_corrs_opmode('slowref'):
             print('Problem: Correctors not in SlowRef mode.')
-            return
+            return data_mags
 
         elt0 -= _time.time()
         elt0 *= -1
@@ -730,7 +704,7 @@ class MeasACORM(_ThreadBaseClass):
 
         anly = dict()
 
-        fsamp = self._get_sampling_frequency(
+        fsamp = FamBPMs.get_sampling_frequency(
             rf_data['rf_frequency'], rf_data['bpms_acq_rate'])
         dtim = 1/fsamp
         anly['fsamp'] = fsamp
@@ -796,7 +770,7 @@ class MeasACORM(_ThreadBaseClass):
         sofb = self.sofb_data
         anly = dict()
 
-        fsamp = self._get_sampling_frequency(
+        fsamp = FamBPMs.get_sampling_frequency(
             bpms_data['rf_frequency'], bpms_data['bpms_acq_rate'])
         dtim = 1/fsamp
         freqs0 = _np.r_[self.params.ch_freqs, self.params.cv_freqs]
@@ -863,7 +837,7 @@ class MeasACORM(_ThreadBaseClass):
         analysis = []
         for data in magnets_data:
             anly = dict()
-            fsamp = self._get_sampling_frequency(
+            fsamp = FamBPMs.get_sampling_frequency(
                 data['rf_frequency'], data['bpms_acq_rate'])
             dtim = 1/fsamp
             ch_freqs = _np.array(data['ch_frequency'])
@@ -942,89 +916,13 @@ class MeasACORM(_ThreadBaseClass):
             analysis.append(anly)
         return analysis
 
-    @staticmethod
-    def _get_sampling_frequency(rf_freq, acq_rate):
-        fsamp = rf_freq / 864 / 23
-        if acq_rate.lower().startswith('monit'):
-            fsamp /= 25
-        return fsamp
-
     # ----------------- BPMs related methods -----------------------
 
     def _config_bpms(self, nr_points):
-        acq_rate = self.params.acq_rate
-        if acq_rate.lower().startswith('monit1'):
-            acq_rate = self.csbpm.AcqChan.Monit1
-        else:
-            acq_rate = self.csbpm.AcqChan.FOFB
-
-        self._cmd_bpms_acq_abort()
-
-        for bpm in self.bpms.values():
-            bpm.acq_repeat = self.csbpm.AcqRepeat.Repetitive
-            bpm.acq_channel = acq_rate
-            bpm.acq_trigger = self.csbpm.AcqTrigTyp.External
-            bpm.acq_nrsamples_pre = 0
-            bpm.acq_nrsamples_post = nr_points
-
-        self._cmd_bpms_acq_start()
-
-    def _cmd_bpms_acq_abort(self):
-        for bpm in self.bpms.values():
-            bpm.acq_ctrl = self.csbpm.AcqEvents.Abort
-
-        for bpm in self.bpms.values():
-            boo = bpm.wait_acq_finish()
-            if not boo:
-                print('Timed out waiting abort.')
-
-    def _cmd_bpms_acq_start(self):
-        for bpm in self.bpms.values():
-            bpm.acq_ctrl = self.csbpm.AcqEvents.Start
-
-        for bpm in self.bpms.values():
-            boo = bpm.wait_acq_start()
-            if not boo:
-                print('Timed out waiting start.')
-
-    # def _set_flag(self, pvname, **kwargs):
-    #     _ = kwargs
-    #     self._flags[pvname].set()
-
-    # def _reset_flags(self):
-    #     for flag in self._flags.values():
-    #         flag.clear()
-
-    def _wait_bpms_update(self, timeout=10):
-        """."""
-        orbx0, orby0 = self.get_orbit()
-        # for name, flag in self._flags.items():
-        #     t00 = _time.time()
-        #     if not flag.wait(timeout=timeout):
-        #         print(f'Timed out in PV {name:s}')
-        #         return False
-        #     timeout -= _time.time() - t00
-        #     timeout = max(timeout, 0)
-
-        while timeout > 0:
-            t00 = _time.time()
-            orbx, orby = self.get_orbit()
-            sizx = min(orbx.shape[0], orbx0.shape[0])
-            sizy = min(orby.shape[0], orby0.shape[0])
-
-            try:
-                continue_ = sizx != sizy
-                continue_ |= _np.any(_np.all(
-                    _np.isclose(orbx0[:sizx], orbx[:sizx]), axis=0))
-                continue_ |= _np.any(_np.all(
-                    _np.isclose(orby0[:sizy], orby[:sizy]), axis=0))
-            except TypeError:
-                continue_ = True
-            if not continue_:
-                return True
-            _time.sleep(0.1)
-            timeout -= _time.time() - t00
-        return False
+        self.bpms.mturn_config_acquisition(
+            acq_rate=self.params.acq_rate,
+            nr_points_before=0, nr_points_after=nr_points,
+            repeat=False, external=True)
 
     # ----------------- Timing related methods -----------------------
 
@@ -1059,7 +957,7 @@ class MeasACORM(_ThreadBaseClass):
         # Calculate delta_delay for correctors to be as close as possible to a
         # multiple of the the sampling period to ensure repeatability of
         # experiment along the sectors excited during single acquisition:
-        fsamp = self._get_sampling_frequency(
+        fsamp = FamBPMs.get_sampling_frequency(
             self.devices['rfgen'].frequency, self.params.acq_rate)
         secs_delta_dly = _np.arange(len(sectors), dtype=float)
         secs_delta_dly *= self.params.nr_points / fsamp
