@@ -367,7 +367,7 @@ class MeasACORM(_ThreadBaseClass):
         """
         orbx, orby = self.bpms.get_mturn_orbit()
         bpm0 = self.bpms.devices[0]
-        csbpm = bpm0.csbpm
+        csbpm = self.bpms.csbpm
 
         data = dict()
         data['orbx'] = orbx
@@ -394,31 +394,6 @@ class MeasACORM(_ThreadBaseClass):
         data['tunex'] = self.devices['tune'].tunex
         data['tuney'] = self.devices['tune'].tuney
         return data
-
-    def get_orbit(self):
-        """Get Multiturn orbit matrices.
-
-        Returns:
-            orbx (numpy.ndarray, Nx160): Horizontal Orbit.
-            orby (numpy.ndarray, Nx160): Vertical Orbit.
-
-        """
-        orbx, orby = [], []
-        mini = None
-        for bpm_name in self.sofb_data.bpm_names:
-            bpm = self.devices[bpm_name]
-            mtx = bpm.mt_posx
-            mty = bpm.mt_posy
-            orbx.append(mtx)
-            orby.append(mty)
-            if mini is None:
-                mini = mtx.size
-            mini = _np.min([mini, mtx.size, mty.size])
-
-        for i in range(len(orbx)):
-            orbx[i] = orbx[i][:mini]
-            orby[i] = orby[i][:mini]
-        return _np.array(orbx).T, _np.array(orby).T
 
     # ------------------ Auxiliary Methods ------------------
 
@@ -502,9 +477,12 @@ class MeasACORM(_ThreadBaseClass):
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         print('    Waiting BPMs to update...', end='')
-        if not self.bpms.mturn_wait_update_flags(
-                timeout=self.params.timeout_bpms):
-            print('Problem: timed out waiting BPMs update.')
+        ret = self.bpms.mturn_wait_update_flags(
+            timeout=self.params.timeout_bpms)
+        if ret:
+            print(
+                'Problem: timed out waiting BPMs update. '
+                f'Error code: {ret:d}')
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
@@ -545,9 +523,12 @@ class MeasACORM(_ThreadBaseClass):
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         print('    Waiting BPMs to update...', end='')
-        if not self.bpms.mturn_wait_update_flags(
-                timeout=self.params.timeout_bpms):
-            print('Problem: timed out waiting BPMs update.')
+        ret = self.bpms.mturn_wait_update_flags(
+            timeout=self.params.timeout_bpms)
+        if ret:
+            print(
+                'Problem: timed out waiting BPMs update. '
+                f'Error code: {ret:d}')
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
@@ -646,9 +627,12 @@ class MeasACORM(_ThreadBaseClass):
             # Wait BPMs PV to update with new data
             t00 = _time.time()
             print('    Waiting BPMs to update...', end='')
-            if not self.bpms.mturn_wait_update_flags(
-                    timeout=self.params.timeout_bpms):
-                print('Problem: timed out waiting BPMs update.')
+            ret = self.bpms.mturn_wait_update_flags(
+                timeout=self.params.timeout_bpms)
+            if ret:
+                print(
+                    'Problem: timed out waiting BPMs update. '
+                    f'Error code: {ret:d}')
                 break
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -669,7 +653,10 @@ class MeasACORM(_ThreadBaseClass):
 
             # set operation mode to slowref
             t00 = _time.time()
-            print('    Changing Correctors to SlowOrb...', end='')
+            print('    Changing Correctors to SlowRef...', end='')
+            if not self._wait_cycle_to_finish(chs_slc + cvs_slc):
+                print('Problem: Cycle still not finished.')
+                break
             if not self._change_corrs_opmode('slowref', chs_slc + cvs_slc):
                 print('Problem: Correctors not in SlowRef mode.')
                 break
@@ -1017,6 +1004,16 @@ class MeasACORM(_ThreadBaseClass):
 
         print(corrname)
         return False
+
+    def _wait_cycle_to_finish(self, corr_names=None, timeout=10):
+        if corr_names is None:
+            corr_names = self.sofb_data.ch_names + self.sofb_data.cv_names
+
+        for cmn in corr_names:
+            cmo = self.devices[cmn]
+            if not cmo.wait_cycle_to_finish(timeout=timeout):
+                return False
+        return True
 
     @staticmethod
     def _shift_list(lst, num):
