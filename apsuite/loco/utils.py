@@ -275,9 +275,6 @@ class LOCOUtils:
     @staticmethod
     def jloco_calc_k_dip(config, model):
         """."""
-        matrix_nominal = LOCOUtils.respm_calc(
-            model, config.respm, config.use_dispersion)
-
         if config.use_dip_families:
             dip_indices = []
             for fam_name in config.famname_dipset:
@@ -430,7 +427,7 @@ class LOCOUtils:
         """."""
         dip_indices = config.respm.fam_data['BN']['index']
         kick_matrix = LOCOUtils._parallel_base(
-            config, model, ksindices,
+            config, model, dip_indices,
             LOCOUtils._jloco_calc_kick_dip)
         return kick_matrix
 

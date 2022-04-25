@@ -384,21 +384,24 @@ class LOCOConfig:
         # bpm
         bpmw = self.weight_bpm
         if bpmw is None:
-            bpmw = _np.ones((2*self.nr_bpm, self.nr_corr))
+            bpmw = _np.ones((2*self.nr_bpm, self.nr_corr + 1))
         elif isinstance(bpmw, (int, float)):
-            weight_bpm = _np.ones((2*self.nr_bpm, self.nr_corr))
+            weight_bpm = _np.ones((2*self.nr_bpm, self.nr_corr + 1))
             weight_bpm *= bpmw / 2 / self.nr_bpm
             bpmw = weight_bpm
         elif isinstance(bpmw, _np.ndarray) and bpmw.ndim == 1:
-            bpmw = _np.tile(bpmw[:, None], self.nr_corr)
+            bpmw = _np.tile(bpmw[:, None], self.nr_corr + 1)
         self.weight_bpm = bpmw
 
         # corr
-        if self.weight_corr is None:
-            self.weight_corr = _np.ones(self.nr_corr + 1)
-        elif isinstance(self.weight_corr, (int, float)):
-            self.weight_corr = _np.ones(self.nr_corr + 1) * \
-                self.weight_corr / (self.nr_corr + 1)
+        corrw = self.weight_corr
+        if corrw is None:
+            corrw = _np.ones(self.nr_corr + 1)
+        elif isinstance(corrw, (int, float)):
+            weight_corr = _np.ones(self.nr_corr + 1)
+            weight_corr *= corrw / (self.nr_corr + 1)
+            corrw = weight_corr
+        self.weight_corr = corrw
 
         nknb = 0
         if self.fit_quadrupoles:
