@@ -596,9 +596,7 @@ class MeasACORM(_ThreadBaseClass):
 
             t00 = _time.time()
             print('    Configuring BPMs and timing...', end='')
-            # No need to configure BPMs when they are already configured
-            if not itr or len(secs) != nr_secs_acq:
-                self._config_bpms(nr_points * len(secs))
+            self._config_bpms(nr_points * len(secs))
             self._config_timing(self.params.delay_corrs, secs)
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
