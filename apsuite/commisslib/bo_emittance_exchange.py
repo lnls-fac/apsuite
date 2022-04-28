@@ -460,6 +460,52 @@ class EmittanceExchangeSimul:
         self._bunch = _pa.tracking.generate_bunch(
             n_part=n_part, envelope=init_env[0])
 
+    def dynamic_emit_exchange_envelope(self, verbose=True):
+        s = self.tune_crossing_vel
+        c = self.coupling_coeff
+        delta = self._calc_delta()
+        n_turns = int(_np.abs(delta)/(s * c**2))
+        print("---------------------Tracking particles----------------------\n"
+              "Initial delta = {:.3f} [C] \n N = {}".format(delta/c, 2*n_turns)
+              )
+        qf_idx = self.qf_idxs
+        K_default = self.model[qf_idx[0]].K
+        dK = self._calc_dk(-delta)
+        K_list = _np.linspace(K_default, K_default + 2*dK, 2*n_turns)
+
+        emittances = _np.zeros([2, K_list.size])
+        tunes = emittances.copy()
+
+        env0 = _pa.optics.calc_beamenvelope(
+            accelerator=self._model, indices=[0], full=False)
+        for i, K in enumerate(K_list):
+
+            # Changing quadrupole forces
+            _pa.lattice.set_attribute(
+                lattice=self._model, attribute_name='K', values=K,
+                indices=self.qf_idxs)
+
+            env0, _, _, _ = _pa.optics.calc_beamenvelope(
+                        accelerator=self._model, init_env=env0[-1],
+                        indices='closed', full=True)
+
+            # Computing the RMS emittance
+            emittances[:, i] = self._calc_envelope_emittances(env0[0])
+
+            # Computing Tunes
+            tunes[:, i] = self._calc_tunes()
+
+            if verbose:
+                if i % 100 == 0:
+                    print(f"step {i}", end='\t')
+                if i % 500 == 0:
+                    print('\n')
+                if i == K_list.size-1:
+                    print('Done!')
+
+        self._emittances = emittances
+        self._tunes = tunes
+
     def dynamic_emit_exchange(self, verbose=True):
         s = self.tune_crossing_vel
         c = self.coupling_coeff
@@ -586,6 +632,18 @@ class EmittanceExchangeSimul:
         if tune2 > 0.5:
             tune2 = _np.abs(1-tune2)
         return _np.array([tune1, tune2])
+
+    def _calc_envelope_emittances(self, env):
+        """."""
+        twi, *_ = _pa.optics.calc_twiss(self.model)
+        etax, etapx = twi.etax[0], twi.etapx[0]
+        etay, etapy = twi.etay[0], twi.etapy[0]
+        disp = _np.array([[etax], [etapx], [etay], [etapy], [0], [0]])
+        env_nodisp = env - env[4, 4]*_np.dot(disp, disp.T)
+        emitx = _np.sqrt(_np.linalg.det(env_nodisp[:2, :2]))
+        emity = _np.sqrt(_np.linalg.det(env_nodisp[2:4, 2:4]))
+        emittances_array = _np.array([emitx, emity])
+        return emittances_array
 
     def _calc_emittances(self):
         """."""
