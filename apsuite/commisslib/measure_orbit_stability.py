@@ -40,7 +40,7 @@ class OrbitAnalysis:
         if self.fname:
             self.load_orb()
             self.get_closest_orm()
-            self.sampling_freq = self._get_sampling_freq(self.data)
+            self.sampling_freq = self.get_sampling_freq(self.data)
 
     @property
     def fname(self):
@@ -224,19 +224,19 @@ class OrbitAnalysis:
         orbxy_fil = _np.hstack((orbx, orby))
         _, _, vhmat = self._calc_pca(orbxy_fil)
         etaxy = _np.hstack((self.etax, self.etay))
-        etaxy -= _np.mean(etaxy)
+        etaxy_nm = etaxy - _np.mean(etaxy)
 
         correls = []
         for mode in range(vhmat.shape[0]):
-            vech_nomean = vhmat[mode] - _np.mean(vhmat[mode])
-            correls.append(abs(self._calc_correlation(vech_nomean, etaxy)))
+            vech_nm = vhmat[mode] - _np.mean(vhmat[mode])
+            correls.append(abs(self._calc_correlation(vech_nm, etaxy_nm)))
 
         maxcorr_idx = _np.argmax(correls)
         vheta = vhmat[maxcorr_idx]
-        vheta -= _np.mean(vheta)
+        vheta_nm = vheta - _np.mean(vheta)
 
         # scale obtained by least-squares minimization
-        gamma = _np.dot(etaxy, vheta)/_np.dot(etaxy, etaxy)
+        gamma = _np.dot(etaxy_nm, vheta_nm)/_np.dot(etaxy_nm, etaxy_nm)
         eta_meas = vheta/gamma
 
         orbxy = _np.hstack((orbx_ns, orby_ns))
@@ -256,7 +256,8 @@ class OrbitAnalysis:
         self.analysis['energy_ipsd'] = intpsd
 
     def orbit_stability_analysis(
-            self, central_freq=60, window=10, inverse=False):
+            self, central_freq=60, window=10,
+            inverse=False, pca=True, split_planes=True):
         """Calculate orbit spectrum, integrated PSD and apply SVD in orbit
             data by filtering around a center frequency with a window.
 
@@ -267,15 +268,18 @@ class OrbitAnalysis:
                 Units [Hz].
             inverse (bool, optional): calculate the integrated PSD with from
                 lower to higher frequencies (inverse=False) or the contrary.
+            pca (bool, optional): calculate SVD of orbit matrices for
+                principal component analysis (PCA). Default is True.
+            split_planes (bool, optional): perform PCA analysis in x and y planes independently. Default is True. If False, concatenates x and y data.
         """
+        orbx_ns, orby_ns, _ = self.remove_switching_freq()
         orbx_fil, orby_fil = self.filter_around_freq(
+            orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
         orbx_spec, freqx = self.calc_spectrum(orbx_fil, fs=self.sampling_freq)
         orby_spec, freqy = self.calc_spectrum(orby_fil, fs=self.sampling_freq)
         ipsdx = self.calc_integrated_spectrum(orbx_spec, inverse=inverse)
         ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
-        umatx, svalsx, vhmatx = self._calc_pca(orbx_fil)
-        umaty, svalsy, vhmaty = self._calc_pca(orby_fil)
         self.analysis['orb_freqmax'] = central_freq + window/2
         self.analysis['orb_freqmin'] = central_freq - window/2
         self.analysis['orbx_spectrum'] = orbx_spec
@@ -284,12 +288,22 @@ class OrbitAnalysis:
         self.analysis['orby_freq'] = freqy
         self.analysis['orbx_ipsd'] = ipsdx
         self.analysis['orby_ipsd'] = ipsdy
-        self.analysis['orbx_umat'] = umatx
-        self.analysis['orbx_svals'] = svalsx
-        self.analysis['orbx_vhmat'] = vhmatx
-        self.analysis['orby_umat'] = umaty
-        self.analysis['orby_svals'] = svalsy
-        self.analysis['orby_vhmat'] = vhmaty
+        if pca:
+            if split_planes:
+                umatx, svalsx, vhmatx = self._calc_pca(orbx_fil)
+                umaty, svalsy, vhmaty = self._calc_pca(orby_fil)
+                self.analysis['orbx_umat'] = umatx
+                self.analysis['orbx_svals'] = svalsx
+                self.analysis['orbx_vhmat'] = vhmatx
+                self.analysis['orby_umat'] = umaty
+                self.analysis['orby_svals'] = svalsy
+                self.analysis['orby_vhmat'] = vhmaty
+            else:
+                orbxy_fil = _np.hstack((orbx_fil, orby_fil))
+                umatxy, svalsxy, vhmatxy = self._calc_pca(orbxy_fil)
+                self.analysis['orbxy_umat'] = umatxy
+                self.analysis['orbxy_svals'] = svalsxy
+                self.analysis['orbxy_vhmat'] = vhmatxy
 
     # plotting methods
     def plot_orbit_spectrum(
@@ -361,14 +375,22 @@ class OrbitAnalysis:
         """."""
         if orbx is None:
             anly = self.analysis
-            umatx, vhmatx = anly['orbx_umat'], anly['orbx_vhmat']
-            svalsx = anly['orbx_svals']
+            try:
+                umatx, vhmatx = anly['orbx_umat'], anly['orbx_vhmat']
+                svalsx = anly['orbx_svals']
+            except KeyError:
+                print('PCA results of x orbit missing in analysis dict.')
+                return None
         else:
             umatx, svalsx, vhmatx = self._calc_pca(orbx)
         if orby is None:
             anly = self.analysis
-            umaty, vhmaty = anly['orby_umat'], anly['orby_vhmat']
-            svalsy = anly['orby_svals']
+            try:
+                umaty, vhmaty = anly['orby_umat'], anly['orby_vhmat']
+                svalsy = anly['orby_svals']
+            except KeyError:
+                print('PCA results of y orbit missing in analysis dict.')
+                return None
         else:
             umaty, svalsy, vhmaty = self._calc_pca(orby)
 
@@ -477,7 +499,7 @@ class OrbitAnalysis:
         return spec, freq
 
     @staticmethod
-    def _get_sampling_freq(data):
+    def get_sampling_freq(data):
         """."""
         fs = data['rf_frequency'] / OrbitAnalysis.HARM_NR
         if data['bpms_acq_rate'] == 'FOFB':
@@ -535,7 +557,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         """."""
         ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
         dtmp = '{0:26s} = {1:9d}  {2:s}\n'.format
-        stmp = '{0:15s} = {1:9}  {2:s}\n'.format
+        stmp = '{0:26s} = {1:9}  {2:s}\n'.format
         stg = ''
         stg += ftmp('trigbpm_delay', self.trigbpm_delay, '[us]')
         stg += dtmp('trigbpm_nrpulses', self.trigbpm_nrpulses, '')
@@ -614,7 +636,6 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """."""
         fambpms = self.devices['fambpms']
         prms = self.params
-        fambpms.cmd_mturn_acq_abort()
         fambpms.mturn_config_acquisition(
             nr_points_after=prms.orbit_nrpoints_after,
             acq_rate=prms.orbit_acq_rate,
@@ -624,6 +645,8 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """."""
         fambpms = self.devices['fambpms']
         evt_study = self.devices['evt_study']
+        self.prepare_bpms_acquisition()
+        fambpms.mturn_reset_flags()
         evt_study.cmd_external_trigger()
         fambpms.mturn_wait_update_flags(timeout=self.params.orbit_timeout)
         orbx, orby = fambpms.get_mturn_orbit()
@@ -652,17 +675,19 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """Energy Stability Analysis."""
         self._process_orb()
         self.get_closest_orm()
-        self.sampling_freq = self._get_sampling_freq(self.data)
+        self.sampling_freq = self.get_sampling_freq(self.data)
         self.energy_stability_analysis(
             central_freq=central_freq, window=window, inverse=inverse)
 
     def process_data_orbit(
-            self, central_freq=60, window=10, inverse=False):
+            self, central_freq=60, window=10,
+            inverse=False, pca=True, split_planes=True):
         """Orbit Stability Analysis."""
         self._process_orb()
-        self.sampling_freq = self._get_sampling_freq(self.data)
+        self.sampling_freq = self.get_sampling_freq(self.data)
         self.orbit_stability_analysis(
-            central_freq=central_freq, window=window, inverse=inverse)
+            central_freq=central_freq, window=window,
+            inverse=inverse, pca=pca, split_planes=split_planes)
 
     def _process_orb(self):
         orbx = self.data['orbx'].copy()
@@ -670,3 +695,9 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         orbx -= orbx.mean(axis=0)[None, :]
         orby -= orby.mean(axis=0)[None, :]
         self.orbx, self.orby = orbx, orby
+
+    def load_and_apply(self, fname):
+        """."""
+        super().load_and_apply(fname)
+        self.get_closest_orm()
+        self.sampling_freq = self.get_sampling_freq(self.data)
