@@ -879,7 +879,7 @@ class MeasACORM(_ThreadBaseClass):
 
     @staticmethod
     def _get_sampling_frequency(data):
-        fsamp = data['rf_frequency'] / _asparams.SI_HARM_NR
+        fsamp = data['rf_frequency'] / _asparams.SI_HARM_NUM
         if data['bpms_acq_rate'].lower().startswith('monit'):
             fsamp /= _asparams.BPM_MONIT1_DOWNSAMPLING
         else:

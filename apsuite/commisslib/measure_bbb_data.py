@@ -86,7 +86,7 @@ class UtilClass:
         """."""
         rev_per = params.REV_PER
         calib = params.CALIBRATION_FACTOR
-        harm_nr = params.HARM_NR
+        harm_nr = params.HARM_NUM
         current = data.get('stored_current', None)
         if current is None:
             current = data['current']
@@ -260,7 +260,7 @@ class BbBLParams(_ParamsBaseClass):
     CALIBRATION_FACTOR = _asparams.BBBL_CALIBRATION_FACTOR
     DAMPING_RATE = _asparams.BBBL_DAMPING_RATE
     RF_FREQ = _asparams.RF_FREQ
-    HARM_NR = _asparams.SI_HARM_NR
+    HARM_NUM = _asparams.SI_HARM_NUM
     REV_FREQ = _asparams.SI_REV_FREQ
     REV_PER = 1 / REV_FREQ
 
@@ -351,7 +351,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         data.pop('rf_freq')
         data.pop('harmonic_number')
         data['rawdata'] = _np.array(
-            data.pop('data').reshape((-1, self.params.HARM_NR)).T,
+            data.pop('data').reshape((-1, self.params.HARM_NUM)).T,
             dtype=float)
         data['cavity_data'] = dict(
             temperature={
@@ -383,7 +383,7 @@ class BbBAcqData(_BaseClass, UtilClass):
     def pca_analysis(self, rawdata=None):
         """."""
         calib = self.params.CALIBRATION_FACTOR
-        harm_nr = self.params.HARM_NR
+        harm_nr = self.params.HARM_NUM
         current = self.data.get('stored_current', None)
         if current is None:
             current = self.data['current']
@@ -641,7 +641,7 @@ class DriveDampLParams(BbBLParams):
     def __init__(self):
         """."""
         super().__init__()
-        self.modes_to_measure = _np.arange(1, self.HARM_NR//2+1)
+        self.modes_to_measure = _np.arange(1, self.HARM_NUM//2+1)
         self.drive_num = 0
         self.wait_acquisition = 1  # [s]
         self.wait_pv_update = 0  # [s]

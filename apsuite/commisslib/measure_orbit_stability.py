@@ -17,8 +17,8 @@ class OrbitAnalysis:
     """."""
 
     MOM_COMPACT = _asparams.SI_MOM_COMPACT
-    NR_BPMS = _asparams.SI_NR_BPMS
-    HARM_NR = _asparams.SI_HARM_NR
+    NUM_BPMS = _asparams.SI_NUM_BPMS
+    HARM_NUM = _asparams.SI_HARM_NUM
     ENERGY_SPREAD = _asparams.SI_ENERGY_SPREAD
     BPM_SWITCHING_FREQ = _asparams.BPM_SWITCHING_FREQ
     BPM_FOFB_DOWNSAMPLING = _asparams.BPM_FOFB_DOWNSAMPLING
@@ -150,10 +150,10 @@ class OrbitAnalysis:
         orm_name = configs[_np.argmin(delays)]['name']
         orm_meas = _np.array(
             self.orm_client.get_config_value(name=orm_name))
-        orm_meas = _np.reshape(orm_meas, (2*self.NR_BPMS, -1))
+        orm_meas = _np.reshape(orm_meas, (2*self.NUM_BPMS, -1))
         rf_freq = self.data['rf_frequency']
         etaxy = orm_meas[:, -1] * (-self.MOM_COMPACT*rf_freq)  # units of [um]
-        self.etax, self.etay = etaxy[:self.NR_BPMS], etaxy[self.NR_BPMS:]
+        self.etax, self.etay = etaxy[:self.NUM_BPMS], etaxy[self.NUM_BPMS:]
         self.orm = orm_meas
 
     def calc_integrated_spectrum(self, spec, inverse=False):
@@ -480,7 +480,7 @@ class OrbitAnalysis:
     @staticmethod
     def _get_sampling_freq(data):
         """."""
-        fs = data['rf_frequency'] / OrbitAnalysis.HARM_NR
+        fs = data['rf_frequency'] / OrbitAnalysis.HARM_NUM
         if data['bpms_acq_rate'] == 'FOFB':
             return fs / OrbitAnalysis.BPM_FOFB_DOWNSAMPLING
         elif data['bpms_acq_rate'] == 'Monit1':

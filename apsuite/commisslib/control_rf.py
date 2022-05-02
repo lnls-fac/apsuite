@@ -231,9 +231,9 @@ class ControlRF(_BaseClass):
         rout = []
         l_speed = 299792458
         if self.acc == 'SI':
-            harm = _asparams.SI_HARM_NR
+            harm = _asparams.SI_HARM_NUM
         else:
-            harm = _asparams.BO_HARM_NR
+            harm = _asparams.BO_HARM_NUM
         for _ in range(nturns):
             rou, *_ = _pyaccel.tracking.line_pass(mod, inn, indices=None)
             inn = rou[-npart:, :]
