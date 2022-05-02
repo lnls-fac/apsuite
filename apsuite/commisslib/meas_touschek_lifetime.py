@@ -80,16 +80,22 @@ class MeasTouschekLifetime(_BaseClass):
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
     FILTER_OUTLIER = 0.2  # Relative error data/fitting
 
-    # # calibration curves measured during machine shift in 2021/09/21:
+    # # calibration curves measured during machine studies shift in 2021/09/21:
     # EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
     # EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
     # OFFSET_DCCT = 8.4e-3  # [mA]
 
     # calibration curves measured with BPM switching off (direct mode) during
-    # machine shift in 2021/11/01:
+    # machine studies shift in 2021/11/01:
     EXCCURVE_SUMA = [1.22949e-3, 1.9433e-4]  # BPM Sum [counts] -> Current [mA]
     EXCCURVE_SUMB = [2.55117e-3, 1.9519e-4]  # BPM Sum [counts] -> Current [mA]
     OFFSET_DCCT = 12.64e-3  # [mA]
+
+    # calibration curves measured with BPM switching off (direct mode) during
+    # machine studies shift in 2022/04/19:
+    EXCCURVE_SUMA = [3.71203e-3, 1.9356e-4]  # BPM Sum [counts] -> Current [mA]
+    EXCCURVE_SUMB = [7.23981e-3, 2.2668e-4]  # BPM Sum [counts] -> Current [mA]
+    OFFSET_DCCT = -3.361e-3  # [mA]
 
     def __init__(self, isonline=True):
         """."""
@@ -649,7 +655,7 @@ class MeasTouschekLifetime(_BaseClass):
         meas = dict(
             sum_a=[], sum_b=[], nan_a=[], nan_b=[], tim_a=[], tim_b=[],
             current=[], rf_voltage=[], avg_pressure=[],
-            rf_frequency=[], sync_frequency=[],
+            rf_frequency=[], sync_frequency=[], sync_tune=[],
             tunex=[], tuney=[], dorbx=[], dorby=[])
         parms = self.params
 
@@ -728,6 +734,7 @@ class MeasTouschekLifetime(_BaseClass):
             meas['rf_voltage'].append(rfcav.dev_cavmon.gap_voltage)
             meas['rf_frequency'].append(rfgen.frequency)
             meas['sync_tune'].append(bbbl.sram.spec_marker1_tune)
+            meas['sync_frequency'].append(bbbl.sram.spec_marker1_freq)
 
             meas['avg_pressure'].append(press.value)
 
