@@ -29,6 +29,9 @@ class MeasTouschekParams(_ParamsBaseClass):
         super().__init__()
         self.total_duration = 0  # [s] 0 means infinity
         self.save_partial = True
+        self.save_each_nrmeas = 100
+        self.correct_orbit = True
+        self.get_tunes = True
         self.bpm_name = self.DEFAULT_BPMNAME
         self.bpm_attenuation = 14  # [dB]
         self.acquisition_timeout = 1  # [s]
@@ -684,7 +687,7 @@ class MeasTouschekLifetime(_BaseClass):
         bpm.tbt_mask_enbl = 1
 
         maxidx = parms.total_duration / parms.acquisition_period
-        maxidx = float('inf') if maxidx < 1 else maxidx
+        maxidx = float('inf') if maxidx < 1 else int(maxidx)
         idx = 0
 
         while idx < maxidx and not self._stopevt.is_set():
@@ -728,7 +731,7 @@ class MeasTouschekLifetime(_BaseClass):
 
             meas['avg_pressure'].append(press.value)
 
-            if not idx % 100 and parms.save_partial:
+            if not idx % int(parms.save_each_nrmeas) and parms.save_partial:
                 # 5 iterations of orbit correction.
                 # SOFB must be properly configured:
                 # 1) SOFBMode: SlowOrb with Num. Pts.: 50;
@@ -738,16 +741,18 @@ class MeasTouschekLifetime(_BaseClass):
                 # (since switching mode is off);
                 # 4) singular values should be removed until the delta kicks
                 # are reasonable (about 120 out of 281 SVs are sufficient);
-                dorbx, dorby = self._correct_and_get_cod()
-                meas['dorbx'].append(dorbx)
-                meas['dorby'].append(dorby)
+                if parms.correct_orbit:
+                    dorbx, dorby = self._correct_and_get_cod()
+                    meas['dorbx'].append(dorbx)
+                    meas['dorby'].append(dorby)
 
-                # Turn on tune excitation and get the tune only at every 100
+                # Turn on tune excitation and get the tune only at every N
                 # iterations not to disturb the beam too much with the tune
                 # shaker.
-                tunex, tuney = self._excite_and_get_tunes()
-                meas['tunex'].append(tunex)
-                meas['tuney'].append(tuney)
+                if parms.measure_tunes:
+                    tunex, tuney = self._excite_and_get_tunes()
+                    meas['tunex'].append(tunex)
+                    meas['tuney'].append(tuney)
 
                 self.data = meas
                 self.save_data(fname=parms.filename, overwrite=True)
