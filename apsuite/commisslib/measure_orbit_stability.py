@@ -6,6 +6,7 @@ import time as _time
 
 from mathphys.functions import load_pickle
 import siriuspy.clientconfigdb as _sconf
+from .. import asparams as _asparams
 from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
 from siriuspy.devices import Tune, CurrInfoSI, \
@@ -15,13 +16,13 @@ from siriuspy.devices import Tune, CurrInfoSI, \
 class OrbitAnalysis:
     """."""
 
-    MOM_COMPACT = 1.636e-04
-    NR_BPMS_SI = 160
-    HARM_NR = 864
-    ENERGY_SPREAD = 0.085  # [%]
-    BPM_SWITCHING_FREQ = 12.5e3  # Hz
-    FOFB_DOWNSAMPLING = 23
-    MONIT1_DOWNSAMPLING = 25*FOFB_DOWNSAMPLING
+    MOM_COMPACT = _asparams.SI_MOM_COMPACT
+    NUM_BPMS = _asparams.SI_NUM_BPMS
+    HARM_NUM = _asparams.SI_HARM_NUM
+    ENERGY_SPREAD = _asparams.SI_ENERGY_SPREAD
+    BPM_SWITCHING_FREQ = _asparams.BPM_SWITCHING_FREQ
+    BPM_FOFB_DOWNSAMPLING = _asparams.BPM_FOFB_DOWNSAMPLING
+    BPM_MONIT1_DOWNSAMPLING = _asparams.BPM_MONIT1_DOWNSAMPLING
 
     def __init__(self, filename=''):
         """Analysis of orbit over time at BPMs for a given acquisition rate.
@@ -149,10 +150,10 @@ class OrbitAnalysis:
         orm_name = configs[_np.argmin(delays)]['name']
         orm_meas = _np.array(
             self.orm_client.get_config_value(name=orm_name))
-        orm_meas = _np.reshape(orm_meas, (2*self.NR_BPMS_SI, -1))
+        orm_meas = _np.reshape(orm_meas, (2*self.NUM_BPMS, -1))
         rf_freq = self.data['rf_frequency']
         etaxy = orm_meas[:, -1] * (-self.MOM_COMPACT*rf_freq)  # units of [um]
-        self.etax, self.etay = etaxy[:self.NR_BPMS_SI], etaxy[self.NR_BPMS_SI:]
+        self.etax, self.etay = etaxy[:self.NUM_BPMS], etaxy[self.NUM_BPMS:]
         self.orm = orm_meas
 
     def calc_integrated_spectrum(self, spec, inverse=False):
@@ -501,11 +502,11 @@ class OrbitAnalysis:
     @staticmethod
     def get_sampling_freq(data):
         """."""
-        fs = data['rf_frequency'] / OrbitAnalysis.HARM_NR
+        fs = data['rf_frequency'] / OrbitAnalysis.HARM_NUM
         if data['bpms_acq_rate'] == 'FOFB':
-            return fs / OrbitAnalysis.FOFB_DOWNSAMPLING
+            return fs / OrbitAnalysis.BPM_FOFB_DOWNSAMPLING
         elif data['bpms_acq_rate'] == 'Monit1':
-            return fs / OrbitAnalysis.MONIT1_DOWNSAMPLING
+            return fs / OrbitAnalysis.BPM_MONIT1_DOWNSAMPLING
 
     @staticmethod
     def _calc_pca(data):
