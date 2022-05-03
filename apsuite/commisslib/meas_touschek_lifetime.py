@@ -56,6 +56,9 @@ class MeasTouschekParams(_ParamsBaseClass):
         stg += ftmp(
             'total_duration', self.total_duration, '[s] (0) means forever')
         stg += f'{"save_partial":20s} = {str(bool(self.save_partial)):s}\n'
+        stg += dtmp('save_each_nrmeas', self.save_each_nrmeas)
+        stg += f'{"correct_orbit":20s} = {str(bool(self.correct_orbit)):s}\n'
+        stg += f'{"get_tunes":20s} = {str(bool(self.get_tunes)):s}\n'
         stg += stmp('bpm_name', self.bpm_name)
         stg += ftmp('bpm_attenuation', self.bpm_attenuation, '[dB]')
         stg += ftmp('acquisition_timeout', self.acquisition_timeout, '[s]')
@@ -79,17 +82,6 @@ class MeasTouschekLifetime(_BaseClass):
     RFFEAttMB = 0  # [dB]  Multibunch Attenuation
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
     FILTER_OUTLIER = 0.2  # Relative error data/fitting
-
-    # # calibration curves measured during machine studies shift in 2021/09/21:
-    # EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
-    # EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
-    # OFFSET_DCCT = 8.4e-3  # [mA]
-
-    # calibration curves measured with BPM switching off (direct mode) during
-    # machine studies shift in 2021/11/01:
-    EXCCURVE_SUMA = [1.22949e-3, 1.9433e-4]  # BPM Sum [counts] -> Current [mA]
-    EXCCURVE_SUMB = [2.55117e-3, 1.9519e-4]  # BPM Sum [counts] -> Current [mA]
-    OFFSET_DCCT = 12.64e-3  # [mA]
 
     # calibration curves measured with BPM switching off (direct mode) during
     # machine studies shift in 2022/04/19:
