@@ -362,6 +362,7 @@ class EmittanceExchangeSimul:
         self._coupling_coeff = c
         self._init_delta = init_delta
         self._tunes = None
+        self._envelopes = None
         self._emittances = None
         self._exchange_quality = None
 
@@ -421,6 +422,10 @@ class EmittanceExchangeSimul:
         return _np.sign(tunes_diff) * _np.sqrt(tunes_diff**2 - c**2)
 
     @property
+    def envelopes(self):
+        return self._envelopes
+
+    @property
     def emittances(self):
         return self._emittances
 
@@ -460,24 +465,26 @@ class EmittanceExchangeSimul:
         self._bunch = _pa.tracking.generate_bunch(
             n_part=n_part, envelope=init_env[0])
 
-    def dynamic_emit_exchange_envelope(self, verbose=True):
+    def dynamic_emit_exchange_envelope(self, verbose=True,):
         s = self.tune_crossing_vel
         c = self.coupling_coeff
         delta = self._calc_delta()
         n_turns = int(_np.abs(delta)/(s * c**2))
         print("---------------------Tracking particles----------------------\n"
-              "Initial delta = {:.3f} [C] \n N = {}".format(delta/c, 2*n_turns)
-              )
+              "Initial delta = {:.3f} \n N = {}\n".format(delta, 2*n_turns),
+              "C={:.3f}[%], S={:.3f}".format(c*1e2, s))
         qf_idx = self.qf_idxs
         K_default = self.model[qf_idx[0]].K
         dK = self._calc_dk(-delta)
         K_list = _np.linspace(K_default, K_default + 2*dK, 2*n_turns)
 
         emittances = _np.zeros([2, K_list.size])
+        envelopes = []
         tunes = emittances.copy()
 
         env0 = _pa.optics.calc_beamenvelope(
             accelerator=self._model, indices=[0], full=False)
+        envelopes.append(env0)
         for i, K in enumerate(K_list):
 
             # Changing quadrupole forces
@@ -488,6 +495,9 @@ class EmittanceExchangeSimul:
             env0, _, _, _ = _pa.optics.calc_beamenvelope(
                         accelerator=self._model, init_env=env0[-1],
                         indices='closed', full=True)
+
+            # Saving the envelopes
+            envelopes.append(env0)
 
             # Computing the RMS emittance
             emittances[:, i] = self._calc_envelope_emittances(env0[0])
