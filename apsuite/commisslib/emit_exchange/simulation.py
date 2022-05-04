@@ -9,27 +9,28 @@ import matplotlib.pyplot as _plt
 
 
 class EmittanceExchangeSimul:
-
+    """Class used to simulate the emittance exchange process in the Sirius Booster
+    """
     BO_REV_PERIOD = 1.657e-3  # [m s]
 
-    def __init__(self, init_delta=None, c=0.01, radiation=True, s=1):
-
+    def __init__(
+            self, init_delta=None, c=0.01, radiation=True, s=1, indices=[0]):
+        """."""
         self._model = _pm.bo.create_accelerator(energy=3e9)
         self._model.vchamber_on = True
         self._model.cavity_on = True
-
-        if radiation:
-            self._model.radiation_on = True
-
+        self._model.radiation_on = radiation
         self._radiation = radiation
         self._tune_crossing_vel = s
         self._coupling_coeff = c
         self._init_delta = init_delta
+        self._indices = indices
         self._K_list = None
         self._tunes = None
         self._envelopes = None
         self._emittances = None
         self._exchange_quality = None
+        self._bunch = None
 
         self._qf_idxs = _pa.lattice.find_indices(
             lattice=self.model, attribute_name='fam_name', value='QF')
@@ -50,7 +51,9 @@ class EmittanceExchangeSimul:
 
         if c:
             self._set_coupling(c=c)
-        self._bunch = None
+
+        self._init_env = _pa.optics.calc_beamenvelope(
+            accelerator=self.model, indices=[0], full=False)
 
     @property
     def K_list(self):
@@ -107,7 +110,14 @@ class EmittanceExchangeSimul:
         return self._exchange_quality
 
     def experimental_params(self, final_delta):
-        """."""
+        """Estimate emittance exchange experimental parameters based on the
+        Booster nominal model.
+
+        Parameters
+        ----------
+        final_delta : float with opposite sign of self.initial_delta.
+            Tune difference whose the beam is extracted.
+        """
         c = self.coupling_coeff
         s = self.tune_crossing_vel
         Tr = self.BO_REV_PERIOD
@@ -127,14 +137,32 @@ class EmittanceExchangeSimul:
         stg += ftmp('dC/dKsL', dc_dksL, '[m]')
         print(stg)
 
-    def generate_bunch(self, n_part):
-        """."""
-        init_env = _pa.optics.calc_beamenvelope(
-            accelerator=self.model, indices=[0], full=False)
+    def generate_bunch(self, n_part=1e3):
+        """Generates the bunch used in the particle simulations.
+        Not necessary to run if you would use envelope tracking instead
+        particle tracking.
+
+        Parameters
+        ----------
+        n_part : int
+            Number of particles, by default, 1e3.
+        """
+        init_env = self._init_env
         self._bunch = _pa.tracking.generate_bunch(
             n_part=n_part, envelope=init_env[0])
 
-    def dynamic_emit_exchange_envelope(self, verbose=True,):
+    def env_emit_exchange(self, verbose=True, indices=[0]):
+        """Simulates the dynamic process of emittance exchange using beam
+        envelope tracking.
+
+        Parameters
+        ----------
+        verbose : bool, optional;
+            If True, there will be printed the remaining steps to conclude the
+            simulation, by default True.
+        indices : list, optional;
+            Indices in which there will be stored the envelopes, by default [0]
+        """
         s = self.tune_crossing_vel
         c = self.coupling_coeff
         delta = self._calc_delta()
@@ -151,28 +179,21 @@ class EmittanceExchangeSimul:
         envelopes = []
         tunes = emittances.copy()
 
-        env0 = _pa.optics.calc_beamenvelope(
-            accelerator=self._model, indices=[0], full=False)
-        envelopes.append(env0)
+        env0 = self._init_env
+
         for i, K in enumerate(K_list):
 
-            # Changing quadrupole forces
             _pa.lattice.set_attribute(
                 lattice=self._model, attribute_name='K', values=K,
                 indices=self.qf_idxs)
 
-            env0, _, _, _ = _pa.optics.calc_beamenvelope(
-                accelerator=self._model, init_env=env0[-1],
-                indices='closed', full=True)
+            env0 = _pa.optics.calc_beamenvelope(
+                accelerator=self._model, init_env=env0[0],
+                indices='closed', full=False)
 
-            # Saving the envelopes
-            envelopes.append(env0)
-
-            # Computing the RMS emittance
+            envelopes.append(env0[indices][0])
             emittances[:, i] = self._calc_envelope_emittances(env0[0])
-
-            # Computing Tunes
-            tunes[:, i] = self._calc_tunes()
+            tunes[:, i] = self._calc_nm_tunes()
 
             if verbose:
                 if i % 100 == 0:
@@ -186,12 +207,21 @@ class EmittanceExchangeSimul:
         self._emittances = emittances
         self._tunes = tunes
 
-    def dynamic_emit_exchange(self, verbose=True):
+    def part_emit_exchange(self, verbose=True):
+        """Simulates the dynamic process of emittance exchange using particles
+        tracking.
+
+        Parameters
+        ----------
+        verbose : bool, optional;
+            If True, there will be printed the remaining steps to conclude the
+            simulation, by default True.
+        """
         s = self.tune_crossing_vel
         c = self.coupling_coeff
         delta = self._calc_delta()
-        n_turns = int(_np.abs(delta)/(s * c**2))  # Turns until the exchange
-        rng = _default_rng()
+        n_turns = int(_np.abs(delta)/(s * c**2))    # Turns until the resonance
+        rng = _default_rng()                        # crossing
 
         print("---------------------Tracking particles----------------------\n"
               "Initial delta = {:.3f} [C] \n N = {}".format(delta/c, 2*n_turns)
@@ -237,7 +267,7 @@ class EmittanceExchangeSimul:
             emittances[:, i] = self._calc_emittances()
 
             # Computing Tunes
-            tunes[:, i] = self._calc_tunes()
+            tunes[:, i] = self._calc_nm_tunes()
 
             if verbose:
                 if i % 100 == 0:
@@ -302,7 +332,14 @@ class EmittanceExchangeSimul:
         deltaK = sign*4*_np.pi*dtune/(sum_beta_l)
         return deltaK
 
-    def _calc_tunes(self):
+    def _calc_nm_tunes(self):
+        """Calculate normal modes tunes
+
+        Returns
+        -------
+        np.array of size 2
+            Vector with the tunes
+        """
         ed_teng, _ = _pa.optics.calc_edwards_teng(self.model)
         tune1 = ed_teng.mu1[-1]/(2*_np.pi)
         tune2 = ed_teng.mu2[-1]/(2*_np.pi)
