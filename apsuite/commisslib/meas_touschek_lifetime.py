@@ -31,6 +31,7 @@ class MeasTouschekParams(_ParamsBaseClass):
         self.save_partial = True
         self.save_each_nrmeas = 100
         self.correct_orbit = True
+        self.correct_orbit_nr_iters = 5
         self.get_tunes = True
         self.bpm_name = self.DEFAULT_BPMNAME
         self.bpm_attenuation = 14  # [dB]
@@ -58,6 +59,7 @@ class MeasTouschekParams(_ParamsBaseClass):
         stg += f'{"save_partial":20s} = {str(bool(self.save_partial)):s}\n'
         stg += dtmp('save_each_nrmeas', self.save_each_nrmeas)
         stg += f'{"correct_orbit":20s} = {str(bool(self.correct_orbit)):s}\n'
+        stg += dtmp('correct_orbit_nr_iters', self.correct_orbit_nr_iters)
         stg += f'{"get_tunes":20s} = {str(bool(self.get_tunes)):s}\n'
         stg += stmp('bpm_name', self.bpm_name)
         stg += ftmp('bpm_attenuation', self.bpm_attenuation, '[dB]')
@@ -76,7 +78,32 @@ class MeasTouschekParams(_ParamsBaseClass):
 
 
 class MeasTouschekLifetime(_BaseClass):
-    """."""
+    """Measurement of two single-bunches current decay with BPM sum signal.
+
+    In single-bunch mode, RFFE attenuation must be adjusted in all BPMs
+    before injection, the default value is 30dB. The BPM used to be measured
+    is allowed to have an attenuation of 14dB to increase the sum signal. In
+    the case that some BPMs attenuation setting fails, a local reset of RFFE
+    module at the BPM rack must be done.
+
+    The measurement is typically performed with two single-bunches with
+    different currents: one with high current (~2mA) and one with low current
+    (~0.2mA).
+
+    If correct_orbit=True in params, SOFB must be properly configured:
+        1) SOFBMode: SlowOrb with Num. Pts.: 50;
+        2) BPMs nearby RF cavity (around 02M1 and 02M2 ) should be
+            removed from correction;
+        3) the BPM used to acquire sum data also should be removed
+            (since switching mode is off);
+        4) singular values should be removed until the delta kicks
+            are reasonable (about 120 out of 281 SVs are sufficient).
+        5) the default number of correction iterations is 5. The correction
+        stops if the orbit residue in both planes is smaller than 5um.
+
+    If get_tunes=True in params, the amplitudes in the spectrum analyzer
+    must be adjusted to actually measure the tunes in single-bunch mode
+    """
 
     AVG_PRESSURE_PV = 'Calc:VA-CCG-SI-Avg:Pressure-Mon'
     RFFEAttMB = 0  # [dB]  Multibunch Attenuation
@@ -731,17 +758,10 @@ class MeasTouschekLifetime(_BaseClass):
             meas['avg_pressure'].append(press.value)
 
             if not idx % int(parms.save_each_nrmeas) and parms.save_partial:
-                # 5 iterations of orbit correction.
-                # SOFB must be properly configured:
-                # 1) SOFBMode: SlowOrb with Num. Pts.: 50;
-                # 2) BPMs nearby RF cavity (around 02M1 and 02M2 ) should be
-                # removed from correction;
-                # 3) the BPM used to acquire sum data also should be removed
-                # (since switching mode is off);
-                # 4) singular values should be removed until the delta kicks
-                # are reasonable (about 120 out of 281 SVs are sufficient);
+                # Orbit correction
                 if parms.correct_orbit:
-                    dorbx, dorby = self._correct_and_get_cod()
+                    dorbx, dorby = self._correct_and_get_cod(
+                        nr_iters=parms.correct_orbit_nr_iters)
                     meas['dorbx'].append(dorbx)
                     meas['dorby'].append(dorby)
 
@@ -792,9 +812,9 @@ class MeasTouschekLifetime(_BaseClass):
         tune.cmd_disabley()
         return tunex, tuney
 
-    def _correct_and_get_cod(self):
+    def _correct_and_get_cod(self, nr_iters=5):
         sofb = self.devices['sofb']
-        sofb.correct_orbit_manually(nr_iters=5)
+        sofb.correct_orbit_manually(nr_iters=nr_iters)
         return sofb.orbx-sofb.refx, sofb.orby-sofb.refy
 
     @staticmethod
