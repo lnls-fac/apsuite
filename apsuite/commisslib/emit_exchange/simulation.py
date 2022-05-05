@@ -433,9 +433,9 @@ class EmittanceExchangeSimul:
         qf_idx = self.qf_idxs
         betax = ed_teng.beta1
         betay = ed_teng.beta2
-        length = self.model[qf_idx[0]].length
         betasx = _np.zeros(len(qf_idx))
         betasy = betasx.copy()
+        length = betasx.copy()
 
         for i in range(0, len(qf_idx), 2):
             idx1, idx2 = qf_idx[i], qf_idx[i+1]
@@ -443,7 +443,10 @@ class EmittanceExchangeSimul:
             betax_values = betax[[idx1, idx2, idx2+1]]
             betasx[i] = _np.mean(betax_values)
             betasy[i] = _np.mean(betay_values)
-        sum_beta_l = 2*length*(_np.sum(betasx) + _np.sum(betasy))
+            length[i] = self.model[qf_idx[i]].length + \
+                self.model[qf_idx[i+1]].length
+
+        sum_beta_l = _np.sum(length*(betasx + betasy))
 
         return sum_beta_l, length
 
