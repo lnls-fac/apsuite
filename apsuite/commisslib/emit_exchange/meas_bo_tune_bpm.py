@@ -58,6 +58,7 @@ class BOTunebyBPM(_BaseClass):
     You need to configure the extraction kicker to act at the point of the ramp
     where you want to know the tunes. The tunes will be measured based on the
     Fourier transform of the betatron oscillations induced by the kick.
+    NOTE:Maybe its necessary to include this step in this class.
 
     The BPMs need to be configured to acquire data immediately after the kicker
     pulse, a few thousands of revolutions acquired data are necessary to

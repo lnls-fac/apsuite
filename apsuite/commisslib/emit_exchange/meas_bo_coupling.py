@@ -1,10 +1,10 @@
 """Booster Coupling Measurement from Minimal Tune Separation.
 (Work in progress)
 """
-import numpy as _np
-from scipy.optimize import least_squares
-import matplotlib.pyplot as _plt
-import matplotlib.gridspec as _mpl_gs
+# import numpy as _np
+# from scipy.optimize import least_squares
+# import matplotlib.pyplot as _plt
+# import matplotlib.gridspec as _mpl_gs
 
 from siriuspy.ramp.ramp import BoosterRamp
 # from siriuspy.ramp.conn import ConnPS
