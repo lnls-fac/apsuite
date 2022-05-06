@@ -22,6 +22,19 @@ class BeamSizesParams(_ParamsBaseClass):
         self.init_delay = -3  # [ms]
         self.final_delay = 3  # [ms]
 
+    def __str__(self):
+        """."""
+        ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
+        dtmp = '{0:26s} = {1:9d}  {2:s}\n'.format
+        stmp = '{0:15s} = {1:9}  {2:s}\n'.format
+        stg = ''
+        stg += dtmp('measures_per_point', self.measures_per_point, '')
+        stg += dtmp('nr_points', self.nr_points, '')
+        stg += dtmp('ts_screen_number', self.ts_screen_number, '')
+        stg += stmp('ramp_config', self.ramp_config, '')
+        stg += ftmp('init_delay', self.init_delay, '[ms]')
+        stg += ftmp('final_delay', self.final_delay, '[ms]')
+
 
 class BeamSizesAnalysis(_BaseClass):
     """."""
@@ -41,7 +54,7 @@ class BeamSizesAnalysis(_BaseClass):
     def create_devices(self):
         """."""
         self.devices['evg'] = EVG()
-        self.devices['bo_ramp'] = BoosterRamp(self.params.ramp_base_config)
+        self.devices['bo_ramp'] = BoosterRamp(self.params.ramp_config)
         self.devices['bo_ramp'].load()
 
         self.devices['conn_ps'] = ConnPS()
@@ -58,8 +71,11 @@ class BeamSizesAnalysis(_BaseClass):
         scrn_idx = self.params.ts_screen_number-1
         self.devices['ts_screen'] = Screen(scrns[scrn_idx])
 
-    def reset_ramp(self):
-        pass
+    def reset_ramp_config(self):
+        """."""
+        old_boramp = BoosterRamp(self.params.ramp_config)
+        old_boramp.load()
+        self._send_ramp_wfm(boramp=old_boramp)
 
     def scan_emittance_exchange(self):
         """."""
@@ -84,7 +100,7 @@ class BeamSizesAnalysis(_BaseClass):
             boramp.ps_normalized_configs_change_time(end_old, endn)
             init_old, mid_old, end_old = initn, midn, endn
 
-            # Send the config to the machine
+            # Send the ramp config to the machine
             self._send_ramp_wfm()
             _time.sleep(5)
 
@@ -102,8 +118,9 @@ class BeamSizesAnalysis(_BaseClass):
                 scl_factx = scrn.scale_factor_x
                 scl_facty = scrn.scale_factor_x
                 data['images'].append(image)
-                data['scl_factx'] = _np.abs(scl_factx)
-                data['scl_facty'] = _np.abs(scl_facty)
+
+            data['scl_factx'] = _np.abs(scl_factx)
+            data['scl_facty'] = _np.abs(scl_facty)
 
             self.data = data
 
@@ -124,19 +141,19 @@ class BeamSizesAnalysis(_BaseClass):
 
         # Saving beam sizes in the data dict with the flat array convention:
         data['sigmasx'] = sigma_arr
-        # Reshaping sigma_arr to output it in a more useful structure,
-        # (n_measures_x + n_measures_y) x n_points
-        sigmas = sigma_arr.reshape(2*prms.measures_per_point, prms.nr_points)
+        sx = sigma_arr[0].reshape(prms.nr_points, -1).T
+        sy = sigma_arr[1].reshape(prms.nr_points, -1).T
+
         # delay_arr is a flat array with non repeated delays
         delay_arr = -_np.array(data['delay'][::prms.measures_per_point])
 
-        return sigmas, delay_arr
+        return sx, sy, delay_arr
 
     def plot_time_scan(self, figname=None, legend=True, axis=None):
         """."""
-        sigmas, delays = self.process_data()
-        sx = sigmas[:3, :]
-        sy = sigmas[3:, :]
+        prms = self.params
+        sx, sy, delays = self.process_data()
+
         mean_sx, usx = sx.mean(axis=0), sx.std(axis=0)
         mean_sy, usy = sy.mean(axis=0), sy.std(axis=0)
 
@@ -145,7 +162,7 @@ class BeamSizesAnalysis(_BaseClass):
         else:
             ax = axis
 
-        rep_delays = _np.tile(delays, 3)
+        rep_delays = _np.tile(delays, prms.measures_per_point)
         ax.scatter(
             rep_delays, sx.ravel(), c='C0', s=1.5,
             label=r'measured $\sigma_x$', marker='v')
@@ -168,8 +185,9 @@ class BeamSizesAnalysis(_BaseClass):
             _plt.show()
 
     @staticmethod
-    def calc_beam_size(self, image):
+    def calc_beam_size(image):
         """."""
+        gauss_f = BeamSizesAnalysis.gauss
         projx = _np.sum(image, axis=0)
         projy = _np.sum(image, axis=1)
         x_mean_idx = _np.argmax(projx)
@@ -182,11 +200,11 @@ class BeamSizesAnalysis(_BaseClass):
         sigy = _np.std(vline)
 
         poptx, _ = curve_fit(
-            self._gauss, xx, hline, p0=[
+            gauss_f, xx, hline, p0=[
                 _np.max(hline), x_mean_idx, sigx, hline[0]
                 ])
         popty, _ = curve_fit(
-            self._gauss, xy, vline, p0=[
+            gauss_f, xy, vline, p0=[
                 _np.max(vline), y_mean_idx, sigy, vline[0]
                 ])
 
@@ -194,9 +212,8 @@ class BeamSizesAnalysis(_BaseClass):
         return sigmas_arr
 
     @staticmethod
-    def extract_quadrupoles_ramp(self, ramp):
+    def extract_quadrupoles_ramp(ramp):
         """."""
-        ramp = self.devices['bo_ramp']
         conf_times = _np.sort(ramp.ps_normalized_configs_times)
         qf_ramp = _np.zeros(len(conf_times))
         qd_ramp = qf_ramp.copy()
@@ -205,17 +222,20 @@ class BeamSizesAnalysis(_BaseClass):
             qd_ramp[i] = ramp[c_time]['BO-Fam:PS-QD']
         return qf_ramp, qd_ramp
 
-    def _gauss(x, amp, x0, sigma, off):
+    @staticmethod
+    def gauss(x, amp, x0, sigma, off):
+        """."""
         return amp*_np.exp(-(x-x0)**2/(2*sigma**2)) + off
 
-    def _send_ramp_wfm(self):
+    def _send_ramp_wfm(self, boramp=None):
         """."""
         conn = self.devices['conn_ps']
-        boramp = self.devices['bo_ramp']
+        if boramp is None:
+            boramp = self.devices['bo_ramp']
         conn.get_ramp_config(boramp)
         conn.cmd_wfm()
 
-    def _create_dict_with_lists():
+    def _create_dict_with_lists(self):
         """."""
         data = dict()
         data['measure'] = []
