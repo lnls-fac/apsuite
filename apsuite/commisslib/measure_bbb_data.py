@@ -15,7 +15,7 @@ from siriuspy.devices import BunchbyBunch, PowerSupplyPU, EGTriggerPS
 from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
-
+from .. import asparams as _asparams
 
 class UtilClass:
     """."""
@@ -84,9 +84,9 @@ class UtilClass:
     @staticmethod
     def _process_data(data, params, rawdata=None):
         """."""
-        per_rev = params.PER_REV
+        rev_per = params.REV_PER
         calib = params.CALIBRATION_FACTOR
-        harm_num = params.HARM_NUM
+        harm_nr = params.HARM_NUM
         current = data.get('stored_current', None)
         if current is None:
             current = data['current']
@@ -96,7 +96,7 @@ class UtilClass:
 
         if rawdata is None:
             dataraw = data['rawdata'].astype(float)
-            dataraw *= 1 / (calib * current / harm_num)
+            dataraw *= 1 / (calib * current / harm_nr)
         else:
             dataraw = rawdata.astype(float)
 
@@ -110,7 +110,7 @@ class UtilClass:
         data_dft = _np.fft.fft(data_anal, axis=1)
 
         # compensate the different time samplings of each bunch:
-        dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * per_rev
+        dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * rev_per
         comp = _np.exp(-1j*2*_np.pi * freq[None, :]*dts[:, None])
         data_dft *= comp
 
@@ -255,14 +255,14 @@ class UtilClass:
 class BbBLParams(_ParamsBaseClass):
     """."""
 
-    DAC_NBITS = 14
-    SAT_THRES = 2**(DAC_NBITS-1) - 1
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/degree]
-    DAMPING_RATE = 1/13.0  # [Hz]
-    FREQ_RF = 499666000
-    HARM_NUM = 864
-    FREQ_REV = FREQ_RF / HARM_NUM
-    PER_REV = 1 / FREQ_REV
+    DAC_NR_BITS = _asparams.BBBL_DAC_NR_BITS
+    SAT_THRES = _asparams.BBBL_SAT_THRES
+    CALIBRATION_FACTOR = _asparams.BBBL_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBL_DAMPING_RATE
+    RF_FREQ = _asparams.RF_FREQ
+    HARM_NUM = _asparams.SI_HARM_NUM
+    REV_FREQ = _asparams.SI_REV_FREQ
+    REV_PER = 1 / REV_FREQ
 
     def __init__(self):
         """."""
@@ -286,15 +286,15 @@ class BbBLParams(_ParamsBaseClass):
 class BbBHParams(BbBLParams):
     """."""
 
-    DAMPING_RATE = 1/16.9e-3  # [Hz]
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+    CALIBRATION_FACTOR = _asparams.BBBH_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBH_DAMPING_RATE
 
 
 class BbBVParams(BbBLParams):
     """."""
 
-    DAMPING_RATE = 1/22.0e-3  # [Hz]
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+    CALIBRATION_FACTOR = _asparams.BBBV_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBV_DAMPING_RATE
 
 
 class BbBAcqData(_BaseClass, UtilClass):
@@ -383,14 +383,14 @@ class BbBAcqData(_BaseClass, UtilClass):
     def pca_analysis(self, rawdata=None):
         """."""
         calib = self.params.CALIBRATION_FACTOR
-        harm_num = self.params.HARM_NUM
+        harm_nr = self.params.HARM_NUM
         current = self.data.get('stored_current', None)
         if current is None:
             current = self.data['current']
 
         if rawdata is None:
             rawdata = self.data['rawdata'].astype(float)
-            rawdata *= 1 / (calib * current / harm_num)
+            rawdata *= 1 / (calib * current / harm_nr)
         else:
             rawdata = rawdata.astype(float)
 
@@ -527,9 +527,9 @@ class BbBAcqData(_BaseClass, UtilClass):
         if rawdata is None:
             rawdata = self.data['rawdata']
         rawdata = rawdata.astype(float)
-        per_rev = self.params.PER_REV
+        rev_per = self.params.REV_PER
         downsample = self.data['downsample']
-        dtime = per_rev*downsample
+        dtime = rev_per*downsample
 
         if subtract_mean:
             rawdata -= rawdata.mean(axis=1)[:, None]
@@ -941,9 +941,9 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         drive = bbb.drive0 if drive_num == 0 else bbb.drive1
         drive = drive if drive_num != 2 else bbb.drive2
 
-        harm_num = bbb.info.harmonic_number
+        harm_nr = bbb.info.harmonic_number
         modes_to_measure = self.params.modes_to_measure
-        bunches = _np.arange(harm_num)
+        bunches = _np.arange(harm_nr)
 
         bbb.sram.cmd_data_dump(pv_update=True)
         _time.sleep(self.params.wait_pv_update)
@@ -958,14 +958,14 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             self.data = dict(infos=[], modes_data=[], modes_measured=[])
         for mode in modes_to_measure:
             elt = _time.time()
-            drive.mask = _np.cos(2*_np.pi*bunches*mode/harm_num) > 0
+            drive.mask = _np.cos(2*_np.pi*bunches*mode/harm_nr) > 0
             _time.sleep(self.params.wait_acquisition)
             bbb.sram.cmd_data_dump(pv_update=True)
             _time.sleep(self.params.wait_pv_update)
 
             infos = self.get_data(bbb, acqtype)
             analysis = self._process_data(infos, self.params)
-            modei = sorted({mode, harm_num - mode})
+            modei = sorted({mode, harm_nr - mode})
             data = analysis['mode_data'][modei]
             infos.pop('rawdata')
 
@@ -994,7 +994,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
 class TuneShiftParams(_ParamsBaseClass):
     """."""
 
-    TIME_REV = 864 / 499666000  # s
+    REV_TIME = _asparams.SI_REV_TIME  # s
     WAIT_INJ = 0.2  # s
     DEF_TOL_CURRENT = 0.01  # mA
 
@@ -1248,7 +1248,7 @@ class MeasTuneShift(_ThreadBaseClass):
         mag = _np.array(mag, dtype=float)
         mag -= _np.mean(mag, axis=1)[:, None]
         mag = _np.abs(mag)
-        dtime = _np.arange(0, mag.shape[1]) * TuneShiftParams.TIME_REV
+        dtime = _np.arange(0, mag.shape[1]) * TuneShiftParams.REV_TIME
 
         idx = _np.argsort(curr)
         curr = curr[idx]

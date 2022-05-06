@@ -10,6 +10,7 @@ from siriuspy.devices import SOFB, RFGen, Tune, BunchbyBunch
 from pymodels import si as _si
 import pyaccel as _pyacc
 
+from .. import asparams as _asparams
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
 
@@ -43,7 +44,7 @@ class MeasParams(_ParamsBaseClass):
 class MeasDispChrom(_BaseClass):
     """."""
 
-    MOM_COMPACT = 1.68e-4
+    MOM_COMPACT = _asparams.SI_MOM_COMPACT
 
     def __init__(self, isonline=True):
         """."""

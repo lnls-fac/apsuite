@@ -5,11 +5,12 @@ from mathphys.functions import save_pickle as _save_pickle, \
     load_pickle as _load_pickle
 from siriuspy.devices import SOFB, RFGen
 
+from .. import asparams as _asparams
 
 class DispMeas:
     """."""
 
-    ALPHA = 0.0007193573346558
+    MOM_COMPACT = _asparams.BO_MOM_COMPACT
 
     def __init__(self):
         """."""
@@ -27,7 +28,7 @@ class DispMeas:
     @property
     def deltaen(self):
         """."""
-        return - self.deltaf/self.freq0/self.ALPHA
+        return - self.deltaf/self.freq0/self.MOM_COMPACT
 
     def get_orb(self):
         """."""
@@ -49,7 +50,7 @@ class DispMeas:
         print('Getting initial orbit...')
         self.orb0 = self.get_orb()
         self.freq0 = self.rfgen.frequency
-        self.deltaen = - self.deltaf/self.freq0/self.ALPHA
+        self.deltaen = - self.deltaf/self.freq0/self.MOM_COMPACT
         print('Initial frequency is {:.6f} MHz'.format(self.freq0*1e-6))
         print('Applying Delta + {:.6f} kHz'.format(deltaf*1e-3))
         self.rfgen.frequency(self.freq0+deltaf)
