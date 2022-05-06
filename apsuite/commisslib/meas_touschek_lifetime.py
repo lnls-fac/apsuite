@@ -81,8 +81,10 @@ class MeasTouschekLifetime(_BaseClass):
     """Measurement of two single-bunches current decay with BPM sum signal.
 
     In single-bunch mode, RFFE attenuation must be adjusted in all BPMs
-    before injection, the default value is 30dB. The BPM used to be measured
-    is allowed to have an attenuation of 14dB to increase the sum signal. In
+    before injection, the default value is 30dB. The BPM used in the
+    measurement is allowed to have an attenuation of 14dB to increase the sum
+    signal, if the maximum single-bunch current is 3.0mA (to be within the
+    recommendation of 10% of sum signal full scale which is 2^15 counts). In
     the case that some BPMs attenuation setting fails, a local reset of RFFE
     module at the BPM rack must be done.
 
@@ -90,7 +92,16 @@ class MeasTouschekLifetime(_BaseClass):
     different currents: one with high current (~2mA) and one with low current
     (~0.2mA).
 
-    If correct_orbit=True in params, SOFB must be properly configured:
+    It was observed that the calibration curves BPM Sum -> Current and also the
+    DCCT offset considerably changed during a time span of about 5 months (
+    observed between machine studies in November 2021 and April 2022).
+    Therefore, it is recommended to re-measure the calibration curves prior to
+    the start of the experiment.
+    [TO-DO]: Bring the calibration curve measurement and analysis from jupyter-
+    notebook to this class.
+
+    If correct_orbit=True in params, SOFB must be properly configured by hand
+    prior to the start of the experiment:
         1) SOFBMode: SlowOrb with Num. Pts.: 50;
         2) BPMs nearby RF cavity (around 02M1 and 02M2 ) should be
             removed from correction;
@@ -102,7 +113,8 @@ class MeasTouschekLifetime(_BaseClass):
         stops if the orbit residue in both planes is smaller than 5um.
 
     If get_tunes=True in params, the amplitudes in the spectrum analyzer
-    must be adjusted to actually measure the tunes in single-bunch mode
+    must be adjusted by hand prior to the start of the experiment to actually
+    measure the tunes in single-bunch mode.
     """
 
     AVG_PRESSURE_PV = 'Calc:VA-CCG-SI-Avg:Pressure-Mon'
