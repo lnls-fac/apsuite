@@ -97,8 +97,6 @@ class MeasTouschekLifetime(_BaseClass):
     observed between machine studies in November 2021 and April 2022).
     Therefore, it is recommended to re-measure the calibration curves prior to
     the start of the experiment.
-    [TO-DO]: Bring the calibration curve measurement and analysis from jupyter-
-    notebook to this class.
 
     If correct_orbit=True in params, SOFB must be properly configured by hand
     prior to the start of the experiment:
@@ -116,6 +114,10 @@ class MeasTouschekLifetime(_BaseClass):
     must be adjusted by hand prior to the start of the experiment to actually
     measure the tunes in single-bunch mode.
     """
+
+    # TODO:
+    #   1) Bring the calibration curve measurement and analysis from jupyter-
+    #   notebook to this class.
 
     AVG_PRESSURE_PV = 'Calc:VA-CCG-SI-Avg:Pressure-Mon'
     RFFEAttMB = 0  # [dB]  Multibunch Attenuation
