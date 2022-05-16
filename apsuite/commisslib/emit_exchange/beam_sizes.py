@@ -1,3 +1,5 @@
+"""Classes to measure beam sizes at TS line screens"""
+
 import numpy as _np
 import matplotlib.pyplot as _plt
 import time as _time
@@ -13,6 +15,7 @@ from ...utils import MeasBaseClass as _BaseClass, \
 
 
 class BeamSizesParams(_ParamsBaseClass):
+    """."""
     def __init__(self):
         """."""
         self.measures_per_point = 3
@@ -78,12 +81,15 @@ class BeamSizesAnalysis(_BaseClass):
         self._send_ramp_wfm(boramp=old_boramp)
 
     def scan_emittance_exchange(self):
-        """."""
+        """Method to measure the beam sizes while moving the emittance exchange
+        ramp 'peak'. The results are useful to analyze the emittance exchange
+        process."""
         boramp = self.devices['bo_ramp']
         evg = self.devices['evg']
         scrn = self.devices['ts_screen']
         pvs = self.pvs
         prms = self.params
+        data = self._create_dict_with_lists()
 
         delays = _np.linspace(
             prms.init_delay, prms.final_delay, prms.nr_points)
@@ -105,7 +111,6 @@ class BeamSizesAnalysis(_BaseClass):
             _time.sleep(5)
 
             for i in range(prms.measures_per_point):
-                data = self._create_dict_with_lists()
                 print(f"Delay = {delay}, measure {i}.")
                 evg.cmd_turn_on_injection()
                 data['measure'].append(i)
@@ -115,17 +120,24 @@ class BeamSizesAnalysis(_BaseClass):
                 data['qd_wfm'].append(pvs['bo-qd-wfm'].get())
                 _time.sleep(10)
                 image = scrn.image
-                scl_factx = scrn.scale_factor_x
-                scl_facty = scrn.scale_factor_x
                 data['images'].append(image)
 
-            data['scl_factx'] = _np.abs(scl_factx)
-            data['scl_facty'] = _np.abs(scl_facty)
-
-            self.data = data
+        data['scl_factx'] = _np.abs(scrn.scale_factor_x)
+        data['scl_facty'] = _np.abs(scrn.scale_factor_x)
+        self.data = data
 
     def process_data(self):
-        """."""
+        """Compute beam sizes and time delays from measures.
+
+        Returns
+        -------
+        sx : np.array;
+            Horizontal beam size.
+        sy : np.array;
+            Vertical beam size.
+        delay_arr : np.array;
+            Time delays applied to emittance exchange ramp peak.
+        """
         data = self.data
         prms = self.params
         n_samples = prms.measures_per_point * prms.nr_points
@@ -186,7 +198,19 @@ class BeamSizesAnalysis(_BaseClass):
 
     @staticmethod
     def calc_beam_size(image):
-        """."""
+        """Compute beam size from screen image.
+
+        Parameters
+        ----------
+        image : np.ndarray
+            Raw image matrix, in grayscale.
+
+        Returns
+        -------
+        np.array
+           Array containing the the horizontal beam size in the first
+           coordinate and the vertical in the second.
+        """
         gauss_f = BeamSizesAnalysis.gauss
         projx = _np.sum(image, axis=0)
         projy = _np.sum(image, axis=1)
