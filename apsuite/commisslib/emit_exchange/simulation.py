@@ -14,7 +14,8 @@ class EmittanceExchangeSimul:
     BO_REV_PERIOD = 1.657e-3  # [m s]
 
     def __init__(
-            self, init_delta=None, c=0.01, radiation=True, s=1, indices=[0]):
+            self, init_delta=None, c=0.01, radiation=True, s=1, indices=[0],
+            quad='QF'):
         """."""
         self._model = _pm.bo.create_accelerator(energy=3e9)
         self._model.vchamber_on = True
@@ -22,27 +23,26 @@ class EmittanceExchangeSimul:
         self._model.radiation_on = radiation
         self._radiation = radiation
         self._tune_crossing_vel = s
-        self._coupling_coeff = c
         self._init_delta = init_delta
         self._indices = indices
+        self._quad = quad
+        self._coupling_coeff = None
         self._K_list = None
         self._tunes = None
         self._envelopes = None
         self._emittances = None
         self._exchange_quality = None
         self._bunch = None
+        self._quad_idxs = None
+        self._qs_idxs = None
 
-        self._qf_idxs = _pa.lattice.find_indices(
-            lattice=self.model, attribute_name='fam_name', value='QF')
         self._KL_default = _pa.lattice.get_attribute(
             lattice=self.model, attribute_name='KL',
-            indices=self._qf_idxs[0])[0]
+            indices=self.quad_idxs[0])[0]
 
-        self._qs_idxs = _pa.lattice.find_indices(
-            lattice=self.model, attribute_name='fam_name', value='QS')
         self._KS_default = _pa.lattice.get_attribute(
             lattice=self.model, attribute_name='KsL',
-            indices=self._qs_idxs[0])[0]
+            indices=self.qs_idxs[0])[0]
 
         if init_delta is not None:
             self._set_initial_delta(init_delta)
@@ -60,11 +60,15 @@ class EmittanceExchangeSimul:
         return self._K_list
 
     @property
-    def qf_idxs(self):
-        return self._qf_idxs
+    def quad_idxs(self):
+        self._quad_idxs = _pa.lattice.find_indices(
+            lattice=self.model, attribute_name='fam_name', value=self._quad)
+        return self._quad_idxs
 
     @property
     def qs_idxs(self):
+        self._qs_idxs = _pa.lattice.find_indices(
+            lattice=self.model, attribute_name='fam_name', value='QS')
         return self._qs_idxs
 
     @property
@@ -77,6 +81,9 @@ class EmittanceExchangeSimul:
 
     @property
     def coupling_coeff(self):
+        ed_teng, _ = _pa.optics.calc_edwards_teng(self.model)
+        self._coupling_coeff, _ = _pa.optics.estimate_coupling_parameters(
+            ed_teng)
         return self._coupling_coeff
 
     @property
@@ -123,7 +130,7 @@ class EmittanceExchangeSimul:
         Tr = self.BO_REV_PERIOD
         dtune_dt = s*c**2/Tr
         l_quad = 2*_pa.lattice.get_attribute(
-            self.model, 'length', indices=self._qf_idxs[0])[0]
+            self.model, 'length', indices=self.quad_idxs[0])[0]
         dkl_dt = self._calc_dk(dtune_dt) * l_quad
         tt = (_np.abs(self._init_delta) + _np.abs(final_delta))/dtune_dt
         dc_dksL = self._ksl_to_c(1)
@@ -170,29 +177,32 @@ class EmittanceExchangeSimul:
         print("---------------------Tracking particles----------------------\n"
               "Initial delta = {:.3f} \n N = {}\n".format(delta, 2*n_turns),
               "C={:.3f}[%], S={:.3f}".format(c*1e2, s))
-        qf_idx = self.qf_idxs
-        K_default = self.model[qf_idx[0]].K
-        dK = self._calc_dk(-delta)
+        quad_idx = self.quad_idxs
+        K_default = self.model[quad_idx[0]].K
+        if self._quad == 'QF':
+            dK = self._calc_dk(-delta)
+        else:
+            dK = self._calc_dk(delta)
         K_list = _np.linspace(K_default, K_default + 2*dK, 2*n_turns)
         self._K_list = K_list
         emittances = _np.zeros([2, K_list.size])
-        envelopes = []
+        envelopes = _np.zeros([K_list.size, 6, 6])
         tunes = emittances.copy()
 
         env0 = self._init_env
 
-        for i, K in enumerate(K_list):
+        for i, k in enumerate(K_list):
 
             _pa.lattice.set_attribute(
-                lattice=self._model, attribute_name='K', values=K,
-                indices=self.qf_idxs)
+                lattice=self._model, attribute_name='K', values=k,
+                indices=quad_idx)
 
             env0 = _pa.optics.calc_beamenvelope(
-                accelerator=self._model, init_env=env0[0],
+                accelerator=self._model, init_env=env0[-1],
                 indices='closed', full=False)
 
-            envelopes.append(env0[indices][0])
-            emittances[:, i] = self._calc_envelope_emittances(env0[0])
+            envelopes[i] = env0[indices]
+            emittances[:, i] = self._calc_envelope_emittances(env0[-1])
             tunes[:, i] = self._calc_nm_tunes()
 
             if verbose:
@@ -207,7 +217,8 @@ class EmittanceExchangeSimul:
         self._emittances = emittances
         self._tunes = tunes
 
-    def part_emit_exchange(self, verbose=True):
+    def part_emit_exchange(
+            self, verbose=True):
         """Simulates the dynamic process of emittance exchange using particles
         tracking.
 
@@ -224,12 +235,15 @@ class EmittanceExchangeSimul:
         rng = _default_rng()                        # crossing
 
         print("---------------------Tracking particles----------------------\n"
-              "Initial delta = {:.3f} [C] \n N = {}".format(delta/c, 2*n_turns)
-              )
+              "Initial delta = {:.3f} \n N = {}\n".format(delta, 2*n_turns),
+              "C={:.3f}[%], S={:.3f}".format(c*1e2, s))
 
-        qf_idx = self.qf_idxs
-        K_default = self.model[qf_idx[0]].K
-        dK = self._calc_dk(-delta)
+        quad_idx = self.quad_idxs
+        K_default = self.model[quad_idx[0]].K
+        if self._quad == 'QF':
+            dK = self._calc_dk(-delta)
+        else:
+            dK = self._calc_dk(delta)
         K_list = _np.linspace(K_default, K_default + 2*dK, 2*n_turns)
         self._K_list = K_list
 
@@ -238,14 +252,14 @@ class EmittanceExchangeSimul:
 
         bunch0 = self.bunch
         npart = bunch0.shape[1]
-        env0 = _np.cov(self.bunch).reshape([1, 6, 6])
+        env0 = self._init_env
 
         for i, K in enumerate(K_list):
 
             # Changing quadrupole forces
             _pa.lattice.set_attribute(
                 lattice=self._model, attribute_name='K', values=K,
-                indices=self.qf_idxs)
+                indices=quad_idx)
 
             if self._radiation:
                 # Tracking with quantum excitation
@@ -261,12 +275,9 @@ class EmittanceExchangeSimul:
             else:
                 m = _pa.tracking.find_m66(self.model)
                 bunch0 = _np.dot(m, bunch0)
+
             self._bunch = bunch0
-
-            # Computing the RMS emittance
             emittances[:, i] = self._calc_emittances()
-
-            # Computing Tunes
             tunes[:, i] = self._calc_nm_tunes()
 
             if verbose:
@@ -321,13 +332,14 @@ class EmittanceExchangeSimul:
             tuney = _np.abs(1-tuney)
         return tunex - tuney
 
-    def _calc_dk(self, dtune, plane='x'):
-        if plane == 'x':
+    def _calc_dk(self, dtune):
+        """."""
+        if self._quad == 'QF':
             sign = 1
-        elif plane == 'y':
+        elif self._quad == 'QD':
             sign = -1
         else:
-            raise ValueError("Plane must be 'x' or 'y'")
+            raise ValueError('Wrong quadrupole type')
         sum_beta_l, _ = self._calc_sum_beta_l()
         deltaK = sign*4*_np.pi*dtune/(sum_beta_l)
         return deltaK
@@ -388,21 +400,30 @@ class EmittanceExchangeSimul:
 
     def _set_coupling(self, c):
         """."""
-        ksl = self._c_to_ksl(c)
+        # NOTE: Change this method to set the coupling by minimization and
+        # then set a scale factor to convert C to Ks and vice-versa.
+        c0 = self.coupling_coeff
+        dc = c - c0
+        dksl = self._c_to_ksl(dc)
+
+        ksl0 = _pa.lattice.get_attribute(
+            lattice=self.model, attribute_name='KsL',
+            indices=self.qs_idxs)
+
         _pa.lattice.set_attribute(
-            lattice=self._model, attribute_name='KsL', values=ksl,
+            lattice=self._model, attribute_name='KsL', values=ksl0+dksl,
             indices=self.qs_idxs)
 
     def _set_initial_delta(self, init_delta):
         "Sets delta to delta_f"
         delta = self._calc_delta()
-        qf_idx = self.qf_idxs
+        quad_idx = self.quad_idxs
         sum_beta_l, _ = self._calc_sum_beta_l()
         dv_x = init_delta - delta
         dk_x = 4*_np.pi*dv_x/(sum_beta_l)
-        k_x = self.model[qf_idx[0]].K + dk_x
+        k_x = self.model[quad_idx[0]].K + dk_x
         _pa.lattice.set_attribute(
-            lattice=self._model, attribute_name='K', indices=qf_idx,
+            lattice=self._model, attribute_name='K', indices=quad_idx,
             values=k_x)
 
     def _c_to_ksl(self, C):
@@ -430,27 +451,37 @@ class EmittanceExchangeSimul:
     def _calc_sum_beta_l(self):
         """."""
         ed_teng, _ = _pa.optics.calc_edwards_teng(self.model)
-        qf_idx = self.qf_idxs
+        quad_idx = self.quad_idxs
         betax = ed_teng.beta1
         betay = ed_teng.beta2
-        betasx = _np.zeros(len(qf_idx))
+        betasx = _np.zeros(len(quad_idx))
         betasy = betasx.copy()
         length = betasx.copy()
 
-        for i in range(0, len(qf_idx), 2):
-            idx1, idx2 = qf_idx[i], qf_idx[i+1]
-            betay_values = betay[[idx1, idx2, idx2+1]]
-            betax_values = betax[[idx1, idx2, idx2+1]]
-            betasx[i] = _np.mean(betax_values)
-            betasy[i] = _np.mean(betay_values)
-            length[i] = self.model[qf_idx[i]].length + \
-                self.model[qf_idx[i+1]].length
+        if self._quad == 'QF':
+            for i in range(0, len(quad_idx), 2):
+                idx1, idx2 = quad_idx[i], quad_idx[i+1]
+                betay_values = betay[[idx1, idx2, idx2+1]]
+                betax_values = betax[[idx1, idx2, idx2+1]]
+                length[i] = self.model[quad_idx[i]].length + \
+                    self.model[quad_idx[i+1]].length
+                betasx[i] = _np.mean(betax_values)
+                betasy[i] = _np.mean(betay_values)
+        else:
+            for i in range(0, len(quad_idx)):
+                idx = quad_idx[i]
+                betay_values = betay[[idx, idx+1]]
+                betax_values = betax[[idx, idx+1]]
+                length[i] = self.model[quad_idx[i]].length
+                betasx[i] = _np.mean(betax_values)
+                betasy[i] = _np.mean(betay_values)
 
         sum_beta_l = _np.sum(length*(betasx + betasy))
 
         return sum_beta_l, length
 
     def _delta2time(self, delta):
+        """."""
         s = self._tune_crossing_vel
         c = self.coupling_coeff
         tr = self.BO_REV_PERIOD
@@ -459,6 +490,7 @@ class EmittanceExchangeSimul:
         return time
 
     def _time2delta(self, time):
+        """."""
         s = self._tune_crossing_vel
         c = self.coupling_coeff
         tr = self.BO_REV_PERIOD
