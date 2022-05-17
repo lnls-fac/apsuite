@@ -10,8 +10,8 @@ import matplotlib.gridspec as _mgs
 import scipy.optimize as _scy_opt
 import scipy.integrate as _scy_int
 
-from siriuspy.devices import BPM, CurrInfoSI, EGun, RFCav, Tune, Trigger, \
-    Event, EVG, SOFB
+from siriuspy.devices import BPM, CurrInfoSI, EGun, RFGen, RFCav, \
+    Tune, Trigger, Event, EVG, SOFB, BunchbyBunch
 from siriuspy.search import BPMSearch
 from siriuspy.epics import PV
 
@@ -29,6 +29,10 @@ class MeasTouschekParams(_ParamsBaseClass):
         super().__init__()
         self.total_duration = 0  # [s] 0 means infinity
         self.save_partial = True
+        self.save_each_nrmeas = 100
+        self.correct_orbit = True
+        self.correct_orbit_nr_iters = 5
+        self.get_tunes = True
         self.bpm_name = self.DEFAULT_BPMNAME
         self.bpm_attenuation = 14  # [dB]
         self.acquisition_timeout = 1  # [s]
@@ -53,6 +57,10 @@ class MeasTouschekParams(_ParamsBaseClass):
         stg += ftmp(
             'total_duration', self.total_duration, '[s] (0) means forever')
         stg += f'{"save_partial":20s} = {str(bool(self.save_partial)):s}\n'
+        stg += dtmp('save_each_nrmeas', self.save_each_nrmeas)
+        stg += f'{"correct_orbit":20s} = {str(bool(self.correct_orbit)):s}\n'
+        stg += dtmp('correct_orbit_nr_iters', self.correct_orbit_nr_iters)
+        stg += f'{"get_tunes":20s} = {str(bool(self.get_tunes)):s}\n'
         stg += stmp('bpm_name', self.bpm_name)
         stg += ftmp('bpm_attenuation', self.bpm_attenuation, '[dB]')
         stg += ftmp('acquisition_timeout', self.acquisition_timeout, '[s]')
@@ -70,23 +78,57 @@ class MeasTouschekParams(_ParamsBaseClass):
 
 
 class MeasTouschekLifetime(_BaseClass):
-    """."""
+    """Measurement of two single-bunches current decay with BPM sum signal.
+
+    In single-bunch mode, RFFE attenuation must be adjusted in all BPMs
+    before injection, the default value is 30dB. The BPM used in the
+    measurement is allowed to have an attenuation of 14dB to increase the sum
+    signal, if the maximum single-bunch current is 3.0mA (to be within the
+    recommendation of 10% of sum signal full scale which is 2^15 counts). In
+    the case that some BPMs attenuation setting fails, a local reset of RFFE
+    module at the BPM rack must be done.
+
+    The measurement is typically performed with two single-bunches with
+    different currents: one with high current (~2mA) and one with low current
+    (~0.2mA).
+
+    It was observed that the calibration curves BPM Sum -> Current and also the
+    DCCT offset considerably changed during a time span of about 5 months (
+    observed between machine studies in November 2021 and April 2022).
+    Therefore, it is recommended to re-measure the calibration curves prior to
+    the start of the experiment.
+
+    If correct_orbit=True in params, SOFB must be properly configured by hand
+    prior to the start of the experiment:
+        1) SOFBMode: SlowOrb with Num. Pts.: 50;
+        2) BPMs nearby RF cavity (around 02M1 and 02M2 ) should be
+            removed from correction;
+        3) the BPM used to acquire sum data also should be removed
+            (since switching mode is off);
+        4) singular values should be removed until the delta kicks
+            are reasonable (about 120 out of 281 SVs are sufficient).
+        5) the default number of correction iterations is 5. The correction
+        stops if the orbit residue in both planes is smaller than 5um.
+
+    If get_tunes=True in params, the amplitudes in the spectrum analyzer
+    must be adjusted by hand prior to the start of the experiment to actually
+    measure the tunes in single-bunch mode.
+    """
+
+    # TODO:
+    #   1) Bring the calibration curve measurement and analysis from jupyter-
+    #   notebook to this class.
 
     AVG_PRESSURE_PV = 'Calc:VA-CCG-SI-Avg:Pressure-Mon'
     RFFEAttMB = 0  # [dB]  Multibunch Attenuation
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
     FILTER_OUTLIER = 0.2  # Relative error data/fitting
 
-    # # calibration curves measured during machine shift in 2021/09/21:
-    # EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
-    # EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
-    # OFFSET_DCCT = 8.4e-3  # [mA]
-
     # calibration curves measured with BPM switching off (direct mode) during
-    # machine shift in 2021/11/01:
-    EXCCURVE_SUMA = [1.22949e-3, 1.9433e-4]  # BPM Sum [counts] -> Current [mA]
-    EXCCURVE_SUMB = [2.55117e-3, 1.9519e-4]  # BPM Sum [counts] -> Current [mA]
-    OFFSET_DCCT = 12.64e-3  # [mA]
+    # machine studies shift in 2022/04/19:
+    EXCCURVE_SUMA = [3.71203e-3, 1.9356e-4]  # BPM Sum [counts] -> Current [mA]
+    EXCCURVE_SUMB = [7.23981e-3, 2.2668e-4]  # BPM Sum [counts] -> Current [mA]
+    OFFSET_DCCT = -3.361e-3  # [mA]
 
     def __init__(self, isonline=True):
         """."""
@@ -116,8 +158,10 @@ class MeasTouschekLifetime(_BaseClass):
             self.devices['currinfo'] = CurrInfoSI()
             self.devices['egun'] = EGun()
             self.devices['rfcav'] = RFCav(RFCav.DEVICES.SI)
+            self.devices['rfgen'] = RFGen()
             self.devices['tune'] = Tune(Tune.DEVICES.SI)
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+            self.devices['bbbl'] = BunchbyBunch(BunchbyBunch.DEVICES.L)
             self.pvs['avg_pressure'] = PV(MeasTouschekLifetime.AVG_PRESSURE_PV)
 
     def set_bpms_attenuation(self, value_att=RFFEAttSB):
@@ -644,12 +688,15 @@ class MeasTouschekLifetime(_BaseClass):
         meas = dict(
             sum_a=[], sum_b=[], nan_a=[], nan_b=[], tim_a=[], tim_b=[],
             current=[], rf_voltage=[], avg_pressure=[],
+            rf_frequency=[], sync_frequency=[], sync_tune=[],
             tunex=[], tuney=[], dorbx=[], dorby=[])
         parms = self.params
 
         curr = self.devices['currinfo']
         rfcav = self.devices['rfcav']
+        rfgen = self.devices['rfgen']
         tune = self.devices['tune']
+        bbbl = self.devices['bbbl']
         press = self.pvs['avg_pressure']
         bpm = self.devices[parms.bpm_name]
         bpm.cmd_sync_tbt()  # Sync TbT BPM acquisition
@@ -679,7 +726,7 @@ class MeasTouschekLifetime(_BaseClass):
         bpm.tbt_mask_enbl = 1
 
         maxidx = parms.total_duration / parms.acquisition_period
-        maxidx = float('inf') if maxidx < 1 else maxidx
+        maxidx = float('inf') if maxidx < 1 else int(maxidx)
         idx = 0
 
         while idx < maxidx and not self._stopevt.is_set():
@@ -718,28 +765,27 @@ class MeasTouschekLifetime(_BaseClass):
             # Get other relevant parameters
             meas['current'].append(curr.current)
             meas['rf_voltage'].append(rfcav.dev_cavmon.gap_voltage)
+            meas['rf_frequency'].append(rfgen.frequency)
+            meas['sync_tune'].append(bbbl.sram.spec_marker1_tune)
+            meas['sync_frequency'].append(bbbl.sram.spec_marker1_freq)
+
             meas['avg_pressure'].append(press.value)
 
-            if not idx % 100 and parms.save_partial:
-                # 5 iterations of orbit correction.
-                # SOFB must be properly configured:
-                # 1) SOFBMode: SlowOrb with Num. Pts.: 50;
-                # 2) BPMs nearby RF cavity (around 02M1 and 02M2 ) should be
-                # removed from correction;
-                # 3) the BPM used to acquire sum data also should be removed
-                # (since switching mode is off);
-                # 4) singular values should be removed until the delta kicks
-                # are reasonable (about 120 out of 281 SVs are sufficient);
-                dorbx, dorby = self._correct_and_get_cod()
-                meas['dorbx'].append(dorbx)
-                meas['dorby'].append(dorby)
+            if not idx % int(parms.save_each_nrmeas) and parms.save_partial:
+                # Orbit correction
+                if parms.correct_orbit:
+                    dorbx, dorby = self._correct_and_get_cod(
+                        nr_iters=parms.correct_orbit_nr_iters)
+                    meas['dorbx'].append(dorbx)
+                    meas['dorby'].append(dorby)
 
-                # Turn on tune excitation and get the tune only at every 100
+                # Turn on tune excitation and get the tune only at every N
                 # iterations not to disturb the beam too much with the tune
                 # shaker.
-                tunex, tuney = self._excite_and_get_tunes()
-                meas['tunex'].append(tunex)
-                meas['tuney'].append(tuney)
+                if parms.measure_tunes:
+                    tunex, tuney = self._excite_and_get_tunes()
+                    meas['tunex'].append(tunex)
+                    meas['tuney'].append(tuney)
 
                 self.data = meas
                 self.save_data(fname=parms.filename, overwrite=True)
@@ -780,9 +826,9 @@ class MeasTouschekLifetime(_BaseClass):
         tune.cmd_disabley()
         return tunex, tuney
 
-    def _correct_and_get_cod(self):
+    def _correct_and_get_cod(self, nr_iters=5):
         sofb = self.devices['sofb']
-        sofb.correct_orbit_manually(nr_iters=5)
+        sofb.correct_orbit_manually(nr_iters=nr_iters)
         return sofb.orbx-sofb.refx, sofb.orby-sofb.refy
 
     @staticmethod

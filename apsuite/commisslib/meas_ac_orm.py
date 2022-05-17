@@ -17,7 +17,7 @@ import pyaccel as _pyaccel
 
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
-
+from .. import asparams as _asparams
 
 class ACORMParams(_ParamsBaseClass):
     """."""
