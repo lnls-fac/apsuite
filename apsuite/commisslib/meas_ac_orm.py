@@ -17,7 +17,7 @@ import pyaccel as _pyaccel
 
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
-from .. import asparams as _asparams
+
 
 class ACORMParams(_ParamsBaseClass):
     """."""
@@ -452,8 +452,16 @@ class MeasACORM(_ThreadBaseClass):
         if self.params.meas_bpms_noise:
             self.data['bpms_noise'] = self._do_measure_bpms_noise()
 
+        if self._stopevt.is_set():
+            print('Stopping...')
+            return
+
         if self.params.meas_rf_line:
             self.data['rf'] = self._do_measure_rf_line()
+
+        if self._stopevt.is_set():
+            print('Stopping...')
+            return
 
         self.data['magnets'] = self._do_measure_magnets()
 
@@ -854,6 +862,9 @@ class MeasACORM(_ThreadBaseClass):
 
             tim = _np.arange(orbx.shape[0]) * dtim
             if idx_ini is None:
+                # TODO: This logic is broken when more than one sector is
+                # excited per BPM acquisition, because in this case the
+                # deltaDelay variable is set, while delayRaw is kept as zero.
                 delay = 4/data['rf_frequency']
                 delay *= data['corrs_trig_delay_raw']
                 idx_ini = (tim >= delay).nonzero()[0][0]
