@@ -2,12 +2,13 @@
 
 import numpy as _np
 import matplotlib.pyplot as _plt
+import matplotlib.patches as _patches
 import time as _time
 
 from scipy.optimize import curve_fit
-from siriuspy.ramp.ramp import BoosterRamp
-from siriuspy.ramp.conn import ConnPS
-from siriuspy.devices import EVG, Screen
+# from siriuspy.ramp.ramp import BoosterRamp
+# from siriuspy.ramp.conn import ConnPS
+from siriuspy.devices import EVG, Screen, CurrInfoBO
 from siriuspy.epics import PV
 
 from ...utils import MeasBaseClass as _BaseClass, \
@@ -24,6 +25,9 @@ class BeamSizesParams(_ParamsBaseClass):
         self.ramp_config = 'bo_ramp_flop_emit_exchange_slower'
         self.init_delay = -3  # [ms]
         self.final_delay = 3  # [ms]
+        self.roix = [500, 800]
+        self.roiy = [400, 600]
+        self.line_window = 4
 
     def __str__(self):
         """."""
@@ -37,6 +41,11 @@ class BeamSizesParams(_ParamsBaseClass):
         stg += stmp('ramp_config', self.ramp_config, '')
         stg += ftmp('init_delay', self.init_delay, '[ms]')
         stg += ftmp('final_delay', self.final_delay, '[ms]')
+        stg += stmp('roix', str(self.roix), '[pixels]')
+        stg += stmp('roiy', str(self.roiy), '[pixels]')
+        stg += dtmp('line_window', self.line_window, '[pixels]')
+
+        return stg
 
 
 class BeamSizesAnalysis(_BaseClass):
@@ -59,7 +68,7 @@ class BeamSizesAnalysis(_BaseClass):
         self.devices['evg'] = EVG()
         self.devices['bo_ramp'] = BoosterRamp(self.params.ramp_config)
         self.devices['bo_ramp'].load()
-
+        self.devices['curr_info'] = CurrInfoBO()
         self.devices['conn_ps'] = ConnPS()
         if not self.devices['conn_ps'].connected:
             raise AssertionError(
@@ -87,6 +96,7 @@ class BeamSizesAnalysis(_BaseClass):
         boramp = self.devices['bo_ramp']
         evg = self.devices['evg']
         scrn = self.devices['ts_screen']
+        currinfo = self.devices['curr_info']
         pvs = self.pvs
         prms = self.params
         data = self._create_dict_with_lists()
@@ -114,78 +124,73 @@ class BeamSizesAnalysis(_BaseClass):
                 print(f"Delay = {delay}, measure {i}.")
                 evg.cmd_turn_on_injection()
                 data['measure'].append(i)
-                data['delay'].append(delay)
+                data['delays'].append(delay)
                 data['timestamp'].append(_time.time())
                 data['qf_wfm'].append(pvs['bo-qf-wfm'].get())
                 data['qd_wfm'].append(pvs['bo-qd-wfm'].get())
-                _time.sleep(10)
+                _time.sleep(1)
                 image = scrn.image
                 data['images'].append(image)
+                data['curr3gev'].append(currinfo.current3gev)
 
         data['scl_factx'] = _np.abs(scrn.scale_factor_x)
         data['scl_facty'] = _np.abs(scrn.scale_factor_x)
+
         self.data = data
+        self.reset_ramp_config()
 
-    def process_data(self):
-        """Compute beam sizes and time delays from measures.
-
-        Returns
-        -------
-        sx : np.array;
-            Horizontal beam size.
-        sy : np.array;
-            Vertical beam size.
-        delay_arr : np.array;
-            Time delays applied to emittance exchange ramp peak.
-        """
+    def process_data(self, plot_flag=False):
+        """."""
         data = self.data
         prms = self.params
-        n_samples = prms.measures_per_point * prms.nr_points
+        sigmasx = []
+        sigmasy = []
 
-        scl_vec = _np.array([data['scl_factx'],  # pixel to mm
-                             data['scl_facty']])
-        sigma_arr = _np.zeros([2, n_samples])
+        sclx, scly = data['scl_factx'], data['scl_facty']  # pixel to mm
 
-        for i in range(n_samples):
-            image = data['images'][i]
-            mini_sigma_arr = self.calc_beam_size(image) * scl_vec
-            sigma_arr[:, i] = mini_sigma_arr
+        for image in data['images']:
+            sx, _, sy, _ = self.calc_beam_sizes(
+                image, roix=prms.roix, roiy=prms.roiy, window=prms.line_window,
+                plot_flag=plot_flag)
+            sigmasx.append(sx*sclx)
+            sigmasy.append(sy*scly)
 
-        # Saving beam sizes in the data dict with the flat array convention:
-        data['sigmasx'] = sigma_arr
-        sx = sigma_arr[0].reshape(prms.nr_points, -1).T
-        sy = sigma_arr[1].reshape(prms.nr_points, -1).T
-
-        # delay_arr is a flat array with non repeated delays
-        delay_arr = -_np.array(data['delay'][::prms.measures_per_point])
-
-        return sx, sy, delay_arr
+        data['sigmasx'] = sigmasx
+        data['sigmasy'] = sigmasy
 
     def plot_time_scan(self, figname=None, legend=True, axis=None):
         """."""
         prms = self.params
-        sx, sy, delays = self.process_data()
+        data = self.data
 
-        mean_sx, usx = sx.mean(axis=0), sx.std(axis=0)
-        mean_sy, usy = sy.mean(axis=0), sy.std(axis=0)
+        if (data['sigmasx'] == []) or (data['sigmasy'] == []):
+            self.process_data()
+
+        sx, sy = data['sigmasx'], data['sigmasy']
+        rsx = _np.array(sx).reshape(prms.measures_per_point, -1)
+        rsy = _np.array(sy).reshape(prms.measures_per_point, -1)
+        mean_sx, stdx = rsx.mean(axis=1), rsx.std(axis=1)
+        mean_sy, stdy = rsy.mean(axis=1), rsy.std(axis=1)
+
+        delays = data['delays']
+        u_delays = _np.unique(delays)
 
         if axis is None:
             _, ax = _plt.subplots()
         else:
             ax = axis
 
-        rep_delays = _np.tile(delays, prms.measures_per_point)
         ax.scatter(
-            rep_delays, sx.ravel(), c='C0', s=1.5,
+            delays, sx, c='C0', s=1.5,
             label=r'measured $\sigma_x$', marker='v')
         ax.scatter(
-            rep_delays, sy.ravel(), c='tab:orange', s=1.5,
+            delays, sy, c='tab:orange', s=1.5,
             label=r'measured $\sigma_y$', marker='^')
         ax.errorbar(
-            delays, mean_sx, yerr=usx, ls='-', marker='', c='C0',
+            u_delays, mean_sx, yerr=stdx, ls='-', marker='', c='tab:blue',
             label=r'$<\sigma_x>$')
         ax.errorbar(
-            delays, mean_sy, yerr=usy, ls='-', marker='', c='tab:orange',
+            u_delays, mean_sy, yerr=stdy, ls='-', marker='', c='tab:orange',
             label=r'$<\sigma_y>$')
         ax.set_xlabel(r'$\Delta t_{ext}$ [ms]')
         ax.set_ylabel(r'$\sigma_{x,y}$ [mm]')
@@ -197,43 +202,108 @@ class BeamSizesAnalysis(_BaseClass):
             _plt.show()
 
     @staticmethod
-    def calc_beam_size(image):
-        """Compute beam size from screen image.
+    def calc_beam_sizes(
+            image, roix=[500, 800], roiy=[400, 600], window=4,
+            plot_flag=False):
+        """Compute the beam sizes from an image.
 
         Parameters
         ----------
-        image : np.ndarray
-            Raw image matrix, in grayscale.
+        image : np.array
+            Image of the beam.
+        roix : list, optional
+            Horizontal region of interest, by default [500, 800]
+        roiy : list, optional
+            Vertical region of interest, by default [400, 600]
+        window : int, optional
+            Width of the lines that will be taken to generate the gaussian
+            distribution where the sizes are computed, by default 4
+        plot_flag : bool, optional
+            Plot fit statistics, by default False
 
         Returns
         -------
-        np.array
-           Array containing the the horizontal beam size in the first
-           coordinate and the vertical in the second.
+        sigmax: float
+            Horizontal beam size.
+        usigmax: float
+            sigmax fit uncertainty.
+
+        sigmay: float
+            Vertical beam size.
+        usigmay: float
+            sigmay fit uncertainty.
         """
-        gauss_f = BeamSizesAnalysis.gauss
+        gauss = BeamSizesAnalysis.gauss
+
+        roix1, roix2 = roix
+        roiy1, roiy2 = roiy
+        roix = slice(roix1, roix2)
+        roiy = slice(roiy1, roiy2)
+        xx = _np.arange(image.shape[1])[roix]
+        xy = _np.arange(image.shape[0])[roiy]
+
+        image = image[roiy, roix]
         projx = _np.sum(image, axis=0)
+        projx = _np.array(projx)/_np.sum(projx)
         projy = _np.sum(image, axis=1)
-        x_mean_idx = _np.argmax(projx)
-        y_mean_idx = _np.argmax(projy)
-        hline = image[y_mean_idx, :]
-        vline = image[:, x_mean_idx]
-        xx = _np.arange(hline.size)
-        xy = _np.arange(vline.size)
-        sigx = _np.std(hline)
-        sigy = _np.std(vline)
+        projy = _np.array(projy)/_np.sum(projy)
 
-        poptx, _ = curve_fit(
-            gauss_f, xx, hline, p0=[
-                _np.max(hline), x_mean_idx, sigx, hline[0]
-                ])
-        popty, _ = curve_fit(
-            gauss_f, xy, vline, p0=[
-                _np.max(vline), y_mean_idx, sigy, vline[0]
-                ])
+        xx_mean = _np.sum(xx*projx)
+        xy_mean = _np.sum(xy*projy)
+        xx_std = _np.sqrt(_np.sum((xx-xx_mean)**2*projx))
+        xy_std = _np.sqrt(_np.sum((xy-xy_mean)**2*projy))
 
-        sigmas_arr = _np.array([poptx[2], popty[2]])
-        return sigmas_arr
+        p0x = [_np.max(projx), xx_mean, xx_std, 0]
+        p0y = [_np.max(projy), xy_mean, xy_std, 0]
+        poptx_proj, _ = curve_fit(gauss, xx, projx, p0=p0x)
+        popty_proj, _ = curve_fit(gauss, xy, projy, p0=p0y)
+
+        x_mean_idx = _np.argmin(_np.abs(xx-poptx_proj[1]))
+        y_mean_idx = _np.argmin(_np.abs(xy-popty_proj[1]))
+
+        hsection = image[y_mean_idx-int(window/2):y_mean_idx+int(window/2), :]
+        vsection = image[:, x_mean_idx-int(window/2):x_mean_idx+int(window/2)]
+        hline = _np.sum(hsection, axis=0)
+        hline = _np.array(hline)/_np.sum(hline)
+        vline = _np.sum(vsection, axis=1)
+        vline = _np.array(vline)/_np.sum(vline)
+
+        poptx, pcovx = curve_fit(gauss, xx, hline, p0=poptx_proj)
+        popty, pcovy = curve_fit(gauss, xy, vline, p0=popty_proj)
+        sigmax, sigmay = abs(poptx[2]), abs(popty[2])
+        usigmax, usigmay = _np.sqrt(pcovx[2, 2]), _np.sqrt(pcovy[2, 2])
+
+        if plot_flag:
+            fig = _plt.figure(figsize=(9, 12))
+            gs = _plt.GridSpec(2, 2)
+            aimg = _plt.subplot(gs[0, :])
+            ax = _plt.subplot(gs[1, 0])
+            ay = _plt.subplot(gs[1, 1])
+
+            aimg.imshow(image)
+            aimg.plot(xx_mean, xy_mean, 'o', ms=5, color='tab:red')
+            w, h = _np.abs(roix2-roix1), _np.abs(roiy2-roiy1)
+            rect = _patches.Rectangle(
+                (roix1, roiy1), w, h, linewidth=1, edgecolor='k', fill='False',
+                facecolor='none')
+            aimg.add_patch(rect)
+
+            ax.plot(xx, projx, '.', label='data')
+            ax.plot(xx, gauss(xx, *poptx_proj), label='proj')
+            ax.plot(xx, hline/_np.sum(hline), '.', label='line')
+            ax.plot(xx, gauss(xx, *poptx)/_np.sum(hline), label='slice')
+
+            ay.plot(xy, projy, '.', label='data')
+            ay.plot(xy, gauss(xy, *popty_proj), label='proj')
+            ay.plot(xy, vline/_np.sum(vline), '.', label='line')
+            ay.plot(xy, gauss(xy, *popty)/_np.sum(vline), label='slice')
+
+            ax.legend()
+            ay.legend()
+            fig.tight_layout()
+            fig.show()
+
+        return sigmax, usigmax, sigmay, usigmay
 
     @staticmethod
     def extract_quadrupoles_ramp(ramp):
@@ -263,11 +333,11 @@ class BeamSizesAnalysis(_BaseClass):
         """."""
         data = dict()
         data['measure'] = []
-        data['delay'] = []
+        data['delays'] = []
         data['timestamp'] = []
         data['qf_wfm'] = []
         data['qd_wfm'] = []
         data['images'] = []
-        data['sigmasx'] = []
-        data['sigmasy'] = []
+        data['curr3gev'] = []
+
         return data
