@@ -125,6 +125,17 @@ class MeasTouschekLifetime(_BaseClass):
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
     FILTER_OUTLIER = 0.2  # Relative error data/fitting
 
+        # # calibration curves measured during machine studies shift in 2021/09/21:
+    # EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
+    # EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
+    # OFFSET_DCCT = 8.4e-3  # [mA]
+
+    # # calibration curves measured with BPM switching off (direct mode) during
+    # # machine studies shift in 2021/11/01:
+    # EXCCURVE_SUMA = [1.22949e-3, 1.9433e-4]  # BPM Sum [counts] -> Current [mA]
+    # EXCCURVE_SUMB = [2.55117e-3, 1.9519e-4]  # BPM Sum [counts] -> Current [mA]
+    # OFFSET_DCCT = 12.64e-3  # [mA]
+
     # # calibration curves measured with BPM switching off (direct mode) during
     # # machine studies shift in 2022/04/19:
     # EXCCURVE_SUMA = [3.71203e-3, 1.9356e-4]  # BPM Sum [counts] -> Current [mA]
@@ -145,6 +156,8 @@ class MeasTouschekLifetime(_BaseClass):
 
         self._recursion = 0
         self._updated_evt = _Event()
+        self._log_analysis = False
+        self._fit_gas = False
 
         if isonline:
             self._bpms = dict()
@@ -172,6 +185,24 @@ class MeasTouschekLifetime(_BaseClass):
             self.devices['fpm'] = MeasFillingPattern(
                 MeasFillingPattern.DEVICES.SI)
             self.pvs['avg_pressure'] = PV(MeasTouschekLifetime.AVG_PRESSURE_PV)
+
+    @property
+    def log_analysis(self):
+        """."""
+        return self._log_analysis
+
+    @log_analysis.setter
+    def log_analysis(self, value):
+        self._log_analysis = value
+
+    @property
+    def fit_gas(self):
+        """."""
+        return self._fit_gas
+
+    @fit_gas.setter
+    def fit_gas(self, value):
+        self._fit_gas = value
 
     def set_bpms_attenuation(self, value_att=RFFEAttSB):
         """."""
@@ -205,12 +236,19 @@ class MeasTouschekLifetime(_BaseClass):
     def process_data(
             self, proc_type='fit_model', nr_bunches=1, nr_intervals=1,
             window=1000, include_bunlen=False, outlier_poly_deg=8,
-            outlier_std=6, outlier_max_recursion=3):
+            outlier_std=6, outlier_max_recursion=3, alphav=1/100/3600,
+            log_analysis=False, fit_gas=True):
         """."""
         if 'analysis' in self.data:
             self.analysis = self.data.pop('analysis')
         if 'measure' in self.data:
             self.data = self.data.pop('measure')
+        self.log_analysis = False
+        self.fit_gas = False
+        if log_analysis:
+            self.log_analysis = True
+        if fit_gas:
+            self.fit_gas = True
 
         # Pre-processing of data:
         self._handle_data_lens()
@@ -223,15 +261,21 @@ class MeasTouschekLifetime(_BaseClass):
             max_recursion=outlier_max_recursion)
 
         if proc_type.lower().startswith('fit_model'):
-            self._process_model_totalrate(nr_intervals=nr_intervals)
+            self._process_model_totalrate(
+                nr_intervals=nr_intervals, alphav=alphav)
         else:
             self._process_diffbunches(window, include_bunlen)
 
     @classmethod
-    def totalrate_model(cls, curr, *coeff):
+    def totalrate_model(cls, curr, alphav, *coeff):
         """."""
-        total = cls.gasrate_model(curr, *coeff[:-2])
-        total += cls.touschekrate_model(curr, *coeff[-2:])
+        if alphav is None:
+            total = cls.gasrate_model(curr, *coeff[:-3])
+            total += cls.touschekrate_model(curr, *coeff[-3:])
+        else:
+            total = cls.gasrate_model(curr, [alphav])
+            total = total.ravel()
+            total += cls.touschekrate_model(curr, *coeff)
         return total
 
     @classmethod
@@ -250,18 +294,26 @@ class MeasTouschekLifetime(_BaseClass):
     @classmethod
     def touschekrate_model(cls, curr, *coeff):
         """."""
-        tous = coeff[-2]
-        blen = coeff[-1]
-        return tous*curr/(1 + blen*curr)
+        tous = coeff[-3]
+        # blen = 0.479188 * (1 + coeff[-2])
+        # blen2 = -0.06157 * (1 + coeff[-1])
+        # blen = 0.55423065 * (1 + coeff[-2])
+        # blen2 = -0.07710592 * (1 + coeff[-1])
+        blen = coeff[-2]
+        emit = coeff[-1]
+        # den = (1 + blen*curr + blen2*curr**2)
+        den = (1+emit*curr)/(1 + blen*curr)
+        return tous*curr*den
 
     @classmethod
-    def curr_model(cls, curr, *coeff, tim=None):
+    def curr_model(
+            cls, curr, *coeff, alphav=None, log_analysis=False, tim=None):
         """."""
         size = curr.size // 2
         curra = curr[:size]
         currb = curr[size:]
 
-        drate_mod = -cls.totalrate_model(curr, *coeff)
+        drate_mod = -cls.totalrate_model(curr, alphav, *coeff)
         dratea_mod = drate_mod[:size]
         drateb_mod = drate_mod[size:]
 
@@ -269,7 +321,12 @@ class MeasTouschekLifetime(_BaseClass):
         currb_mod = _scy_int.cumtrapz(drateb_mod * currb, x=tim, initial=0.0)
         curra_mod += curra.mean() - curra_mod.mean()
         currb_mod += currb.mean() - currb_mod.mean()
-        return _np.r_[curra_mod, currb_mod]
+        # curra_mod += curra[0]
+        # currb_mod += currb[0]
+        curr = _np.r_[curra_mod, currb_mod]
+        if log_analysis:
+            curr = _np.log(curr)
+        return curr
 
     def plot_touschek_lifetime(
             self, fname=None, title=None, fitting=False, rate=True):
@@ -562,7 +619,7 @@ class MeasTouschekLifetime(_BaseClass):
         else:
             self._recursion = 0
 
-    def _process_model_totalrate(self, nr_intervals=5):
+    def _process_model_totalrate(self, nr_intervals=5, alphav=1/100/3600):
         anly = self.analysis
         curra = anly['current_a']
         currb = anly['current_b']
@@ -572,29 +629,58 @@ class MeasTouschekLifetime(_BaseClass):
 
         # First do one round without bounds to use LM algorithm and find the
         # true miminum:
-        coeff0 = [1/40/3600, ] * nr_intervals + [1/10/3600, 0.2]
+        if self.fit_gas:
+            coeff0 = [alphav, ] * nr_intervals + [1/10/3600, 0.5, 0.1]
+            # coeff0 = [alphav, ] * nr_intervals + [1/10/3600, 0.5, ]
+            alphav_in = None
+        else:
+            coeff0 = [1/10/3600, 0.5, 0.1]
+            # coeff0 = [1/10/3600, 0.5, ]
+            alphav_in = alphav
+        # coeff0 += [curra[0], currb[0]]
+        curr_goal = currt
+        if self.log_analysis:
+            curr_goal = _np.log(currt)
         coeff, pconv = _scy_opt.curve_fit(
-            _partial(self.curr_model, tim=tim), currt, currt, p0=coeff0)
+            _partial(
+                self.curr_model, tim=tim, alphav=alphav_in,
+                log_analysis=self.log_analysis),
+            currt, curr_goal, p0=coeff0)
+        errs = _np.sqrt(_np.diag(pconv))
 
         # Then fix the negative arguments to make the final round with bounds:
         coeff = _np.array(coeff)
-        idcs = coeff < 0
-        if idcs.any():
-            coeff[idcs] = 0
-            lower = [0, ] * (nr_intervals + 2)
-            upper = [_np.inf, ] * (nr_intervals + 2)
-            coeff, pconv = _scy_opt.curve_fit(
-                _partial(self.curr_model, tim=tim), currt, currt, p0=coeff,
-                bounds=(lower, upper))
-        errs = _np.sqrt(_np.diag(pconv))
+        if self.fit_gas:
+            idcs = coeff < 0
+            if idcs.any():
+                # coeff[idcs] = 0
+                max_lifetime = 10000
+                coeff[idcs] = 1/max_lifetime/3600
+                # coeff[0] = coeff0[0]
+                lower = [1/max_lifetime/3600, ] * (nr_intervals + 3)
+                upper = [_np.inf, ] * (nr_intervals + 3)
+                lower[-3:] = [0] * 3
+                coeff, pconv = _scy_opt.curve_fit(
+                    _partial(self.curr_model, tim=tim, alphav=alphav_in),
+                    currt, currt, p0=coeff,
+                    bounds=(lower, upper))
+                errs = _np.sqrt(_np.diag(pconv))
 
-        tousrate = self.touschekrate_model(currt, *coeff[-2:])
-        gasrate = self.gasrate_model(currt, *coeff[:-2])
+        if self.fit_gas:
+            gasrate = self.gasrate_model(currt, *coeff[:-3])
+            tousrate = self.touschekrate_model(currt, *coeff[-3:])
+        else:
+            gasrate = self.gasrate_model(currt, [alphav])
+            tousrate = self.touschekrate_model(currt, *coeff)
         gasrate *= 3600
         tousrate *= 3600
         totrate = tousrate + gasrate
 
-        currt_fit = self.curr_model(currt, *coeff, tim=tim)
+        currt_fit = self.curr_model(
+            currt, *coeff, tim=tim, alphav=alphav_in,
+            log_analysis=self.log_analysis)
+        if self.log_analysis:
+            currt_fit = _np.exp(currt_fit)
 
         anly['coeffs'] = coeff
         anly['coeffs_pconv'] = pconv
