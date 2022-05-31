@@ -17,6 +17,7 @@ from ..utils import MeasBaseClass as _BaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
 from .. import asparams as _asparams
 
+
 class UtilClass:
     """."""
 
@@ -87,6 +88,7 @@ class UtilClass:
         rev_per = params.REV_PER
         calib = params.CALIBRATION_FACTOR
         harm_nr = params.HARM_NUM
+        int_tune = params.integer_tune
         current = data.get('stored_current', None)
         if current is None:
             current = data['current']
@@ -110,8 +112,9 @@ class UtilClass:
         data_dft = _np.fft.fft(data_anal, axis=1)
 
         # compensate the different time samplings of each bunch:
+        int_freq = int_tune/rev_per
         dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * rev_per
-        comp = _np.exp(-1j*2*_np.pi * freq[None, :]*dts[:, None])
+        comp = _np.exp(-1j*2*_np.pi * (int_freq+freq[None, :])*dts[:, None])
         data_dft *= comp
 
         # get the processed data by inverse DFT
@@ -271,15 +274,18 @@ class BbBLParams(_ParamsBaseClass):
         self.bandwidth = 200  # [Hz]
         self.filter_type = 'gauss'  # (gauss, sinc)
         self.acqtype = 'SRAM'
+        self.integer_tune = 0
 
     def __str__(self):
         """."""
         ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
+        dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
         stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
         st = ftmp('center_frequency  [Hz]', self.center_frequency, '')
         st += ftmp('bandwidth [Hz]', self.bandwidth, '')
         st += stmp('filter_type', self.filter_type, '[gauss or sinc]')
         st += stmp('acqtype', self.acqtype, '[SRAM or BRAM]')
+        st += dtmp('integer_tune', self.integer_tune, '')
         return st
 
 
@@ -453,10 +459,15 @@ class BbBAcqData(_BaseClass, UtilClass):
                 arrowprops=dict(arrowstyle='->'),
                 bbox=dict(boxstyle="round", fc="0.8"))
 
+        title_ = f'{mode_num:02d}'
+        if title:
+            title_ += ' -> ' + title
         aty.legend(loc='best', fontsize='small')
-        aty.set_title(title, fontsize='small')
+        aty.set_title(title_, fontsize='small')
         aty.set_xlabel('time [ms]')
-        aty.set_ylabel('Amplitude [°]')
+        pln = self.devices['bbb'].devname[-1]
+        unit = '[°]' if pln == 'L' else '[um]'
+        aty.set_ylabel('Amplitude '+unit)
 
         idx = abs_mode > abs_mode.max()/10
         inst_freq = self.calc_instant_frequency(data_mode, dtime)
@@ -506,12 +517,14 @@ class BbBAcqData(_BaseClass, UtilClass):
             nzer = abs_mode > abs_mode.max()/10
             atx.plot(tim[nzer], inst_freq[nzer]/1e3, label=f'{idx:03d}')
 
+        pln = self.devices['bbb'].devname[-1]
+        unit = '[°]' if pln == 'L' else '[um]'
         aty.legend(loc='best', fontsize='small')
         ax.set_title(title)
-        ax.set_ylabel('Max Amplitude [°]')
+        ax.set_ylabel('Max Amplitude '+unit)
         ax.set_xlabel('Mode Number')
         aty.set_xlabel('time [ms]')
-        aty.set_ylabel('Amplitude [°]')
+        aty.set_ylabel('Amplitude '+unit)
         atx.set_xlabel('time [ms]')
         atx.set_ylabel('Instantaneous Frequency [kHz]')
 
@@ -575,9 +588,12 @@ class BbBAcqData(_BaseClass, UtilClass):
         abs_modes = _np.abs(data_modes)
         abs_dataf = _np.abs(data_anal)
 
+        pln = self.devices['bbb'].devname[-1]
+        unit = '[°]' if pln == 'L' else '[um]'
+
         afx.plot(mode_nums, abs_modes.mean(axis=1))
         afx.set_xlabel('Mode Number')
-        afx.set_ylabel('Average Amplitude [°]')
+        afx.set_ylabel('Average Amplitude '+unit)
         # afx.set_yscale('log')
 
         # waterfall_plot(afy, tim, mode_nums, abs_modes)
@@ -591,11 +607,11 @@ class BbBAcqData(_BaseClass, UtilClass):
         afy.set_xlabel('Time [ms]')
         afy.set_ylabel('Mode Number')
         cb = f.colorbar(cf, ax=afy, pad=0.01)
-        cb.set_label('Amplitude [°]')
+        cb.set_label('Amplitude '+unit)
 
         atx.plot(bunch_nums, abs_dataf.mean(axis=1))
         atx.set_xlabel('Bunch Number')
-        atx.set_ylabel('Average Amplitude [°]')
+        atx.set_ylabel('Average Amplitude '+unit)
 
         # waterfall_plot(aty, tim, bunch_nums, abs_dataf)
         # aty.set_ylabel('\ntime [ms]')
@@ -608,7 +624,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         aty.set_xlabel('Time [ms]')
         aty.set_ylabel('Bunch Number')
         cb = f.colorbar(cf, ax=aty, pad=0.01)
-        cb.set_label('Amplitude [°]')
+        cb.set_label('Amplitude '+unit)
 
         f.show()
         return f
@@ -682,15 +698,15 @@ class DriveDampLParams(BbBLParams):
 class DriveDampHParams(DriveDampLParams):
     """."""
 
-    DAMPING_RATE = 1/16.9e-3  # [Hz]
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+    CALIBRATION_FACTOR = _asparams.BBBH_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBH_DAMPING_RATE
 
 
 class DriveDampVParams(DriveDampLParams):
     """."""
 
-    DAMPING_RATE = 1/22.0e-3  # [Hz]
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+    CALIBRATION_FACTOR = _asparams.BBBV_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBV_DAMPING_RATE
 
 
 class MeasDriveDamp(_ThreadBaseClass, UtilClass):
@@ -918,10 +934,14 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             inst_freq /= 1e3
             idx = absm > absm.max()/10
             atx.plot(tim[idx], inst_freq[idx], color=lin.get_color())
+
+        pln = self.devices['bbb'].devname[-1]
+        unit = '[°]' if pln == 'L' else '[um]'
+
         aty.legend(loc='best', fontsize='small')
         aty.set_title(title, fontsize='small')
         aty.set_xlabel('time [ms]')
-        aty.set_ylabel('Amplitude [°]')
+        aty.set_ylabel('Amplitude '+unit)
 
         atx.set_xlabel('time [ms]')
         atx.set_ylabel('Instantaneous Frequency [kHz]')
