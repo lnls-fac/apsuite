@@ -12,7 +12,6 @@ import scipy.integrate as _scy_int
 
 from siriuspy.devices import BPM, CurrInfoSI, EGun, RFGen, RFCav, \
     Tune, Trigger, Event, EVG, SOFB, BunchbyBunch
-from siriuspy.search import BPMSearch
 from siriuspy.epics import PV
 from siriuspy.currinfo import MeasFillingPattern
 
@@ -23,14 +22,14 @@ from ..utils import ThreadedMeasBaseClass as _BaseClass, \
 class MeasTouschekParams(_ParamsBaseClass):
     """."""
 
-    DEFAULT_BPMNAME = 'SI-01M2:DI-BPM'
+    DEFAULT_BPMNAME = 'SI-10M2:DI-BPM'
 
     def __init__(self):
         """."""
         super().__init__()
         self.total_duration = 0  # [s] 0 means infinity
         self.save_partial = True
-        self.save_each_nrmeas = 100
+        self.orb_tune_save_each_nrmeas = 10
         self.correct_orbit = True
         self.correct_orbit_nr_iters = 5
         self.get_tunes = True
@@ -38,14 +37,13 @@ class MeasTouschekParams(_ParamsBaseClass):
         self.bpm_attenuation = 14  # [dB]
         self.acquisition_timeout = 1  # [s]
         self.acquisition_period = 3  # [s]
-        self.mask_beg_bunch_a = 180
-        self.mask_end_bunch_a = 0
-        self.mask_beg_bunch_b = 0
-        self.mask_end_bunch_b = 240
         self.bucket_bunch_a = 1
         self.bucket_bunch_b = 550
         self.acq_nrsamples_pre = 0
-        self.acq_nrsamples_post = 20000
+        self.acq_nrsamples_post = 382
+        self.acq_nrturns = 10
+        # Options: Lifetime, Calibration, Offset
+        self.measurement_type = 'Lifetime'
         self.filename = ''
 
     def __str__(self):
@@ -58,7 +56,8 @@ class MeasTouschekParams(_ParamsBaseClass):
         stg += ftmp(
             'total_duration', self.total_duration, '[s] (0) means forever')
         stg += f'{"save_partial":20s} = {str(bool(self.save_partial)):s}\n'
-        stg += dtmp('save_each_nrmeas', self.save_each_nrmeas)
+        stg += dtmp(
+            'orb_tune_save_each_nrmeas', self.orb_tune_save_each_nrmeas)
         stg += f'{"correct_orbit":20s} = {str(bool(self.correct_orbit)):s}\n'
         stg += dtmp('correct_orbit_nr_iters', self.correct_orbit_nr_iters)
         stg += f'{"get_tunes":20s} = {str(bool(self.get_tunes)):s}\n'
@@ -66,14 +65,12 @@ class MeasTouschekParams(_ParamsBaseClass):
         stg += ftmp('bpm_attenuation', self.bpm_attenuation, '[dB]')
         stg += ftmp('acquisition_timeout', self.acquisition_timeout, '[s]')
         stg += ftmp('acquisition_period', self.acquisition_period, '[s]')
-        stg += dtmp('mask_beg_bunch_a', self.mask_beg_bunch_a)
-        stg += dtmp('mask_end_bunch_a', self.mask_end_bunch_a)
-        stg += dtmp('mask_beg_bunch_b', self.mask_beg_bunch_b)
-        stg += dtmp('mask_end_bunch_b', self.mask_end_bunch_b)
         stg += dtmp('bucket_bunch_a', self.bucket_bunch_a)
         stg += dtmp('bucket_bunch_b', self.bucket_bunch_b)
         stg += dtmp('acq_nrsamples_pre', self.acq_nrsamples_pre)
         stg += dtmp('acq_nrsamples_post', self.acq_nrsamples_post)
+        stg += dtmp('acq_nrturns', self.acq_nrturns)
+        stg += stmp('measurement_type', self.measurement_type)
         stg += stmp('filename', self.filename)
         return stg
 
@@ -125,7 +122,7 @@ class MeasTouschekLifetime(_BaseClass):
     RFFEAttSB = 30  # [dB] Singlebunch Attenuation
     FILTER_OUTLIER = 0.2  # Relative error data/fitting
 
-        # # calibration curves measured during machine studies shift in 2021/09/21:
+    # # calibration curves measured during machine studies shift in 2021/09/21:
     # EXCCURVE_SUMA = [-1.836e-3, 1.9795e-4]
     # EXCCURVE_SUMB = [-2.086e-3, 1.9875e-4]
     # OFFSET_DCCT = 8.4e-3  # [mA]
@@ -158,20 +155,14 @@ class MeasTouschekLifetime(_BaseClass):
         self._updated_evt = _Event()
         self._log_analysis = False
         self._fit_gas = False
+        self.data = []
 
         if isonline:
-            self._bpms = dict()
-            bpmnames = BPMSearch.get_names({'sec': 'SI', 'dev': 'BPM'})
-            bpm = BPM(bpmnames[0])
-            self._bpms[bpmnames[0]] = bpm
+            bpm = BPM(self.params.bpm_name)
             propties = bpm.auto_monitor_status
-            for name in bpmnames[1:]:
-                bpm = BPM(name)
-                for ppt in propties:
-                    bpm.set_auto_monitor(ppt, False)
-                self._bpms[name] = bpm
-
-            self.devices.update(self._bpms)
+            for ppt in propties:
+                bpm.set_auto_monitor(ppt, False)
+            self.devices[self.params.bpm_name] = bpm
             self.devices['trigger'] = Trigger('SI-Fam:TI-BPM')
             self.devices['event'] = Event('Study')
             self.devices['evg'] = EVG()
@@ -203,27 +194,6 @@ class MeasTouschekLifetime(_BaseClass):
     @fit_gas.setter
     def fit_gas(self, value):
         self._fit_gas = value
-
-    def set_bpms_attenuation(self, value_att=RFFEAttSB):
-        """."""
-        if not self.isonline:
-            raise ConnectionError('Cannot do that in offline mode.')
-
-        for bpm in self._bpms.values():
-            bpm.rffe_att = value_att
-        _time.sleep(1.0)
-
-        mstr = ''
-        for name, bpm in self._bpms.items():
-            if bpm.rffe_att != value_att:
-                mstr += (
-                    f'\n{name:<20s}: ' +
-                    f'rb {bpm.rffe_att:.0f} != sp {value_att:.0f}')
-        if not mstr:
-            print('RFFE attenuation set confirmed in all BPMs.')
-        else:
-            print(
-                'RFFE attenuation set confirmed in all BPMs, except:' + mstr)
 
     def cmd_switch_to_single_bunch(self):
         """."""
@@ -300,9 +270,10 @@ class MeasTouschekLifetime(_BaseClass):
         # blen = 0.55423065 * (1 + coeff[-2])
         # blen2 = -0.07710592 * (1 + coeff[-1])
         blen = coeff[-2]
-        emit = coeff[-1]
-        # den = (1 + blen*curr + blen2*curr**2)
-        den = (1+emit*curr)/(1 + blen*curr)
+        # emit = coeff[-1]
+        blen2 = coeff[-1]
+        den = (1 + blen*curr + blen2*curr**2)
+        # den = (1+emit*curr)/(1 + blen*curr)
         return tous*curr*den
 
     @classmethod
@@ -780,33 +751,18 @@ class MeasTouschekLifetime(_BaseClass):
         anly['tous_coeffs_pconv'] = pconv
 
     def _do_measure(self):
-        meas = dict(
-            sum_a=[], sum_b=[], nan_a=[], nan_b=[], tim_a=[], tim_b=[],
-            current=[], rf_voltage=[], avg_pressure=[],
-            rf_frequency=[], sync_frequency=[], sync_tune=[],
-            tunex=[], tuney=[], dorbx=[], dorby=[],
-            antenna_time=[], antenna_a=[], antenna_b=[],
-            antenna_c=[], antenna_d=[],
-            fpm_time=[], fpm_wfm_time=[], fpm_wfm_amp=[])
         parms = self.params
-
-        curr = self.devices['currinfo']
-        rfcav = self.devices['rfcav']
-        rfgen = self.devices['rfgen']
         tune = self.devices['tune']
-        bbbl = self.devices['bbbl']
-        fpm = self.devices['fpm']
-        press = self.pvs['avg_pressure']
         bpm = self.devices[parms.bpm_name]
         bpm.cmd_sync_tbt()  # Sync TbT BPM acquisition
-
         excx0 = tune.enablex
         excy0 = tune.enabley
         # Ensures that tune excitation is off before measurement.
         tune.cmd_disablex()
         tune.cmd_disabley()
 
-        pvsum = bpm.pv_object('GEN_SUMArrayData')
+        swtch0 = self._configure_bpms()
+        pvsum = bpm.pv_object('GEN_AArrayData')
         pvsum.auto_monitor = True
         pvsum.add_callback(self._pv_updated)
 
@@ -814,109 +770,41 @@ class MeasTouschekLifetime(_BaseClass):
         self.devices['event'].mode = 'Continuous'
         self.devices['evg'].cmd_update_events()
 
-        swtch0 = bpm.switching_mode
-        # bpm.acq_channel = 2  # tbt
-        bpm.acq_channel = 1  # adcswap
-        bpm.cmd_turn_off_switching()
-        bpm.cmd_acq_abort()
-        # bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
-        # bpm.acq_nrsamples_post = parms.acq_nrsamples_post
-        bpm.acq_nrsamples_pre = 0
-        bpm.acq_nrsamples_post = 382
-        bpm.acq_repeat = 'normal'
-        bpm.acq_trigger = 'external'
-        bpm.rffe_att = parms.bpm_attenuation
-        bpm.tbt_mask_enbl = 0  # Turn-off Mask Data Acq
-        # bpm.tbt_mask_enbl = 1
-
         maxidx = parms.total_duration / parms.acquisition_period
         maxidx = float('inf') if maxidx < 1 else int(maxidx)
         idx = 0
 
         while idx < maxidx and not self._stopevt.is_set():
-            # Get data for bunch with higher current
-            # bpm.tbt_mask_beg = parms.mask_beg_bunch_a
-            # bpm.tbt_mask_end = parms.mask_end_bunch_a
-            _time.sleep(parms.acquisition_period/3)
-            self._updated_evt.clear()
-            bpm.cmd_acq_start()
-            bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
-            self._updated_evt.wait(timeout=parms.acquisition_timeout)
-            # suma = bpm.mt_possum
-            # Use mean to remove influence of bad points
-            # (maybe consider using median):
-            # meas['sum_a'].append(_np.nanmean(suma))
-            # meas['nan_a'].append(_np.sum(_np.isnan(suma)))
-            # meas['tim_a'].append(_time.time())
+            self.data.append(self.get_data())
 
-            # Antennas:
-            antna = bpm.mt_ampla
-            antnb = bpm.mt_amplb
-            antnc = bpm.mt_amplc
-            antnd = bpm.mt_ampld
-
-            meas['antenna_time'].append(_time.time())
-            meas['antenna_a'].append(antna)
-            meas['antenna_b'].append(antnb)
-            meas['antenna_c'].append(antnc)
-            meas['antenna_d'].append(antnd)
-            _time.sleep(parms.acquisition_period/3)
-
-            meas['fpm_time'].append(_time.time())
-            wfmt, wfmd = fpm.get_data()
-            _time.sleep(0.5)
-            meas['fpm_wfm_time'].append(wfmt)
-            meas['fpm_wfm_amp'].append(wfmd)
-
-            # Get data for bunch with lower current
-            # bpm.tbt_mask_beg = parms.mask_beg_bunch_b
-            # bpm.tbt_mask_end = parms.mask_end_bunch_b
-            # _time.sleep(parms.acquisition_period/4)
-            # self._updated_evt.clear()
-            # bpm.cmd_acq_start()
-            # bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
-            # self._updated_evt.wait(timeout=parms.acquisition_timeout)
-            # sumb = bpm.mt_possum
-            # # Use mean to remove influence of bad points
-            # # (maybe consider using median):
-            # meas['sum_b'].append(_np.nanmean(sumb))
-            # meas['nan_b'].append(_np.sum(_np.isnan(sumb)))
-            # meas['tim_b'].append(_time.time())
-
-            # Get other relevant parameters
-            meas['current'].append(curr.current)
-            meas['rf_voltage'].append(rfcav.dev_cavmon.gap_voltage)
-            meas['rf_frequency'].append(rfgen.frequency)
-            meas['sync_tune'].append(bbbl.sram.spec_marker1_tune)
-            meas['sync_frequency'].append(bbbl.sram.spec_marker1_freq)
-
-            meas['avg_pressure'].append(press.value)
-
-            if not idx % int(parms.save_each_nrmeas) and parms.save_partial:
+            if not idx % int(parms.orb_tune_save_each_nrmeas):
                 # Orbit correction
+                stg = ''
                 if parms.correct_orbit:
                     dorbx, dorby = self._correct_and_get_cod(
                         nr_iters=parms.correct_orbit_nr_iters)
-                    meas['dorbx'].append(dorbx)
-                    meas['dorby'].append(dorby)
+                    self.data[-1]['dorbx'] = dorbx
+                    self.data[-1]['dorby'] = dorby
+                    stg += '   Orbit corrected!'
 
                 # Turn on tune excitation and get the tune only at every N
                 # iterations not to disturb the beam too much with the tune
                 # shaker.
                 if parms.get_tunes:
                     tunex, tuney = self._excite_and_get_tunes()
-                    meas['tunex'].append(tunex)
-                    meas['tuney'].append(tuney)
+                    self.data[-1]['tunex'] = tunex
+                    self.data[-1]['tuney'] = tuney
+                    stg += '   I Got the Tunes!'
 
-                self.data = meas
-                self.save_data(fname=parms.filename, overwrite=True)
-                print(f'{idx:04d}: data saved to file.')
+                if parms.save_partial:
+                    self.save_data(fname=parms.filename, overwrite=True)
+                    stg += '   Partial Data Saved!'
+                print(f'{idx:04d}:' + stg)
             idx += 1
             _time.sleep(parms.acquisition_period/3)
 
-        self.data = meas
         self.save_data(fname=parms.filename, overwrite=True)
-        print(f'{idx:04d}: data saved to file.')
+        print(f'{idx:04d}: all data saved to file.')
 
         if excx0:
             tune.cmd_enablex()
@@ -925,12 +813,79 @@ class MeasTouschekLifetime(_BaseClass):
         bpm.switching_mode = swtch0
 
         self.devices['trigger'].source = 'DigSI'
-        self.devices['event'].mode = 'External'
+        self.devices['event'].mode = 'Injection'
         self.devices['evg'].cmd_update_events()
         pvsum.clear_callbacks()
         pvsum.auto_monitor = False
-
         print('Done!')
+
+    def _configure_bpms(self):
+        parms = self.params
+        bpm = self.devices[parms.bpm_name]
+        swtch0 = bpm.switching_mode
+        # bpm.acq_channel = 2  # tbt
+        bpm.acq_channel = 1  # adcswap
+        bpm.cmd_turn_off_switching()
+        bpm.cmd_acq_abort()
+        bpm.acq_nrsamples_pre = parms.acq_nrsamples_pre
+        bpm.acq_nrsamples_post = parms.acq_nrturns*parms.acq_nrsamples_post
+        bpm.acq_repeat = 'normal'
+        bpm.acq_trigger = 'external'
+        bpm.rffe_att = parms.bpm_attenuation
+        bpm.tbt_mask_enbl = 0  # Turn-off Mask Data Acq
+        return swtch0
+
+    def get_data(self):
+        """."""
+        parms = self.params
+        curr = self.devices['currinfo']
+        rfcav = self.devices['rfcav']
+        rfgen = self.devices['rfgen']
+        bbbl = self.devices['bbbl']
+        fpm = self.devices['fpm']
+        press = self.pvs['avg_pressure']
+        bpm = self.devices[parms.bpm_name]
+        bpm.cmd_sync_tbt()  # Sync TbT BPM
+
+        _time.sleep(parms.acquisition_period/3)
+        self._updated_evt.clear()
+        bpm.cmd_acq_start()
+        bpm.wait_acq_finish(timeout=parms.acquisition_timeout)
+        self._updated_evt.wait(timeout=parms.acquisition_timeout)
+        _time.sleep(0.5)
+
+        meas = dict()
+        # Antennas:
+        antna = bpm.mt_ampla.reshape((parms.acq_nrturns, -1))
+        antnb = bpm.mt_amplb.reshape((parms.acq_nrturns, -1))
+        antnc = bpm.mt_amplc.reshape((parms.acq_nrturns, -1))
+        antnd = bpm.mt_ampld.reshape((parms.acq_nrturns, -1))
+
+        antna = _np.mean(antna, axis=0)
+        antnb = _np.mean(antnb, axis=0)
+        antnc = _np.mean(antnc, axis=0)
+        antnd = _np.mean(antnd, axis=0)
+
+        meas['antenna_time'] = _time.time()
+        meas['antenna_a'] = antna
+        meas['antenna_b'] = antnb
+        meas['antenna_c'] = antnc
+        meas['antenna_d'] = antnd
+        _time.sleep(parms.acquisition_period/3)
+
+        # wfmt, wfmd = fpm.get_data()
+        # meas['fpm_time'] = _time.time()
+        # meas['fpm_wfm_time'] = wfmt
+        # meas['fpm_wfm_amp'] = wfmd
+
+        # Get other relevant parameters
+        meas['current'] = curr.current
+        meas['rf_voltage'] = rfcav.dev_cavmon.gap_voltage
+        meas['rf_frequency'] = rfgen.frequency
+        meas['sync_tune'] = bbbl.sram.spec_marker1_tune
+        meas['sync_frequency'] = bbbl.sram.spec_marker1_freq
+        meas['avg_pressure'] = press.value
+        return meas
 
     def _pv_updated(self, *args, **kwargs):
         _ = args, kwargs
