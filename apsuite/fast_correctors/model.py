@@ -1,3 +1,5 @@
+#!/usr/bin/env python-sirius
+
 """."""
 
 import numpy as np
@@ -20,28 +22,42 @@ def create_model():
     bpm_names = famdata['BPM']['devnames']
     fch_idx = famdata['FCH']['index']
     fcv_idx = famdata['FCV']['index']
-    bpm_idx = famdata['BPM']['index']
+    bpm_idx = [item[0] for item in famdata['BPM']['index']]
     # bpm_idx = pa.lattice.find_indices(si, 'fam_name', 'BPM')
     return model, bpm_names, fch_names, fcv_names, fch_idx, fcv_idx, bpm_idx
 
 
 
-def calc_orbit_respm(model, bpm_idx, corr_idx):
+def calc_orbit_respm(model, bpm_idx, corr_idx, plane):
     """."""
     nrows = len(bpm_idx)
     ncolumns = len(corr_idx)
     respm = np.zeros([2*nrows, ncolumns])
     kick = 10e-6
     for j, fidx in enumerate(corr_idx):
-        model[fidx[0]].hkick_polynom = +kick/2
-        orbit1 = pyaccel.tracking.find_orbit6(accelerator=si, indices=bpm_idx)
-        model[fidx[0]].hkick_polynom = -kick/2
-        orbit2 = pyaccel.tracking.find_orbit6(accelerator=si, indices=bpm_idx)
+        if plane.lower() == 'x':
+            model[fidx[0]].hkick_polynom = +kick/2
+        else:
+            model[fidx[0]].vkick_polynom = +kick/2
+        orbit1 = pyaccel.tracking.find_orbit6(accelerator=model, indices=bpm_idx)
+        if plane.lower() == 'x':
+            model[fidx[0]].hkick_polynom = -kick/2
+        else:
+            model[fidx[0]].vkick_polynom = -kick/2
+        orbit2 = pyaccel.tracking.find_orbit6(accelerator=model, indices=bpm_idx)
         dorbitx = orbit1[0] - orbit2[0]
         respm[:nrows, j] = dorbitx
         dorbity = orbit1[2] - orbit2[2]
         respm[nrows:, j] = dorbity
-        model[fidx[0]].hkick_polynom = 0
+        if plane.lower() == 'x':
+            model[fidx[0]].hkick_polynom = 0
+        else:
+            model[fidx[0]].vkick_polynom = 0
+    return respm
+
 
 if __name__ == "__main__":
+    model, bpm_names, fch_names, fcv_names, fch_idx, fcv_idx, bpm_idx = create_model()
+    respmx = calc_orbit_respm(model, bpm_idx, fch_idx, 'x')
+    respmy = calc_orbit_respm(model, bpm_idx, fcv_idx, 'y')
     print('ok')
