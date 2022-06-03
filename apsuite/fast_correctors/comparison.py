@@ -24,7 +24,7 @@ def get_respm_meas(fname):
     return fch_names, fcv_names, data
 
 
-def make_comparison(ps_names, data, plot_flag=True, filter=None):
+def make_comparison(ps_names, data, respmx, respmy, plot_flag=True, filter=None):
 
     fmt = '{} {:+4.0f} {:+.3f} {:+06.1f} {:+.3f} {:+06.1f}'
     for idx, fc in enumerate(ps_names):
@@ -39,7 +39,7 @@ def make_comparison(ps_names, data, plot_flag=True, filter=None):
         cody_measu = orby1 - orby0
         codx_model = 1e6 * respmx[:160, idx]
         cody_model = 1e6 * respmy[160:, idx]
-        
+
         crossx = np.dot(codx_model, codx_measu)
         alphax = crossx / np.dot(codx_model, codx_model)
         thetax = crossx / np.sqrt(np.dot(codx_model, codx_model) * np.dot(codx_measu, codx_measu))
@@ -77,8 +77,8 @@ def run():
     fch_names, fcv_names, data = get_respm_meas(fname)
 
     filters = ['M1', 'M2', 'C2', 'C3']
-    make_comparison(fch_names, data, plot_flag=False, filter=None)
-    make_comparison(fcv_names, data, plot_flag=False, filter=None)
+    make_comparison(fch_names, data, respmx, respmy, plot_flag=False, filter=None)
+    make_comparison(fcv_names, data, respmx, respmy, plot_flag=False, filter=None)
 
 
 if __name__ == '__main__':
