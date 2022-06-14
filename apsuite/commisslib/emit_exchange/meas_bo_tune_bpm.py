@@ -1,4 +1,4 @@
-"Measures booster tunes using bpms"
+"Methods for tune measurement using bpm data"
 import numpy as _np
 import matplotlib.pyplot as _plt
 import pyaccel as _pa
@@ -52,17 +52,19 @@ class BOTunebyBPMParams(_ParamsBaseClass):
 
 
 class BOTunebyBPM(_BaseClass):
-    """Methods for measuring tunes by bpm data.
+    """"Methods for tune measurement using bpm data"
 
-    Before starting the experiment:
-    You need to configure the extraction kicker to act at the point of the ramp
-    where you want to know the tunes. The tunes will be measured based on the
-    Fourier transform of the betatron oscillations induced by the kick.
-    NOTE:Maybe its necessary to include this step in this class.
+    *Experiment Guide Lines*
 
-    The BPMs need to be configured to acquire data immediately after the kicker
-    pulse, a few thousands of revolutions acquired data are necessary to
-    compute the tunes with precision.
+        Before starting the experiment:
+        You need to configure the extraction kicker to act at the point of the
+        ramp where you want to know the tunes. The tunes will be measured
+        based on the Fourier transform of the betatron oscillations induced by
+        the kick.
+
+        The BPMs need to be configured to acquire data immediately after the
+        kicker pulse. Just a few thousands of revolutions are
+        necessary to compute the tunes with precision.
     """
     BPM_TRIGGER = 'BO-Fam:TI-BPM'
 
@@ -136,9 +138,12 @@ class BOTunebyBPM(_BaseClass):
             acq_rate='TbT', repeat=False)
 
     def get_orbit(self, injection=False, ext_trigger=False):
-        """Get orbit data from BPMs in TbT acquisition rate..
-        If injection is True, then injection is turned on before the measure.
-        If external_trigger is True, the event will listen a external trigger.
+        """Get orbit data from BPMs in TbT acquisition rate.
+
+        If injection is True and the Injection System is on, then injection
+        bottom is pressed before the measure.
+
+        If external_trigger is True, the event will list a external trigger.
         """
         prms = self.params
         bobpms = self.devices['bobpms']
@@ -216,7 +221,7 @@ class BOTunebyBPM(_BaseClass):
         return tunes, dtunes
 
     def naff_tunes(
-            self, dn=None, window_param=1, bpm_indices=None, interval=None):
+            self, dn=None, bpm_indices=None, interval=None):
         """Computes the tune evolution from the BPMs matrix with a moving
             window of length dn.
            If dn is not passed, the tunes are computed using all points."""
