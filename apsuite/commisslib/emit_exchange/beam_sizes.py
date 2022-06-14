@@ -167,16 +167,16 @@ class BeamSizesAnalysis(_BaseClass):
             self.process_data()
 
         sx, sy = data['sigmasx'], data['sigmasy']
-        rsx = _np.array(sx).reshape(prms.measures_per_point, -1)
-        rsy = _np.array(sy).reshape(prms.measures_per_point, -1)
+        rsx = _np.array(sx).reshape(-1, prms.measures_per_point)
+        rsy = _np.array(sy).reshape(-1, prms.measures_per_point)
         mean_sx, stdx = rsx.mean(axis=1), rsx.std(axis=1)
         mean_sy, stdy = rsy.mean(axis=1), rsy.std(axis=1)
 
-        delays = data['delays']
-        u_delays = _np.unique(delays)
+        delays = -_np.array(data['delays'])
+        u_delays = -_np.unique(delays)
 
         if axis is None:
-            _, ax = _plt.subplots()
+            _, ax = _plt.subplots(figsize=(6, 3))
         else:
             ax = axis
 
@@ -198,7 +198,8 @@ class BeamSizesAnalysis(_BaseClass):
             # ax.legend(loc='lower left', bbox_to_anchor=(1, 0.5))
             ax.legend(loc='best', fontsize=8, frameon=True)
         if figname is not None:
-            _plt.savefig(figname)
+            _plt.savefig(figname, dpi=300, facecolor='white',
+                         transparent=False)
             _plt.show()
 
     @staticmethod
@@ -339,5 +340,7 @@ class BeamSizesAnalysis(_BaseClass):
         data['qd_wfm'] = []
         data['images'] = []
         data['curr3gev'] = []
+        data['sigmasx'] = []
+        data['sigmasy'] = []
 
         return data
