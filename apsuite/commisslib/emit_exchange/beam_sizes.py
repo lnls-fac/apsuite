@@ -243,6 +243,7 @@ class BeamSizesAnalysis(_BaseClass):
         xx = _np.arange(image.shape[1])[roix]
         xy = _np.arange(image.shape[0])[roiy]
 
+        image0 = image
         image = image[roiy, roix]
         projx = _np.sum(image, axis=0)
         projx = _np.array(projx)/_np.sum(projx)
@@ -281,7 +282,7 @@ class BeamSizesAnalysis(_BaseClass):
             ax = _plt.subplot(gs[1, 0])
             ay = _plt.subplot(gs[1, 1])
 
-            aimg.imshow(image)
+            aimg.imshow(image0)
             aimg.plot(xx_mean, xy_mean, 'o', ms=5, color='tab:red')
             w, h = _np.abs(roix2-roix1), _np.abs(roiy2-roiy1)
             rect = _patches.Rectangle(
@@ -293,11 +294,15 @@ class BeamSizesAnalysis(_BaseClass):
             ax.plot(xx, gauss(xx, *poptx_proj), label='proj')
             ax.plot(xx, hline/_np.sum(hline), '.', label='line')
             ax.plot(xx, gauss(xx, *poptx)/_np.sum(hline), label='slice')
+            ax.set_xlabel('x [pixel]')
+            ax.set_ylabel('Density')
 
             ay.plot(xy, projy, '.', label='data')
             ay.plot(xy, gauss(xy, *popty_proj), label='proj')
             ay.plot(xy, vline/_np.sum(vline), '.', label='line')
             ay.plot(xy, gauss(xy, *popty)/_np.sum(vline), label='slice')
+            ay.set_xlabel('y [pixel]')
+            ay.set_ylabel('Density')
 
             ax.legend()
             ay.legend()
