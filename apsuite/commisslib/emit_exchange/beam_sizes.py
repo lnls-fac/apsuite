@@ -6,8 +6,8 @@ import matplotlib.patches as _patches
 import time as _time
 
 from scipy.optimize import curve_fit
-# from siriuspy.ramp.ramp import BoosterRamp
-# from siriuspy.ramp.conn import ConnPS
+from siriuspy.ramp.ramp import BoosterRamp
+from siriuspy.ramp.conn import ConnPS
 from siriuspy.devices import EVG, Screen, CurrInfoBO
 from siriuspy.epics import PV
 

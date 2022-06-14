@@ -162,7 +162,7 @@ class BOTunebyBPM(_BaseClass):
 
     def load_orbit(self, data=None, orbx=None, orby=None):
         """Load orbit data into the object. You can pass the
-        intire data dictionary or just the orbits. If data argument
+        entire data dictionary or just the orbits. If data argument
         is provided, orbx and orby become optional"""
 
         if data is not None:
