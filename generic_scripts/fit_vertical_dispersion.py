@@ -7,7 +7,7 @@ import pyaccel as pa
 from pymodels import si
 
 import siriuspy.clientconfigdb as servconf
-from apsuite.orbcorr import OrbRespmat
+from apsuite.orbcorr.calc_orbcorr_mat import OrbRespmat
 from apsuite.optics_analysis.tune_correction import TuneCorr
 
 import matplotlib.pyplot as plt
@@ -58,10 +58,10 @@ def get_orm_from_servconf(setup, find_best_alpha=True):
     # Get measured orbit matrix from configuration server
     print('--- loading orm from servconf')
     client = servconf.ConfigDBClient(config_type='si_orbcorr_respm')
-    orbmat_name = setup['orbmat_name']
-    orbmat_meas = np.array(client.get_config_value(name=orbmat_name))
-    orbmat_meas = np.reshape(orbmat_meas, (320, 281))
-    orbmat_meas[:, -1] *= 1e-6
+    orm_name = setup['orbmat_name']
+    orm_meas = np.array(client.get_config_value(name=orm_name))
+    orm_meas = np.reshape(orm_meas, (320, 281))
+    orm_meas[:, -1] *= 1e-6
 
     rf_freq_meas = setup['rf_frequency']
     alpha_meas = alpha0
@@ -69,8 +69,8 @@ def get_orm_from_servconf(setup, find_best_alpha=True):
         print('     search for best mcf to fit dispersion')
         alphas = (1 + np.linspace(-10, 10, 1001)/100)*alpha0
         errs = []
-        for al in alphas:
-            disp_meas = get_dispersion_from_orm(orbmat_meas, al, rf_freq_meas)
+        for alp in alphas:
+            disp_meas = get_dispersion_from_orm(orm_meas, alp, rf_freq_meas)
             err = disp_meas - disp_nominal
             err = np.sqrt(np.mean(err*err))
             errs.append(err)
@@ -78,8 +78,8 @@ def get_orm_from_servconf(setup, find_best_alpha=True):
         print('     nominal mcf: {:e}'.format(alpha0))
         print('     best mcf: {:e}'.format(alpha_meas))
         print('     ratio best/nominal: {:f}'.format(alpha_meas/alpha0))
-    disp_meas = get_dispersion_from_orm(orbmat_meas, alpha_meas, rf_freq_meas)
-    return simod, disp_meas
+    disp_meas = get_dispersion_from_orm(orm_meas, alpha_meas, rf_freq_meas)
+    return simod, disp_meas, orm_meas
 
 
 def adjust_tunes(simod, setup):
@@ -264,13 +264,67 @@ def print_strengths_fitted_model(modfit):
     print(stren_qs, ')')
 
 
+def compare_orms(modfit, orm_meas, chidx=0, cvidx=0):
+    """."""
+    ormc = OrbRespmat(modfit, acc='SI', dim='4d')
+    orm_fit = ormc.get_respm()
+    fam = si.get_family_data(modfit)
+    namex = fam['CH']['devnames'][chidx]
+    namey = fam['CV']['devnames'][cvidx]
+
+    fig = plt.figure(figsize=(10, 4))
+    gs = plt_gs.GridSpec(2, 1)
+    ax = plt.subplot(gs[0, 0])
+    ay = plt.subplot(gs[1, 0])
+    ax.plot(orm_meas[160:, chidx], label='meas')
+    ax.plot(orm_fit[160:, chidx], label='fit')
+    ay.plot(orm_meas[:160, 120+cvidx])
+    ay.plot(orm_fit[:160, 120+cvidx])
+    ax.set_title(namex)
+    ax.legend()
+    ax.set_xlabel('bpm idx')
+    ax.set_ylabel(r'$M_{yx}$ [m/rad]')
+    ay.set_title(namey)
+    ay.set_xlabel('bpm idx')
+    ay.set_ylabel(r'$M_{xy}$ [m/rad]')
+    ax.grid(True, ls='--', alpha=0.5)
+    ay.grid(True, ls='--', alpha=0.5)
+    fig.tight_layout()
+    fig.savefig(
+        'compare_off_diagonal_orm_bad_corresp.png',
+        dpi=300, format='png')
+    plt.show()
+
+    diffx = orm_meas[160:, :120]-orm_fit[160:, :120]
+    diffx = np.std(diffx, axis=0)
+    diffy = orm_meas[:160, 120:-1]-orm_fit[:160, 120:-1]
+    diffy = np.std(diffy, axis=0)
+
+    fig = plt.figure(figsize=(6, 4))
+    gs = plt_gs.GridSpec(1, 1)
+    ax = plt.subplot(gs[0, 0])
+
+    ax.plot(diffx, 'o-', label=r'$M_{yx}$')
+    ax.plot(diffy, 'o-', label=r'$M_{xy}$')
+    ax.legend()
+    ax.set_xlabel('corrector idx')
+    ax.set_ylabel(r'std diff. between meas. and fit ORM [m/rad]')
+    ax.grid(True, ls='--', alpha=0.5)
+    fig.tight_layout()
+    fig.savefig(
+        'compare_off_diagonal_orm_allcorrs.png',
+        dpi=300, format='png')
+    plt.show()
+
+
 if __name__ == '__main__':
     your_dir = ''
     orm_name = your_dir
     orm_name += '/shared/screens-iocs/data_by_day/2022-05-24-SI_LOCO/'
     orm_name += 'respmat_endofmay22_bpms_03sector_switching_issue.pickle'
     setup = get_orm_setup(orm_name)
-    simod, disp_meas = get_orm_from_servconf(setup, find_best_alpha=True)
+    simod, disp_meas, orm_meas = get_orm_from_servconf(
+        setup, find_best_alpha=True)
     disp_mat, bpmidx, qsidx = calc_dispmat(simod)
 
     # # scan singular values
@@ -285,3 +339,4 @@ if __name__ == '__main__':
     plot_dispersion_fit(
         disp_meas, modfit, bpmidx, svals=svals, svalsmax=qsidx.size)
     print_strengths_fitted_model(modfit)
+    compare_orms(modfit, orm_meas, chidx=0, cvidx=0)
