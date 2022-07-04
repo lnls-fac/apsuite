@@ -226,7 +226,8 @@ def plot_dispersion_fit(disp_meas, modfit, bpmidx, svals, svalsmax):
 
 
 def plot_dispersion_fit_scan_singular_values(
-        nsvals, eta_errors, betabeatx, betabeaty, emitx, emity, qsksl):
+        nsvals, eta_errors, betabeatx, betabeaty,
+        emitx, emity, emitx_ri, emity_ri, qsksl):
     """."""
     fig = plt.figure(figsize=(8, 6))
     gs = plt_gs.GridSpec(1, 1)
@@ -239,14 +240,16 @@ def plot_dispersion_fit_scan_singular_values(
     ay.plot(nsvals, betabeaty, 'o-', color='tab:red',
             label=r'$\Delta \beta_y/\beta_y$')
     ay.plot(nsvals, emity/emitx * 100, 'o-', color='tab:purple',
-            label=r'$\epsilon_y/\epsilon_x$')
+            label=r'$\epsilon_y/\epsilon_x$ Beam Env.')
+    ay.plot(nsvals, emity_ri/emitx_ri * 100, 'o-', color='C1',
+            label=r'$\epsilon_y/\epsilon_x$ Rad. Int.')
     ay.plot(nsvals, rms_ksl*1000, 'o-', color='tab:green',
-            label=r'KsL $\times 10^3$')
+            label=r'KsL $\times 10^3$ [1/m]')
     ax.set_xlabel('Number of singular values')
     ax.set_ylabel('V. dispersion error [mm]')
     ay.set_ylabel('Beta-Beatings and Coupling [%]')
     ax.legend(loc='upper center')
-    ay.legend(loc='center right')
+    ay.legend(loc='upper right')
     ax.grid(True, ls='--', alpha=0.5)
     ay.grid(True, ls='--', alpha=0.5)
     fig.tight_layout()
@@ -310,16 +313,16 @@ def compare_orms(modfit, orm_meas, chidx=0, cvidx=0):
     gs = plt_gs.GridSpec(1, 1)
     ax = plt.subplot(gs[0, 0])
 
-    ax.plot(diffx, 'o-', label=r'$M_{yx}$')
-    ax.plot(diffy, 'o-', label=r'$M_{xy}$')
-    ax.legend()
-    ax.set_xlabel('corrector idx')
-    ax.set_ylabel(r'std diff. between meas. and fit ORM [m/rad]')
-    ax.grid(True, ls='--', alpha=0.5)
-    fig.tight_layout()
-    fig.savefig(
-        'compare_off_diagonal_orm_allcorrs.png',
-        dpi=300, format='png')
+def plot_singular_values_dispmat(dispmat):
+    """."""
+    _, smat, _ = np.linalg.svd(disp_mat, full_matrices=False)
+    plt.figure()
+    plt.plot(smat/smat[0], 'o-')
+    plt.grid(True, ls='--', alpha=0.5)
+    plt.yscale('log')
+    plt.ylabel('sv/sv_max (log)')
+    plt.xlabel('sv index')
+    plt.savefig('singular_values_dispmat.png', dpi=300)
     plt.show()
 
 
@@ -332,6 +335,7 @@ if __name__ == '__main__':
     simod, disp_meas, orm_meas = get_orm_from_servconf(
         setup, find_best_alpha=True)
     disp_mat, bpmidx, qsidx = calc_dispmat(simod)
+    # plot_singular_values_dispmat(dispmat)
 
     # # scan singular values
     # out = fit_dispersion_scan_singular_values(
