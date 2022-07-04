@@ -378,6 +378,29 @@ def plot_singular_values_dispmat(dispmat):
     plt.show()
 
 
+def plot_diff_qs_strengths(
+        simod, disp_mat, disp_meas, bpmidx, qsidx, setup, sv1, sv2):
+    """."""
+    modfit, *_ = fit_dispersion(
+        simod, disp_mat, disp_meas, bpmidx, qsidx, setup,
+        svals=sv1, niter=10)
+    stren_sv1 = pa.lattice.get_attribute(modfit, 'KsL', qsidx)
+    modfit, *_ = fit_dispersion(
+        simod, disp_mat, disp_meas, bpmidx, qsidx, setup,
+        svals=sv2, niter=10)
+    stren_sv2 = pa.lattice.get_attribute(modfit, 'KsL', qsidx)
+    plt.figure(figsize=(6, 4))
+    plt.plot(stren_sv1*1e3, 'o-', label=f'{sv1:02d} SVs')
+    plt.plot(stren_sv2*1e3, 'o-', label=f'{sv2:02d} SVs')
+    plt.plot((stren_sv2-stren_sv1)*1e3, '-', label='diff.')
+    plt.xlabel('QS idx')
+    plt.ylabel('KsL x 10^3 [1/m]')
+    plt.grid(True, ls='--', alpha=0.5)
+    plt.legend()
+    plt.savefig(f'strengths_comparison_{sv1:02d}_{sv2:02d}_svs.png', dpi=300)
+    plt.show()
+
+
 if __name__ == '__main__':
     your_dir = ''
     orm_name = your_dir
@@ -395,6 +418,10 @@ if __name__ == '__main__':
     # save_pickle(out, 'etay_fitting_svals_scan')
     # out = load_pickle('etay_fitting_svals_scan')
     # plot_dispersion_fit_scan_singular_values(**out)
+
+    # # compare QS strengths with different singular values
+    # plot_diff_qs_strengths(
+    #     simod, disp_mat, disp_meas, bpmidx, qsidx, setup, sv1=35, sv2=41)
 
     # fit vertical dispersion with fixed singular value
     svals = 41
