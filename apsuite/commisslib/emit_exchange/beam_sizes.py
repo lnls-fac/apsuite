@@ -134,7 +134,7 @@ class BeamSizesAnalysis(_BaseClass):
                 data['curr3gev'].append(currinfo.current3gev)
 
         data['scl_factx'] = _np.abs(scrn.scale_factor_x)
-        data['scl_facty'] = _np.abs(scrn.scale_factor_x)
+        data['scl_facty'] = _np.abs(scrn.scale_factor_y)
 
         self.data = data
         self.reset_ramp_config()
