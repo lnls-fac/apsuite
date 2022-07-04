@@ -162,6 +162,7 @@ def fit_dispersion_scan_singular_values(
     eta_errors, qsksl = [], []
     betabeatx, betabeaty = [], []
     emitx, emity = [], []
+    emitx_ri, emity_ri = [], []
     for nsv in svals:
         modfit, diff, kslfit = fit_dispersion(
                     simod, disp_mat, disp_meas, bpmidx, qsidx,
@@ -171,12 +172,15 @@ def fit_dispersion_scan_singular_values(
         bbx = (twi_fit.betax - twi_nom.betax)/twi_nom.betax*100
         bby = (twi_fit.betay - twi_nom.betay)/twi_nom.betay*100
         eq_fit = pa.optics.EqParamsFromBeamEnvelope(modfit)
+        eq_rad = pa.optics.EqParamsFromRadIntegrals(modfit)
 
         eta_errors.append(calc_rms(diff))
         betabeatx.append(calc_rms(bbx))
         betabeaty.append(calc_rms(bby))
         emitx.append(eq_fit.emit1)
         emity.append(eq_fit.emit2)
+        emitx_ri.append(eq_rad.emitx)
+        emity_ri.append(eq_rad.emity)
         qsksl.append(kslfit)
 
     eta_errors = np.array(eta_errors)
@@ -184,8 +188,10 @@ def fit_dispersion_scan_singular_values(
     betabeaty = np.array(betabeaty)
     emitx = np.array(emitx)
     emity = np.array(emity)
+    emitx_ri = np.array(emitx_ri)
+    emity_ri = np.array(emity_ri)
     qsksl = np.array(qsksl)
-    return svals, eta_errors, betabeatx, betabeaty, emitx, emity, qsksl
+    return svals, eta_errors, betabeatx, betabeaty, emitx, emity, emitx_ri, emity_ri, qsksl
 
 
 def plot_dispersion_fit(disp_meas, modfit, bpmidx, svals, svalsmax):
