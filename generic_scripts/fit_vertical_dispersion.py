@@ -39,7 +39,7 @@ def get_orm_setup(name):
     return setup
 
 
-def get_orm_from_servconf(setup, find_best_alpha=True):
+def get_data_servconf_adjust_model(setup, find_best_alpha=True):
     """."""
     # Get nominal model
     simod = si.create_accelerator()
@@ -361,7 +361,7 @@ if __name__ == '__main__':
     orm_name += '/shared/screens-iocs/data_by_day/2022-05-24-SI_LOCO/'
     orm_name += 'respmat_endofmay22_bpms_03sector_switching_issue.pickle'
     setup = get_orm_setup(orm_name)
-    simod, disp_meas, orm_meas = get_orm_from_servconf(
+    simod, disp_meas, orm_meas = get_data_servconf_adjust_model(
         setup, find_best_alpha=True)
     disp_mat, bpmidx, qsidx = calc_dispmat(simod)
     # plot_singular_values_dispmat(dispmat)
