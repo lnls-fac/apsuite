@@ -278,8 +278,45 @@ def compare_orms(modfit, orm_meas, chidx=0, cvidx=0):
     ormc = OrbRespmat(modfit, acc='SI', dim='4d')
     orm_fit = ormc.get_respm()
     fam = si.get_family_data(modfit)
-    namex = fam['CH']['devnames'][chidx]
-    namey = fam['CV']['devnames'][cvidx]
+    namex = np.array(fam['CH']['devnames'])
+    namey = np.array(fam['CV']['devnames'])
+
+    correx = []
+    correy = []
+    for ax in range(0, 120):
+        v1_, v2_ = orm_meas[160:, ax], orm_fit[160:, ax]
+        correx.append(np.abs(np.corrcoef(v1_, v2_)[0, 1]))
+    for ay in range(120, 280):
+        v1_, v2_ = orm_meas[:160, ay], orm_fit[:160, ay]
+        correy.append(np.abs(np.corrcoef(v1_, v2_)[0, 1]))
+
+    correx = np.array(correx)*100
+    correy = np.array(correy)*100
+
+    print('Good correlation CH')
+    print(namex[correx > 90])
+    print('Good correlation CV')
+    print(namey[correy > 95])
+    print('Bad correlation CH')
+    print(namex[correx < 5])
+    print('Bad correlation CV')
+    print(namey[correy < 5])
+
+    fig = plt.figure(figsize=(10, 4))
+    gs = plt_gs.GridSpec(1, 1)
+    ax = plt.subplot(gs[0, 0])
+
+    ax.plot(correx, 'o-', label=r'$M_{yx}$')
+    ax.plot(correy, 'o-', label=r'$M_{xy}$')
+    ax.legend()
+    ax.set_xlabel('corrector idx')
+    ax.set_ylabel('correlation between meas. and fit ORM [%]')
+    ax.grid(True, ls='--', alpha=0.5)
+    fig.tight_layout()
+    fig.savefig(
+        'compare_off_diagonal_orm_allcorrs_correlation.png',
+        dpi=300, format='png')
+    plt.show()
 
     fig = plt.figure(figsize=(10, 4))
     gs = plt_gs.GridSpec(2, 1)
@@ -289,11 +326,11 @@ def compare_orms(modfit, orm_meas, chidx=0, cvidx=0):
     ax.plot(orm_fit[160:, chidx], label='fit')
     ay.plot(orm_meas[:160, 120+cvidx])
     ay.plot(orm_fit[:160, 120+cvidx])
-    ax.set_title(namex)
+    ax.set_title(namex[chidx] + f', correlation: {correx[chidx]:.2f} %')
     ax.legend()
     ax.set_xlabel('bpm idx')
     ax.set_ylabel(r'$M_{yx}$ [m/rad]')
-    ay.set_title(namey)
+    ay.set_title(namey[cvidx] + f', correlation: {correy[cvidx]:.2f} %')
     ay.set_xlabel('bpm idx')
     ay.set_ylabel(r'$M_{xy}$ [m/rad]')
     ax.grid(True, ls='--', alpha=0.5)
@@ -304,14 +341,6 @@ def compare_orms(modfit, orm_meas, chidx=0, cvidx=0):
         dpi=300, format='png')
     plt.show()
 
-    diffx = orm_meas[160:, :120]-orm_fit[160:, :120]
-    diffx = np.std(diffx, axis=0)
-    diffy = orm_meas[:160, 120:-1]-orm_fit[:160, 120:-1]
-    diffy = np.std(diffy, axis=0)
-
-    fig = plt.figure(figsize=(6, 4))
-    gs = plt_gs.GridSpec(1, 1)
-    ax = plt.subplot(gs[0, 0])
 
 def plot_singular_values_dispmat(dispmat):
     """."""
@@ -339,14 +368,16 @@ if __name__ == '__main__':
 
     # # scan singular values
     # out = fit_dispersion_scan_singular_values(
-    #     simod, disp_mat, disp_meas, bpmidx, qsidx, niter=5)
+    #     simod, disp_mat, disp_meas, bpmidx, qsidx, niter=10)
     # plot_dispersion_fit_scan_singular_values(*out)
 
     # fit vertical dispersion with fixed singular value
-    svals = 35
+    svals = 38
     modfit, *_ = fit_dispersion(
         simod, disp_mat, disp_meas, bpmidx, qsidx, svals=svals, niter=10)
     plot_dispersion_fit(
         disp_meas, modfit, bpmidx, svals=svals, svalsmax=qsidx.size)
     print_strengths_fitted_model(modfit)
-    compare_orms(modfit, orm_meas, chidx=0, cvidx=0)
+    # good correlation idx: chidx=22, cvidx=16
+    # bad correlation idx: chidx=77, cvidx=85
+    compare_orms(modfit, orm_meas, chidx=77, cvidx=85)
