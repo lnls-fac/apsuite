@@ -127,7 +127,7 @@ def calc_dispmat(simod, dksl=1e-6):
 
 
 def fit_dispersion(
-        simod, disp_mat, disp_meas, bpmidx, qsidx, svals=35, niter=5):
+        simod, disp_mat, disp_meas, bpmidx, qsidx, setup, svals=35, niter=5):
     """."""
     print('--- fitting vertical dispersion')
     umat, smat, vhmat = np.linalg.svd(disp_mat, full_matrices=False)
@@ -149,11 +149,12 @@ def fit_dispersion(
             calc_rms(diff)*1e3, calc_rms(stren_ksl)))
         for idx, qs in enumerate(qsidx):
             modfit[qs].KsL += stren[idx]
+    modfit = adjust_tunes(modfit, setup)
     return modfit, diff, stren_ksl
 
 
 def fit_dispersion_scan_singular_values(
-        simod, disp_mat, disp_meas, bpmidx, qsidx, niter=5, svals=None):
+        simod, disp_mat, disp_meas, bpmidx, qsidx, setup, niter=5, svals=None):
     """."""
     print('--- scanning singular values used to fit')
     if svals is None:
@@ -163,16 +164,18 @@ def fit_dispersion_scan_singular_values(
     betabeatx, betabeaty = [], []
     emitx, emity = [], []
     emitx_ri, emity_ri = [], []
+    tunesep = []
     for nsv in svals:
         modfit, diff, kslfit = fit_dispersion(
-                    simod, disp_mat, disp_meas, bpmidx, qsidx,
+                    simod, disp_mat, disp_meas, bpmidx, qsidx, setup,
                     svals=nsv, niter=niter)
-        modfit = adjust_tunes(modfit, setup)
         twi_fit, _ = pa.optics.calc_twiss(modfit)
         bbx = (twi_fit.betax - twi_nom.betax)/twi_nom.betax*100
         bby = (twi_fit.betay - twi_nom.betay)/twi_nom.betay*100
         eq_fit = pa.optics.EqParamsFromBeamEnvelope(modfit)
         eq_rad = pa.optics.EqParamsFromRadIntegrals(modfit)
+        edteng, *_ = pa.optics.calc_edwards_teng(modfit)
+        numin, _ = pa.optics.estimate_coupling_parameters(edteng)
 
         eta_errors.append(calc_rms(diff))
         betabeatx.append(calc_rms(bbx))
@@ -181,17 +184,20 @@ def fit_dispersion_scan_singular_values(
         emity.append(eq_fit.emit2)
         emitx_ri.append(eq_rad.emitx)
         emity_ri.append(eq_rad.emity)
+        tunesep.append(numin)
         qsksl.append(kslfit)
 
-    eta_errors = np.array(eta_errors)
-    betabeatx = np.array(betabeatx)
-    betabeaty = np.array(betabeaty)
-    emitx = np.array(emitx)
-    emity = np.array(emity)
-    emitx_ri = np.array(emitx_ri)
-    emity_ri = np.array(emity_ri)
-    qsksl = np.array(qsksl)
-    return svals, eta_errors, betabeatx, betabeaty, emitx, emity, emitx_ri, emity_ri, qsksl
+    return dict(
+        nsvals=np.array(svals),
+        eta_errors=np.array(eta_errors),
+        betabeatx=np.array(betabeatx),
+        betabeaty=np.array(betabeaty),
+        emitx=np.array(emitx),
+        emity=np.array(emity),
+        emitx_ri=np.array(emitx_ri),
+        emity_ri=np.array(emity_ri),
+        tunesep=np.array(tunesep),
+        qsksl=np.array(qsksl))
 
 
 def plot_dispersion_fit(disp_meas, modfit, bpmidx, svals, svalsmax):
@@ -227,31 +233,48 @@ def plot_dispersion_fit(disp_meas, modfit, bpmidx, svals, svalsmax):
 
 def plot_dispersion_fit_scan_singular_values(
         nsvals, eta_errors, betabeatx, betabeaty,
-        emitx, emity, emitx_ri, emity_ri, qsksl):
+        emitx, emity, emitx_ri, emity_ri, tunesep, qsksl):
     """."""
     fig = plt.figure(figsize=(8, 6))
-    gs = plt_gs.GridSpec(1, 1)
-    ax = plt.subplot(gs[0, 0])
-    ay = ax.twinx()
+    gs = plt_gs.GridSpec(3, 1)
+    ax1 = plt.subplot(gs[0, 0])
+    ay1 = ax1.twinx()
+    ax2 = plt.subplot(gs[1, 0])
+    ax3 = plt.subplot(gs[2, 0])
     rms_ksl = np.std(qsksl, axis=1)
-    ax.plot(nsvals, eta_errors*1000, 'o-', color='k', label=r'$\eta_y$ error')
-    ay.plot(nsvals, betabeatx, 'o-', color='tab:blue',
-            label=r'$\Delta \beta_x/\beta_x$')
-    ay.plot(nsvals, betabeaty, 'o-', color='tab:red',
-            label=r'$\Delta \beta_y/\beta_y$')
-    ay.plot(nsvals, emity/emitx * 100, 'o-', color='tab:purple',
-            label=r'$\epsilon_y/\epsilon_x$ Beam Env.')
-    ay.plot(nsvals, emity_ri/emitx_ri * 100, 'o-', color='C1',
-            label=r'$\epsilon_y/\epsilon_x$ Rad. Int.')
-    ay.plot(nsvals, rms_ksl*1000, 'o-', color='tab:green',
-            label=r'KsL $\times 10^3$ [1/m]')
-    ax.set_xlabel('Number of singular values')
-    ax.set_ylabel('V. dispersion error [mm]')
-    ay.set_ylabel('Beta-Beatings and Coupling [%]')
-    ax.legend(loc='upper center')
-    ay.legend(loc='upper right')
-    ax.grid(True, ls='--', alpha=0.5)
-    ay.grid(True, ls='--', alpha=0.5)
+
+    ax1.plot(nsvals, eta_errors*1000, 'o-', color='C0')
+    ay1.plot(nsvals, rms_ksl*1000, 'o-', color='C1')
+    ax1.set_ylabel(r'$\eta_y$ fitting residue [mm]', color='C0')
+    ax1.set_yscale('log')
+    ay1.set_ylabel(r'KsL $\times 10^3$ [1/m]', color='C1')
+
+    ax2.set_ylabel('Beta-Beatings [%]')
+    ax2.plot(
+        nsvals, betabeatx, 'o-', color='C0',
+        label=r'$\Delta \beta_x/\beta_x$')
+    ax2.plot(
+        nsvals, betabeaty, 'o-', color='C1',
+        label=r'$\Delta \beta_y/\beta_y$')
+
+    ax3.plot(
+        nsvals, emity/emitx*100, 'o-', color='C0',
+        label=r'$\epsilon_y/\epsilon_x$ Beam Env.')
+    ax3.plot(
+        nsvals, emity_ri/emitx_ri*100, 'o-', color='C1',
+        label=r'$\epsilon_y/\epsilon_x$ Rad. Int.')
+    ax3.plot(
+        nsvals, tunesep*100, 'o-', color='tab:gray',
+        label=r'min $\Delta \nu$')
+    ax3.set_xlabel('Number of singular values')
+    ax3.set_ylabel('Emittance ratio and \n Min. tune separation [%]')
+
+    ax2.legend(fontsize=8)
+    ax3.legend(fontsize=8)
+    ax1.grid(True, ls='--', alpha=0.5)
+    ay1.grid(True, ls='--', alpha=0.5)
+    ax2.grid(True, ls='--', alpha=0.5)
+    ax3.grid(True, ls='--', alpha=0.5)
     fig.tight_layout()
     fig.savefig(
         'vertical_dispersion_fit_vs_singular_values.png',
@@ -344,7 +367,7 @@ def compare_orms(modfit, orm_meas, chidx=0, cvidx=0):
 
 def plot_singular_values_dispmat(dispmat):
     """."""
-    _, smat, _ = np.linalg.svd(disp_mat, full_matrices=False)
+    _, smat, _ = np.linalg.svd(dispmat, full_matrices=False)
     plt.figure()
     plt.plot(smat/smat[0], 'o-')
     plt.grid(True, ls='--', alpha=0.5)
@@ -368,8 +391,10 @@ if __name__ == '__main__':
 
     # # scan singular values
     # out = fit_dispersion_scan_singular_values(
-    #     simod, disp_mat, disp_meas, bpmidx, qsidx, niter=10)
-    # plot_dispersion_fit_scan_singular_values(*out)
+    #     simod, disp_mat, disp_meas, bpmidx, qsidx, setup, niter=10)
+    # save_pickle(out, 'etay_fitting_svals_scan')
+    # out = load_pickle('etay_fitting_svals_scan')
+    # plot_dispersion_fit_scan_singular_values(**out)
 
     # fit vertical dispersion with fixed singular value
     svals = 38
