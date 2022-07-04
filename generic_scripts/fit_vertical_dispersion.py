@@ -397,12 +397,13 @@ if __name__ == '__main__':
     # plot_dispersion_fit_scan_singular_values(**out)
 
     # fit vertical dispersion with fixed singular value
-    svals = 38
+    svals = 41
     modfit, *_ = fit_dispersion(
-        simod, disp_mat, disp_meas, bpmidx, qsidx, svals=svals, niter=10)
+        simod, disp_mat, disp_meas, bpmidx, qsidx, setup,
+        svals=svals, niter=10)
     plot_dispersion_fit(
         disp_meas, modfit, bpmidx, svals=svals, svalsmax=qsidx.size)
-    print_strengths_fitted_model(modfit)
-    # good correlation idx: chidx=22, cvidx=16
-    # bad correlation idx: chidx=77, cvidx=85
-    compare_orms(modfit, orm_meas, chidx=77, cvidx=85)
+    # print_strengths_fitted_model(modfit)
+    # good correlation idx: chidx=22, cvidx=35
+    # bad correlation idx: chidx=34, cvidx=23
+    compare_orms(modfit, orm_meas, chidx=34, cvidx=23)
