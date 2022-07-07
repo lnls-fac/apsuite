@@ -38,8 +38,8 @@ class OrbitCorr:
         """."""
         self.acc = acc
         self.params = params or CorrParams()
-        self.respm = OrbRespmat(model=model, acc=self.acc, dim='6d')
-        self.respm.model.cavity_on = True
+        dim = '6d' if model.cavity_on else '4d'
+        self.respm = OrbRespmat(model=model, acc=self.acc, dim=dim)
         self.params.enbllistbpm = _np.ones(
             self.respm.bpm_idx.size*2, dtype=bool)
         self.params.enbllistch = _np.ones(
@@ -127,7 +127,12 @@ class OrbitCorr:
 
     def get_orbit(self):
         """."""
-        cod = pyaccel.tracking.find_orbit6(self.respm.model, indices='open')
+        if self.respm.dim == '6d':
+            cod = pyaccel.tracking.find_orbit6(
+                self.respm.model, indices='open')
+        else:
+            cod = pyaccel.tracking.find_orbit4(
+                self.respm.model, indices='open')
         codx = cod[0, self.respm.bpm_idx].ravel()
         cody = cod[2, self.respm.bpm_idx].ravel()
         res = _np.r_[codx, cody]
