@@ -180,6 +180,12 @@ class LOCOUtils:
             model, 'hkick_polynom', idx_mag, kick_values + kick_delta * angle)
 
     @staticmethod
+    def set_dip_roll(model, idx_mag, roll_angs, droll_ang):
+        """."""
+        _pyaccel.lattice.set_error_rotation_roll(
+            model, idx_mag, roll_angs + droll_ang)
+
+    @staticmethod
     def set_girders_long_shift(model, girders, ds_shift):
         """."""
         for i, inds in enumerate(girders):
@@ -456,6 +462,43 @@ class LOCOUtils:
         for idx, idx_set in enumerate(dip_indices):
             set_dip_kick(model_this, idx_set, dip_kick_values[idx], 0)
         return dip_kick_matrix
+
+    @staticmethod
+    def jloco_calc_dipoles_roll(config, model):
+        """."""
+        # NOTE: I will start with only BCs.
+        dip_indices = config.respm.fam_data['BC']['index']
+        dip_roll_matrix = LOCOUtils._parallel_base(
+            config, model, dip_indices,
+            LOCOUtils._jloco_calc_dip_roll)
+        return dip_roll_matrix
+
+    @staticmethod
+    def _jloco_calc_dip_roll(config, model, dip_indices):
+        """."""
+        roll_angles = _np.array(
+            _pyaccel.lattice.get_error_rotation_roll(model, dip_indices)
+        )
+        set_roll = LOCOUtils.set_dip_roll
+        matrix_nominal = LOCOUtils.respm_calc(
+            model, config.respm, config.use_dispersion)
+        dip_roll_matrix = _np.zeros((matrix_nominal.size, len(dip_indices)))
+        dip_droll_angle = config.DEFAULT_DELTA_DIP_ROLL_ANGLE
+
+        for i, dip_idxs in enumerate(dip_indices):
+            # The model is created in each iteration because
+            # _pyaccel.lattice.set_error_rotation_roll can't set
+            # a zero roll angle.
+            model_this = _dcopy(model)
+            set_roll(
+                model_this, dip_idxs, roll_angs=roll_angles,
+                droll_ang=dip_droll_angle)
+            matrix_this = LOCOUtils.respm_calc(
+                model_this, config.respm, config.use_dispersion)
+            # nsegs = len(dip_idxs) # NOTE: divide dmatrix by nsegs?
+            dmatrix = (matrix_this - matrix_nominal)/dip_droll_angle
+            dip_roll_matrix[:, i] = dmatrix.ravel()
+        return dip_roll_matrix
 
     @staticmethod
     def jloco_calc_energy_shift(config, model):

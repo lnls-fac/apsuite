@@ -75,6 +75,8 @@ class LOCO:
         self._jloco_energy_shift = None
         self._jloco_girder_shift = None
 
+        self._jloco_roll_dip = None
+
         self._jloco = None
         self._jloco_inv = None
         self._jloco_u = None
@@ -386,6 +388,15 @@ class LOCO:
                 self._jloco_girder_shift = _LOCOUtils.load_data(
                     fname_jloco_girder_shift)['jloco_kmatrix']
 
+    def _handle_dip_rot_roll(self, fname__jloco_calc_dip_roll):
+        # calculate roll rotation jacobian for dipole
+        if self.config.fit_dipoles_rotation_roll:
+            print('calculating dipole roll rotation matrix')
+            self._jloco_roll_dip = _LOCOUtils._jloco_calc_dip_roll(
+                self.config, self._model)
+        else:
+            NotImplementedError()
+
     def _get_ps_names(self, idx, sub):
         name_list = []
         for num, ind in enumerate(idx):
@@ -481,7 +492,8 @@ class LOCO:
                      fname_jloco_ks_sext=None,
                      fname_jloco_kick_dip=None,
                      fname_jloco_ks_skewquad=None,
-                     fname_jloco_girder_shift=None):
+                     fname_jloco_girder_shift=None,
+                     fname__jloco_calc_dip_roll=None):
         """."""
         # calc jloco linear parts
         self._jloco_gain_bpm, self._jloco_roll_bpm, self._jloco_gain_corr = \
@@ -504,6 +516,8 @@ class LOCO:
             self._handle_skewquad_fit_ks(fname_jloco_ks_skewquad)
 
             self._handle_girder_shift(fname_jloco_girder_shift)
+
+            self._handle_dip_rot_roll(fname__jloco_calc_dip_roll)
 
             if self.save_jacobian_matrices:
                 self.save_jacobian()
