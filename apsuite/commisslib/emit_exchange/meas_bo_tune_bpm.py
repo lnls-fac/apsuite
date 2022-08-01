@@ -20,10 +20,10 @@ class BOTunebyBPMParams(_ParamsBaseClass):
     def __init__(self):
         """"""
         super().__init__()
-        self.event = 'DigBO'
+        self.event = 'Study'
         self.event_mode = 'External'
         self.event_delay = 0
-        self.trigger_source = 'DigBO'
+        self.trigger_source = 'Study'
         # self.trigger_source_mode = 'Injection'
 
         self.nr_pulses = 1
@@ -115,7 +115,7 @@ class BOTunebyBPM(_BaseClass):
     def prepare_timing(self):
         """."""
         trigbpm = self.devices['trigbpm']
-        evt_study = self.devices['evt_study']
+        evt_study = self.devices['event']
 
         trigbpm.delay = self.params.trigbpm_delay
         trigbpm.nr_pulses = self.params.trigbpm_nrpulses
