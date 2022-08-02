@@ -17,7 +17,7 @@ class LOCOConfig:
     DEFAULT_DELTA_K = 1e-6  # [1/m^2]
     DEFAULT_DELTA_KS = 1e-6  # [1/m^2]
     DEFAULT_DELTA_DIP_KICK = 1e-6  # [rad]
-    DEFAULT_DELTA_DIP_ROLL_ANGLE = 1e-3 # [rad]
+    DEFAULT_DELTA_DIP_ROLL_ANGLE = 1e-3  # [rad]
     DEFAULT_DELTA_RF = 100  # [Hz]
     DEFAULT_SVD_THRESHOLD = 1e-6
     DEFAULT_DELTAK_NORMALIZATION = 1e-3
@@ -67,6 +67,7 @@ class LOCOConfig:
         self.fit_quadrupoles_coupling = None
         self.fit_sextupoles_coupling = None
         self.fit_dipoles_coupling = None
+        self.fit_dip_roll = None
         self.fit_gain_bpm = None
         self.fit_roll_bpm = None
         self.fit_gain_corr = None

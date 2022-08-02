@@ -180,7 +180,7 @@ class LOCOUtils:
             model, 'hkick_polynom', idx_mag, kick_values + kick_delta * angle)
 
     @staticmethod
-    def set_dip_roll(model, idx_mag, roll_angs, droll_ang):
+    def set_dipmag_roll(model, idx_mag, roll_angs, droll_ang):
         """."""
         _pyaccel.lattice.set_error_rotation_roll(
             model, idx_mag, roll_angs + droll_ang)
@@ -466,32 +466,30 @@ class LOCOUtils:
     @staticmethod
     def jloco_calc_dipoles_roll(config, model):
         """."""
-        # NOTE: I will start with only BCs.
-        dip_indices = config.respm.fam_data['BC']['index']
+        dip_indices = config.respm.fam_data['BN']['index']
         dip_roll_matrix = LOCOUtils._parallel_base(
             config, model, dip_indices,
             LOCOUtils._jloco_calc_dip_roll)
         return dip_roll_matrix
 
     @staticmethod
-    def _jloco_calc_dip_roll(config, model, dip_indices):
+    def _jloco_calc_dip_roll(config, model, dip_indices, magtype=None):
         """."""
-        roll_angles = _np.array(
-            _pyaccel.lattice.get_error_rotation_roll(model, dip_indices)
-        )
-        set_roll = LOCOUtils.set_dip_roll
+        set_roll = LOCOUtils.set_dipmag_roll
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
         dip_roll_matrix = _np.zeros((matrix_nominal.size, len(dip_indices)))
         dip_droll_angle = config.DEFAULT_DELTA_DIP_ROLL_ANGLE
 
         for i, dip_idxs in enumerate(dip_indices):
-            # The model is created in each iteration because
+            roll_angle = _pyaccel.lattice.get_error_rotation_roll(
+                model, dip_idxs)
+            # The model is recreated every iteration because
             # _pyaccel.lattice.set_error_rotation_roll can't set
             # a zero roll angle.
             model_this = _dcopy(model)
             set_roll(
-                model_this, dip_idxs, roll_angs=roll_angles,
+                model_this, dip_idxs, roll_angs=roll_angle,
                 droll_ang=dip_droll_angle)
             matrix_this = LOCOUtils.respm_calc(
                 model_this, config.respm, config.use_dispersion)
@@ -553,7 +551,7 @@ class LOCOUtils:
             ksm_quad, ksm_sext, ksm_dip,
             dmdg_bpm, dmdalpha_bpm, dmdg_corr,
             kick_dip, energy_shift, ks_skewquad,
-            girder_shift):
+            girder_shift, dmdroll_dip):
         """."""
         nbpm = config.nr_bpm
         nch = config.nr_ch
@@ -591,6 +589,8 @@ class LOCOUtils:
             knobs_linear += 3
         if config.fit_girder_shift:
             knobs_gir += girder_shift.shape[1]
+        if config.fit_dip_roll:
+            knobs_linear += dmdroll_dip.shape[1]
 
         nknobs = knobs_k + knobs_ks + knobs_skewquad
         nknobs += knobs_linear
@@ -650,6 +650,10 @@ class LOCOUtils:
         if config.fit_girder_shift:
             num = knobs_gir
             jloco[:, idx:idx+num] = girder_shift
+            idx += num
+        if config.fit_dip_roll:
+            num = dmdroll_dip.shape[1]
+            jloco[:, idx:idx+num] = dmdroll_dip
             idx += num
         return jloco
 
@@ -715,6 +719,10 @@ class LOCOUtils:
         if config.fit_girder_shift:
             size = config.gir_indices.shape[0]
             param_dict['girders_shift'] = param[idx:idx+size]
+            idx += size
+        if config.fit_dip_roll:
+            size = len(config.dip_indices)
+            param_dict['dip_roll'] = param[idx:idx+size]
             idx += size
         return param_dict
 

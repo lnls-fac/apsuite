@@ -106,6 +106,9 @@ class LOCO:
         self._dip_kick_inival = None
         self._dip_kick_deltas = None
 
+        self._dip_roll_inival = None
+        self._dip_roll_deltas = None
+
         self._energy_shift_inival = None
         self._energy_shift_deltas = None
         self._girders_shift_inival = None
@@ -153,7 +156,8 @@ class LOCO:
                fname_jloco_ks_dip=None,
                fname_jloco_kick_dip=None,
                fname_jloco_ks_skewquad=None,
-               fname_jloco_girder_shift=None):
+               fname_jloco_girder_shift=None,
+               fname_jloco_dip_roll=None):
         """."""
         print('update config...')
         self.update_config()
@@ -172,7 +176,8 @@ class LOCO:
                 fname_jloco_ks_dip=fname_jloco_ks_dip,
                 fname_jloco_kick_dip=fname_jloco_kick_dip,
                 fname_jloco_ks_skewquad=fname_jloco_ks_skewquad,
-                fname_jloco_girder_shift=fname_jloco_girder_shift)
+                fname_jloco_girder_shift=fname_jloco_girder_shift,
+                fname_jloco_dip_roll=fname_jloco_dip_roll)
             print('update svd...')
             self.update_svd()
         print('update fit...')
@@ -371,7 +376,7 @@ class LOCO:
             else:
                 print('loading dipole kick matrix...')
                 self._jloco_kick_dip = _LOCOUtils.load_data(
-                    fname_jloco_kick_dip)['jloco_kmatrix']
+                    fname_jloco_kick_dip)
 
     def _handle_girder_shift(self, fname_jloco_girder_shift=None):
         # calculate kick jacobian for dipole
@@ -388,14 +393,20 @@ class LOCO:
                 self._jloco_girder_shift = _LOCOUtils.load_data(
                     fname_jloco_girder_shift)['jloco_kmatrix']
 
-    def _handle_dip_rot_roll(self, fname__jloco_calc_dip_roll):
+    def _handle_dip_rot_roll(self, fname_jloco_calc_dip_roll):
         # calculate roll rotation jacobian for dipole
-        if self.config.fit_dipoles_rotation_roll:
-            print('calculating dipole roll rotation matrix')
-            self._jloco_roll_dip = _LOCOUtils._jloco_calc_dip_roll(
-                self.config, self._model)
-        else:
-            NotImplementedError()
+        if self.config.fit_dip_roll:
+            if fname_jloco_calc_dip_roll is None:
+                print('calculating dipole roll matrix')
+                time0 = _time.time()
+                self._jloco_roll_dip = _LOCOUtils.jloco_calc_dipoles_roll(
+                    self.config, self._model)
+                dtime = _time.time() - time0
+                print('it took {:.2f} min to calculate'.format(dtime/60))
+            else:
+                print('loading dipole roll matrix...')
+                self._jloco_roll_dip = _LOCOUtils.load_data(
+                    fname_jloco_calc_dip_roll)
 
     def _get_ps_names(self, idx, sub):
         name_list = []
@@ -481,6 +492,11 @@ class LOCO:
             print('saving jacobian KsL for sextupoles')
             _LOCOUtils.save_data(
                 '6d_KsL_sextupoles', jloco_ks_sext)
+        if self.config.fit_dip_roll:
+            jloco_dip_roll = self.create_new_jacobian_dict(
+                self._jloco_roll_dip, idx_bn, sub_bn)
+            print('saving jacobian for dipole roll rotation')
+            _LOCOUtils.save_data('dip_roll', jloco_dip_roll)
 
     def update_jloco(self,
                      fname_jloco_k=None,
@@ -493,7 +509,7 @@ class LOCO:
                      fname_jloco_kick_dip=None,
                      fname_jloco_ks_skewquad=None,
                      fname_jloco_girder_shift=None,
-                     fname__jloco_calc_dip_roll=None):
+                     fname_jloco_dip_roll=None):
         """."""
         # calc jloco linear parts
         self._jloco_gain_bpm, self._jloco_roll_bpm, self._jloco_gain_corr = \
@@ -517,7 +533,7 @@ class LOCO:
 
             self._handle_girder_shift(fname_jloco_girder_shift)
 
-            self._handle_dip_rot_roll(fname__jloco_calc_dip_roll)
+            self._handle_dip_rot_roll(fname_jloco_dip_roll)
 
             if self.save_jacobian_matrices:
                 self.save_jacobian()
@@ -538,7 +554,7 @@ class LOCO:
             self._jloco_gain_bpm, self._jloco_roll_bpm,
             self._jloco_gain_corr, self._jloco_kick_dip,
             self._jloco_energy_shift, self._jloco_ks_skew_quad,
-            self._jloco_girder_shift)
+            self._jloco_girder_shift, self._jloco_roll_dip)
 
         # apply weight
         self._jloco = _LOCOUtils.jloco_apply_weight(
@@ -696,6 +712,11 @@ class LOCO:
             self._gain_corr_inival = _np.ones(self.config.nr_corr)
         self._gain_corr_delta = _np.zeros(self.config.nr_corr)
 
+        # dip roll inival and deltas
+        if self._dip_roll_inival is None:
+            self._dip_roll_inival = _np.zeros(len(self.config.dip_indices))
+        self._dip_roll_deltas = _np.zeros(len(self.config.dip_indices))
+
         check_case = self._gain_bpm_inival is not None
         check_case |= self._roll_bpm_inival is not None
         check_case |= self._gain_corr_inival is not None
@@ -828,7 +849,8 @@ class LOCO:
         if matrix is None:
             matrix = self._matrix
         dmatrix = matrix - self.config.goalmat
-        # dmatrix = _LOCOUtils.apply_all_weight(dmatrix, self.config.weight_bpm, self.config.weight_corr)
+        # dmatrix = _LOCOUtils.apply_all_weight(
+        # dmatrix, self.config.weight_bpm, self.config.weight_corr)
         dmatrix[:, :self.config.nr_ch] *= self.config.delta_kickx_meas
         dmatrix[:, self.config.nr_ch:-1] *= self.config.delta_kicky_meas
         dmatrix[:, -1] *= self.config.delta_frequency_meas
@@ -842,6 +864,7 @@ class LOCO:
         self.bpm_gain = self._gain_bpm_inival + self._gain_bpm_delta
         self.bpm_roll = self._roll_bpm_inival + self._roll_bpm_delta
         self.corr_gain = self._gain_corr_inival + self._gain_corr_delta
+        self.dip_roll = self._dip_roll_inival + self._dip_roll_deltas
         self.energy_shift = self._energy_shift_inival + \
             self._energy_shift_deltas
         self.residue_history = self._res_history
@@ -856,6 +879,7 @@ class LOCO:
         self.bpm_roll = None
         self.corr_gain = None
         self.energy_shift = None
+        self.dip_roll = None
         self.chi_history = []
         self.residue_history = []
         self._chi_history = []
@@ -943,6 +967,15 @@ class LOCO:
                 _LOCOUtils.set_dipmag_kick(
                     model, idx_set,
                     self._dip_kick_inival[idx], self._dip_kick_deltas[idx])
+            one_knob = True
+        if 'dip_roll' in param_dict:
+            # update roll angle delta
+            self._dip_roll_deltas += param_dict['dip_roll']
+            # update local model
+            for idx, idx_set in enumerate(config.dip_indices):
+                _LOCOUtils.set_dipmag_roll(
+                    model, idx_set,
+                    self._dip_roll_inival[idx], self._dip_roll_deltas[idx])
             one_knob = True
         if 'skew_quadrupoles' in param_dict:
             # update skew quadrupoles
