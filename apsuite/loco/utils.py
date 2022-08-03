@@ -486,14 +486,13 @@ class LOCOUtils:
                 model, dip_idxs)
             # The model is recreated every iteration because
             # _pyaccel.lattice.set_error_rotation_roll can't set
-            # a zero roll angle.
+            # a exact zero roll angle.
             model_this = _dcopy(model)
             set_roll(
                 model_this, dip_idxs, roll_angs=roll_angle,
                 droll_ang=dip_droll_angle)
             matrix_this = LOCOUtils.respm_calc(
                 model_this, config.respm, config.use_dispersion)
-            # nsegs = len(dip_idxs) # NOTE: divide dmatrix by nsegs?
             dmatrix = (matrix_this - matrix_nominal)/dip_droll_angle
             dip_roll_matrix[:, i] = dmatrix.ravel()
         return dip_roll_matrix

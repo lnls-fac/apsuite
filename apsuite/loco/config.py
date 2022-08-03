@@ -165,6 +165,8 @@ class LOCOConfig:
         stg += stmp(
             'Girders longitudinal shifts', self.fit_girder_shift, '')
 
+        stg += stmp('Dipoles roll', self.fit_dip_roll, '')
+
         stg += stmp('BPM gains', self.fit_gain_bpm, '')
         stg += stmp('Corrector gains', self.fit_gain_corr, '')
         stg += stmp('BPM roll', self.fit_roll_bpm, '')
