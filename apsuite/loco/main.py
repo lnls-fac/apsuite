@@ -376,7 +376,7 @@ class LOCO:
             else:
                 print('loading dipole kick matrix...')
                 self._jloco_kick_dip = _LOCOUtils.load_data(
-                    fname_jloco_kick_dip)
+                    fname_jloco_kick_dip)['jloco_kmatrix']
 
     def _handle_girder_shift(self, fname_jloco_girder_shift=None):
         # calculate kick jacobian for dipole

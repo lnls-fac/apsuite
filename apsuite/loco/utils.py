@@ -479,7 +479,7 @@ class LOCOUtils:
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
         dip_roll_matrix = _np.zeros((matrix_nominal.size, len(dip_indices)))
-        dip_droll_angle = config.DEFAULT_DELTA_DIP_ROLL_ANGLE
+        dip_droll_angle = config.DEFAULT_DELTA_MAG_ROLL_ANGLE
 
         for i, dip_idxs in enumerate(dip_indices):
             roll_angle = _pyaccel.lattice.get_error_rotation_roll(
