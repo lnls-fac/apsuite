@@ -974,7 +974,7 @@ class LOCO:
             # update local model
             for idx, idx_set in enumerate(config.dip_indices):
                 _LOCOUtils.set_dipmag_roll(
-                    model, idx_set,
+                    model, config.acc, idx_set,
                     self._dip_roll_inival[idx], self._dip_roll_deltas[idx])
             one_knob = True
         if 'skew_quadrupoles' in param_dict:

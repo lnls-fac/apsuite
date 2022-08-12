@@ -8,6 +8,7 @@ import numpy as _np
 from mathphys.functions import save_pickle as _save_pickle, \
     load_pickle as _load_pickle
 import pyaccel as _pyaccel
+from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 
 
 class LOCOUtils:
@@ -180,10 +181,12 @@ class LOCOUtils:
             model, 'hkick_polynom', idx_mag, kick_values + kick_delta * angle)
 
     @staticmethod
-    def set_dipmag_roll(model, idx_mag, roll_angs, droll_ang):
+    def set_dipmag_roll(model, acc, idx_mag, roll_angs, droll_ang):
         """."""
         _pyaccel.lattice.set_error_rotation_roll(
             model, idx_mag, roll_angs + droll_ang)
+        corrobj = _OrbitCorr(model, acc)
+        corrobj.correct_orbit()
 
     @staticmethod
     def set_girders_long_shift(model, girders, ds_shift):
@@ -475,11 +478,13 @@ class LOCOUtils:
     @staticmethod
     def _jloco_calc_dip_roll(config, model, dip_indices, magtype=None):
         """."""
-        set_roll = LOCOUtils.set_dipmag_roll
+        def set_roll(model, idx_mag, roll_angs, droll_ang): \
+            LOCOUtils.set_dipmag_roll(
+                model, config.acc, idx_mag, roll_angs, droll_ang)
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
         dip_roll_matrix = _np.zeros((matrix_nominal.size, len(dip_indices)))
-        dip_droll_angle = config.DEFAULT_DELTA_MAG_ROLL_ANGLE
+        dip_droll_angle = config.DEFAULT_DELTA_DIP_ROLL_ANGLE
 
         for i, dip_idxs in enumerate(dip_indices):
             roll_angle = _pyaccel.lattice.get_error_rotation_roll(
