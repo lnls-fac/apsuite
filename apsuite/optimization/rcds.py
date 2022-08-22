@@ -451,8 +451,11 @@ class RCDS:
                     pos_min = pos_idx
                 else:
                     if print_flag:
-                        print(f'Direction replacement conditions met.\n')
+                        print(f'Direction replacement conditions were met.')
                         print(f'Skipping new direction {ik_+1:d}: max dot product {max_dotp:f}')
+
+            hist_best_pos = _np.vstack((hist_best_pos, pos_min))
+            hist_best_func = _np.vstack((hist_best_func, func_min))
 
             tol = self.tolerance
             cond = 2 * (func0 - func_min) <= tol * (abs(func0) + abs(func_min))
@@ -470,8 +473,7 @@ class RCDS:
 
             func0 = func_min
             pos0 = pos_min
-            hist_best_pos = _np.vstack((hist_best_pos, pos_min))
-            hist_best_func = _np.vstack((hist_best_func, func_min))
+
             print('')
 
         self.hist_best_positions = hist_best_pos
