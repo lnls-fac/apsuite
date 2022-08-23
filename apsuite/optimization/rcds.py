@@ -11,8 +11,8 @@ class RCDS:
 
     # NOTE: objects with threading.Event cannot be serialized with pickle
 
-    GOLDEN_RATIO = (1 + _np.sqrt(5))/2
-    TINY = 1e-25
+    _GOLDEN_RATIO = (1 + _np.sqrt(5))/2
+    _TINY = 1e-25
 
     def __init__(self, save=False, use_thread=True):
         """."""
@@ -285,7 +285,7 @@ class RCDS:
         while func < (func_min + 3 * self.gnoise):
             step_backup = step
             if abs(step) < 0.1:
-                step *= (1 + self.GOLDEN_RATIO)
+                step *= (1 + self._GOLDEN_RATIO)
             else:
                 if direction == 'positive':
                     step += 0.1
@@ -379,8 +379,8 @@ class RCDS:
 
     def _optimize(self, print_flag=True):
         """Powell Direction Search Algorithm with Xiaobiao's bracketing and Linescan"""
-        pos0 = self._position
-        func0 = self.calc_obj_fun(pos0)
+        pos0 = (self._position - self.limits_lower) / (self.limits_upper - self.limits_lower) 
+        func0 = self.calc_obj_fun(pos0) # obj func should take params in [0,1] and convert to the real span
         init_func = func0
         nr_func_evals = 1
 
@@ -459,7 +459,7 @@ class RCDS:
 
             tol = self.tolerance
             cond = 2 * (func0 - func_min) <= tol * (abs(func0) + abs(func_min))
-            # cond = 2 * (func0 - func_min) <= tol * (abs(func0) + abs(func_min)) + self.TINY #Numerical recipes
+            # cond = 2 * (func0 - func_min) <= tol * (abs(func0) + abs(func_min)) + self._TINY #Numerical recipes
             if (cond and tol > 0):
             #if abs(func_min) < tol:
                 stg = 'Finished! \n'
@@ -476,6 +476,6 @@ class RCDS:
 
             print('')
 
-        self.hist_best_positions = hist_best_pos
+        self.hist_best_positions = self.limits_lower + hist_best_pos * (self.limits_upper - self.limits_lower) 
         self.hist_best_objfunc = hist_best_func
         self.best_direction = dmat
