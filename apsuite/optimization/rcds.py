@@ -119,7 +119,7 @@ class RCDS:
         """Return a number."""
         raise NotImplementedError
 
-    def start(self, print_flag=True):
+    def start(self, print_flag=True, update_dir_flag=True):
         """."""
         if self._use_thread:
             if not self._thread.is_alive():
@@ -128,7 +128,7 @@ class RCDS:
                 self._stopevt.clear()
                 self._thread.start()
         else:
-            self._optimize(print_flag=print_flag)
+            self._optimize(print_flag=print_flag,update_dir_flag=update_dir_flag)
 
     def stop(self):
         """."""
@@ -377,7 +377,7 @@ class RCDS:
             func_min = func_v[idx_min]
             return pos_min, func_min, nr_func_evals
 
-    def _optimize(self, print_flag=True):
+    def _optimize(self, print_flag=True, update_dir_flag=True):
         """Powell Direction Search Algorithm with Xiaobiao's bracketing and Linescan"""
         pos0 = (self._position - self.limits_lower) / (self.limits_upper - self.limits_lower) 
         func0 = self.calc_obj_fun(pos0) # obj func should take params in [0,1] and convert to the real span
@@ -417,42 +417,45 @@ class RCDS:
                 func_min = func_idx # update obj func min
                 pos_min = pos_idx # and position
 
-            pos_e = 2 * pos_min - pos0 # extension point for direction replacement conditions
-            print('Evaluating objective function at extension point...')
-            func_e = self.calc_obj_fun(pos_e)
-            print('Done!\n')
-            nr_func_evals += 1
+            if update_dir_flag:
+                pos_e = 2 * pos_min - pos0 # extension point for direction replacement conditions
+                print('Evaluating objective function at extension point...')
+                func_e = self.calc_obj_fun(pos_e)
+                print('Done!\n')
+                nr_func_evals += 1
 
-            cond1 = (func0 <= func_e) # Numerical Recipes conditions (same order)
-            cond2 = 2 * (func0 - 2 * func_min + func_e) * (func0 - func_min - dl_)**2 >= dl_ * (func_e - func0)**2 
-            if cond1 or cond2: 
-                if print_flag:
-                    print(f'Direction {ik_+1:d} not replaced: Condition 1: {cond1}; Condition 2: {cond2}')
-            else:
-                diff = pos_min - pos0
-                new_dv = diff/_np.linalg.norm(diff) # new conjugate direction
-                pos_proj = (new_dv.T * dmat).sum(axis=0) # used for checking orthogonality with other directions
-                 
-                max_dotp = _np.max(pos_proj)
-                if max_dotp < 0.9:
+                cond1 = (func0 <= func_e) # Numerical Recipes conditions (same order)
+                cond2 = 2 * (func0 - 2 * func_min + func_e) * (func0 - func_min - dl_)**2 >= dl_ * (func_e - func0)**2 
+                
+                if cond1 or cond2: 
                     if print_flag:
-                        print(f'Replacing direction {ik_+1:d}')
-                    for idx in range(ik_, self.ndim-1):
-                        dmat[:, idx] = dmat[:, idx+1]
-                    dmat[:, -1] = new_dv
-                    info = self.bracketing_min(pos_min, func_min, new_dv, step)
-                    nr_func_evals += info['nr_func_evals']
-                    info['pos0'] = info['pos_min']
-                    info['func0'] = info['func_min']
-                    print(f'Iteration {iter+1:d}, New dir. {ik_+1:d}, Obj. Func. Min {func_min:f}')
-                    pos_idx, func_idx, nevals = self.linescan(info)
-                    nr_func_evals += nevals
-                    func_min = func_idx
-                    pos_min = pos_idx
+                        print(f'Direction {ik_+1:d} not replaced: Condition 1: {cond1}; Condition 2: {cond2}')
                 else:
-                    if print_flag:
-                        print(f'Direction replacement conditions were met.')
-                        print(f'Skipping new direction {ik_+1:d}: max dot product {max_dotp:f}')
+                    diff = pos_min - pos0
+                    new_dv = diff/_np.linalg.norm(diff) # new conjugate direction
+                    
+                    pos_proj = (new_dv.T * dmat).sum(axis=0) # used for checking orthogonality with other directions
+                    max_dotp = _np.max(pos_proj)
+                    
+                    if max_dotp < 0.9:
+                        if print_flag:
+                            print(f'Replacing direction {ik_+1:d}')
+                        for idx in range(ik_, self.ndim-1):
+                            dmat[:, idx] = dmat[:, idx+1]
+                        dmat[:, -1] = new_dv
+                        info = self.bracketing_min(pos_min, func_min, new_dv, step)
+                        nr_func_evals += info['nr_func_evals']
+                        info['pos0'] = info['pos_min']
+                        info['func0'] = info['func_min']
+                        print(f'Iteration {iter+1:d}, New dir. {ik_+1:d}, Obj. Func. Min {func_min:f}')
+                        pos_idx, func_idx, nevals = self.linescan(info)
+                        nr_func_evals += nevals
+                        func_min = func_idx
+                        pos_min = pos_idx
+                    else:
+                        if print_flag:
+                            print(f'Direction replacement conditions were met.')
+                            print(f'Skipping new direction {ik_+1:d}: max dot product {max_dotp:f}')
 
             hist_best_pos = _np.vstack((hist_best_pos, pos_min))
             hist_best_func = _np.vstack((hist_best_func, func_min))
