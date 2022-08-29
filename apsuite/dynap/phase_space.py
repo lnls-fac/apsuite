@@ -111,7 +111,7 @@ class PhaseSpace(_BaseClass):
 
         out = _pytrack.ring_pass(
             self._acc, rin, nr_turns=self.params.nrturns,
-            turn_by_turn=True)
+            turn_by_turn=True, parallel=True)
 
         self.data['x_in'] = x_in
         self.data['x_rout'] = out[0]
