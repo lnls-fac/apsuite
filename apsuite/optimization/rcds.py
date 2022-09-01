@@ -1,165 +1,61 @@
 """Robust Conjugate Direction Search Algorithm for Minimization."""
 from threading import Thread as _Thread, Event as _Event
-
+import logging as _log
 
 import numpy as _np
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as _mplt
+
+from .base import Optimize as _Optimize, OptimizeParams as _OptimizeParams
 
 
-class RCDS:
+class RCDSParams(_OptimizeParams):
+
+    def __init__(self):
+        """."""
+        super().__init__()
+        self.initial_stepsize = 0.1  # in normalized units.
+        self.noise_level = 0.0  # in units of the objective function.
+        self.tolerance = 1e-5  # in relative units.
+        self.initial_search_directions = _np.array([], ndmin=2)
+        self.update_search_directions = True
+
+    def __str__(self):
+        """."""
+        stg = self._TMPF.format('initial_stepsize', self.initial_stepsize)
+        stg += self._TMPF.format('noise_level', self.noise_level)
+        stg += self._TMPF.format('tolerance', self.tolerance)
+        stg += self._TMPS.format(
+            'update_search_directions', str(self.update_search_directions))
+        stg += super().__str__()
+        names = [f'Search Dir. {i:d}' for i in range(
+            self.initial_search_directions.shape[0])]
+        stg += self.print_positions(
+            self.initial_search_directions, names=names, print_header=False)
+        return stg
+
+
+class RCDS(_Optimize):
     """The original algorithm was developed by X. Huang from SLAC."""
-
-    # NOTE: objects with threading.Event cannot be serialized with pickle
 
     _GOLDEN_RATIO = (1 + _np.sqrt(5))/2
     _TINY = 1e-25
 
-    def __init__(self, save=False, use_thread=True):
+    def __init__(self, use_thread=True):
         """."""
-        self._use_thread = use_thread
+        super().__init__(RCDSParams(), use_thread=use_thread)
+        self._num_objective_evals = 0
 
-        # search space
-        self._position = _np.array([])
-        self._pos_lim_lower = None
-        self._pos_lim_upper = None
-        self._pos_step = None
-        self.gnoise = None
-        self.gcount = None # not used?
-        # search control
-
-        self._niter = 0
-        self._flag_save = save
-        self._tolerance = 0
-        self.dmat0 = None
-
-        if self._use_thread:
-            self._thread = _Thread(target=self._optimize, daemon=True)
-            self._stopevt = _Event()
-        self.hist_best_positions = _np.array([])
-        self.hist_best_objfunc = _np.array([])
-
-        # initialization
-        self.initialization()
-        self._check_initialization()
+        self.figure, self.axes = _mplt.subplots(1, 1)
+        self.line_data = self.axes.plot([1, 1], [1, 1], 'or', label='Data')[0]
+        self.line_fit = self.axes.plot([1, 1], [1, 1], '-b', label='Fit')[0]
+        self.axes.legend(loc='best')
+        self.axes.set_ylabel('Objective Function')
+        self.axes.set_xlabel('Direction Search Steps')
 
     @property
-    def ndim(self):
+    def num_objective_evals(self):
         """."""
-        return len(self._position)
-
-    @property
-    def position(self):
-        """."""
-        return self._position
-
-    @position.setter
-    def position(self, value):
-        """."""
-        self._position = value
-
-    @property
-    def niter(self):
-        """."""
-        return self._niter
-
-    @niter.setter
-    def niter(self, value):
-        """."""
-        self._niter = value
-
-    @property
-    def tolerance(self):
-        """."""
-        return self._tolerance
-
-    @tolerance.setter
-    def tolerance(self, value):
-        """."""
-        self._tolerance = value
-
-    @property
-    def limits_upper(self):
-        """."""
-        return self._pos_lim_upper
-
-    @limits_upper.setter
-    def limits_upper(self, value):
-        """."""
-        #if len(value) != len(self._position): # move these checkings to another place
-        #    raise Exception('Incompatible upper limit!') # they impose an order to parameter setting
-        self._pos_lim_upper = _np.array(value)
-
-    @property
-    def limits_lower(self):
-        """."""
-        return self._pos_lim_lower
-
-    @limits_lower.setter
-    def limits_lower(self, value):
-        """."""
-        #if len(value) != len(self._position):
-        #    raise Exception('Incompatible lower limit!')
-        self._pos_lim_lower = _np.array(value)
-
-    @property
-    def step(self):
-        """."""
-        return self._pos_step
-
-    @step.setter
-    def step(self, value):
-        """."""
-        self._pos_step = value
-
-    def initialization(self):
-        """."""
-        raise NotImplementedError
-
-    def calc_obj_fun(self):
-        """Return a number."""
-        raise NotImplementedError
-
-    def start(self, print_flag=True, update_dir_flag=True):
-        """."""
-        if self._use_thread:
-            if not self._thread.is_alive():
-                self._thread = _Thread(
-                    target=self._optimize, args=(print_flag, ), daemon=True)
-                self._stopevt.clear()
-                self._thread.start()
-        else:
-            self._optimize(print_flag=print_flag,update_dir_flag=update_dir_flag)
-
-    def stop(self):
-        """."""
-        if self._use_thread:
-            self._stopevt.set()
-
-    def join(self):
-        """."""
-        if self._use_thread:
-            self._thread.join()
-
-    @property
-    def isrunning(self):
-        """."""
-        if self._use_thread:
-            return self._thread.is_alive()
-        else:
-            return False
-
-    def _check_initialization(self):
-        """."""
-        if self._pos_lim_upper is None and self._pos_lim_lower is None:
-            return
-
-        if len(self._pos_lim_upper) != len(self._pos_lim_lower):
-            raise Exception(
-                'Upper and Lower Limits have different lengths')
-
-        if self.ndim != len(self._pos_lim_upper):
-            raise Exception(
-                'Dimension incompatible with limits!')
+        return self._num_objective_evals
 
     def _check_lim(self):
         # If particle position exceeds the boundary, set the boundary value
@@ -169,316 +65,279 @@ class RCDS:
         if self._pos_lim_lower is not None:
             under = self._position < self._pos_lim_lower
             self._position[under] = self._pos_lim_lower[under]
-    
-    def print_initial_settings(self):
-        print(f'Parameter space dimension: {self.ndim}')
-        print(f'Initial point: {self.position}')
-        print(f'Initial step: {self.step}')
-        print(f'Tolerance {self.tolerance}')
-        print(f'Parameter space span:\n{_np.concatenate((self.limits_lower[:, None],self.limits_upper[:, None]),axis=1)}')
-        print(f'Max number of iterations: {self.niter}')
-        print(f'Objective function noise-sigma: {self.gnoise}')
-        print(f'Initial directions matrix:\n{self.dmat0}')
 
-    def bracketing_min(self, pos0, func0, dv, step):
+    def bracketing_min(self, pos0, func0, dir, step):
         """Brackets the minimum
 
         Args:
             pos0 (n-dimensional np.array): starting point in param space
             func0 (float): objective function at pos0
-            dv (n-dimensional np.array): direction vector
+            dir (n-dimensional np.array): direction vector
             step (float): initial step
 
         Returns:
-            info (dict): dictionary containing the input args as well
-            as the number of obj. func evaluations, 'nr_func_evals', a list of such evaluations
-            and steps 'xflist', the step for which the minimum is attained 'alpha_min',
-            the minimum point 'pos_min' and the obj. func minimum value, 'func_min'.
+            info (dict): dictionary containing the input args as well as a
+                list of such evaluations and steps 'xflist', the step for
+                which the minimum is attained 'delta_min', the minimum point
+                'pos_min' and the obj. func minimum value, 'func_min'.
         """
-        nr_func_evals = 0
         if _np.isnan(func0):
-            func0 = self.calc_obj_fun(pos0)
-            nr_func_evals += 1
+            func0 = self._objective_func(pos0)
 
-        xflist = _np.array([[0, func0]])
-        func_min = func0
-        alpha_min = 0 
-        pos_min = pos0
+        # mins is a tuple with informations about the minimum so far:
+        mins = pos0, 0, func0
 
-        step_init = step
+        # Lists with properties of all evaluations made along this direction:
+        delta_array = [0]
+        func_array = [func0]
 
-        info = dict()
-        info['pos0'] = pos0
-        info['func0'] = func0
-        info['dv'] = dv
-        info['step'] = step
-        info['nr_func_evals'] = nr_func_evals
-        info['xflist'] = xflist
-        info['alpha_min'] = alpha_min
-        info['pos_min'] = pos_min
-        info['func_min'] = func_min
+        d_array, f_array, mins = self.search_bound(
+            pos0, mins, dir, step, direction='positive')
+        delta_array.extend(d_array)
+        func_array.extend(f_array)
 
-        info = self.search_bound(info, direction='positive') #searches for upper bracket bound, minimum along dv, and constructs xflist: list of steps and function evaluations
+        # if False, no need to search bound in the negative direction:
+        if func0 <= (mins[-1] + 3 * self.params.noise_level):
+            d_array, f_array, mins = self.search_bound(
+                pos0, mins, dir, -step, direction='negative')
+            delta_array.extend(d_array)
+            func_array.extend(f_array)
 
-        alpha2 = info['alpha_bound'] #setting the upper bound
-        pos_min, func_min = info['pos_min'], info['func_min'] # setting the position and value of the minimum
-        alpha_min = info['alpha_min'] # setting the step at which the minimum is attained
-        xflist = info['xflist'] # steps and function evaluations
-        nr_func_evals = info['nr_func_evals'] # number of objective function evaluations
-        
-        if func0 > (func_min + 3 * self.gnoise): # if true, no need to search bound in the negative direction
-            alpha1 = -alpha_min
-            alpha2 -= alpha_min
-            xflist[:, 0] -= alpha_min  # subtract alpha_min from all alphas to set the minimum at 0
-            info['xflist'] = xflist
-            info['alpha1'] = alpha1
-            info['alpha2'] = alpha2
-            # at this point, the bounds are at positions
-            # - first bound:  pos1 = pos_min + (-alpha_min)*dv
-            # - second bound: pos2 = pos_min + (alpha2 - alpha_min)*dv
-            # and the minimum is at 0 of xflist[:,0]
-            return info
+        delta_array = _np.array(delta_array)
+        func_array = _np.array(func_array)
 
-        # searching for lower bound in the negative direction
-        info['step'] = -step_init
-        info = self.search_bound(info, direction='negative')
-        alpha1 = info['alpha_bound']
-        alpha_min = info['alpha_min']
-        xflist = info['xflist']
+        # subtract delta_min since pos_min is the new reference
+        delta_array -= mins[1]
 
-        # upper and lower bounds found. check the order
-        if alpha1 > alpha2:
-            alpha1, alpha2 = alpha2, alpha1
+        inds = _np.argsort(delta_array)
+        delta_array = delta_array[inds]
+        func_array = func_array[inds]
+        return delta_array, func_array, mins
 
-        # subtract alpha_min since pos_min is the new reference
-        alpha1 -= alpha_min
-        alpha2 -= alpha_min
-        xflist[:, 0] -= alpha_min
-        xflist = xflist[_np.argsort(xflist[:, 0])]
-
-        info['xflist'] = xflist
-        info['alpha1'] = alpha1
-        info['alpha2'] = alpha2
-        return info
-
-    def search_bound(self, info, direction='positive'):
+    def search_bound(self, pos0, mins, dir, step, direction='pos', nsigma=3):
         """."""
-        pos0 = info['pos0']
-        dv = info['dv']
-        step = info['step']
-        nevals = info['nr_func_evals']
-        xflist = info['xflist']
-        alpha_min = info['alpha_min']
-        pos_min, func_min = info['pos_min'], info['func_min']
-        
-        pos = pos0 + step * dv
-        func = self.calc_obj_fun(pos)
-        nevals += 1
-        new_xf = _np.array([[step, func]])
-        xflist = _np.concatenate((xflist, new_xf), axis=0)
+        direction = direction.lower()[:3]  # pos or neg
 
-        if func < func_min:
-            func_min = func
-            alpha_min = step
-            pos_min = pos
+        pos = pos0 + step * dir
+        func = self._objective_func(pos)
 
-        while func < (func_min + 3 * self.gnoise):
+        # Lists with properties of all evaluations made along this direction:
+        delta_array = [step]
+        func_array = [func]
+
+        if func < mins[-1]:
+            mins = pos, step, func
+
+        while func < (mins[-1] + nsigma * self.params.noise_level):
             step_backup = step
             if abs(step) < 0.1:
+                # NOTE: wouldn't it be only phi istead of 1 + phi?
                 step *= (1 + self._GOLDEN_RATIO)
             else:
-                if direction == 'positive':
-                    step += 0.1
-                elif direction == 'negative':
-                    step -= 0.1
-                else:
-                    raise Exception('Invalid Direction')
+                step += 0.1 if direction.startswith('pos') else -0.1
 
-            pos = pos0 + step * dv
-            func = self.calc_obj_fun(pos)
-            nevals += 1
+            pos = pos0 + step * dir
+            func = self._objective_func(pos)
 
             if _np.isnan(func):
                 step = step_backup
                 break
-            else:
-                new_xf = _np.array([[step, func]])
-                xflist = _np.concatenate((xflist, new_xf), axis=0)
-                if func < func_min:
-                    func_min = func
-                    alpha_min = step
-                    pos_min = pos
+            delta_array.append(step)
+            func_array.append(func)
 
-        info['alpha_bound'] = step
-        info['nr_func_evals'] = nevals
-        info['xflist'] = xflist
-        info['alpha_min'] = alpha_min
-        info['pos_min'], info['func_min'] = pos_min, func_min
-        return info
+            if func < mins[-1]:
+                mins = pos, step, func
 
-    def linescan(self, info):
+        return delta_array, func_array, mins
+
+    def linescan(self, delta_array, func_array, pos0, func0, dir, npts=6):
         """."""
-        pos0 = info['pos0']
-        func0 = info['func0']
-        dv = info['dv']
-        nr_func_evals = info['nr_func_evals']
-        xflist = info['xflist']
-        alpha1, alpha2 = info['alpha1'], info['alpha2']
+        idx = _np.argsort(delta_array)
+        delta_array = delta_array[idx]
+        func_array = func_array[idx]
 
         if _np.isnan(func0):
-            func0 = self.calc_obj_fun(pos0)
-            nr_func_evals += 1
+            func0 = self._objective_func(pos0)
 
-        if alpha1 >= alpha2:
-            print('Upper bound <= Lower bound')
-            return pos0, func0, nr_func_evals
+        deltas = _np.linspace(delta_array[0], delta_array[-1], npts)
+        funcs = deltas * _np.nan
 
-        npts = 6
-        alphas_step = (alpha2 - alpha1)/(npts - 1)
-        alphas = _np.arange(alpha1, alpha2, alphas_step)
-        flist = alphas * _np.nan
-        
-        for idx, alpha in enumerate(xflist[:,0]):
-            if alpha >= alpha1 and alpha <= alpha2:
-                ik = int((alpha - alpha1) / alphas_step)
-                if ik == alphas.size:
-                    ik = -1
-                alphas[ik] = alpha  
-                flist[ik] = xflist[ik,1] 
+        idx = _np.argmin(
+            _np.abs(deltas[:, None] - delta_array[None, :]), axis=0)
+        deltas[idx] = delta_array
+        funcs[idx] = func_array
 
-        mask = [True] * alphas.size
-        for idx, alpha in enumerate(alphas):
-            if _np.isnan(flist[idx]):
-                pos = pos0 + alpha * dv
-                flist[idx] = self.calc_obj_fun(pos)
-                nr_func_evals += 1
-            if _np.isnan(flist[idx]):
-                mask[idx] = False
+        for idx, delta in enumerate(deltas):
+            if _np.isnan(funcs[idx]):
+                pos = pos0 + delta * dir
+                funcs[idx] = self._objective_func(pos)
 
-        alphas = alphas[mask]
-        flist = flist[mask]
+        mask = ~_np.isnan(funcs)
+        deltas = deltas[mask]
+        funcs = funcs[mask]
 
-        if alphas.size == 0:
-            return pos0, func0, nr_func_evals
-        elif alphas.size < npts - 1:
-            idx_min = flist.argmin()
-            pos_min = pos0 + alphas[idx_min] * dv
-            func_min = flist[idx_min]
-            return pos_min, func_min, nr_func_evals
-        else:
-            poly = _np.poly1d(_np.polyfit(alphas, flist, deg=2))
-            alpha_v = _np.linspace(alphas[0], alphas[-1], 100)
-            func_v = poly(alpha_v)
-            #plt.figure() #edit this later
-            #plt.plot(alpha_v, func_v)
-            #plt.show()
-            idx_min = _np.argmin(func_v)
-            pos_min = pos0 + alpha_v[idx_min] * dv
-            func_min = func_v[idx_min]
-            return pos_min, func_min, nr_func_evals
+        if deltas.size == 0:
+            return pos0, 0, func0
 
-    def _optimize(self, print_flag=True, update_dir_flag=True):
-        """Powell Direction Search Algorithm with Xiaobiao's bracketing and Linescan"""
-        pos0 = (self._position - self.limits_lower) / (self.limits_upper - self.limits_lower) 
-        func0 = self.calc_obj_fun(pos0) # obj func should take params in [0,1] and convert to the real span
+        coeffs = _np.polynomial.polynomial.polyfit(deltas, funcs, deg=2)
+        if deltas.size < 3 or coeffs[-1] <= 0:  # wrong concavity
+            idx_min = funcs.argmin()
+            pos_min = pos0 + deltas[idx_min] * dir
+            func_min = funcs[idx_min]
+            return pos_min, deltas[idx_min], func_min
+
+        delta_v = _np.linspace(deltas[0], deltas[-1], 1000)
+        func_v = _np.polynomial.polynomial.polyval(delta_v, coeffs)
+
+        self.line_data.set_data(deltas, funcs)
+        self.line_fit.set_data(delta_v, func_v)
+        self.axes.set_xlim([delta_v.min(), delta_v.max()])
+        self.axes.set_ylim([func_v.min(), func_v.max()])
+        self.figure.tight_layout()
+        self.figure.show()
+        _mplt.pause(3)
+
+        idx_min = _np.argmin(func_v)
+        pos_min = pos0 + delta_v[idx_min] * dir
+        func_min = func_v[idx_min]
+        return pos_min, delta_v[idx_min], func_min
+
+    def _normalize_positions(self, pos):
+        npos = (pos - self.params.limit_lower)
+        npos /= (self.params.limit_upper - self.params.limit_lower)
+        return npos
+
+    def _denormalize_positions(self, npos):
+        pos = npos * (self.params.limit_upper - self.params.limit_lower)
+        pos += self.params.limit_lower
+        return pos
+
+    def _objective_func(self, pos):
+        self._num_objective_evals += 1
+        pos = self._denormalize_positions(pos)
+        return self.objective_function(pos)
+
+    def _optimize(self):
+        """Xiaobiao's version of Powell's direction search algorithm (RCDS).
+
+        Xiaobiao implements his own bracketing and linescan.
+
+        """
+        self._num_objective_evals = 0
+        search_dirs = self.params.initial_search_directions.copy()
+        search_dirs = self._normalize_positions(search_dirs)
+        search_dirs /= _np.sum(search_dirs*search_dirs, axis=1)[:, None]
+
+        step = self.params.initial_stepsize
+        tol = self.params.tolerance
+        max_iters = self.params.max_number_iters
+        pos0 = self._normalize_positions(self.params.initial_position)
+
+        func0 = self._objective_func(pos0)
         init_func = func0
-        nr_func_evals = 1
-
         pos_min, func_min = pos0, func0
-        dmat = self.dmat0
-        step = self.step
+        hist_best_pos, hist_best_func = [pos_min], [func_min]
 
-        hist_best_pos, hist_best_func = [pos_min], _np.array([func_min])
+        for iter in range(max_iters):
+            _log.info(f'Iteration {iter+1:04d}/{max_iters:04d}\n')
+            max_decr = 0
+            max_decr_dir = 0
 
-        for iter in range(self.niter):
-            if print_flag:
-                print(f'Iteration {iter+1:04d}/{self.niter:04d}\n')
-            step /= 1.20 # where does this come from? Not in numerical recipes, check Powell
-            dl_ = 0 # largest objective function decrease
-            ik_ = 0 # direction index at which the largest decrease happens
+            # NOTE: where does this step division come from?
+            # Not in numerical recipes. Check Powell' method again!
+            step /= 1.20
 
-            for idx in range(self.ndim): # for each direction in param space
-                dv = dmat[:, idx] # choose the corresponding direction vector
-                info = self.bracketing_min(pos_min, func_min, dv, step) # bracket the minimum along it
+            for idx in range(search_dirs.shape[0]):
+                dir = search_dirs[idx]
+                delta_array, func_array, mins = self.bracketing_min(
+                    pos_min, func_min, dir, step)
 
-                stg = f'Direction {idx+1:d}. '
-                stg += f"Obj. Func. Min: {info['func_min']}"
-                if print_flag:
-                    print(stg)
-                nr_func_evals += info['nr_func_evals']
-                info['pos0'], info['func0'] = info['pos_min'], info['func_min'] # minimum found in bracketing is the new starting point
-                pos_idx, func_idx, nevals = self.linescan(info) # minimum from parabola within brackets
-                nr_func_evals += nevals
-                if (func_min - func_idx) > dl_: # if current decrease is the largest decrease
-                    dl_ = func_min - func_idx # update largest decrease
-                    ik_ = idx # save largest decrease direction index
-                    if print_flag:
-                        print(f'Largest obj. func delta = {dl_:f}, updated.')
-                func_min = func_idx # update obj func min
-                pos_min = pos_idx # and position
+                _log.info(
+                    f'Dir. {idx+1:d}. Obj. Func. Min: {mins[-1]}')
 
-            if update_dir_flag:
-                pos_e = 2 * pos_min - pos0 # extension point for direction replacement conditions
-                print('Evaluating objective function at extension point...')
-                func_e = self.calc_obj_fun(pos_e)
-                print('Done!\n')
-                nr_func_evals += 1
+                pos_idx, _, func_idx = self.linescan(
+                    delta_array, func_array, mins[0], mins[-1], dir)
 
-                cond1 = (func0 <= func_e) # Numerical Recipes conditions (same order)
-                cond2 = 2 * (func0 - 2 * func_min + func_e) * (func0 - func_min - dl_)**2 >= dl_ * (func_e - func0)**2 
-                
-                if cond1 or cond2: 
-                    if print_flag:
-                        print(f'Direction {ik_+1:d} not replaced: Condition 1: {cond1}; Condition 2: {cond2}')
-                else:
-                    diff = pos_min - pos0
-                    new_dv = diff/_np.linalg.norm(diff) # new conjugate direction
-                    
-                    pos_proj = (new_dv.T * dmat).sum(axis=0) # used for checking orthogonality with other directions
-                    max_dotp = _np.max(pos_proj)
-                    
-                    if max_dotp < 0.9:
-                        if print_flag:
-                            print(f'Replacing direction {ik_+1:d}')
-                        for idx in range(ik_, self.ndim-1):
-                            dmat[:, idx] = dmat[:, idx+1]
-                        dmat[:, -1] = new_dv
-                        info = self.bracketing_min(pos_min, func_min, new_dv, step)
-                        nr_func_evals += info['nr_func_evals']
-                        info['pos0'] = info['pos_min']
-                        info['func0'] = info['func_min']
-                        print(f'Iteration {iter+1:d}, New dir. {ik_+1:d}, Obj. Func. Min {func_min:f}')
-                        pos_idx, func_idx, nevals = self.linescan(info)
-                        nr_func_evals += nevals
-                        func_min = func_idx
-                        pos_min = pos_idx
-                    else:
-                        if print_flag:
-                            print(f'Direction replacement conditions were met.')
-                            print(f'Skipping new direction {ik_+1:d}: max dot product {max_dotp:f}')
+                if (func_min - func_idx) > max_decr:
+                    max_decr = func_min - func_idx
+                    max_decr_dir = idx
+                    _log.info(
+                        f'Largest obj.func delta = {max_decr:f}, updated.')
+                func_min = func_idx
+                pos_min = pos_idx
 
-            hist_best_pos = _np.vstack((hist_best_pos, pos_min))
-            hist_best_func = _np.vstack((hist_best_func, func_min))
+            # Define an extension point colinear with pos0 and pos_min:
+            pos_e = 2 * pos_min - pos0
+            func_e = 0
+            if self.params.update_search_directions:
+                _log.info('Evaluating objective func. at extension point...')
+                func_e = self._objective_func(pos_e)
+                _log.info('Done!\n')
 
-            tol = self.tolerance
+            # Calculate new normalized direction:
+            diff = pos_min - pos0
+            new_dir = diff/_np.linalg.norm(diff)
+            # used for checking orthogonality with other directions:
+            max_dotp = (new_dir.T @ search_dirs).max()
+
+            # Numerical Recipes conditions (same order)
+            cond1 = func0 <= func_e
+            cond2_lhs = 2 * (func0 - 2 * func_min + func_e)
+            cond2_lhs *= (func0 - func_min - max_decr)**2
+            cond2_rhs = max_decr * (func_e - func0)**2
+            cond2 = cond2_lhs >= cond2_rhs
+            if not self.params.update_search_directions:
+                pass
+            elif cond1 or cond2:
+                _log.info(
+                    f'Direction {max_decr_dir+1:d} not replaced: '
+                    f'Condition 1: {cond1}; Condition 2: {cond2}')
+            elif max_dotp < 0.9:  # only accept if reasonably orthogonal
+                _log.info(f'Replacing direction {max_decr_dir+1:d}')
+                search_dirs[max_decr_dir:-1] = search_dirs[max_decr_dir+1:]
+                search_dirs[-1] = new_dir
+
+                delta_array, func_array, mins = self.bracketing_min(
+                    pos_min, func_min, new_dir, step)
+                _log.info(
+                    f'Iteration {iter+1:d}, New dir. {max_decr_dir+1:d}, '
+                    f'Obj. Func. Min {func_min:f}')
+                pos_idx, _, func_idx = self.linescan(
+                    delta_array, func_array, mins[0], mins[-1], dir)
+                func_min = func_idx
+                pos_min = pos_idx
+            else:
+                _log.info('Direction replacement conditions were met.')
+                _log.info(
+                    f'Skipping new direction {max_decr_dir+1:d}: '
+                    f'max dot product {max_dotp:f}')
+
+            hist_best_pos.append(pos_min)
+            hist_best_func.append(func_min)
+
+            # Numerical recipes does:
+            # cond = 2*(func0-func_min) <= \
+            #       tol*(abs(func0)+abs(func_min)) + self._TINY
             cond = 2 * (func0 - func_min) <= tol * (abs(func0) + abs(func_min))
-            # cond = 2 * (func0 - func_min) <= tol * (abs(func0) + abs(func_min)) + self._TINY #Numerical recipes
-            if (cond and tol > 0):
-            #if abs(func_min) < tol:
-                stg = 'Finished! \n'
-                stg += f'f_0 = {init_func:4.2e}\n'
-                stg += f'f_min = {func_min:4.2e}\n'
-                ratio = func_min/init_func
-                stg += f'f_min/f0 = {ratio:4.2e}\n'
-                if print_flag:
-                     print(stg)
+            # if abs(func_min) < tol:
+            if (cond and tol > 0) or self._stopevt.is_set():
+                _log.info(
+                    f'Quiting : Condition: {cond}; func0: {func0}, '
+                    f'func_min: {func_min}: Event: {self._stopevt.is_set()}')
+
                 break
 
             func0 = func_min
             pos0 = pos_min
 
-            print('')
+        stg = 'Finished! \n'
+        stg += f'f_0 = {init_func:4.2e}\n'
+        stg += f'f_min = {func_min:4.2e}\n'
+        ratio = func_min/init_func
+        stg += f'f_min/f0 = {ratio:4.2e}\n'
+        _log.info(stg)
 
-        self.hist_best_positions = self.limits_lower + hist_best_pos * (self.limits_upper - self.limits_lower) 
-        self.hist_best_objfunc = hist_best_func
-        self.best_direction = dmat
+        self.hist_best_positions = self._denormalize_positions(
+            _np.array(hist_best_pos, ndmin=2))
+        self.hist_best_objfunc = _np.array(hist_best_func, ndmin=2)
+        self.best_direction = self._denormalize_positions(search_dirs)
