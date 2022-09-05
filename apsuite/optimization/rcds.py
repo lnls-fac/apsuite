@@ -45,12 +45,12 @@ class RCDS(_Optimize):
         super().__init__(RCDSParams(), use_thread=use_thread)
         self._num_objective_evals = 0
 
-        self.figure, self.axes = _mplt.subplots(1, 1)
-        self.line_data = self.axes.plot([1, 1], [1, 1], 'or', label='Data')[0]
-        self.line_fit = self.axes.plot([1, 1], [1, 1], '-b', label='Fit')[0]
-        self.axes.legend(loc='best')
-        self.axes.set_ylabel('Objective Function')
-        self.axes.set_xlabel('Direction Search Steps')
+        # self.figure, self.axes = _mplt.subplots(1, 1)
+        # self.line_data = self.axes.plot([1, 1], [1, 1], 'or', label='Data')[0]
+        # self.line_fit = self.axes.plot([1, 1], [1, 1], '-b', label='Fit')[0]
+        # self.axes.legend(loc='best')
+        # self.axes.set_ylabel('Objective Function')
+        # self.axes.set_xlabel('Direction Search Steps')
 
     @property
     def num_objective_evals(self):
@@ -81,6 +81,7 @@ class RCDS(_Optimize):
                 which the minimum is attained 'delta_min', the minimum point
                 'pos_min' and the obj. func minimum value, 'func_min'.
         """
+        print(func0)
         if _np.isnan(func0):
             func0 = self._objective_func(pos0)
 
@@ -189,27 +190,55 @@ class RCDS(_Optimize):
         delta_v = _np.linspace(deltas[0], deltas[-1], 1000)
         func_v = _np.polynomial.polynomial.polyval(delta_v, coeffs)
 
-        self.line_data.set_data(deltas, funcs)
-        self.line_fit.set_data(delta_v, func_v)
-        self.axes.set_xlim([delta_v.min(), delta_v.max()])
-        self.axes.set_ylim([func_v.min(), func_v.max()])
-        self.figure.tight_layout()
-        self.figure.show()
-        _mplt.pause(3)
+        #self.line_data.set_data(deltas, funcs)
+        #self.line_fit.set_data(delta_v, func_v)
+        #self.axes.set_xlim([delta_v.min(), delta_v.max()])
+        #self.axes.set_ylim([func_v.min(), func_v.max()])
+        #self.figure.tight_layout()
+        #self.figure.show()
+        #_mplt.pause(0.5)
+
+        deltas, funcs = self._remove_outlier(deltas, funcs, coeffs)
+
+        # TODO: deal with repeated code
+        # check if outlier removal actuallly took place
+        # avoid re-fitting
+
+        coeffs = _np.polynomial.polynomial.polyfit(deltas, funcs, deg=2)
+        if deltas.size < 3 or coeffs[-1] <= 0:  # wrong concavity
+            idx_min = funcs.argmin()
+            pos_min = pos0 + deltas[idx_min] * dir
+            func_min = funcs[idx_min]
+            return pos_min, deltas[idx_min], func_min
+
+        delta_v = _np.linspace(deltas[0], deltas[-1], 1000)
+        func_v = _np.polynomial.polynomial.polyval(delta_v, coeffs)
 
         idx_min = _np.argmin(func_v)
         pos_min = pos0 + delta_v[idx_min] * dir
         func_min = func_v[idx_min]
         return pos_min, delta_v[idx_min], func_min
 
-    def _normalize_positions(self, pos):
-        npos = (pos - self.params.limit_lower)
+    def _remove_outlier(self, deltas, funcs, coeffs):
+        """."""
+        error = _np.polynomial.polynomial.polyval(deltas, coeffs)
+        error -= funcs
+        std = error.std()
+        mask = ~(error >= 3 * std)
+
+        return deltas[mask], funcs[mask]
+
+    def _normalize_positions(self, pos, is_pos=True):
+        npos = pos
+        if is_pos:
+            npos -= self.params.limit_lower
         npos /= (self.params.limit_upper - self.params.limit_lower)
         return npos
 
-    def _denormalize_positions(self, npos):
+    def _denormalize_positions(self, npos, is_pos=True):
         pos = npos * (self.params.limit_upper - self.params.limit_lower)
-        pos += self.params.limit_lower
+        if is_pos:
+            pos += self.params.limit_lower
         return pos
 
     def _objective_func(self, pos):
@@ -225,7 +254,7 @@ class RCDS(_Optimize):
         """
         self._num_objective_evals = 0
         search_dirs = self.params.initial_search_directions.copy()
-        search_dirs = self._normalize_positions(search_dirs)
+        search_dirs = self._normalize_positions(search_dirs, is_pos=False)
         search_dirs /= _np.sum(search_dirs*search_dirs, axis=1)[:, None]
 
         step = self.params.initial_stepsize
@@ -340,4 +369,5 @@ class RCDS(_Optimize):
         self.hist_best_positions = self._denormalize_positions(
             _np.array(hist_best_pos, ndmin=2))
         self.hist_best_objfunc = _np.array(hist_best_func, ndmin=2)
-        self.best_direction = self._denormalize_positions(search_dirs)
+        self.best_direction = self._denormalize_positions(
+            search_dirs, is_pos=False)
