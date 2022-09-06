@@ -23,6 +23,7 @@ class RCDSParams(_OptimizeParams):
         self.initial_stepsize = 0.1  # in normalized units.
         self.noise_level = 0.0  # in units of the objective function.
         self.tolerance = 1e-5  # in relative units.
+        self.orthogonality_threshold = 0.9
         self.update_search_directions = True
         self.linescan_num_pts = 6
         self.linescan_min_pts_fit = 4
@@ -39,6 +40,8 @@ class RCDSParams(_OptimizeParams):
         stg += self._TMPF.format('initial_stepsize', self.initial_stepsize)
         stg += self._TMPF.format('noise_level', self.noise_level)
         stg += self._TMPF.format('tolerance', self.tolerance)
+        stg += self._TMPF.format(
+            'orthogonality_threshold', self.orthogonality_threshold)
         stg += self._TMPS.format(
             'update_search_directions', str(self.update_search_directions))
         stg += self._TMPD.format('linescan_num_pts', self.linescan_num_pts)
@@ -145,8 +148,8 @@ class RCDSParams(_OptimizeParams):
                     return deltas[indcs[1:]], funcs[indcs[1:]]
                 return deltas, funcs
 
-            upn = max(int(error.size*(1-perlim)), 4)
-            dnn = max(int(error.size*perlim), 1)
+            upn = max(int(error.size*(1-perlim)), 3)
+            dnn = max(int(error.size*perlim), 2)
             std = diff[dnn:upn].mean()
 
             # For the larger diffs, the index after the first diff larger than
@@ -163,9 +166,7 @@ class RCDSParams(_OptimizeParams):
             idx = (diff[:dnn] > max_err_factor*std).nonzero()[0]
             if idx.size > 0:
                 # here we don't have to increment, because we started from 0:
-                dncut = idx.min()+1
-
-            print(dnn, upn, dncut, upcut)
+                dncut = idx.min()
 
             mask = _np.zeros(error.shape, dtype=bool)
             mask[dncut:upcut] = True
@@ -318,19 +319,21 @@ class RCDS(_Optimize):
         funcs = funcs[mask]
 
         if deltas.size == 0:
-            _log.warning('empty list on linescan!')
+            _log.warning('        empty list on linescan!')
             return pos0, 0, func0
         elif deltas.size < self.params.linescan_min_pts_fit:
             idx_min = funcs.argmin()
             pos_min = pos0 + deltas[idx_min] * dir
-            _log.warning('small number of points in linescan!')
+            _log.warning('        small number of points in linescan!')
             return pos_min, deltas[idx_min], funcs[idx_min]
 
         cfs = _np.polynomial.polynomial.polyfit(deltas, funcs, deg=2)
         fits = _np.polynomial.polynomial.polyval(deltas, cfs)
         deltas, funcs = self.params.remove_outlier(deltas, funcs, fits)
         if deltas.size < fits.size:
-            _log.info(f'Outliers removed: {fits.size-deltas.size:d}')
+            _log.info(
+                f'        # outliers removed = {fits.size-deltas.size:d},   '
+                f'')
             cfs = _np.polynomial.polynomial.polyfit(deltas, funcs, deg=2)
 
         # wrong concavity must also count:
@@ -348,7 +351,7 @@ class RCDS(_Optimize):
         self.axes.set_ylim([func_v.min()*0.9, func_v.max()*1.1])
         self.figure.tight_layout()
         self.figure.show()
-        _mplt.pause(3)
+        _mplt.pause(2)
 
         idx_min = _np.argmin(func_v)
         pos_min = pos0 + delta_v[idx_min] * dir
@@ -368,7 +371,6 @@ class RCDS(_Optimize):
         Xiaobiao implements his own bracketing and linescan.
 
         """
-
         self.figure, self.axes = _mplt.subplots(1, 1)
         self.line_data = self.axes.plot([1, 1], [1, 1], 'or', label='Data')[0]
         self.line_fit = self.axes.plot([1, 1], [1, 1], '-b', label='Fit')[0]
@@ -380,7 +382,8 @@ class RCDS(_Optimize):
         search_dirs = self.params.initial_search_directions.copy()
         search_dirs = self.params.normalize_positions(
             search_dirs, is_pos=False)
-        search_dirs /= _np.sum(search_dirs*search_dirs, axis=1)[:, None]
+        search_dirs /= _np.sqrt(_np.sum(
+            search_dirs*search_dirs, axis=1))[:, None]
 
         step = self.params.initial_stepsize
         tol = self.params.tolerance
@@ -393,8 +396,9 @@ class RCDS(_Optimize):
         pos_min, func_min = pos0, func0
         hist_best_pos, hist_best_func = [pos_min], [func_min]
 
+        _log.info(f'Starting Optimization. Initial ObjFun: {func0:.3g}')
         for iter in range(max_iters):
-            _log.info(f'Iteration {iter+1:04d}/{max_iters:04d}\n')
+            _log.info(f'\nIteration {iter+1:04d}/{max_iters:04d}')
             max_decr = 0
             max_decr_dir = 0
 
@@ -406,34 +410,39 @@ class RCDS(_Optimize):
                 dir = search_dirs[idx]
                 delta_array, func_array, mins = self.bracketing_min(
                     pos_min, func_min, dir, step)
-
                 _log.info(
-                    f'Dir. {idx+1:d}. Obj. Func. Min: {mins[-1]}')
+                    f'    Bracketing Dir. {idx+1:d}:  '
+                    f'Delta = ['
+                    f'{delta_array[0]:.3g}, {delta_array[-1]:.3g}]   '
+                    f'Objfun = {mins[-1]:.3g}')
 
-                pos_idx, _, func_idx = self.linescan(
+                pos_idx, delta_idx, func_idx = self.linescan(
                     delta_array, func_array, mins[0], mins[-1], dir)
+                _log.info(
+                    f'    Linescan in Dir. {idx+1:d}:    '
+                    f'Delta = {delta_idx:.3g}   Objfun = {func_idx:.3g}')
 
                 if (func_min - func_idx) > max_decr:
                     max_decr = func_min - func_idx
                     max_decr_dir = idx
                     _log.info(
-                        f'Largest obj.func delta = {max_decr:f}, updated.')
+                        f'    Updated ObjFun largest decrease {max_decr:.3f}.')
                 func_min = func_idx
                 pos_min = pos_idx
+                _log.info('')
 
             # Define an extension point colinear with pos0 and pos_min:
             pos_e = 2 * pos_min - pos0
             func_e = 0
             if self.params.update_search_directions:
-                _log.info('Evaluating objective func. at extension point...')
+                _log.info('    Checking extension point.')
                 func_e = self._objective_func(pos_e)
-                _log.info('Done!\n')
 
             # Calculate new normalized direction:
             diff = pos_min - pos0
             new_dir = diff/_np.linalg.norm(diff)
             # used for checking orthogonality with other directions:
-            max_dotp = (new_dir.T @ search_dirs).max()
+            max_dotp = (search_dirs @ new_dir).max()
 
             # Numerical Recipes conditions (same order)
             cond1 = func0 <= func_e
@@ -445,27 +454,33 @@ class RCDS(_Optimize):
                 pass
             elif cond1 or cond2:
                 _log.info(
-                    f'Direction {max_decr_dir+1:d} not replaced: '
-                    f'Condition 1: {cond1}; Condition 2: {cond2}')
-            elif max_dotp < 0.9:  # only accept if reasonably orthogonal
-                _log.info(f'Replacing direction {max_decr_dir+1:d}')
+                    f'    Dir. {max_decr_dir+1:d} not replaced:\n'
+                    f'        func0 >= func_e: {cond1}\n'
+                    f'        cond 2nd deriv.: {cond2}')
+            # only accept if reasonably orthogonal:
+            elif max_dotp < self.params.orthogonality_threshold:
+                _log.info(f'    Replacing direction {max_decr_dir+1:d}')
                 search_dirs[max_decr_dir:-1] = search_dirs[max_decr_dir+1:]
                 search_dirs[-1] = new_dir
 
                 delta_array, func_array, mins = self.bracketing_min(
                     pos_min, func_min, new_dir, step)
                 _log.info(
-                    f'Iteration {iter+1:d}, New dir. {max_decr_dir+1:d}, '
-                    f'Obj. Func. Min {func_min:f}')
+                    f'        Bracket result:  '
+                    f'Delta = [{delta_array[0]:.3g}, {delta_array[-1]:.3g}]   '
+                    f'Objfun = {mins[-1]:.3g}')
+
                 pos_idx, _, func_idx = self.linescan(
                     delta_array, func_array, mins[0], mins[-1], dir)
+                _log.info(
+                    f'        Linescan result: Delta = {delta_idx:.3g}   '
+                    f'Objfun = {func_idx:.3g}')
                 func_min = func_idx
                 pos_min = pos_idx
             else:
-                _log.info('Direction replacement conditions were met.')
                 _log.info(
-                    f'Skipping new direction {max_decr_dir+1:d}: '
-                    f'max dot product {max_dotp:f}')
+                    f'    Dir. {max_decr_dir+1:d} not replaced: '
+                    f'max dot product {max_dotp:.3f}')
 
             hist_best_pos.append(pos_min)
             hist_best_func.append(func_min)
@@ -473,27 +488,32 @@ class RCDS(_Optimize):
             # Numerical recipes does:
             # cond = 2*(func0-func_min) <= \
             #       tol*(abs(func0)+abs(func_min)) + self._TINY
-            cond = 2 * (func0 - func_min) <= tol * (abs(func0) + abs(func_min))
+            cond = 2 * (func0 - func_min) <= tol * (abs(func0)+abs(func_min))
             # if abs(func_min) < tol:
-            if (cond and tol > 0) or self._stopevt.is_set():
+            if (cond and tol > 0):
                 _log.info(
-                    f'Quiting : Condition: {cond}; func0: {func0}, '
-                    f'func_min: {func_min}: Event: {self._stopevt.is_set()}')
-
+                    f'Exiting: Init ObjFun = {func0:.3g},  '
+                    f'Final ObjFun = {func_min:.3g}')
                 break
-
-            if self._num_objective_evals > max_evals:
+            elif self._stopevt.is_set():
+                _log.info('Exiting: stop event was set.')
+                break
+            elif self._num_objective_evals > max_evals:
                 _log.info('Exiting: Maximum number of evaluations reached.')
                 break
 
             func0 = func_min
             pos0 = pos_min
+            _log.info(
+                f'End of iteration {iter+1:04d}: '
+                f'Final ObjFun = {func_min:.3g}')
 
-        stg = 'Finished! \n'
-        stg += f'f_0 = {init_func:4.2e}\n'
-        stg += f'f_min = {func_min:4.2e}\n'
-        ratio = func_min/init_func
-        stg += f'f_min/f0 = {ratio:4.2e}\n'
+        stg = '\n Finished! \n'
+        stg += f'Numer of iterations: {iter+1:04d}\n'
+        stg += f'Numer of evaluations: {self.num_objective_evals:04d}\n'
+        stg += f'f_0 = {init_func:.3g}\n'
+        stg += f'f_min = {func_min:.3g}\n'
+        stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
         _log.info(stg)
 
         self.hist_best_positions = self.params.denormalize_positions(
