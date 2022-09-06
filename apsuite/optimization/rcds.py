@@ -5,33 +5,178 @@ import logging as _log
 import numpy as _np
 import matplotlib.pyplot as _mplt
 
+from mathphys.functions import get_namedtuple as _get_namedtuple
+
 from .base import Optimize as _Optimize, OptimizeParams as _OptimizeParams
 
 
 class RCDSParams(_OptimizeParams):
+    """Parameters used in RCDS Optimization algorithm."""
+
+    OutlierMethod = _get_namedtuple(
+        'OutlierMethod', ('Xiaobiao', 'STD', 'None_'))
 
     def __init__(self):
         """."""
         super().__init__()
+        self.max_number_evals = 1500
         self.initial_stepsize = 0.1  # in normalized units.
         self.noise_level = 0.0  # in units of the objective function.
         self.tolerance = 1e-5  # in relative units.
-        self.initial_search_directions = _np.array([], ndmin=2)
         self.update_search_directions = True
+        self.linescan_num_pts = 6
+        self.linescan_min_pts_fit = 4
+        self.outlier_method = self.OutlierMethod.Xiaobiao
+        self.outlier_max_err_factor = 3.0
+        self.outlier_percentile_limit = 0.25
+        self.initial_search_directions = _np.array([], ndmin=2)
 
     def __str__(self):
         """."""
-        stg = self._TMPF.format('initial_stepsize', self.initial_stepsize)
+        stg = ''
+        stg += self._TMPD.format('max_number_iters', self.max_number_iters)
+        stg += self._TMPD.format('max_number_evals', self.max_number_evals)
+        stg += self._TMPF.format('initial_stepsize', self.initial_stepsize)
         stg += self._TMPF.format('noise_level', self.noise_level)
         stg += self._TMPF.format('tolerance', self.tolerance)
         stg += self._TMPS.format(
             'update_search_directions', str(self.update_search_directions))
+        stg += self._TMPD.format('linescan_num_pts', self.linescan_num_pts)
+        stg += self._TMPD.format(
+            'linescan_min_pts_fit', self.linescan_min_pts_fit)
+        stg += self._TMPS.format(
+            'outlier_method',
+            self.OutlierMethod._fields[self.outlier_method])
+        stg += self._TMPF.format(
+            'outlier_max_err_factor', self.outlier_max_err_factor)
+        stg += self._TMPF.format(
+            'outlier_percentile_limit', self.outlier_percentile_limit)
+
         stg += super().__str__()
         names = [f'Search Dir. {i:d}' for i in range(
             self.initial_search_directions.shape[0])]
         stg += self.print_positions(
             self.initial_search_directions, names=names, print_header=False)
         return stg
+
+    def normalize_positions(self, pos, is_pos=True):
+        """Normalize positions to interval [0, 1] in all search directions.
+
+        Args:
+            pos (numpy.ndarray, (N, M)): Unnormalized position or direction.
+                If `pos` is bi-dimensional, each row is considered to be a
+                position or direction vector.
+            is_pos (bool, optional): Whether pos is a position or a direction
+                in search space. Since directions are not associated with a
+                specific point, the `limit_lower` is not subtracted from it
+                before scale normalization. Defaults to True.
+
+        Returns:
+            numpy.ndarray, (N, M): Normalized position vector with same shape
+                as `pos`.
+
+        """
+        npos = pos.copy()
+        if is_pos:
+            npos -= self.limit_lower
+        npos /= (self.limit_upper - self.limit_lower)
+        return npos
+
+    def denormalize_positions(self, npos, is_pos=True):
+        """Bring a normalized position or direction back to original space.
+
+        Args:
+            npos (numpy.ndarray, (N, M)): Unnormalized position or direction.
+                If `pos` is bi-dimensional, each row is considered to be a
+                position or direction vector.
+            is_pos (bool, optional): Whether pos is a position or a direction
+                in search space. Since directions are not associated with a
+                specific point, the `limit_lower` is not added to it after
+                scale correction. Defaults to True.
+
+        Returns:
+            numpy.ndarray, (N, M): Un-Normalized position vector with same
+                shape as `npos`.
+        """
+        pos = npos * (self.limit_upper - self.limit_lower)
+        if is_pos:
+            pos += self.limit_lower
+        return pos
+
+    def check_and_adjust_boundary(self, pos):
+        """Check whether position is outside boundary and set nans when needed.
+
+        Args:
+            pos (numpy.ndarray, (N, M)): Unnormalized position. If `pos` is
+                bi-dimensional, each row is considered to be a position vector.
+
+        Returns:
+            numpy.ndarray, (N, M): new position with numpy.nans applied when
+                needed.
+
+        """
+        valu = self.limit_upper.copy()
+        vall = self.limit_lower.copy()
+        idu = pos > valu
+        idl = pos < vall
+        pos = _np.where(idu, _np.nan, pos)
+        pos = _np.where(idl, _np.nan, pos)
+        return pos
+
+    def remove_outlier(self, deltas, funcs, fits):
+        """."""
+        max_err_factor = self.outlier_max_err_factor
+
+        error = funcs - fits
+        if self.outlier_method == self.OutlierMethod.Xiaobiao:
+            perlim = self.outlier_percentile_limit
+
+            if deltas.size < 3:
+                return deltas, funcs
+
+            indcs = _np.argsort(error)
+            # since error is sorted, all diff are positive:
+            diff = _np.diff(error[indcs])
+
+            if deltas.size < 5:
+                if diff[-1] > max_err_factor*diff[:-1].mean():
+                    return deltas[indcs[:-1]], funcs[indcs[:-1]]
+                if diff[0] > max_err_factor*diff[1:].mean():
+                    return deltas[indcs[1:]], funcs[indcs[1:]]
+                return deltas, funcs
+
+            upn = max(int(error.size*(1-perlim)), 4)
+            dnn = max(int(error.size*perlim), 1)
+            std = diff[dnn:upn].mean()
+
+            # For the larger diffs, the index after the first diff larger than
+            # the threshold indicates the outliers:
+            upcut = None
+            idx = (diff[upn:] > max_err_factor*std).nonzero()[0]
+            if idx.size > 0:
+                # we need to increment here, to get the appropriate index:
+                upcut = upn + idx.min() + 1
+
+            # While for the smaller diffs, the index of the first diff larger
+            # than the threshold indicates the outliers:
+            dncut = None
+            idx = (diff[:dnn] > max_err_factor*std).nonzero()[0]
+            if idx.size > 0:
+                # here we don't have to increment, because we started from 0:
+                dncut = idx.min()+1
+
+            print(dnn, upn, dncut, upcut)
+
+            mask = _np.zeros(error.shape, dtype=bool)
+            mask[dncut:upcut] = True
+            mask = _np.sort(indcs[mask])
+        elif self.outlier_method == self.OutlierMethod.STD:
+            std = error.std()
+            mask = _np.abs(error) <= max_err_factor * std
+        else:
+            mask = _np.ones(error.shape, dtype=bool)
+
+        return deltas[mask], funcs[mask]
 
 
 class RCDS(_Optimize):
@@ -45,29 +190,13 @@ class RCDS(_Optimize):
         super().__init__(RCDSParams(), use_thread=use_thread)
         self._num_objective_evals = 0
 
-        # self.figure, self.axes = _mplt.subplots(1, 1)
-        # self.line_data = self.axes.plot([1, 1], [1, 1], 'or', label='Data')[0]
-        # self.line_fit = self.axes.plot([1, 1], [1, 1], '-b', label='Fit')[0]
-        # self.axes.legend(loc='best')
-        # self.axes.set_ylabel('Objective Function')
-        # self.axes.set_xlabel('Direction Search Steps')
-
     @property
     def num_objective_evals(self):
         """."""
         return self._num_objective_evals
 
-    def _check_lim(self):
-        # If particle position exceeds the boundary, set the boundary value
-        if self._pos_lim_upper is not None:
-            over = self._position > self._pos_lim_upper
-            self._position[over] = self._pos_lim_upper[over]
-        if self._pos_lim_lower is not None:
-            under = self._position < self._pos_lim_lower
-            self._position[under] = self._pos_lim_lower[under]
-
     def bracketing_min(self, pos0, func0, dir, step):
-        """Brackets the minimum
+        """Bracket the minimum.
 
         Args:
             pos0 (n-dimensional np.array): starting point in param space
@@ -81,9 +210,11 @@ class RCDS(_Optimize):
                 which the minimum is attained 'delta_min', the minimum point
                 'pos_min' and the obj. func minimum value, 'func_min'.
         """
-        print(func0)
         if _np.isnan(func0):
             func0 = self._objective_func(pos0)
+
+        if _np.isnan(func0):
+            raise ValueError('Objective function is Nan for initial position.')
 
         # mins is a tuple with informations about the minimum so far:
         mins = pos0, 0, func0
@@ -119,12 +250,17 @@ class RCDS(_Optimize):
         """."""
         direction = direction.lower()[:3]  # pos or neg
 
+        # Lists with properties of all evaluations made along this direction:
+        delta_array = []
+        func_array = []
+
         pos = pos0 + step * dir
         func = self._objective_func(pos)
+        if _np.isnan(func):
+            return delta_array, func_array, mins
 
-        # Lists with properties of all evaluations made along this direction:
-        delta_array = [step]
-        func_array = [func]
+        delta_array.append(step)
+        func_array.append(func)
 
         if func < mins[-1]:
             mins = pos, step, func
@@ -141,7 +277,7 @@ class RCDS(_Optimize):
             func = self._objective_func(pos)
 
             if _np.isnan(func):
-                step = step_backup
+                step = step_backup  # retrieve last valid step
                 break
             delta_array.append(step)
             func_array.append(func)
@@ -151,7 +287,7 @@ class RCDS(_Optimize):
 
         return delta_array, func_array, mins
 
-    def linescan(self, delta_array, func_array, pos0, func0, dir, npts=6):
+    def linescan(self, delta_array, func_array, pos0, func0, dir):
         """."""
         idx = _np.argsort(delta_array)
         delta_array = delta_array[idx]
@@ -160,7 +296,11 @@ class RCDS(_Optimize):
         if _np.isnan(func0):
             func0 = self._objective_func(pos0)
 
-        deltas = _np.linspace(delta_array[0], delta_array[-1], npts)
+        if _np.isnan(func0):
+            raise ValueError('Objective function is Nan for initial position.')
+
+        deltas = _np.linspace(
+            delta_array[0], delta_array[-1], self.params.linescan_num_pts)
         funcs = deltas * _np.nan
 
         idx = _np.argmin(
@@ -178,72 +318,48 @@ class RCDS(_Optimize):
         funcs = funcs[mask]
 
         if deltas.size == 0:
+            _log.warning('empty list on linescan!')
             return pos0, 0, func0
-
-        coeffs = _np.polynomial.polynomial.polyfit(deltas, funcs, deg=2)
-        if deltas.size < 3 or coeffs[-1] <= 0:  # wrong concavity
+        elif deltas.size < self.params.linescan_min_pts_fit:
             idx_min = funcs.argmin()
             pos_min = pos0 + deltas[idx_min] * dir
-            func_min = funcs[idx_min]
-            return pos_min, deltas[idx_min], func_min
+            _log.warning('small number of points in linescan!')
+            return pos_min, deltas[idx_min], funcs[idx_min]
 
-        delta_v = _np.linspace(deltas[0], deltas[-1], 1000)
-        func_v = _np.polynomial.polynomial.polyval(delta_v, coeffs)
+        cfs = _np.polynomial.polynomial.polyfit(deltas, funcs, deg=2)
+        fits = _np.polynomial.polynomial.polyval(deltas, cfs)
+        deltas, funcs = self.params.remove_outlier(deltas, funcs, fits)
+        if deltas.size < fits.size:
+            _log.info(f'Outliers removed: {fits.size-deltas.size:d}')
+            cfs = _np.polynomial.polynomial.polyfit(deltas, funcs, deg=2)
 
-        #self.line_data.set_data(deltas, funcs)
-        #self.line_fit.set_data(delta_v, func_v)
-        #self.axes.set_xlim([delta_v.min(), delta_v.max()])
-        #self.axes.set_ylim([func_v.min(), func_v.max()])
-        #self.figure.tight_layout()
-        #self.figure.show()
-        #_mplt.pause(0.5)
-
-        deltas, funcs = self._remove_outlier(deltas, funcs, coeffs)
-
-        # TODO: deal with repeated code
-        # check if outlier removal actuallly took place
-        # avoid re-fitting
-
-        coeffs = _np.polynomial.polynomial.polyfit(deltas, funcs, deg=2)
-        if deltas.size < 3 or coeffs[-1] <= 0:  # wrong concavity
+        # wrong concavity must also count:
+        if deltas.size <= self.params.linescan_min_pts_fit or cfs[-1] <= 0:
             idx_min = funcs.argmin()
             pos_min = pos0 + deltas[idx_min] * dir
-            func_min = funcs[idx_min]
-            return pos_min, deltas[idx_min], func_min
+            return pos_min, deltas[idx_min], funcs[idx_min]
 
         delta_v = _np.linspace(deltas[0], deltas[-1], 1000)
-        func_v = _np.polynomial.polynomial.polyval(delta_v, coeffs)
+        func_v = _np.polynomial.polynomial.polyval(delta_v, cfs)
+
+        self.line_data.set_data(deltas, funcs)
+        self.line_fit.set_data(delta_v, func_v)
+        self.axes.set_xlim([delta_v.min()*1.1, delta_v.max()*1.1])
+        self.axes.set_ylim([func_v.min()*0.9, func_v.max()*1.1])
+        self.figure.tight_layout()
+        self.figure.show()
+        _mplt.pause(3)
 
         idx_min = _np.argmin(func_v)
         pos_min = pos0 + delta_v[idx_min] * dir
-        func_min = func_v[idx_min]
-        return pos_min, delta_v[idx_min], func_min
-
-    def _remove_outlier(self, deltas, funcs, coeffs):
-        """."""
-        error = _np.polynomial.polynomial.polyval(deltas, coeffs)
-        error -= funcs
-        std = error.std()
-        mask = ~(error >= 3 * std)
-
-        return deltas[mask], funcs[mask]
-
-    def _normalize_positions(self, pos, is_pos=True):
-        npos = pos
-        if is_pos:
-            npos -= self.params.limit_lower
-        npos /= (self.params.limit_upper - self.params.limit_lower)
-        return npos
-
-    def _denormalize_positions(self, npos, is_pos=True):
-        pos = npos * (self.params.limit_upper - self.params.limit_lower)
-        if is_pos:
-            pos += self.params.limit_lower
-        return pos
+        return pos_min, delta_v[idx_min], func_v[idx_min]
 
     def _objective_func(self, pos):
         self._num_objective_evals += 1
-        pos = self._denormalize_positions(pos)
+        pos = self.params.denormalize_positions(pos)
+        pos = self.params.check_and_adjust_boundary(pos)
+        if _np.any(_np.isnan(pos)):
+            return _np.nan
         return self.objective_function(pos)
 
     def _optimize(self):
@@ -252,15 +368,25 @@ class RCDS(_Optimize):
         Xiaobiao implements his own bracketing and linescan.
 
         """
+
+        self.figure, self.axes = _mplt.subplots(1, 1)
+        self.line_data = self.axes.plot([1, 1], [1, 1], 'or', label='Data')[0]
+        self.line_fit = self.axes.plot([1, 1], [1, 1], '-b', label='Fit')[0]
+        self.axes.legend(loc='best')
+        self.axes.set_ylabel('Objective Function')
+        self.axes.set_xlabel('Direction Search Steps')
+
         self._num_objective_evals = 0
         search_dirs = self.params.initial_search_directions.copy()
-        search_dirs = self._normalize_positions(search_dirs, is_pos=False)
+        search_dirs = self.params.normalize_positions(
+            search_dirs, is_pos=False)
         search_dirs /= _np.sum(search_dirs*search_dirs, axis=1)[:, None]
 
         step = self.params.initial_stepsize
         tol = self.params.tolerance
         max_iters = self.params.max_number_iters
-        pos0 = self._normalize_positions(self.params.initial_position)
+        max_evals = self.params.max_number_evals
+        pos0 = self.params.normalize_positions(self.params.initial_position)
 
         func0 = self._objective_func(pos0)
         init_func = func0
@@ -356,6 +482,10 @@ class RCDS(_Optimize):
 
                 break
 
+            if self._num_objective_evals > max_evals:
+                _log.info('Exiting: Maximum number of evaluations reached.')
+                break
+
             func0 = func_min
             pos0 = pos_min
 
@@ -366,8 +496,8 @@ class RCDS(_Optimize):
         stg += f'f_min/f0 = {ratio:4.2e}\n'
         _log.info(stg)
 
-        self.hist_best_positions = self._denormalize_positions(
+        self.hist_best_positions = self.params.denormalize_positions(
             _np.array(hist_best_pos, ndmin=2))
         self.hist_best_objfunc = _np.array(hist_best_func, ndmin=2)
-        self.best_direction = self._denormalize_positions(
+        self.best_direction = self.params.denormalize_positions(
             search_dirs, is_pos=False)
