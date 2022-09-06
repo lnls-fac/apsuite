@@ -75,10 +75,11 @@ class OptimizeParams:
 
         stg = ''
         if print_header:
-            dirs = ''.join([f'Dir. {i:<15d}' for i in range(pos.shape[-1])])
+            dirs = ''.join([
+                '{:^15s}'.format(f'Dir. {i:d}') for i in range(pos.shape[-1])])
             stg += '\n' + f"{'Positions':20s}" + dirs
 
-        tmp = '\n{:20s}'+'{:10.3f}'*pos.shape[-1]
+        tmp = '\n{:20s}'+'{:^15.3g}'*pos.shape[-1]
 
         for p, name in zip(pos, names):
             stg += tmp.format(name, *p)
