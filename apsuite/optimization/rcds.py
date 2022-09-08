@@ -190,6 +190,7 @@ class RCDS(_Optimize):
         """."""
         super().__init__(RCDSParams(), use_thread=use_thread)
         self._num_objective_evals = 0
+        self.final_search_directions = _np.array([], dtype=float)
 
     @property
     def num_objective_evals(self):
@@ -488,7 +489,7 @@ class RCDS(_Optimize):
             # Numerical recipes does:
             # cond = 2*(func0-func_min) <= \
             #       tol*(abs(func0)+abs(func_min)) + self._TINY
-            cond = 2 * (func0 - func_min) <= tol * (abs(func0)+abs(func_min))
+            cond = 2 * abs(func0-func_min) <= tol*(abs(func0)+abs(func_min))
             # if abs(func_min) < tol:
             if (cond and tol > 0):
                 _log.info(
@@ -516,8 +517,11 @@ class RCDS(_Optimize):
         stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
         _log.info(stg)
 
-        self.hist_best_positions = self.params.denormalize_positions(
+        self.best_positions = self.params.denormalize_positions(
             _np.array(hist_best_pos, ndmin=2))
-        self.hist_best_objfunc = _np.array(hist_best_func, ndmin=2)
-        self.best_direction = self.params.denormalize_positions(
+        self.best_objfuncs = _np.array(hist_best_func, ndmin=2)
+
+        self.final_search_directions = self.params.denormalize_positions(
             search_dirs, is_pos=False)
+        self.final_search_directions /= _np.linalg.norm(
+            self.final_search_directions, axis=0)
