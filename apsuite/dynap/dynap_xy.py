@@ -97,7 +97,7 @@ class DynapXY(_BaseClass):
 
         out = _pytrack.ring_pass(
             self._acc, rin, nr_turns=self.params.nrturns,
-            turn_by_turn=self.params.turn_by_turn)
+            turn_by_turn=self.params.turn_by_turn, parallel=True)
 
         self.data['x_in'] = x_in
         self.data['y_in'] = y_in
