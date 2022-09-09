@@ -129,7 +129,7 @@ class Optimize:
 
         self.current_position = _np.array([])
         self.best_positions = _np.array([], ndmin=2)
-        self.best_objfunc = _np.array([], ndmin=2)
+        self.best_objfuncs = _np.array([], ndmin=2)
 
         self.initialization()
 
@@ -167,7 +167,7 @@ class Optimize:
             'use_thread': self.use_thread,
             'current_position': self.current_position,
             'best_positions': self.best_positions,
-            'best_objfunc': self.best_objfunc,
+            'best_objfuncs': self.best_objfuncs,
             }
 
     def from_dict(self, dic):
@@ -178,7 +178,7 @@ class Optimize:
         self.current_position = dic.get(
             'current_position', self.current_position)
         self.best_positions = dic.get('best_positions', self.best_positions)
-        self.best_objfunc = dic.get('best_objfunc', self.best_objfunc)
+        self.best_objfuncs = dic.get('best_objfuncs', self.best_objfuncs)
 
     def initialization(self):
         """."""
