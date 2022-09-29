@@ -68,7 +68,7 @@ class LOCOUtils:
     @staticmethod
     def apply_bpm_weight(matrix, weight_bpm):
         """."""
-        return weight_bpm[:, None] * matrix
+        return weight_bpm * matrix
 
     @staticmethod
     def apply_corr_weight(matrix, weight_corr):
@@ -275,9 +275,6 @@ class LOCOUtils:
     @staticmethod
     def jloco_calc_k_dip(config, model):
         """."""
-        matrix_nominal = LOCOUtils.respm_calc(
-            model, config.respm, config.use_dispersion)
-
         if config.use_dip_families:
             dip_indices = []
             for fam_name in config.famname_dipset:
@@ -430,7 +427,7 @@ class LOCOUtils:
         """."""
         dip_indices = config.respm.fam_data['BN']['index']
         kick_matrix = LOCOUtils._parallel_base(
-            config, model, ksindices,
+            config, model, dip_indices,
             LOCOUtils._jloco_calc_kick_dip)
         return kick_matrix
 
@@ -616,7 +613,7 @@ class LOCOUtils:
     @staticmethod
     def jloco_apply_weight(jloco, weight_bpm, weight_corr):
         """."""
-        weight = (weight_bpm[:, None] * weight_corr[None, :]).ravel()
+        weight = (weight_bpm * weight_corr[None, :]).ravel()
         return weight[:, None] * jloco
 
     @staticmethod

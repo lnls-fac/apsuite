@@ -207,7 +207,7 @@ class TrajRespmat:
     def get_respm(self):
         """."""
         _, cumulmat = pyaccel.tracking.find_m44(
-            self.model, indices='open', closed_orbit=[0, 0, 0, 0])
+            self.model, indices='open', fixed_point=[0, 0, 0, 0])
 
         respmat = []
         corrs = np.hstack([self.ch_idx, self.cv_idx])

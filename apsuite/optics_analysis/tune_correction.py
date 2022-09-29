@@ -6,6 +6,7 @@ import pyaccel
 from pymodels import bo, si
 
 from .base_correction import BaseCorr
+from mathphys.functions import get_namedtuple as _get_namedtuple
 
 
 class TuneCorr(BaseCorr):
@@ -16,12 +17,22 @@ class TuneCorr(BaseCorr):
     SI_QD = ['QDA', 'QDB1', 'QDB2', 'QDP1', 'QDP2']
     BO_QF = ['QF']
     BO_QD = ['QD']
+    OPTICS = _get_namedtuple('Optics', ['EdwardsTeng', 'Twiss'])
 
     def __init__(self, model, acc, qf_knobs=None, qd_knobs=None,
-                 method=None, grouping=None):
+                 method=None, grouping=None, type_optics=None):
         """."""
         super().__init__(
             model=model, acc=acc, method=method, grouping=grouping)
+        self._type_optics = TuneCorr.OPTICS.EdwardsTeng
+        self.type_optics = type_optics
+        if self.type_optics == self.OPTICS.EdwardsTeng:
+            self._optics_func = pyaccel.optics.calc_edwards_teng
+        elif self._type_optics == self.OPTICS.Twiss:
+            self._optics_func = pyaccel.optics.calc_twiss
+        else:
+            raise TypeError('Optics type not supported.')
+
         if self.acc == 'BO':
             self.knobs.focusing = qf_knobs or TuneCorr.BO_QF
             self.knobs.defocusing = qd_knobs or TuneCorr.BO_QD
@@ -43,7 +54,28 @@ class TuneCorr(BaseCorr):
             'correction method', self.method_str)
         strg += '{0:25s}= {1:30s}\n'.format(
             'grouping', self.grouping_str)
+        strg += '{0:25s}= {1:30s}\n'.format(
+            'type_optics', self.type_optics_str)
         return strg
+
+    @property
+    def type_optics_str(self):
+        """."""
+        return TuneCorr.OPTICS._fields[self._type_optics]
+
+    @property
+    def type_optics(self):
+        """."""
+        return self._type_optics
+
+    @type_optics.setter
+    def type_optics(self, value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            self._type_optics = int(value in TuneCorr.OPTICS._fields[1])
+        elif int(value) in TuneCorr.OPTICS:
+            self._type_optics = int(value)
 
     def get_tunes(self, model=None):
         """."""
@@ -77,8 +109,12 @@ class TuneCorr(BaseCorr):
         """."""
         if model is None:
             model = self.model
-        twinom, *_ = pyaccel.optics.calc_twiss(
+        linopt, *_ = self._optics_func(
             accelerator=model, indices='open')
-        nux = twinom.mux[-1]/2/np.pi
-        nuy = twinom.muy[-1]/2/np.pi
-        return np.array([nux, nuy])
+        if self.type_optics == self.OPTICS.EdwardsTeng:
+            nu1 = linopt.mu1[-1]
+            nu2 = linopt.mu2[-1]
+        else:
+            nu1 = linopt.mux[-1]
+            nu2 = linopt.muy[-1]
+        return np.array([nu1, nu2])/2/np.pi

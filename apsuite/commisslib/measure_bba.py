@@ -325,7 +325,7 @@ class DoBBA(_BaseClass):
         idx, resx, resy = sofb.correct_orbit_manually(
             nr_iters=self.params.sofb_maxcorriter,
             residue=self.params.sofb_maxorberr)
-        return idx, _np.linalg.norm([resx, resy])
+        return idx, _np.max([resx, resy])
 
     def correct_orbit(self):
         """."""
