@@ -173,12 +173,13 @@ class MeasCoupling(_BaseClass):
         fittune1, fittune2, qcurr_interp = self.get_normal_modes(
             params=fit_vec, curr=qcurr, oversampling=oversampling)
 
-        fig = _plt.figure(figsize=(8, 6))
-        grid = _mpl_gs.GridSpec(1, 1)
-        grid.update(
-            left=0.12, right=0.95, bottom=0.15, top=0.9,
-            hspace=0.5, wspace=0.35)
-        axi = _plt.subplot(grid[0, 0])
+        # fig = _plt.figure(figsize=(8, 6))
+        # grid = _mpl_gs.GridSpec(1, 1)
+        # grid.update(
+        #     left=0.12, right=0.95, bottom=0.15, top=0.9,
+        #     hspace=0.5, wspace=0.35)
+        # axi = _plt.subplot(grid[0, 0])
+        fig, axi = _plt.subplots(1, 1, figsize=(8, 6))
 
         axi.set_xlabel(f'{self.data["qname"]} Current [A]')
         axi.set_ylabel('Transverse Tunes')
@@ -198,6 +199,7 @@ class MeasCoupling(_BaseClass):
                 date_string = _time.strftime("%Y-%m-%d-%H:%M")
                 fname = 'coupling_fitting_{}.png'.format(date_string)
             fig.savefig(fname, format='png', dpi=300)
+        fig.tight_layout()
         return fig, axi
 
     @staticmethod

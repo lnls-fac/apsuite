@@ -15,7 +15,7 @@ from siriuspy.devices import BunchbyBunch, PowerSupplyPU, EGTriggerPS
 from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
-
+from .. import asparams as _asparams
 
 class UtilClass:
     """."""
@@ -84,9 +84,9 @@ class UtilClass:
     @staticmethod
     def _process_data(data, params, rawdata=None):
         """."""
-        per_rev = params.PER_REV
+        rev_per = params.REV_PER
         calib = params.CALIBRATION_FACTOR
-        harm_num = params.HARM_NUM
+        harm_nr = params.HARM_NUM
         current = data.get('stored_current', None)
         if current is None:
             current = data['current']
@@ -96,7 +96,7 @@ class UtilClass:
 
         if rawdata is None:
             dataraw = data['rawdata'].astype(float)
-            dataraw *= 1 / (calib * current / harm_num)
+            dataraw *= 1 / (calib * current / harm_nr)
         else:
             dataraw = rawdata.astype(float)
 
@@ -110,7 +110,7 @@ class UtilClass:
         data_dft = _np.fft.fft(data_anal, axis=1)
 
         # compensate the different time samplings of each bunch:
-        dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * per_rev
+        dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * rev_per
         comp = _np.exp(-1j*2*_np.pi * freq[None, :]*dts[:, None])
         data_dft *= comp
 
@@ -255,14 +255,14 @@ class UtilClass:
 class BbBLParams(_ParamsBaseClass):
     """."""
 
-    DAC_NBITS = 14
-    SAT_THRES = 2**(DAC_NBITS-1) - 1
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/degree]
-    DAMPING_RATE = 1/13.0  # [Hz]
-    FREQ_RF = 499666000
-    HARM_NUM = 864
-    FREQ_REV = FREQ_RF / HARM_NUM
-    PER_REV = 1 / FREQ_REV
+    DAC_NR_BITS = _asparams.BBBL_DAC_NR_BITS
+    SAT_THRES = _asparams.BBBL_SAT_THRES
+    CALIBRATION_FACTOR = _asparams.BBBL_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBL_DAMPING_RATE
+    RF_FREQ = _asparams.RF_FREQ
+    HARM_NUM = _asparams.SI_HARM_NUM
+    REV_FREQ = _asparams.SI_REV_FREQ
+    REV_PER = 1 / REV_FREQ
 
     def __init__(self):
         """."""
@@ -286,15 +286,15 @@ class BbBLParams(_ParamsBaseClass):
 class BbBHParams(BbBLParams):
     """."""
 
-    DAMPING_RATE = 1/16.9e-3  # [Hz]
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+    CALIBRATION_FACTOR = _asparams.BBBH_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBH_DAMPING_RATE
 
 
 class BbBVParams(BbBLParams):
     """."""
 
-    DAMPING_RATE = 1/22.0e-3  # [Hz]
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+    CALIBRATION_FACTOR = _asparams.BBBV_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBV_DAMPING_RATE
 
 
 class BbBAcqData(_BaseClass, UtilClass):
@@ -383,14 +383,14 @@ class BbBAcqData(_BaseClass, UtilClass):
     def pca_analysis(self, rawdata=None):
         """."""
         calib = self.params.CALIBRATION_FACTOR
-        harm_num = self.params.HARM_NUM
+        harm_nr = self.params.HARM_NUM
         current = self.data.get('stored_current', None)
         if current is None:
             current = self.data['current']
 
         if rawdata is None:
             rawdata = self.data['rawdata'].astype(float)
-            rawdata *= 1 / (calib * current / harm_num)
+            rawdata *= 1 / (calib * current / harm_nr)
         else:
             rawdata = rawdata.astype(float)
 
@@ -527,9 +527,9 @@ class BbBAcqData(_BaseClass, UtilClass):
         if rawdata is None:
             rawdata = self.data['rawdata']
         rawdata = rawdata.astype(float)
-        per_rev = self.params.PER_REV
+        rev_per = self.params.REV_PER
         downsample = self.data['downsample']
-        dtime = per_rev*downsample
+        dtime = rev_per*downsample
 
         if subtract_mean:
             rawdata -= rawdata.mean(axis=1)[:, None]
@@ -941,9 +941,9 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         drive = bbb.drive0 if drive_num == 0 else bbb.drive1
         drive = drive if drive_num != 2 else bbb.drive2
 
-        harm_num = bbb.info.harmonic_number
+        harm_nr = bbb.info.harmonic_number
         modes_to_measure = self.params.modes_to_measure
-        bunches = _np.arange(harm_num)
+        bunches = _np.arange(harm_nr)
 
         bbb.sram.cmd_data_dump(pv_update=True)
         _time.sleep(self.params.wait_pv_update)
@@ -958,14 +958,14 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             self.data = dict(infos=[], modes_data=[], modes_measured=[])
         for mode in modes_to_measure:
             elt = _time.time()
-            drive.mask = _np.cos(2*_np.pi*bunches*mode/harm_num) > 0
+            drive.mask = _np.cos(2*_np.pi*bunches*mode/harm_nr) > 0
             _time.sleep(self.params.wait_acquisition)
             bbb.sram.cmd_data_dump(pv_update=True)
             _time.sleep(self.params.wait_pv_update)
 
             infos = self.get_data(bbb, acqtype)
             analysis = self._process_data(infos, self.params)
-            modei = sorted({mode, harm_num - mode})
+            modei = sorted({mode, harm_nr - mode})
             data = analysis['mode_data'][modei]
             infos.pop('rawdata')
 
@@ -994,44 +994,41 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
 class TuneShiftParams(_ParamsBaseClass):
     """."""
 
-    TIME_REV = 864 / 499666000  # s
+    REV_TIME = _asparams.SI_REV_TIME  # s
     WAIT_INJ = 0.2  # s
     DEF_TOL_CURRENT = 0.01  # mA
 
     def __init__(self):
         """."""
         super().__init__()
-        self.plane = 'HV'  # 'H', 'V' or 'HV'
         self.kickh = -25/1000  # mrad
         self.kickv = +20/1000  # mrad
         self.wait_bbb = 9  # s
-        self.currents = list()
-        self.filename = ''
+        self.currents = _np.arange(0.05, 2.1, 0.1)  # mA
 
     def __str__(self):
         """."""
         dtmp = '{0:10s} = {1:9d}  {2:s}\n'.format
         ftmp = '{0:10s} = {1:9.3f}  {2:s}\n'.format
         ltmp = '{0:6.3f},'.format
-        stg = f"{'plane':10s} = {self.plane:4s} ('H', 'V' or 'HV')\n"
+        stg = ''
         stg += ftmp('kickh', self.kickh, '[mrad]')
         stg += ftmp('kickv', self.kickv, '[mrad]')
         stg += dtmp('wait_bbb', self.wait_bbb, '[s]')
         stg += f"{'currents':10s} = ("
         stg += ''.join(map(ltmp, self.currents))
-        stg += ' ) mA \n'
-        stg += f"{'filename':10s} = '{self.filename:s}'\n"
+        stg += ' ) [mA] \n'
         return stg
 
 
-class MeasTuneShift(_BaseClass):
+class MeasTuneShift(_ThreadBaseClass):
     """."""
 
     def __init__(self, isonline=True):
         """."""
-        self.devices = dict()
-        self.data = dict()
-        self.params = TuneShiftParams()
+        params = TuneShiftParams()
+        super().__init__(
+            params=params, target=self._do_measure, isonline=isonline)
         self.pingers = list()
         if isonline:
             self.devices['bbbh'] = BunchbyBunch(BunchbyBunch.DEVICES.H)
@@ -1043,7 +1040,7 @@ class MeasTuneShift(_BaseClass):
             self.devices['egun'] = EGTriggerPS()
             self.pingers = [self.devices['pingh'], self.devices['pingv']]
 
-    def get_data(self, plane):
+    def get_data_from_plane(self, plane):
         """."""
         bbbtype = 'bbbh' if plane.upper() == 'H' else 'bbbv'
         bbb = self.devices[bbbtype]
@@ -1060,7 +1057,8 @@ class MeasTuneShift(_BaseClass):
             'nr_averages': sb_tune.nr_averages}
         return data
 
-    def merge_data(data1, data2):
+    @staticmethod
+    def merge_data(data1: dict, data2: dict):
         """."""
         if data1.keys() != data2.keys():
             raise Exception('Incompatible data sets')
@@ -1101,9 +1099,6 @@ class MeasTuneShift(_BaseClass):
         self.devices['egun'].cmd_enable_trigger()
         while not self._check_stored_current(goal_curr):
             _time.sleep(TuneShiftParams.WAIT_INJ)
-        curr = self.devices['bbbh'].dcct.current
-        print(
-            f'Stored Current: {curr:.3f}/{goal_curr:.3f}mA.')
         self.devices['egun'].cmd_disable_trigger()
 
     def _check_stored_current(
@@ -1111,65 +1106,70 @@ class MeasTuneShift(_BaseClass):
         dcct_curr = self.devices['bbbh'].dcct.current
         return dcct_curr > goal_curr or abs(dcct_curr - goal_curr) < tol
 
-    def _check_pingers_problem(self):
-        for ping in self.pingers:
-            if ping.voltage_mon < 0:
-                # reset pinger
-                ping.cmd_turn_off()
-                ping.cmd_turn_on()
-                return True
-        return False
-
-    def run_meas(self, save=True):
+    def _do_measure(self):
         """."""
-        data = dict()
         datah = list()
         datav = list()
         currs = list()
-        for curr in self.params.currents:
+        self.prepare_pingers()
+        for gcurr in self.params.currents:
             t0 = _time.time()
-            self.inject_in_storage_ring(curr)
+            print('Injecting...')
+            self.inject_in_storage_ring(gcurr)
+            curr = self.devices['bbbh'].dcct.current
+            print(f'Stored Current: {curr:.3f}/{gcurr:.3f}mA.')
 
-            trial = 0
-            while self._check_pingers_problem():
-                if trial > 2:
-                    print('3 unsucessful reset trials. Exiting...')
-                    break
-                print('Problem with pingers voltage. Resetting...')
-                _time.sleep(5)
-                trial += 1
-
+            print('Waiting BbB Update...')
             _time.sleep(self.params.wait_bbb)
+
             print('Acquiring data...')
             currs.append(self.devices['bbbh'].dcct.current)
-            data['stored_current'] = currs
-            if 'H' in self.params.plane:
-                datah.append(self.get_data(plane='H'))
-                data['horizontal'] = datah
-            if 'V' in self.params.plane:
-                datav.append(self.get_data(plane='V'))
-                data['vertical'] = datav
-            self.data = data
-            if save:
-                self.save_data(fname=self.params.filename, overwrite=True)
-                print('Data saved!')
+            datah.append(self.get_data_from_plane(plane='H'))
+            datav.append(self.get_data_from_plane(plane='V'))
+            self.data['stored_current'] = currs
+            self.data['horizontal'] = datah
+            self.data['vertical'] = datav
+
             tf = _time.time()
             print(f'Elapsed time: {tf-t0:.2f}s \n')
 
+            if self._stopevt.is_set():
+                print('Stopping...')
+                break
+        print('Finished!')
+
     def plot_spectrum(
-            self, plane, freq_min=None, freq_max=None,
-            title=None, fname=None):
+            self, plane, freq_min=None, freq_max=None, title=None,
+            fit_sync_freq=1.8, fit_bet_freq=43, fit_max_curr=0.6,
+            fit_min_curr=0.1,
+            cut_spec=None, fname=None):
         """plane: must be 'H' or 'V'."""
-        if plane.upper() == 'H':
+        plane = plane.upper()
+        if plane == 'H':
             data = self.data['horizontal']
             freq_min = freq_min or 38
             freq_max = freq_max or 52
-        elif plane.upper() == 'V':
+        elif plane == 'V':
             data = self.data['vertical']
             freq_min = freq_min or 72
             freq_max = freq_max or 84
         else:
             raise Exception("plane input must be 'H' or 'V'.")
+
+        def model(coefs, mag, freq, curr):
+            lin_c = coefs[:3][:, None]
+            ang_c = coefs[3:][:, None]
+
+            mag = mag.ravel()
+            freq = freq.ravel()[None, :]
+            curr = curr.ravel()[None, :]
+
+            mod = ang_c * curr
+            mod += lin_c
+            mod -= freq
+            mod = _np.abs(mod)
+            mod = _np.min(mod, axis=0) * mag
+            return mod
 
         curr = _np.array(self.data['stored_current'])
         mag = [dta['spec_mag'] for dta in data]
@@ -1182,37 +1182,73 @@ class MeasTuneShift(_BaseClass):
         curr = curr[idx]
         mag = mag[idx, :]
         mag = mag[:, idcs]
+        freq_, curr_ = _np.meshgrid(freq, curr)
 
-        freq, curr = _np.meshgrid(freq, curr)
-        freq, curr, mag = freq.T, curr.T, mag.T
+        # Transform from dB to amplitude
+        mag = 10**(mag/10)
+        # Normalize data from each current to one:
+        mag /= mag.max(axis=1)[:, None]
 
-        fig = _mplt.figure(figsize=(8, 6))
-        gs = _mgs.GridSpec(1, 1)
-        ax = fig.add_subplot(gs[0, 0])
-        ax.pcolormesh(curr, freq, mag)
+        if cut_spec:
+            mag[mag < cut_spec] = 0
+
+        idx = (curr > fit_min_curr) & (curr < fit_max_curr)
+        mag_fit = mag[idx, :]
+        freq_fit = freq_[idx, :]
+        curr_fit = curr_[idx, :]
+        lin_c0 = _np.arange(-1, 2) * fit_sync_freq + fit_bet_freq
+        ang_c0 = _np.zeros(3)
+        x0 = _np.r_[lin_c0, ang_c0]
+        opt = _scyopt.least_squares(
+            fun=model, x0=x0, method='lm', args=(mag_fit, freq_fit, curr_fit))
+        lin_c = opt.x[:3]
+        ang_c = opt.x[3:]
+
+        errs = self._calc_fitting_error(opt)
+        err_lin_c = errs[:3]
+        err_ang_c = errs[3:]
+
+        tunes_fit = ang_c[:, None] * curr[None, :] + lin_c[:, None]
+
+        fig, ax = _mplt.subplots(figsize=(8, 6))
+
+        ax.pcolormesh(curr_, freq_, 10*_np.log10(mag), shading='auto')
+        lines = ax.plot(curr, tunes_fit.T, 'k')
+        lss = ('--', '-', '-.')
+        for i, (line, ls_) in enumerate(zip(lines, lss)):
+            line.set_label(
+                f'm={i-1:2d} -> '
+                f'f = ({ang_c[i]:5.2f} ± {err_ang_c[i]:5.2f})*I'
+                f' + ({lin_c[i]:6.2f} ± {err_lin_c[i]:6.2f})')
+            line.set_ls(ls_)
+        ax.legend(loc='best', fontsize='xx-small')
         ax.set_ylabel('Frequency [kHz]')
         ax.set_xlabel('Current [mA]')
         ax.set_title(title)
-        if fname:
-            fig.savefig(fname, format='png', dpi=300)
-        return fig
+        fig.tight_layout()
 
-    def plot_time_evolution(
-            self, plane, title=None, fname=None):
+        if fname:
+            if not fname.endswith('.png'):
+                fname += '.png'
+            fig.savefig(fname, dpi=300)
+        return fig, mag, opt.x, opt
+
+    def plot_time_evolution(self, plane, title=None, fname=None):
         """plane: must be 'H' or 'V'."""
-        if plane.upper() == 'H':
+        plane = plane.upper()
+        if plane == 'H':
             data = self.data['horizontal']
-        elif plane.upper() == 'V':
+        elif plane == 'V':
             data = self.data['vertical']
         else:
             raise Exception("plane input must be 'H' or 'V'.")
 
         curr = _np.array(self.data['stored_current'])
-        mag = [dta['spec_mag'] for dta in data]
+        mag = [dta['data'] for dta in data]
         mag = _np.array(mag, dtype=float)
         mag -= _np.mean(mag, axis=1)[:, None]
         mag = _np.abs(mag)
-        dtime = _np.arange(0, mag.shape[1]) * TuneShiftParams.TIME_REV
+        dtime = _np.arange(0, mag.shape[1]) * TuneShiftParams.REV_TIME
 
         idx = _np.argsort(curr)
         curr = curr[idx]
@@ -1230,5 +1266,32 @@ class MeasTuneShift(_BaseClass):
         ax.set_xlabel('Current [mA]')
         ax.set_title(title)
         if fname:
-            fig.savefig(fname, format='png', dpi=300)
+            if not fname.endswith('.png'):
+                fname += '.png'
+            fig.savefig(fname, dpi=300)
         return fig
+
+    @staticmethod
+    def _calc_fitting_error(fit_params):
+        # based on fitting error calculation of scipy.optimization.curve_fit
+        # do Moore-Penrose inverse discarding zero singular values.
+        _, smat, vhmat = _np.linalg.svd(
+            fit_params['jac'], full_matrices=False)
+        thre = _np.finfo(float).eps * max(fit_params['jac'].shape)
+        thre *= smat[0]
+        smat = smat[smat > thre]
+        vhmat = vhmat[:smat.size]
+        pcov = _np.dot(vhmat.T / (smat*smat), vhmat)
+
+        # multiply covariance matrix by residue 2-norm
+        ysize = len(fit_params['fun'])
+        cost = 2 * fit_params['cost']  # res.cost is half sum of squares!
+        popt = fit_params['x']
+        if ysize > popt.size:
+            # normalized by degrees of freedom
+            s_sq = cost / (ysize - popt.size)
+            pcov = pcov * s_sq
+        else:
+            pcov.fill(_np.nan)
+            print('# of fitting parameters larger than # of data points!')
+        return _np.sqrt(_np.diag(pcov))
