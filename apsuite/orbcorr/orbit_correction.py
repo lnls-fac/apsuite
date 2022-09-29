@@ -1,7 +1,7 @@
 """."""
 
 from copy import deepcopy as _dcopy
-from collections import namedtuple as _namedtuple
+from mathphys.functions import get_namedtuple as _get_namedtuple
 import numpy as _np
 
 import pyaccel
@@ -32,12 +32,12 @@ class CorrParams:
 class OrbitCorr:
     """."""
 
-    CORR_STATUS = _namedtuple('CorrStatus', ['Fail', 'Sucess'])(0, 1)
+    CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
 
-    def __init__(self, model, acc):
+    def __init__(self, model, acc, params=None):
         """."""
         self.acc = acc
-        self.params = CorrParams()
+        self.params = params or CorrParams()
         self.respm = OrbRespmat(model=model, acc=self.acc, dim='6d')
         self.respm.model.cavity_on = True
         self.params.enbllistbpm = _np.ones(
@@ -98,6 +98,8 @@ class OrbitCorr:
 
         if jacobian_matrix is None:
             jmat = self.get_jacobian_matrix()
+        else:
+            jmat = jacobian_matrix
 
         ismat = self.get_inverse_matrix(jmat)
 

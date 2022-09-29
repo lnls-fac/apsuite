@@ -153,9 +153,10 @@ class _FitInjTrajBase(_BaseClass):
         """."""
         twi = twi if twi is not None else self.twiss[0]
         bun = pyaccel.tracking.generate_bunch(
-            self.params.simul_emitx, self.params.simul_emity,
-            self.params.simul_espread, self.params.simul_bunlen, twi,
-            self.params.simul_npart, cutoff=self.params.simul_cutoff)
+            self.params.simul_npart, emit1=self.params.simul_emitx,
+            emit2=self.params.simul_emity, sigmae=self.params.simul_espread,
+            sigmas=self.params.simul_bunlen, optics=twi,
+            cutoff=self.params.simul_cutoff)
         bun += np.array([x0, xl0, y0, yl0, delta, 0])[:, None]
 
         rout, *_ = pyaccel.tracking.linepass(
