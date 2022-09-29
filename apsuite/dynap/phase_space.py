@@ -9,9 +9,10 @@ import pyaccel.tracking as _pytrack
 import pyaccel.lattice as _pylatt
 
 from .base import BaseClass as _BaseClass
+from ..utils import ParamsBaseClass as _ParamsBaseClass
 
 
-class PhaseSpaceParams():
+class PhaseSpaceParams(_ParamsBaseClass):
     """."""
 
     def __init__(self):
@@ -111,7 +112,7 @@ class PhaseSpace(_BaseClass):
 
         out = _pytrack.ring_pass(
             self._acc, rin, nr_turns=self.params.nrturns,
-            turn_by_turn=True)
+            turn_by_turn=True, parallel=True)
 
         self.data['x_in'] = x_in
         self.data['x_rout'] = out[0]
@@ -126,7 +127,7 @@ class PhaseSpace(_BaseClass):
 
         out = _pytrack.ring_pass(
             self._acc, rin, nr_turns=self.params.nrturns,
-            turn_by_turn=True)
+            turn_by_turn=True, parallel=True)
 
         self.data['y_in'] = y_in
         self.data['y_rout'] = out[0]
@@ -134,16 +135,15 @@ class PhaseSpace(_BaseClass):
         self.data['y_lost_element'] = out[3]
         self.data['y_lost_plane'] = out[4]
 
-        rout = _np.zeros((6, de_in.size, self.params.nrturns+1))
-        lost_turn = []
-        lost_element = []
-        lost_plane = []
+        rin = _np.full((6, de_in.size), _np.nan)
+        rin[4] = de_in
         for i, den in enumerate(de_in):
             try:
                 if self._acc.cavity_on:
                     rdeltaf = self.params.mom_compact * den
                     self._acc[rfidx].frequency = freq0*(1 - rdeltaf)
                     orb = _np.squeeze(_pytrack.find_orbit6(self._acc))
+                    self._acc[rfidx].frequency = freq0
                 else:
                     orb = _np.zeros(6)
                     orb[4] = den
@@ -152,26 +152,19 @@ class PhaseSpace(_BaseClass):
                 orb[1] += self.params.xl_off
                 orb[3] += self.params.yl_off
                 de_in[i] = orb[4]
-
-                out = _pytrack.ring_pass(
-                    self._acc, orb, nr_turns=self.params.nrturns,
-                    turn_by_turn=True)
+                rin[:, i] = orb
             except _pytrack.TrackingException:
-                out = [_np.nan, 0, 0, 0, 'x']
+                pass
 
-            rout[:, i, :] = out[0]
-            lost_turn.append(out[2])
-            lost_element.append(out[3])
-            lost_plane.append(out[4])
+        out = _pytrack.ring_pass(
+            self._acc, rin, nr_turns=self.params.nrturns,
+            turn_by_turn=True, parallel=True)
 
         self.data['de_in'] = de_in
-        self.data['de_rout'] = rout
-        self.data['de_lost_turn'] = lost_turn
-        self.data['de_lost_element'] = lost_element
-        self.data['de_lost_plane'] = lost_plane
-
-        if self._acc.cavity_on:
-            self._acc[rfidx].frequency = freq0
+        self.data['de_rout'] = out[0]
+        self.data['de_lost_turn'] = out[2]
+        self.data['de_lost_element'] = out[3]
+        self.data['de_lost_plane'] = out[4]
 
     def process_data(self):
         """."""

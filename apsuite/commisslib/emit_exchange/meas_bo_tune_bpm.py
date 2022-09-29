@@ -1,32 +1,33 @@
-"Methods for measure tunes by bpm data"
-
+"Methods for tune measurement using bpm data"
 import numpy as _np
-import time as _time
+import matplotlib.pyplot as _plt
 import pyaccel as _pa
+import time as _time
+
 from numpy.fft import rfft as _rfft,  rfftfreq as _rfftfreq
 from scipy.signal import spectrogram as _spectrogram
-import matplotlib.pyplot as _plt
 
-from siriuspy.sofb.csdev import SOFBFactory
 from siriuspy.epics import PV
 from siriuspy.devices import CurrInfoBO, \
     Trigger, Event, EVG, RFGen, FamBPMs
 
 from apsuite.utils import ParamsBaseClass as _ParamsBaseClass, \
-    ThreadedMeasBaseClass as _ThreadBaseClass
+    MeasBaseClass as _BaseClass
 
 
 class BOTunebyBPMParams(_ParamsBaseClass):
-    """."""
+
     def __init__(self):
-        """."""
+        """"""
         super().__init__()
-        self.event = 'DigBO'
-        self.trigger_source = 'DigBO'
-        self.trigger_source_mode = 'Injection'
-        self.extra_delay = 0
+        self.event = 'Study'
+        self.event_mode = 'External'
+        self.event_delay = 0
+        self.trigger_source = 'Study'
+        # self.trigger_source_mode = 'Injection'
+
         self.nr_pulses = 1
-        self.nr_points_after = 10000
+        self.nr_points_after = 4000
         self.nr_points_before = 0
         self.bpms_timeout = 30  # [s]
 
@@ -38,9 +39,10 @@ class BOTunebyBPMParams(_ParamsBaseClass):
 
         stg = ''
         stg += stmp('event', self.event, '')
+        stg += stmp('event_mode', self.event_mode, '')
+        stg += ftmp('event_delay', self.event_delay, '[us]')
         stg += stmp('trigger_source', self.trigger_source, '')
-        stg += stmp('trigger_source_mode', self.trigger_source_mode, '')
-        stg += ftmp('extra_delay', self.extra_delay, '[us]')
+        # stg += stmp('trigger_source_mode', self.trigger_source_mode, '')
         stg += dtmp('nr_pulses', self.nr_pulses, '')
         stg += dtmp('nr_points_after', self.nr_points_after, '')
         stg += dtmp('nr_points_before', self.nr_points_before, '')
@@ -49,13 +51,27 @@ class BOTunebyBPMParams(_ParamsBaseClass):
         return stg
 
 
-class BOTunebyBPM(_ThreadBaseClass):
-    """."""
+class BOTunebyBPM(_BaseClass):
+    """"Methods for tune measurement using bpm data"
+
+    *Experiment Guide Lines*
+
+        Before starting the experiment:
+        You need to configure the extraction kicker to act at the point of the
+        ramp where you want to know the tunes. The tunes will be measured
+        based on the Fourier transform of the betatron oscillations induced by
+        the kick.
+
+        The BPMs need to be configured to acquire data immediately after the
+        kicker pulse. Just a few thousands of revolutions are
+        necessary to compute the tunes with precision.
+    """
+    BPM_TRIGGER = 'BO-Fam:TI-BPM'
+
     def __init__(self, params=None, isonline=True):
         """."""
         params = BOTunebyBPMParams() if params is None else params
         super().__init__(params=params, isonline=isonline)
-        self.sofb_data = SOFBFactory.create('BO')
         if self.isonline:
             self._create_devices()
             self._create_pvs()
@@ -70,63 +86,103 @@ class BOTunebyBPM(_ThreadBaseClass):
         self.devices['bobpms'] = FamBPMs(FamBPMs.DEVICES.BO)
         self.devices['event'] = Event(self.params.event)
         self.devices['evg'] = EVG()
-        self.devices['trigbpm'] = Trigger('BO-Fam:TI-BPM')
+        self.devices['trigbpm'] = Trigger(BOTunebyBPM.BPM_TRIGGER)
         self.devices['rfgen'] = RFGen()
+
+    def get_initial_state(self):
+        """."""
+        trigbpm = self.devices['trigbpm']
+        event = self.devices['event']
+        state = dict()
+        state['trigbpm_source'] = trigbpm.source
+        state['trigbpm_nrpulses'] = trigbpm.nr_pulses
+        state['trigbpm_delay'] = trigbpm.delay
+        state['event_delay'] = event.delay
+        state['event_mode'] = event.mode
+        return state
+
+    def recover_initial_state(self, state):
+        """."""
+        trigbpm = self.devices['trigbpm']
+        event = self.devices['event']
+
+        trigbpm.source = state['trigbpm_source']
+        trigbpm.nr_pulses = state['trigbpm_nrpulses']
+        trigbpm.delay = state['trigbpm_delay']
+        event.delay = state['event_delay']
+        event.mode = state['event_mode']
+
+    def prepare_timing(self):
+        """."""
+        trigbpm = self.devices['trigbpm']
+        evt_study = self.devices['event']
+
+        trigbpm.delay = self.params.trigbpm_delay
+        trigbpm.nr_pulses = self.params.trigbpm_nrpulses
+        trigbpm.source = self.trigger_source
+
+        evt_study.delay = self.params.event_delay
+        evt_study.mode = self.params.event_mode
+
+        # Update event configurations in EVG
+        self.devices['evg'].cmd_update_events()
 
     def configure_bpms(self):
         """."""
         prms = self.params
         bobpms = self.devices['bobpms']
-        trigbpm = self.devices['trigbpm']
-
+        bobpms.cmd_mturn_acq_abort()
         bobpms.mturn_config_acquisition(
             nr_points_after=prms.nr_points_after,
             nr_points_before=prms.nr_points_before,
-            acq_rate='TbT', repeat=False, external=True)
-        bobpms.mturn_reset_flags()
-        trigbpm.source = prms.trigger_source
-        trigbpm.nr_pulses = prms.nr_pulses
+            acq_rate='TbT', repeat=False)
 
-    def get_orbit(self, injection=False, external_trigger=False):
-        """Get orbit data from BPMs in TbT acquisition rate..
-        If injection is True, then injection is turned on before the measure.
-        If external_trigger is True, the event will listen a external trigger.
+    def get_orbit(self, injection=False, ext_trigger=False):
+        """Get orbit data from BPMs in TbT acquisition rate.
+
+        If injection is True and the Injection System is on, then injection
+        bottom is pressed before the measure.
+
+        If external_trigger is True, the event will list a external trigger.
         """
         prms = self.params
         bobpms = self.devices['bobpms']
-        trigbpm = self.devices['trigbpm']
-
-        delay0 = trigbpm.delay
-        trigbpm.delay = delay0 + prms.extra_delay
-        self.devices['event'].mode = prms.trigger_source_mode
+        event = self.devices['event']
 
         # Inject and start acquisition
-        bobpms.mturn_reset_flags()
-        if external_trigger:
-            self.devices['event'].cmd_external_trigger()
         if injection:
             self.devices['evg'].cmd_turn_on_injection()
+        if ext_trigger:
+            event.cmd_external_trigger()
+
         ret = bobpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
         if ret:
-            trigbpm.delay = delay0
             self.data = dict()
             raise AssertionError(
                 f'Problem waiting BPMs update. Error code: {ret:d}')
         orbx, orby = bobpms.get_mturn_orbit()
-        bobpms.cmd_mturn_acq_abort()
-        trigbpm.delay = delay0
 
         self.data['orbx'], self.data['orby'] = orbx, orby
         self.data['timestamp'] = _time.time()
 
+    def load_orbit(self, data=None, orbx=None, orby=None):
+        """Load orbit data into the object. You can pass the
+        entire data dictionary or just the orbits. If data argument
+        is provided, orbx and orby become optional"""
+
+        if data is not None:
+            self.data = data
+        if orbx is not None:
+            self.data['orbx'] = orbx
+        if orby is not None:
+            self.data['orby'] = orby
+
     def get_data(
-            self, delta='', injection=False, external_trigger=False,
-            orbit=True):
+            self, delta='', injection=False, orbit=True, ext_trigger=False):
         """."""
         # Store orbit
         if orbit:
-            self.get_orbit(
-                injection=injection, external_trigger=external_trigger)
+            self.get_orbit(injection, ext_trigger)
 
         # Store auxiliar data
         bobpms = self.devices['bobpms']
@@ -151,51 +207,21 @@ class BOTunebyBPM(_ThreadBaseClass):
 
         self.data.update(data)
 
-    def load_orbit(self, data=None, orbx=None, orby=None):
-        """Load orbit data into the object. You can pass the
-        intire data dictionary or just the orbits. If data argument
-        is provided, orbx and orby become optional"""
+    def dft_tunes(self, init_cut=50):
+        """."""
+        sx, sy, freqs = self.dft()
+        win = _np.arange(init_cut, freqs.size, dtype=int)
+        freqs, sx, sy = freqs[win], sx[win], sy[win]
+        peaksx, peaksy = _np.argmax(sx, axis=0), _np.argmax(sy, axis=0)
 
-        if data is not None:
-            self.data = data
-        if orbx is not None:
-            self.data['orbx'] = orbx
-        if orby is not None:
-            self.data['orby'] = orby
+        meas_tunesx, meas_tunesy = freqs[peaksx], freqs[peaksy]
 
-    def dft(self, bpm_indices=None):
-        """Apply a dft at BPMs data.
+        tunes = _np.array([meas_tunesx.mean(), meas_tunesy.mean()])
+        dtunes = _np.array([meas_tunesx.std(), meas_tunesy.std()])
+        return tunes, dtunes
 
-        Args:
-        - bpm_indices (int, list or np.array): BPM indices whose dft will
-        be applied. Default is return the dft of all BPMs.
-
-        Returns:
-         - spectrumx, spectrumy (np.arrays): Two matrices of dimension #freqs x
-         #bpm_indices containing the spectra of each BPM for the horizontal and
-         vertical, respectively.
-
-         - freqs (np.array):  frequency domain values.
-        """
-        if bpm_indices is not None:
-            orbx = self.data['orbx'][:, bpm_indices]
-            orby = self.data['orby'][:, bpm_indices]
-        else:
-            orbx = self.data['orbx']
-            orby = self.data['orby']
-
-        x_beta = orbx - orbx.mean(axis=0)
-        y_beta = orby - orby.mean(axis=0)
-
-        N = x_beta.shape[0]
-        freqs = _rfftfreq(N)
-
-        spectrumx = _np.abs(_rfft(x_beta, axis=0))
-        spectrumy = _np.abs(_rfft(y_beta, axis=0))
-
-        return spectrumx, spectrumy, freqs
-
-    def naff_tunes(self, dn=None, window_param=1, bpm_indices=None):
+    def naff_tunes(
+            self, dn=None, bpm_indices=None, interval=None):
         """Computes the tune evolution from the BPMs matrix with a moving
             window of length dn.
            If dn is not passed, the tunes are computed using all points."""
@@ -203,6 +229,12 @@ class BOTunebyBPM(_ThreadBaseClass):
         if bpm_indices is not None:
             x = self.data['orbx'][:, bpm_indices]
             y = self.data['orby'][:, bpm_indices]
+        elif (bpm_indices is not None) and (interval is not None):
+            x = self.data['orbx'][interval, bpm_indices]
+            y = self.data['orby'][interval, bpm_indices]
+        elif interval is not None:
+            x = self.data['orbx'][interval, :]
+            y = self.data['orby'][interval, :]
         else:
             x = self.data['orbx']
             y = self.data['orby']
@@ -226,7 +258,7 @@ class BOTunebyBPM(_ThreadBaseClass):
         return _np.array(tune1_list), _np.array(tune2_list)
 
     def spectrogram(
-            self, bpm_indices=None, dn=None, overlap=None,
+            self, bpm_indices=None, dn=None, interval=None, overlap=None,
             window=('tukey', 0.25)
             ):
         """Compute a spectrogram with consecutive Fourier transforms in segments
@@ -267,6 +299,12 @@ class BOTunebyBPM(_ThreadBaseClass):
         if bpm_indices is not None:
             x = self.data['orbx'][:, bpm_indices]
             y = self.data['orby'][:, bpm_indices]
+        elif (bpm_indices is not None) and (interval is not None):
+            x = self.data['orbx'][interval, bpm_indices]
+            y = self.data['orby'][interval, bpm_indices]
+        elif interval is not None:
+            x = self.data['orbx'][interval, :]
+            y = self.data['orby'][interval, :]
         else:
             x = self.data['orbx']
             y = self.data['orby']
@@ -291,6 +329,38 @@ class BOTunebyBPM(_ThreadBaseClass):
         _plot_heatmap(freqs, revs, tune_matrix)
 
         return tune1_matrix, tune2_matrix, freqs, revs
+
+    def dft(self, bpm_indices=None):
+        """Apply a dft at BPMs data.
+
+        Args:
+        - bpm_indices (int, list or np.array): BPM indices whose dft will
+        be applied. Default is return the dft of all BPMs.
+
+        Returns:
+         - spectrumx, spectrumy (np.arrays): Two matrices of dimension #freqs x
+         #bpm_indices containing the spectra of each BPM for the horizontal and
+         vertical, respectively.
+
+         - freqs (np.array):  frequency domain values.
+        """
+        if bpm_indices is not None:
+            orbx = self.data['orbx'][:, bpm_indices]
+            orby = self.data['orby'][:, bpm_indices]
+        else:
+            orbx = self.data['orbx']
+            orby = self.data['orby']
+
+        x_beta = orbx - orbx.mean(axis=0)
+        y_beta = orby - orby.mean(axis=0)
+
+        N = x_beta.shape[0]
+        freqs = _rfftfreq(N)
+
+        spectrumx = _np.abs(_rfft(x_beta, axis=0))
+        spectrumy = _np.abs(_rfft(y_beta, axis=0))
+
+        return spectrumx, spectrumy, freqs
 
     @staticmethod
     def tune_by_naff(x, y, window_param=1, decimal_only=True):

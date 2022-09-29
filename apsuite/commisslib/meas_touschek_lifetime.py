@@ -812,8 +812,8 @@ class MeasTouschekLifetime(_BaseClass):
             tune.cmd_enabley()
         bpm.switching_mode = swtch0
 
-        self.devices['trigger'].source = 'DigSI'
-        self.devices['event'].mode = 'Injection'
+        self.devices['trigger'].source = 'Linac'
+        self.devices['event'].mode = 'External'
         self.devices['evg'].cmd_update_events()
         pvsum.clear_callbacks()
         pvsum.auto_monitor = False
