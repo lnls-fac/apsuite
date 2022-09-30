@@ -97,23 +97,11 @@ class OptimizeParams:
 
     def to_dict(self):
         """."""
-        return {
-            'max_number_iters': self.max_number_iters,
-            'limit_lower': self.limit_lower,
-            'limit_upper': self.limit_upper,
-            'initial_position': self.initial_position,
-            }
+        return self.__dict__
 
-    def from_dict(self, dic):
+    def from_dict(self, params_dict):
         """."""
-        self.max_number_iters = dic.get(
-            'max_number_iters', self.max_number_iters)
-        self.limit_lower = dic.get(
-            'limit_lower', self.limit_lower)
-        self.limit_upper = dic.get(
-            'limit_upper', self.limit_upper)
-        self.initial_position = dic.get(
-            'initial_position', self.initial_position)
+        self.__dict__.update(params_dict)
 
 
 class Optimize:
