@@ -46,12 +46,8 @@ class OptimizePosAng(_RCDS, _BaseClass):
         posx0, angx0, posy0, angy0, kick_nlk0 = pos0
         posang.cmd_update_reference()
 
-        evg = self.devices['evg']
-        # inject on first bucket just once
-        evg.bucket_list = [1]
-        evg.nrpulses = 1
-        evg.cmd_update_events()
-        _time.sleep(1)
+        self._prepare_evg()
+
         self.devices['injsys'].cmd_switch_to_optim()
 
         self.data['timestamp'] = _time.time()
@@ -112,3 +108,11 @@ class OptimizePosAng(_RCDS, _BaseClass):
         injeff = currinfo.injeff
         print(f'    injection efficiency: {injeff:.2} %')
         return injeff
+
+    def _prepare_evg(self):
+        evg = self.devices['evg']
+        # configure to inject on first bucket just once
+        evg.bucket_list = [1]
+        evg.nrpulses = 1
+        evg.cmd_update_events()
+        _time.sleep(1)
