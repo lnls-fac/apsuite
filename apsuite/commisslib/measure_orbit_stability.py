@@ -558,6 +558,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         """."""
         self.trigbpm_delay = 0.0
         self.trigbpm_nrpulses = 1
+        self.event_src = 'Study'
         self.event_delay = 0.0
         self.event_mode = 'External'
         self.orbit_timeout = 40
@@ -573,6 +574,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         stg = ''
         stg += ftmp('trigbpm_delay', self.trigbpm_delay, '[us]')
         stg += dtmp('trigbpm_nrpulses', self.trigbpm_nrpulses, '')
+        stg += dtmp('event_src', self.event_src, '')
         stg += ftmp('event_delay', self.event_delay, '[us]')
         stg += stmp('event_mode', self.event_mode, '')
         stg += ftmp('orbit_timeout', self.orbit_timeout, '[s]')
@@ -587,10 +589,11 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
 
     BPM_TRIGGER = 'SI-Fam:TI-BPM'
 
-    def __init__(self, isonline=True):
+    def __init__(self, isonline=True, params=None):
         """."""
+        params = params or OrbitAcquisitionParams()
         _BaseClass.__init__(
-            self, params=OrbitAcquisitionParams(), isonline=isonline)
+            self, params=params, isonline=isonline)
         OrbitAnalysis.__init__(self)
 
         if self.isonline:
@@ -602,44 +605,44 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         self.devices['fambpms'] = FamBPMs(FamBPMs.DEVICES.SI)
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self.devices['trigbpm'] = Trigger(OrbitAcquisition.BPM_TRIGGER)
-        self.devices['evt_study'] = Event('Study')
+        self.devices['evt_src'] = Event(self.params.event_src)
         self.devices['evg'] = EVG()
         self.devices['rfgen'] = RFGen()
 
     def get_initial_state(self):
         """."""
         trigbpm = self.devices['trigbpm']
-        evt_study = self.devices['evt_study']
+        evt_src = self.devices['evt_src']
         state = dict()
         state['trigbpm_source'] = trigbpm.source
         state['trigbpm_nrpulses'] = trigbpm.nr_pulses
         state['trigbpm_delay'] = trigbpm.delay
-        state['evt_study_delay'] = evt_study.delay
-        state['evt_study_mode'] = evt_study.mode
+        state['evt_src_delay'] = evt_src.delay
+        state['evt_src_mode'] = evt_src.mode
         return state
 
     def recover_initial_state(self, state):
         """."""
         trigbpm = self.devices['trigbpm']
-        evt_study = self.devices['evt_study']
+        evt_src = self.devices['evt_src']
 
         trigbpm.source = state['trigbpm_source']
         trigbpm.nr_pulses = state['trigbpm_nrpulses']
         trigbpm.delay = state['trigbpm_delay']
-        evt_study.delay = state['evt_study_delay']
-        evt_study.mode = state['evt_study_mode']
+        evt_src.delay = state['evt_src_delay']
+        evt_src.mode = state['evt_src_mode']
 
     def prepare_timing(self):
         """."""
         trigbpm = self.devices['trigbpm']
-        evt_study = self.devices['evt_study']
+        evt_src = self.devices['evt_src']
 
         trigbpm.delay = self.params.trigbpm_delay
         trigbpm.nr_pulses = self.params.trigbpm_nrpulses
         trigbpm.source = 'Study'
 
-        evt_study.delay = self.params.event_delay
-        evt_study.mode = self.params.event_mode
+        evt_src.delay = self.params.event_delay
+        evt_src.mode = self.params.event_mode
 
         # Update event configurations in EVG
         self.devices['evg'].cmd_update_events()
@@ -656,10 +659,10 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
     def acquire_data(self):
         """."""
         fambpms = self.devices['fambpms']
-        evt_study = self.devices['evt_study']
+        evt_src = self.devices['evt_src']
         self.prepare_bpms_acquisition()
         fambpms.mturn_reset_flags()
-        evt_study.cmd_external_trigger()
+        evt_src.cmd_external_trigger()
         fambpms.mturn_wait_update_flags(timeout=self.params.orbit_timeout)
         orbx, orby = fambpms.get_mturn_orbit()
 
