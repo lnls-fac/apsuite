@@ -562,6 +562,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         self.event_delay = 0.0
         self.event_mode = 'External'
         self.orbit_timeout = 40
+        self.orbit_nrpoints_before = 0
         self.orbit_nrpoints_after = 20000
         self.orbit_acq_rate = 'Monit1'
         self.orbit_acq_repeat = False
@@ -578,6 +579,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         stg += ftmp('event_delay', self.event_delay, '[us]')
         stg += stmp('event_mode', self.event_mode, '')
         stg += ftmp('orbit_timeout', self.orbit_timeout, '[s]')
+        stg += dtmp('orbit_nrpoints_before', self.orbit_nrpoints_before, '')
         stg += dtmp('orbit_nrpoints_after', self.orbit_nrpoints_after, '')
         stg += stmp('orbit_acq_rate', self.orbit_acq_rate, '')
         stg += dtmp('orbit_acq_repeat', self.orbit_acq_repeat, '')
@@ -596,6 +598,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             self, params=params, isonline=isonline)
         OrbitAnalysis.__init__(self)
 
+        self._trig_external = self.params.event_mode == 'External'
         if self.isonline:
             self.create_devices()
 
@@ -639,7 +642,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
 
         trigbpm.delay = self.params.trigbpm_delay
         trigbpm.nr_pulses = self.params.trigbpm_nrpulses
-        trigbpm.source = 'Study'
+        trigbpm.source = self.params.event_src
 
         evt_src.delay = self.params.event_delay
         evt_src.mode = self.params.event_mode
@@ -652,6 +655,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         fambpms = self.devices['fambpms']
         prms = self.params
         fambpms.mturn_config_acquisition(
+            nr_points_before=prms.orbit_nrpoints_before,
             nr_points_after=prms.orbit_nrpoints_after,
             acq_rate=prms.orbit_acq_rate,
             repeat=prms.orbit_acq_repeat)
@@ -662,7 +666,8 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         evt_src = self.devices['evt_src']
         self.prepare_bpms_acquisition()
         fambpms.mturn_reset_flags()
-        evt_src.cmd_external_trigger()
+        if self._trig_external:
+            evt_src.cmd_external_trigger()
         fambpms.mturn_wait_update_flags(timeout=self.params.orbit_timeout)
         orbx, orby = fambpms.get_mturn_orbit()
 
