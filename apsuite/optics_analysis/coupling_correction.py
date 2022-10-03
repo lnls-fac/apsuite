@@ -90,13 +90,13 @@ class CouplingCorr():
             self.coup_matrix[:, idx] = elem
         return self.coup_matrix
 
-    def _get_coupling_residue(self, model, weight_dispy=False):
+    def _get_coupling_residue(self, model, weight_dispy=1):
         self.respm.model = model
         orbmat = self.respm.get_respm()
         twi, *_ = pyaccel.optics.calc_twiss(model)
         dispy = twi.etay[self.bpm_idx]
-        if weight_dispy:
-            dispy *= (self._nch + self._ncv)*10
+        # dispy *= (self._nch + self._ncv)*weight_dispy
+        dispy *= weight_dispy
         mxy = orbmat[:self._nbpm, self._nch:-1]
         myx = orbmat[self._nbpm:, :self._nch]
         res = mxy.ravel()
@@ -140,7 +140,7 @@ class CouplingCorr():
                                      model,
                                      jacobian_matrix=None,
                                      nsv=None, nr_max=10, tol=1e-6,
-                                     res0=None):
+                                     res0=None, weight_dispy=1):
         """Coupling correction with orbrespm.
 
         Calculates the pseudo-inverse of coupling correction matrix via SVD
@@ -157,7 +157,7 @@ class CouplingCorr():
         ismat = np.diag(ismat)
         ijmat = -np.dot(np.dot(vmat.T, ismat), umat.T)
         if res0 is None:
-            res = self._get_coupling_residue(model)
+            res = self._get_coupling_residue(model, weight_dispy=weight_dispy)
         else:
             res = res0
         bestfigm = CouplingCorr.get_figm(res)
@@ -167,7 +167,8 @@ class CouplingCorr():
         for _ in range(nr_max):
             dksl = np.dot(ijmat, res)
             self._set_delta_ksl(model=model, delta_ksl=dksl)
-            res = self._get_coupling_residue(model)
+            res = self._get_coupling_residue(
+                model, weight_dispy=weight_dispy)
             figm = CouplingCorr.get_figm(res)
             diff_figm = np.abs(bestfigm - figm)
             if figm < bestfigm:
@@ -182,7 +183,7 @@ class CouplingCorr():
                             model,
                             jacobian_matrix=None,
                             nsv=None, nr_max=10, tol=1e-6,
-                            res0=None):
+                            res0=None, weight_dispy=1):
         """Coupling correction method selection.
 
         Methods available:
@@ -192,7 +193,8 @@ class CouplingCorr():
         if self.corr_method == CouplingCorr.CORR_METHODS.Orbrespm:
             result = self.coupling_corr_orbrespm_dispy(
                 model=model, jacobian_matrix=jacobian_matrix,
-                nsv=nsv, nr_max=nr_max, tol=tol, res0=res0)
+                nsv=nsv, nr_max=nr_max, tol=tol, res0=res0,
+                weight_dispy=weight_dispy)
         else:
             raise Exception('Chosen method is not implemented!')
         return result
