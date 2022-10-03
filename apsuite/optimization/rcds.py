@@ -19,7 +19,7 @@ class RCDSParams(_OptimizeParams):
     def __init__(self):
         """."""
         super().__init__()
-        self.max_number_evals = 1500
+        self._boundary_policy = self.BoundaryPolicy.ToNaN
         self.initial_stepsize = 0.1  # in normalized units.
         self.noise_level = 0.0  # in units of the objective function.
         self.tolerance = 1e-5  # in relative units.
@@ -32,11 +32,14 @@ class RCDSParams(_OptimizeParams):
         self.outlier_percentile_limit = 0.25
         self.initial_search_directions = _np.array([], ndmin=2)
 
+    @_OptimizeParams.boundary_policy.setter
+    def boundary_policy(self, _):
+        """In RCDS the boundary policy must always be: ToNaN."""
+        self._boundary_policy = self.BoundaryPolicy.ToNaN
+
     def __str__(self):
         """."""
         stg = ''
-        stg += self._TMPD.format('max_number_iters', self.max_number_iters)
-        stg += self._TMPD.format('max_number_evals', self.max_number_evals)
         stg += self._TMPF.format('initial_stepsize', self.initial_stepsize)
         stg += self._TMPF.format('noise_level', self.noise_level)
         stg += self._TMPF.format('tolerance', self.tolerance)
@@ -61,70 +64,6 @@ class RCDSParams(_OptimizeParams):
         stg += self.print_positions(
             self.initial_search_directions, names=names, print_header=False)
         return stg
-
-    def normalize_positions(self, pos, is_pos=True):
-        """Normalize positions to interval [0, 1] in all search directions.
-
-        Args:
-            pos (numpy.ndarray, (N, M)): Unnormalized position or direction.
-                If `pos` is bi-dimensional, each row is considered to be a
-                position or direction vector.
-            is_pos (bool, optional): Whether pos is a position or a direction
-                in search space. Since directions are not associated with a
-                specific point, the `limit_lower` is not subtracted from it
-                before scale normalization. Defaults to True.
-
-        Returns:
-            numpy.ndarray, (N, M): Normalized position vector with same shape
-                as `pos`.
-
-        """
-        npos = pos.copy()
-        if is_pos:
-            npos -= self.limit_lower
-        npos /= (self.limit_upper - self.limit_lower)
-        return npos
-
-    def denormalize_positions(self, npos, is_pos=True):
-        """Bring a normalized position or direction back to original space.
-
-        Args:
-            npos (numpy.ndarray, (N, M)): Unnormalized position or direction.
-                If `pos` is bi-dimensional, each row is considered to be a
-                position or direction vector.
-            is_pos (bool, optional): Whether pos is a position or a direction
-                in search space. Since directions are not associated with a
-                specific point, the `limit_lower` is not added to it after
-                scale correction. Defaults to True.
-
-        Returns:
-            numpy.ndarray, (N, M): Un-Normalized position vector with same
-                shape as `npos`.
-        """
-        pos = npos * (self.limit_upper - self.limit_lower)
-        if is_pos:
-            pos += self.limit_lower
-        return pos
-
-    def check_and_adjust_boundary(self, pos):
-        """Check whether position is outside boundary and set nans when needed.
-
-        Args:
-            pos (numpy.ndarray, (N, M)): Unnormalized position. If `pos` is
-                bi-dimensional, each row is considered to be a position vector.
-
-        Returns:
-            numpy.ndarray, (N, M): new position with numpy.nans applied when
-                needed.
-
-        """
-        valu = self.limit_upper.copy()
-        vall = self.limit_lower.copy()
-        idu = pos > valu
-        idl = pos < vall
-        pos = _np.where(idu, _np.nan, pos)
-        pos = _np.where(idl, _np.nan, pos)
-        return pos
 
     def remove_outlier(self, deltas, funcs, fits):
         """."""
@@ -189,13 +128,7 @@ class RCDS(_Optimize):
     def __init__(self, use_thread=True):
         """."""
         super().__init__(RCDSParams(), use_thread=use_thread)
-        self._num_objective_evals = 0
         self.final_search_directions = _np.array([], dtype=float)
-
-    @property
-    def num_objective_evals(self):
-        """."""
-        return self._num_objective_evals
 
     def bracketing_min(self, pos0, func0, dir, step):
         """Bracket the minimum.
@@ -346,25 +279,21 @@ class RCDS(_Optimize):
         delta_v = _np.linspace(deltas[0], deltas[-1], 1000)
         func_v = _np.polynomial.polynomial.polyval(delta_v, cfs)
 
-        self.line_data.set_data(deltas, funcs)
-        self.line_fit.set_data(delta_v, func_v)
-        self.axes.set_xlim([delta_v.min()*1.1, delta_v.max()*1.1])
-        self.axes.set_ylim([func_v.min()*0.9, func_v.max()*1.1])
-        self.figure.tight_layout()
-        self.figure.show()
-        _mplt.pause(2)
+        # self.line_data.set_data(deltas, funcs)
+        # self.line_fit.set_data(delta_v, func_v)
+        # self.axes.set_xlim([delta_v.min()*1.1, delta_v.max()*1.1])
+        # self.axes.set_ylim([func_v.min()*0.9, func_v.max()*1.1])
+        # self.figure.tight_layout()
+        # self.figure.show()
+        # _mplt.pause(2)
 
         idx_min = _np.argmin(func_v)
         pos_min = pos0 + delta_v[idx_min] * dir
         return pos_min, delta_v[idx_min], func_v[idx_min]
 
     def _objective_func(self, pos):
-        self._num_objective_evals += 1
         pos = self.params.denormalize_positions(pos)
-        pos = self.params.check_and_adjust_boundary(pos)
-        if _np.any(_np.isnan(pos)):
-            return _np.nan
-        return self.objective_function(pos)
+        return super()._objective_func(pos)
 
     def _optimize(self):
         """Xiaobiao's version of Powell's direction search algorithm (RCDS).
@@ -372,13 +301,14 @@ class RCDS(_Optimize):
         Xiaobiao implements his own bracketing and linescan.
 
         """
-        self.figure, self.axes = _mplt.subplots(1, 1)
-        self.line_data = self.axes.plot([1, 1], [1, 1], 'or', label='Data')[0]
-        self.line_fit = self.axes.plot([1, 1], [1, 1], '-b', label='Fit')[0]
-        self.axes.legend(loc='best')
-        self.axes.set_ylabel('Objective Function')
-        self.axes.set_xlabel('Direction Search Steps')
+        # self.figure, self.axes = _mplt.subplots(1, 1)
+        # self.line_data = self.axes.plot([1, 1], [1, 1], 'or', label='Data')[0]
+        # self.line_fit = self.axes.plot([1, 1], [1, 1], '-b', label='Fit')[0]
+        # self.axes.legend(loc='best')
+        # self.axes.set_ylabel('Objective Function')
+        # self.axes.set_xlabel('Direction Search Steps')
 
+        self.params.is_positions_consistent()
         self._num_objective_evals = 0
         search_dirs = self.params.initial_search_directions.copy()
         search_dirs = self.params.normalize_positions(
