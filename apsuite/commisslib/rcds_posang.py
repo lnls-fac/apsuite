@@ -15,9 +15,10 @@ class OptimizePosAng(_RCDS, _BaseClass):
         """."""
         _BaseClass.__init__(
             self, params=_RCDSParams(), isonline=isonline)
-        _RCDS.__init__(self, use_thread=use_thread)
         if self.isonline:
             self._create_devices()
+        _RCDS.__init__(self, use_thread=use_thread)
+
 
     def objective_function(self, pos, apply=True):
         """."""
@@ -104,15 +105,15 @@ class OptimizePosAng(_RCDS, _BaseClass):
         print('     injecting')
         evg.cmd_turn_on_injection()
         evg.wait_injection_finish()
-        _time.sleep(1)
+        _time.sleep(3)
         injeff = currinfo.injeff
-        print(f'    injection efficiency: {injeff:.2} %')
+        print(f'    injection efficiency: {injeff:.2f} %')
         return injeff
 
     def _prepare_evg(self):
         evg = self.devices['evg']
         # configure to inject on first bucket just once
-        evg.bucket_list = [1]
+        evg.bucketlist = [1]
         evg.nrpulses = 1
         evg.cmd_update_events()
         _time.sleep(1)
