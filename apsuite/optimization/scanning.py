@@ -1,87 +1,64 @@
 """Multidimensional Simple Scan method for Minimization."""
 
-
-from threading import Thread as _Thread
 import numpy as _np
 
+from .base import OptimizeParams as _OptimizeParams, Optimize as _Optimize
 
-class SimpleScan:
+
+class SimpleScanParams(_OptimizeParams):
     """."""
-
-    @property
-    def ndim(self):
-        """."""
-        return self._ndim
-
-    @ndim.setter
-    def ndim(self, value):
-        """."""
-        self._ndim = value
-
-    @property
-    def position(self):
-        """."""
-        return self._position
-
-    @position.setter
-    def position(self, value):
-        """."""
-        self._position = value
 
     def __init__(self):
         """."""
-        self._lower_limits = _np.array([])
-        self._upper_limits = _np.array([])
-        self._ndim = 0
-        self._position = _np.array([])
-        self._delta = _np.array([])
-        self._curr_dim = 0
-        self._stop = False
-        self._thread = _Thread(target=self._optimize, daemon=True)
-        self.initialization()
+        super().__init__()
+        self.number_of_steps = 10
 
-    def initialization(self):
+    def __str__(self):
         """."""
-        raise NotImplementedError
+        stg = self._TMPD.format('number_of_steps', self.number_of_steps)
+        stg += super().__str__(self)
+        return stg
 
-    def calc_obj_fun(self):
-        """Return arrays with dimension of search space."""
-        raise NotImplementedError
+    def to_dict(self):
+        """."""
+        dic = super().to_dict()
+        dic['number_of_steps'] = self.number_of_steps
+
+    def from_dict(self, dic):
+        """."""
+        super().from_dict(dic)
+        self.number_of_steps = dic.get('number_of_steps', self.number_of_steps)
+
+
+class SimpleScan(_Optimize):
+    """."""
+
+    def __init__(self, use_thread=True):
+        """."""
+        super().__init__(
+            self, params=SimpleScanParams(), use_thread=use_thread)
+        self.params = SimpleScanParams()
 
     def set_limits(self, upper=None, lower=None):
         """."""
         self._upper_limits = upper
         self._lower_limits = lower
-        self.ndim = len(upper)
 
-    def start(self):
+    def _optimize(self):
         """."""
-        if not self._thread.is_alive():
-            self._stop = False
-            self._thread = _Thread(target=self._optimize, daemon=True)
-            self._thread.start()
+        num_pts = self.params.number_of_steps
+        num_dims = self.params.initial_position.shape[-1]
+        shape = num_dims * (num_pts, )
+        size = num_pts**num_dims
 
-    def stop(self):
-        """."""
-        self._stop = True
+        low = self.params.limit_lower
+        high = self.params.limit_upper
+        delta = high - low
 
-    @property
-    def isrunning(self):
-        """."""
-        return self._thread.is_alive()
-
-    def _optimize(self, npoints):
-        """."""
-        self._delta = _np.zeros(npoints)
-        func = _np.zeros(self._ndim)
-        best = _np.zeros(self._ndim)
-
-        for i in range(self._ndim):
-            self._delta = _np.linspace(
-                self._lower_limits[i], self._upper_limits[i], npoints)
-            self._curr_dim = i
-            func[i], best[i] = self.calc_obj_fun()
-            self._position[i] = best[i]
-
-        print('Best result is: ' + str(best))
-        print('Figure of merit is: ' + str(_np.min(func)))
+        self.best_objfuncs = _np.zeros(size, dtype=float)
+        self.best_positions = _np.zeros((size, num_dims), dtype=float)
+        for i in range(size):
+            ivec = _np.unravel_index(i, shape)
+            pos = low + (delta * ivec)/(num_pts - 1)
+            self.best_positions[i] = pos
+            self.best_objfuncs[i] = self._objective_func(pos)
