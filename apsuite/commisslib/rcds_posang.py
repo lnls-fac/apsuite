@@ -19,7 +19,6 @@ class OptimizePosAng(_RCDS, _BaseClass):
             self._create_devices()
         _RCDS.__init__(self, use_thread=use_thread)
 
-
     def objective_function(self, pos, apply=True):
         """."""
         if apply:
@@ -42,21 +41,24 @@ class OptimizePosAng(_RCDS, _BaseClass):
 
     def initialization(self):
         """."""
-        posang = self.devices['posang']
-        pos0 = self.get_positions_machine()
-        posx0, angx0, posy0, angy0, kick_nlk0 = pos0
-        posang.cmd_update_reference()
+        if self.is_online:
+            posang = self.devices['posang']
+            pos0 = self.get_positions_machine()
+            posx0, angx0, posy0, angy0, kick_nlk0 = pos0
+            posang.cmd_update_reference()
 
-        self._prepare_evg()
+            self._prepare_evg()
 
-        self.devices['injsys'].cmd_switch_to_optim()
+            self.devices['injsys'].cmd_switch_to_optim()
 
-        self.data['timestamp'] = _time.time()
-        self.data['posx0'] = posx0
-        self.data['angx0'] = angx0
-        self.data['posy0'] = posy0
-        self.data['angy0'] = angy0
-        self.data['kick_nlk0'] = kick_nlk0
+            self.data['timestamp'] = _time.time()
+            self.data['posx0'] = posx0
+            self.data['angx0'] = angx0
+            self.data['posy0'] = posy0
+            self.data['angy0'] = angy0
+            self.data['kick_nlk0'] = kick_nlk0
+        else:
+            print('is_online=False mode, no connection with devices.')
 
     def get_positions_machine(self):
         """."""
