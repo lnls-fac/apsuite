@@ -193,7 +193,7 @@ class OptimizeParams:
             _np.any(pos >= self.limit_upper))
         return not wrong
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         """."""
         return {
             'max_number_iters': self.max_number_iters,
@@ -204,7 +204,7 @@ class OptimizeParams:
             'initial_position': self.initial_position,
             }
 
-    def from_dict(self, dic):
+    def from_dict(self, dic: dict):
         """."""
         self.max_number_iters = dic.get(
             'max_number_iters', self.max_number_iters)

@@ -423,8 +423,8 @@ class RCDS(_Optimize):
                 f'Final ObjFun = {func_min:.3g}')
 
         stg = '\n Finished! \n'
-        stg += f'Numer of iterations: {iter+1:04d}\n'
-        stg += f'Numer of evaluations: {self.num_objective_evals:04d}\n'
+        stg += f'Number of iterations: {iter+1:04d}\n'
+        stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
         stg += f'f_0 = {init_func:.3g}\n'
         stg += f'f_min = {func_min:.3g}\n'
         stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
