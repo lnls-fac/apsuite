@@ -232,8 +232,6 @@ class Optimize:
         self.best_positions = _np.array([], ndmin=2)
         self.best_objfuncs = _np.array([], ndmin=2)
 
-        self.initialization()
-
     @property
     def num_objective_evals(self):
         """."""
