@@ -2,9 +2,11 @@
 import time as _time
 import numpy as _np
 from ..utils import ThreadedMeasBaseClass as _BaseClass
-from siriuspy.devices import PowerSupplyPU, Tune, CurrInfoSI, EVG, RFGen, \
-     BunchbyBunch
+from siriuspy.devices import PowerSupply, PowerSupplyPU, Tune, CurrInfoSI, \
+     EVG, RFGen, BunchbyBunch
 from ..optimization.rcds import RCDS as _RCDS, RCDSParams as _RCDSParams
+from ..commisslib.inj_traj_fitting import SIFitInjTraj
+from apsuite.optics_analysis.tune_correction import TuneCorr
 
 
 class OptimizeDA(_RCDS, _BaseClass):
@@ -20,10 +22,12 @@ class OptimizeDA(_RCDS, _BaseClass):
 
     def objective_function(self, pos, apply=True):
         """."""
+        # minimize beam loss for a given kick
+        # or maximize kicks for a given loss rate?
         if apply:
             self.apply_changes(pos)
         loss = self._calc_loss()
-        return -loss
+        return loss
 
     def measure_objective_function_noise(self, nr_evals, pos=None):
         """."""
@@ -52,14 +56,19 @@ class OptimizeDA(_RCDS, _BaseClass):
         print('Applying changes to machine')
 
     def _create_devices(self):
-        # which sextupole families to use?
-        self.devices['sextupole'] = PowerSupplyPU(PowerSupplyPU.DEVICES.)
+        # which sextupole families to use? where to find their devices?
+        self.devices['sextupole'] = PowerSupply()  # ?
         self.devices['pinhg'] = PowerSupplyPU(
             PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
         self.devices['curr'] = CurrInfoSI()
         self.devices['rfgen'] = RFGen()
         self.devices['evg'] = EVG()
         self.devices['bbl'] = BunchbyBunch(BunchbyBunch.DEVICES.L)
+        self.devices['fit_traj'] = SIFitInjTraj()
+        self.devices['tunecorr'] = TuneCorr(
+            self.devices['fit_traj.model'], 'SI', method='Proportional',
+            grouping='TwoKnobs')
+        self.devices['tune'] = Tune(Tune.DEVICES.SI)
 
     def _calc_loss(self):
         evg, currinfo = self.devices['evg'], self.devices['currinfo']
@@ -67,9 +76,10 @@ class OptimizeDA(_RCDS, _BaseClass):
         curr0 = currinfo.current - dcct_offset
         _time.sleep(1)
         evg.cmd_turn_on_injection()
-        toca.cmd_reset() #  couldn't find what does this do
+        toca = self.devices['fit_traj'].devices['sofb']
+        toca.cmd_reset()
         toca.wait_buffer()
-        time.sleep(3)
+        _time.sleep(3)
 
         currf = currinfo.current - dcct_offset
         loss = (currf-curr0)/curr0 * 100
