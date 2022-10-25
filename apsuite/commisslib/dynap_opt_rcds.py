@@ -3,6 +3,7 @@ import time as _time
 import numpy as _np
 
 from pymodels import si as _si
+import pyaccel as _pa
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass
 from siriuspy.devices import PowerSupply, PowerSupplyPU, Tune, CurrInfoSI, \
@@ -39,18 +40,16 @@ class OptimizeDA(_RCDS, _BaseClass):
             method=ChromCorr.METHODS.Proportional,
             grouping=ChromCorr.GROUPING.TwoKnobs)
 
-        corr_sexts = set(self.chrom_corr.knobs.all)
+        self.corr_sexts = set(self.chrom_corr.knobs.all)
         self.names_sexts2use = []
         for sext in self.SEXT_FAMS:
-            if sext in corr_sexts:
+            if sext in self.corr_sexts:
                 continue
             self.names_sexts2use.append(sext)
 
     def objective_function(self, pos):
         """."""
-        strengths = []
-
-
+        strengths = self.get_isochromatic_strengths(pos)
         self.set_strengths_to_machine(strengths)
 
         evg, currinfo = self.devices['evg'], self.devices['currinfo']
@@ -59,6 +58,32 @@ class OptimizeDA(_RCDS, _BaseClass):
         evg.wait_injection_finish()
         _time.sleep(0.5)
         return -currinfo.injeff
+
+    def get_isochromatic_strengths(self, pos):
+        model = self.chrom_corr.acc
+        famdata = _si.get_family_data(model)
+        sexts2use_idcs = [
+            _np.array(famdata[fam]['index']).ravel() for fam in
+            self.names_sexts2use]
+        corr_sexts_idcs = [
+            _np.array(famdata[fam]['index']).ravel() for fam in
+            self.corr_sexts]
+        SLs = [
+            _np.ones(len(sext_idcs))*SL for sext_idcs, SL in
+            zip(sexts2use_idcs, pos)]
+        chroms = self.chrom_corr.get_chromaticities()
+        _pa.lattice.set_attribute(
+            model, 'SL', sexts2use_idcs, SLs)
+        # correct chrom after moving to pos
+        self.chrom_corr.correct_parameters(
+            model=self.chrom_corr.acc, goal_parameters=chroms)
+        # get the strengths needed to correct chrom using the corr_sexts
+        corr_SLs = _pa.lattice.get_attribute(
+            self.chrom_corr.acc, 'SL', corr_sexts_idcs)
+        corr_pos = [SL[0] for SL in corr_SLs]
+        strengths =  # find out how to construct the final pos vector
+        # from pos and corr_pos
+        return strengths
 
     def measure_objective_function_noise(self, nr_evals, pos=None):
         """."""
@@ -83,7 +108,7 @@ class OptimizeDA(_RCDS, _BaseClass):
             self.sextupoles[i].strength = stg
 
     def _create_devices(self):
-        for i, fam in self.SEXT_FAMS:
+        for fam in self.SEXT_FAMS:
             sext = PowerSupply('SI-Fam:PS-'+fam)
             self.devices[fam] = sext
             self.sextupoles.append(sext)
