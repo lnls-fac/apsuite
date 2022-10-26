@@ -1,5 +1,6 @@
 """."""
 import time as _time
+from kiwisolver import strength
 import numpy as _np
 
 from pymodels import si as _si
@@ -40,6 +41,11 @@ class OptimizeDA(_RCDS, _BaseClass):
             method=ChromCorr.METHODS.Proportional,
             grouping=ChromCorr.GROUPING.TwoKnobs)
 
+        self.full_chrom_mat = None
+        self.corr_chrom_mat = self.chrom_corr.calc_jacobian_matrix()
+        U, s, Vt = _np.linalg.svd(self.corr_chrom_mat, full_matrices=False)
+        self.corr_chrom_pseudoinv = Vt.T / s @ U.T
+
         self.corr_sexts = set(self.chrom_corr.knobs.all)
         self.names_sexts2use = []
         for sext in self.SEXT_FAMS:
@@ -59,30 +65,27 @@ class OptimizeDA(_RCDS, _BaseClass):
         _time.sleep(0.5)
         return -currinfo.injeff
 
-    def get_isochromatic_strengths(self, pos):
-        model = self.chrom_corr.acc
-        famdata = _si.get_family_data(model)
-        sexts2use_idcs = [
-            _np.array(famdata[fam]['index']).ravel() for fam in
-            self.names_sexts2use]
-        corr_sexts_idcs = [
-            _np.array(famdata[fam]['index']).ravel() for fam in
-            self.corr_sexts]
-        SLs = [
-            _np.ones(len(sext_idcs))*SL for sext_idcs, SL in
-            zip(sexts2use_idcs, pos)]
-        chroms = self.chrom_corr.get_chromaticities()
-        _pa.lattice.set_attribute(
-            model, 'SL', sexts2use_idcs, SLs)
-        # correct chrom after moving to pos
-        self.chrom_corr.correct_parameters(
-            model=self.chrom_corr.acc, goal_parameters=chroms)
-        # get the strengths needed to correct chrom using the corr_sexts
-        corr_SLs = _pa.lattice.get_attribute(
-            self.chrom_corr.acc, 'SL', corr_sexts_idcs)
-        corr_pos = [SL[0] for SL in corr_SLs]
-        strengths =  # find out how to construct the final pos vector
-        # from pos and corr_pos
+    def get_isochrom_strengths(self, pos):
+        """."""
+        if self.full_chrom_mat is None:
+            chrom_corr = ChromCorr(
+                self.chrom_corr._acc, acc='SI',
+                sf_knobs=self.SEXT_FAMS[6:15],
+                sd_knobs=self.SEXT_FAMS[15:],
+                method=ChromCorr.METHODS.Proportional,
+                grouping=ChromCorr.GROUPING.TwoKnobs)
+            self.full_chrom_mat = chrom_corr.calc_jacobian_matrix()
+
+        stg0 = self.get_strengths_from_machine()[6:]  # achroms not included
+        pos_vec = _np.array([
+            pos[6:9].ravel(), _np.zeros(3).ravel(), pos[12:18].ravel(),
+            _np.zeros(3).ravel()])  # opt knobs w/ blank space for corr knobs
+        opt_deltaSL = pos_vec - stg0
+        deltaChrom = self.full_chrom_mat @ opt_deltaSL
+        corr_deltaSL = - self.corr_chrom_pseudoinv @ deltaChrom
+        strengths = _np.array([pos[:6].ravel(), pos_vec.ravel()])
+        strengths[9:12] += corr_deltaSL[:3]
+        strengths[18:21] += corr_deltaSL[3:]
         return strengths
 
     def measure_objective_function_noise(self, nr_evals, pos=None):
