@@ -96,6 +96,7 @@ def test_matrices():
 
 def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, mb1idx=0):
     """."""
+    # NOTE: needs adaptation!
     _, _, mful = calc_matrices(minsingval=0.2, mb1idx=0)
 
     vec = np.array([posx, angx, posy, angy])
@@ -106,7 +107,7 @@ def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, mb1idx=0):
     orbcorr.params.minsingval = 0.2
 
     mci = pyaccel.lattice.find_indices(
-        orbcorr.respm.model, 'fam_name', 'mb2')[2*mb1idx]
+        orbcorr.respm.model, 'fam_name', 'B1_SRC')[2*mb1idx]
 
     idcs = np.array([2, 3, 160+2, 160+3])
     idcs += 8*mb1idx
@@ -116,9 +117,10 @@ def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, mb1idx=0):
     idcs_ignore += 8*mb1idx
     orbcorr.params.enbllistbpm[idcs_ignore] = False
     # remove corrs between BPMs
-    orbcorr.params.enbllistch[mb1idx*6 + 2] = False
-    orbcorr.params.enbllistcv[mb1idx*8 + 2] = False
-    orbcorr.params.enbllistcv[mb1idx*8 + 3] = False
+    orbcorr.params.enbllistch[mb1idx*6 + 0] = False
+    orbcorr.params.enbllistch[mb1idx*6 + 1] = False
+    orbcorr.params.enbllistcv[mb1idx*8 + 0] = False
+    orbcorr.params.enbllistcv[mb1idx*8 + 1] = False
 
     gorb = orbcorr.get_orbit()
 
