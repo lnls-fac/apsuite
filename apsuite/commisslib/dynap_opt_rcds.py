@@ -1,14 +1,12 @@
 """."""
 import time as _time
-from kiwisolver import strength
 import numpy as _np
 
 from pymodels import si as _si
-import pyaccel as _pa
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass
 from siriuspy.devices import PowerSupply, PowerSupplyPU, Tune, CurrInfoSI, \
-     EVG, SOFB
+     EVG, SOFB, Event
 from ..optimization.rcds import RCDS as _RCDS
 from ..optics_analysis import ChromCorr
 
@@ -43,8 +41,8 @@ class OptimizeDA(_RCDS, _BaseClass):
 
         self.full_chrom_mat = None
         self.corr_chrom_mat = self.chrom_corr.calc_jacobian_matrix()
-        U, s, Vt = _np.linalg.svd(self.corr_chrom_mat, full_matrices=False)
-        self.corr_chrom_pseudoinv = Vt.T / s @ U.T
+        u, s, vt = _np.linalg.svd(self.corr_chrom_mat, full_matrices=False)
+        self.corr_chrom_pseudoinv = vt.T / s @ u.T
 
         self.corr_sexts = set(self.chrom_corr.knobs.all)
         self.names_sexts2use = []
@@ -53,39 +51,80 @@ class OptimizeDA(_RCDS, _BaseClass):
                 continue
             self.names_sexts2use.append(sext)
 
+    # def objective_function(self, pos):
+    #     """."""
+    #     strengths = self.get_isochromatic_strengths(pos)
+    #     self.set_strengths_to_machine(strengths)
+
+    #     evg, currinfo = self.devices['evg'], self.devices['currinfo']
+    #     evg.cmd_turn_on_injection()
+    #     _time.sleep(1)
+    #     evg.wait_injection_finish()
+    #     _time.sleep(0.5)
+    #     return -currinfo.injeff
+
     def objective_function(self, pos):
-        """."""
+        toca = self.devices['toca']
+        evg, currinfo = self.devices['evg'], self.devices['currinfo']
+        evt_study = self.devices['evt_study']
+        if currinfo.curr < min_curr:  # define this min curr
+            evg.cmd_turn_on_injection()
+            _time.sleep(1)
+            evg.wait_injection_finish()
+            _time.sleep(0.5)
+        # monitor current until reaching desired value
+
         strengths = self.get_isochromatic_strengths(pos)
         self.set_strengths_to_machine(strengths)
-
-        evg, currinfo = self.devices['evg'], self.devices['currinfo']
-        evg.cmd_turn_on_injection()
+        # how to give the kick comand?
         _time.sleep(1)
-        evg.wait_injection_finish()
-        _time.sleep(0.5)
-        return -currinfo.injeff
+        evt_study.cmd_external_trigger()
+        _time.sleep(2)
+
+        sum = toca.mt_sum.reshape(-1, 160).mean(axis=1)
+        loss = 1 - sum[-1]/sum[0]
+        if loss > 1:
+            loss = 1
+        if loss < 0:
+            loss = 0
+        return loss*100
 
     def get_isochrom_strengths(self, pos):
         """."""
         if self.full_chrom_mat is None:
             chrom_corr = ChromCorr(
                 self.chrom_corr._acc, acc='SI',
-                sf_knobs=self.SEXT_FAMS[6:15],
-                sd_knobs=self.SEXT_FAMS[15:],
+                sf_knobs=self.SEXT_FAMS[15:],
+                sd_knobs=self.SEXT_FAMS[6:15],
                 method=ChromCorr.METHODS.Proportional,
                 grouping=ChromCorr.GROUPING.TwoKnobs)
             self.full_chrom_mat = chrom_corr.calc_jacobian_matrix()
 
+        # !!different conventions for sextupoles strengths!!
+        # *rcds knobs ordering: (15 x 1)
+        # [SD0, SF0, SD1, SD3, SF1]
+        # *machine sextupoles (21 x 1) ordering
+        # [SD0, SF0, SD1, SD2, SD3, SF1, SF2]
+        # *full_chrom_mat ordering (15 x 1)
+        # [SF1, SF2, SD1, SD2, SD3]
+        # *corr_chrom_mat (6 x 1) ordering
+        # [SF2, SD2]
+
         stg0 = self.get_strengths_from_machine()[6:]  # achroms not included
-        pos_vec = _np.array([
-            pos[6:9].ravel(), _np.zeros(3).ravel(), pos[12:18].ravel(),
-            _np.zeros(3).ravel()])  # opt knobs w/ blank space for corr knobs
-        opt_deltaSL = pos_vec - stg0
-        deltaChrom = self.full_chrom_mat @ opt_deltaSL
+        # construct delta SL for change in chrom evaluation
+        # ordered as full_chrom_mat basis
+        deltaSL = _np.concatenate(
+            [pos[12:15]-stg0[15:18], _np.zeros(3), pos[6:9]-stg0[6:9],
+             _np.zeros(3), pos[9:12]-stg0[12:15]]).ravel()
+        # calculate change in chrom due to optimization knobs changes
+        deltaChrom = self.full_chrom_mat @ deltaSL
+        # calculate changes in corr families to undo the chrom buildup
         corr_deltaSL = - self.corr_chrom_pseudoinv @ deltaChrom
-        strengths = _np.array([pos[:6].ravel(), pos_vec.ravel()])
-        strengths[9:12] += corr_deltaSL[:3]
-        strengths[18:21] += corr_deltaSL[3:]
+        # construct strength vector consistent with machine ordering
+        strengths = _np.concatenate([
+            pos[:9], _np.zeros(3), pos[9:15], _np.zeros(3)]).ravel()
+        strengths[9:12] += stg0[9:12] + corr_deltaSL[3:]  # SD2 families
+        strengths[18:21] += stg0[18:21] + corr_deltaSL[:3]  # SF2 fams
         return strengths
 
     def measure_objective_function_noise(self, nr_evals, pos=None):
@@ -124,6 +163,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         self.devices['evg'] = EVG()
         self.devices['toca'] = SOFB(SOFB.DEVICES.SI)
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
+        self.devices['evt_study'] = Event('Study')
 
     def _prepare_evg(self):
         # injection scheme?
