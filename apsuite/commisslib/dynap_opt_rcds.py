@@ -3,10 +3,10 @@ import time as _time
 import numpy as _np
 
 from pymodels import si as _si
+from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoSI, EVG, \
+    Event, FamBPMs
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass
-from siriuspy.devices import PowerSupply, PowerSupplyPU, Tune, CurrInfoSI, \
-     EVG, SOFB, Event
 from ..optimization.rcds import RCDS as _RCDS
 from ..optics_analysis import ChromCorr
 
@@ -32,115 +32,99 @@ class OptimizeDA(_RCDS, _BaseClass):
         self.sextupoles = []
         if self.isonline:
             self._create_devices()
-        self.chrom_corr = ChromCorr(
-            _si.create_accelerator(), acc='SI',
-            sf_knobs=['SFA2', 'SFB2', 'SFP2'],
-            sd_knobs=['SDA2', 'SDB2', 'SDP2'],
-            method=ChromCorr.METHODS.Proportional,
-            grouping=ChromCorr.GROUPING.TwoKnobs)
+        self.chrom_corr = ChromCorr(_si.create_accelerator(), acc='SI')
 
-        self.full_chrom_mat = None
-        self.corr_chrom_mat = self.chrom_corr.calc_jacobian_matrix()
-        u, s, vt = _np.linalg.svd(self.corr_chrom_mat, full_matrices=False)
-        self.corr_chrom_pseudoinv = vt.T / s @ u.T
+        self.full_chrom_mat = _np.zeros((len(self.SEXT_FAMS), 2), dtype=float)
 
-        self.corr_sexts = set(self.chrom_corr.knobs.all)
+        idcs = [self.SEXT_FAMS.index(sx) for sx in self.chrom_corr.knobs]
+        self.full_chrom_mat[:, idcs] = self.chrom_corr.calc_jacobian_matrix()
+
+        self.names_sexts2corr = [
+            'SDA2', 'SDB2', 'SDP2', 'SFA2', 'SFB2', 'SFP2']
         self.names_sexts2use = []
         for sext in self.SEXT_FAMS:
-            if sext in self.corr_sexts:
+            if sext in self.names_sexts2corr:
                 continue
             self.names_sexts2use.append(sext)
 
     def initialization(self):
         """."""
         if self.isonline:
-            strengths0 = self.get_strengths_from_machine()  # machine knobs
-            # skip the SD2 and SF2 families for the rcds pos vector
-            pos0 = _np.concatenate(
-                [strengths0[0:9], strengths0[12:18]]).ravel()
-            self.initial_position = pos0
-
             self.data['timestamp'] = _time.time()
-            # self.data['pos0'] = pos0
-            # self.data['strengths0'] = strengths0
-            self.data['strengths'] = [strengths0]  # keep track of all sexts
-            self._prepare_evg()
-
-    # def objective_function(self, pos):
-    #     """."""
-    #     strengths = self.get_isochromatic_strengths(pos)
-    #     self.set_strengths_to_machine(strengths)
-
-    #     evg, currinfo = self.devices['evg'], self.devices['currinfo']
-    #     evg.cmd_turn_on_injection()
-    #     _time.sleep(1)
-    #     evg.wait_injection_finish()
-    #     _time.sleep(0.5)
-    #     return -currinfo.injeff
+            self.data['strengths'] = [self.get_strengths_from_machine(), ]
 
     def objective_function(self, pos):
         """."""
-        toca = self.devices['toca']
-        evg, currinfo = self.devices['evg'], self.devices['currinfo']
         evt_study = self.devices['evt_study']
 
-        while currinfo.curr < min_curr:  # define this min curr
-            evg.cmd_turn_on_injection()
-            _time.sleep(1)
-            evg.wait_injection_finish()
-            _time.sleep(0.5)
+        if not self.inject_beam(min_curr=self.params.min_stored_current):
+            raise ValueError(
+                'It was not possible to inject beam in the machine.')
 
-        strengths = self.get_isochromatic_strengths(pos)
+        strengths = self.get_isochrom_strengths(pos)
         self.set_strengths_to_machine(strengths)
         self.data['strengths'].append(strengths)
-        _time.sleep(1)
-        evt_study.cmd_external_trigger()   # is this all?
-        _time.sleep(2)
 
-        sum = toca.mt_sum.reshape(-1, 160).mean(axis=1)
-        loss = 1 - sum[-1]/sum[0]
-        if loss > 1:
-            loss = 1
-        if loss < 0:
-            loss = 0
+        _time.sleep(1)
+        bpms = self.devices['bpms']
+        bpms.mturn_reset_flags()
+
+        evt_study.cmd_external_trigger()
+        bpms.mturn_wait_update_flags()
+
+        psum = bpms.get_mturn_orbit(return_sum=True)[2].mean(axis=1)
+        sum0 = _np.mean(psum[0:10])
+        sumf = _np.mean(psum[-10:])
+
+        loss = 1 - sum0/sumf
+        loss = max(min(loss, 1), 0)
+
         return loss*100
+
+    def inject_beam(self, min_curr=2.0, timeout=10):
+        """Inject current in the storage ring.
+
+        Args:
+            min_curr (float, optional): Desired current in [mA].
+                Defaults to 2.0 mA.
+            timeout (int, optional): Maximum time to wait injection in [s].
+                Defaults to 10 s.
+
+        """
+        evg, currinfo = self.devices['evg'], self.devices['currinfo']
+        if currinfo.current >= min_curr:
+            return True
+
+        evg.cmd_turn_on_injection()
+        niter = int(timeout/0.5)
+        for _ in range(niter):
+            _time.sleep(0.5)
+            if currinfo.current >= min_curr:
+                break
+        evg.cmd_turn_off_injection()
+        _time.sleep(0.5)
+
+        return currinfo.current >= min_curr
 
     def get_isochrom_strengths(self, pos):
         """."""
-        if self.full_chrom_mat is None:
-            chrom_corr = ChromCorr(
-                self.chrom_corr._acc, acc='SI',
-                sf_knobs=self.SEXT_FAMS[15:],
-                sd_knobs=self.SEXT_FAMS[6:15],
-                method=ChromCorr.METHODS.Proportional,
-                grouping=ChromCorr.GROUPING.TwoKnobs)
-            self.full_chrom_mat = chrom_corr.calc_jacobian_matrix()
+        idcs_corr = [self.SEXT_FAMS.index(sx) for sx in self.names_sexts2corr]
+        idcs_2use = [self.SEXT_FAMS.index(sx) for sx in self.names_sexts2use]
 
-        # !!different conventions for sextupoles strengths!!
-        # *rcds knobs ordering: (15 x 1)
-        # [SD0, SF0, SD1, SD3, SF1]
-        # *machine sextupoles (21 x 1) ordering
-        # [SD0, SF0, SD1, SD2, SD3, SF1, SF2]
-        # *full_chrom_mat ordering (15 x 1)
-        # [SF1, SF2, SD1, SD2, SD3]
-        # *corr_chrom_mat (6 x 1) ordering
-        # [SF2, SD2]
+        mat2corr = self.full_chrom_mat[:, idcs_corr]
+        imat2corr = _np.linalg.pinv(mat2corr, rcond=1e-15)
 
-        stg0 = self.get_strengths_from_machine()[6:]  # achroms not included
-        # construct delta SL for change in chrom evaluation
-        # ordered as full_chrom_mat basis
-        deltaSL = _np.concatenate(
-            [pos[12:15]-stg0[15:18], _np.zeros(3), pos[6:9]-stg0[6:9],
-             _np.zeros(3), pos[9:12]-stg0[12:15]]).ravel()
-        # calculate change in chrom due to optimization knobs changes
-        deltaChrom = self.full_chrom_mat @ deltaSL
-        # calculate changes in corr families to undo the chrom buildup
-        corr_deltaSL = - self.corr_chrom_pseudoinv @ deltaChrom
-        # construct strength vector consistent with machine ordering
-        strengths = _np.concatenate([
-            pos[:9], _np.zeros(3), pos[9:15], _np.zeros(3)]).ravel()
-        strengths[9:12] += stg0[9:12] + corr_deltaSL[3:]  # SD2 families
-        strengths[18:21] += stg0[18:21] + corr_deltaSL[:3]  # SF2 fams
+        mat2use = self.full_chrom_mat[:, idcs_2use]
+
+        str0 = self.data['strengths'][0].copy()
+        pos0 = str0[idcs_2use]
+        dpos = pos - pos0
+        dchrom = mat2use @ dpos
+        dcorr = - imat2corr @ dchrom
+
+        strengths = _np.full(len(self.SEXT_FAMS), _np.nan)
+        strengths[idcs_2use] = pos
+        strengths[idcs_corr] = dcorr + str0[idcs_corr]
         return strengths
 
     def measure_objective_function_noise(self, nr_evals, pos=None):
@@ -156,13 +140,34 @@ class OptimizeDA(_RCDS, _BaseClass):
         self.data['measured_noise_level'] = noise_level
         return noise_level, obj
 
+    def get_current_position(self):
+        """Return current strengths of sextupoles used by RCDS.
+
+        Returns:
+            numpy.ndarray (N, 1): strengths of the N sextupoles used in
+                optimization.
+
+        """
+        strengths0 = self.get_strengths_from_machine()  # machine knobs
+        pos0 = []
+        for sxt, stg in zip(self.SEXT_FAMS, strengths0):
+            if sxt in self.names_sexts2use:
+                pos0.append(stg)
+        return _np.array(pos0)
+
     def get_strengths_from_machine(self):
         """."""
-        return _np.array([sext.strengthref_mon for sext in self.sextupoles])
+        return _np.array([sx.strengthref_mon for sx in self.sextupoles])
 
     def set_strengths_to_machine(self, strengths):
         """."""
+        if len(strengths) != len(self.sextupoles):
+            raise ValueError(
+                'Length of strengths must match number of sextupole families.')
+
         for i, stg in strengths:
+            if stg is None or _np.isnan(stg):
+                continue
             self.sextupoles[i].strength = stg
 
     def _create_devices(self):
@@ -177,17 +182,8 @@ class OptimizeDA(_RCDS, _BaseClass):
             PowerSupplyPU.DEVICES.SI_PING_V)
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['evg'] = EVG()
-        self.devices['toca'] = SOFB(SOFB.DEVICES.SI)
-        self.devices['tune'] = Tune(Tune.DEVICES.SI)
+        self.devices['bpms'] = FamBPMs()
         self.devices['evt_study'] = Event('Study')
-
-    def _prepare_evg(self):
-        # injection scheme?
-        evg = self.devices['evg']
-        evg.bucketlist = [1]
-        evg.nrpulses = 1
-        evg.cmd_update_events()
-        _time.sleep(1)
 
     def save_optimization_data(self, fname):
         """."""
