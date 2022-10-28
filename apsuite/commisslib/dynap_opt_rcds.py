@@ -4,7 +4,7 @@ import numpy as _np
 
 from pymodels import si as _si
 from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoSI, EVG, \
-    Event, FamBPMs
+    Event, FamBPMs, EGTriggerPS
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass
 from ..optimization.rcds import RCDS as _RCDS
@@ -55,7 +55,7 @@ class OptimizeDA(_RCDS, _BaseClass):
 
     def objective_function(self, pos):
         """."""
-        evt_study = self.devices['evt_study']
+        evg = self.devices['evg']
 
         if not self.inject_beam(min_curr=self.params.min_stored_current):
             raise ValueError(
@@ -69,7 +69,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         bpms = self.devices['bpms']
         bpms.mturn_reset_flags()
 
-        evt_study.cmd_external_trigger()
+        evg.cmd_turn_on_injection()
         bpms.mturn_wait_update_flags()
 
         psum = bpms.get_mturn_orbit(return_sum=True)[2].mean(axis=1)
@@ -92,9 +92,18 @@ class OptimizeDA(_RCDS, _BaseClass):
 
         """
         evg, currinfo = self.devices['evg'], self.devices['currinfo']
+        egun = self.devices['egun']
+        pingh, pingv = self.devices['pingh'], self.devices['pingv']
+        nlk = self.devices['nlk']
         if currinfo.current >= min_curr:
             return True
 
+        evg.nrpulses = 0
+        nlk.pulse = True
+        egun.enable = True
+        pingh.pulse = False
+        pingv.pulse = False
+        _time.sleep(0.1)
         evg.cmd_turn_on_injection()
         niter = int(timeout/0.5)
         for _ in range(niter):
@@ -104,6 +113,12 @@ class OptimizeDA(_RCDS, _BaseClass):
         evg.cmd_turn_off_injection()
         _time.sleep(0.5)
 
+        evg.nrpulses = 1
+        nlk.pulse = False
+        egun.enable = False
+        pingh.pulse = True
+        pingv.pulse = True
+        _time.sleep(0.1)
         return currinfo.current >= min_curr
 
     def get_isochrom_strengths(self, pos):
@@ -178,12 +193,15 @@ class OptimizeDA(_RCDS, _BaseClass):
 
         self.devices['pingh'] = PowerSupplyPU(
             PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
+        self.devices['nlk'] = PowerSupplyPU(
+            PowerSupplyPU.DEVICES.SI_INJ_NLKCKR)
         self.devices['pingv'] = PowerSupplyPU(
             PowerSupplyPU.DEVICES.SI_PING_V)
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['evg'] = EVG()
         self.devices['bpms'] = FamBPMs()
         self.devices['evt_study'] = Event('Study')
+        self.devices['egun'] = EGTriggerPS()
 
     def save_optimization_data(self, fname):
         """."""
