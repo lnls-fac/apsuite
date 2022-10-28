@@ -51,6 +51,21 @@ class OptimizeDA(_RCDS, _BaseClass):
                 continue
             self.names_sexts2use.append(sext)
 
+    def initialization(self):
+        """."""
+        if self.isonline:
+            strengths0 = self.get_strengths_from_machine()  # machine knobs
+            # skip the SD2 and SF2 families for the rcds pos vector
+            pos0 = _np.concatenate(
+                [strengths0[0:9], strengths0[12:18]]).ravel()
+            self.initial_position = pos0
+
+            self.data['timestamp'] = _time.time()
+            # self.data['pos0'] = pos0
+            # self.data['strengths0'] = strengths0
+            self.data['strengths'] = [strengths0]  # keep track of all sexts
+            self._prepare_evg()
+
     # def objective_function(self, pos):
     #     """."""
     #     strengths = self.get_isochromatic_strengths(pos)
@@ -64,21 +79,22 @@ class OptimizeDA(_RCDS, _BaseClass):
     #     return -currinfo.injeff
 
     def objective_function(self, pos):
+        """."""
         toca = self.devices['toca']
         evg, currinfo = self.devices['evg'], self.devices['currinfo']
         evt_study = self.devices['evt_study']
-        if currinfo.curr < min_curr:  # define this min curr
+
+        while currinfo.curr < min_curr:  # define this min curr
             evg.cmd_turn_on_injection()
             _time.sleep(1)
             evg.wait_injection_finish()
             _time.sleep(0.5)
-        # monitor current until reaching desired value
 
         strengths = self.get_isochromatic_strengths(pos)
         self.set_strengths_to_machine(strengths)
-        # how to give the kick comand?
+        self.data['strengths'].append(strengths)
         _time.sleep(1)
-        evt_study.cmd_external_trigger()
+        evt_study.cmd_external_trigger()   # is this all?
         _time.sleep(2)
 
         sum = toca.mt_sum.reshape(-1, 160).mean(axis=1)
@@ -172,3 +188,10 @@ class OptimizeDA(_RCDS, _BaseClass):
         evg.nrpulses = 1
         evg.cmd_update_events()
         _time.sleep(1)
+
+    def save_optimization_data(self, fname):
+        """."""
+        self.data['best_positions'] = self.best_positions
+        self.data['best_objfuncs'] = self.best_objfuncs
+        self.data['final_search_directions'] = self.final_search_directions
+        self.save_data(fname)
