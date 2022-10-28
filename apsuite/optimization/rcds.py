@@ -1,9 +1,7 @@
 """Robust Conjugate Direction Search Algorithm for Minimization."""
-from threading import Thread as _Thread, Event as _Event
 import logging as _log
 
 import numpy as _np
-import matplotlib.pyplot as _mplt
 
 from mathphys.functions import get_namedtuple as _get_namedtuple
 
@@ -279,14 +277,6 @@ class RCDS(_Optimize):
         delta_v = _np.linspace(deltas[0], deltas[-1], 1000)
         func_v = _np.polynomial.polynomial.polyval(delta_v, cfs)
 
-        # self.line_data.set_data(deltas, funcs)
-        # self.line_fit.set_data(delta_v, func_v)
-        # self.axes.set_xlim([delta_v.min()*1.1, delta_v.max()*1.1])
-        # self.axes.set_ylim([func_v.min()*0.9, func_v.max()*1.1])
-        # self.figure.tight_layout()
-        # self.figure.show()
-        # _mplt.pause(2)
-
         idx_min = _np.argmin(func_v)
         pos_min = pos0 + delta_v[idx_min] * dir
         return pos_min, delta_v[idx_min], func_v[idx_min]
@@ -301,13 +291,6 @@ class RCDS(_Optimize):
         Xiaobiao implements his own bracketing and linescan.
 
         """
-        # self.figure, self.axes = _mplt.subplots(1, 1)
-        # self.line_data = self.axes.plot([1, 1], [1, 1], 'or', label='Data')[0]
-        # self.line_fit = self.axes.plot([1, 1], [1, 1], '-b', label='Fit')[0]
-        # self.axes.legend(loc='best')
-        # self.axes.set_ylabel('Objective Function')
-        # self.axes.set_xlabel('Direction Search Steps')
-
         self.params.is_positions_consistent()
         self._num_objective_evals = 0
         search_dirs = self.params.initial_search_directions.copy()
