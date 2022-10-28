@@ -34,9 +34,9 @@ class OptimizeDA(_RCDS, _BaseClass):
             self._create_devices()
         self.chrom_corr = ChromCorr(_si.create_accelerator(), acc='SI')
 
-        self.full_chrom_mat = _np.zeros((len(self.SEXT_FAMS), 2), dtype=float)
+        self.full_chrom_mat = _np.zeros((2, len(self.SEXT_FAMS)), dtype=float)
 
-        idcs = [self.SEXT_FAMS.index(sx) for sx in self.chrom_corr.knobs]
+        idcs = [self.SEXT_FAMS.index(sx) for sx in self.chrom_corr.knobs.all]
         self.full_chrom_mat[:, idcs] = self.chrom_corr.calc_jacobian_matrix()
 
         self.names_sexts2corr = [
@@ -163,7 +163,7 @@ class OptimizeDA(_RCDS, _BaseClass):
                 optimization.
 
         """
-        strengths0 = self.get_strengths_from_machine()  # machine knobs
+        strengths0 = self.get_strengths_from_machine()
         pos0 = []
         for sxt, stg in zip(self.SEXT_FAMS, strengths0):
             if sxt in self.names_sexts2use:
