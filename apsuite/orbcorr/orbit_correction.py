@@ -34,11 +34,12 @@ class OrbitCorr:
 
     CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
 
-    def __init__(self, model, acc, params=None):
+    def __init__(self, model, acc, params=None, corrtype='SOFB'):
         """."""
         self.acc = acc
         self.params = params or CorrParams()
-        self.respm = OrbRespmat(model=model, acc=self.acc, dim='6d')
+        self.respm = OrbRespmat(
+            model=model, acc=self.acc, dim='6d', corrtype=corrtype)
         self.respm.model.cavity_on = True
         self.params.enbllistbpm = _np.ones(
             self.respm.bpm_idx.size*2, dtype=bool)

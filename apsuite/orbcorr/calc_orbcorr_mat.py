@@ -11,7 +11,7 @@ class OrbRespmat:
     _FREQ_DELTA = 10
     _ENERGY_DELTA = 1e-5
 
-    def __init__(self, model, acc, dim='4d'):
+    def __init__(self, model, acc, dim='4d', corrtype='SOFB'):
         """."""
         self.model = model
         self.acc = acc
@@ -28,9 +28,17 @@ class OrbRespmat:
         else:
             raise Exception('Set models: BO or SI')
         self.dim = dim
-        self.bpm_idx = self._get_idx(self.fam_data['BPM']['index'])
-        self.ch_idx = self._get_idx(self.fam_data['CH']['index'])
-        self.cv_idx = self._get_idx(self.fam_data['CV']['index'])
+        bpm_idx = self._get_idx(self.fam_data['BPM']['index'])
+        if corrtype == 'SOFB':
+            self.bpm_idx = bpm_idx
+            self.ch_idx = self._get_idx(self.fam_data['CH']['index'])
+            self.cv_idx = self._get_idx(self.fam_data['CV']['index'])
+        elif corrtype == 'FOFB':
+            self.bpm_idx = self._get_fofb_bpms(bpm_idx)
+            self.ch_idx = self._get_idx(self.fam_data['FCH']['index'])
+            self.cv_idx = self._get_idx(self.fam_data['FCV']['index'])
+        else:
+            raise Exception('Corretion type must be chosen (SOFB or FOFB)')
 
     def get_respm(self):
         """."""
@@ -151,6 +159,21 @@ class OrbRespmat:
     @staticmethod
     def _get_idx(indcs):
         return np.array([idx[0] for idx in indcs])
+
+    @staticmethod
+    def _get_fofb_bpms(bpm_idx):
+        bpm_list = []
+        aux_list = []
+        for i, idx in enumerate(bpm_idx):
+            j = i + 1
+            aux_list.append(idx)
+            if j % 8 == 0 and i != 0:
+                bpm_list.append(aux_list[0])
+                bpm_list.append(aux_list[3])
+                bpm_list.append(aux_list[4])
+                bpm_list.append(aux_list[7])
+                aux_list = []
+        return np.array(bpm_list)
 
 
 class TrajRespmat:
