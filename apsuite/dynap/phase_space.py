@@ -9,9 +9,10 @@ import pyaccel.tracking as _pytrack
 import pyaccel.lattice as _pylatt
 
 from .base import BaseClass as _BaseClass
+from ..utils import ParamsBaseClass as _ParamsBaseClass
 
 
-class PhaseSpaceParams():
+class PhaseSpaceParams(_ParamsBaseClass):
     """."""
 
     def __init__(self):

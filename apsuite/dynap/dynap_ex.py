@@ -10,9 +10,10 @@ import matplotlib.text as _mtext
 import pyaccel.tracking as _pytrack
 
 from .base import BaseClass as _BaseClass
+from ..utils import ParamsBaseClass as _ParamsBaseClass
 
 
-class DynapEXParams():
+class DynapEXParams(_ParamsBaseClass):
     """."""
 
     def __init__(self):
