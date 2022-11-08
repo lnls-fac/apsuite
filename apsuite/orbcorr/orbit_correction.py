@@ -50,7 +50,7 @@ class OrbitCorr:
         elif corr_system == 'SOFB':
             pass
         else:
-            raise Exception('Corretion type must be chosen "SOFB" or "FOFB"')
+            raise ValueError('Corretion system must be "SOFB" or "FOFB"')
 
         self.params.enbllistch = _np.ones(
             self.respm.ch_idx.size, dtype=bool)

@@ -26,7 +26,7 @@ class OrbRespmat:
             self.fam_data = si.get_family_data(self.model)
             self.rf_idx = self._get_idx(self.fam_data['SRFCav']['index'])
         else:
-            raise Exception('Set models: BO or SI')
+            raise ValueError('Set models: BO or SI')
         self.dim = dim
         self.bpm_idx = self._get_idx(self.fam_data['BPM']['index'])
         if corr_system == 'SOFB':
@@ -36,7 +36,7 @@ class OrbRespmat:
             self.ch_idx = self._get_idx(self.fam_data['FCH']['index'])
             self.cv_idx = self._get_idx(self.fam_data['FCV']['index'])
         else:
-            raise Exception('Corretion type must be chosen "SOFB" or "FOFB"')
+            raise ValueError('Corretion system must be "SOFB" or "FOFB"')
 
     def get_respm(self):
         """."""
