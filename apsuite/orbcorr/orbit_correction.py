@@ -34,20 +34,20 @@ class OrbitCorr:
 
     CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
 
-    def __init__(self, model, acc, params=None, corrtype='SOFB'):
+    def __init__(self, model, acc, params=None, corr_system='SOFB'):
         """."""
         self.acc = acc
         self.params = params or CorrParams()
         self.respm = OrbRespmat(
-            model=model, acc=self.acc, dim='6d', corrtype=corrtype)
+            model=model, acc=self.acc, dim='6d', corr_system=corr_system)
         self.respm.model.cavity_on = True
         self.params.enbllistbpm = _np.ones(
             self.respm.bpm_idx.size*2, dtype=bool)
-        if corrtype == 'FOFB':
+        if corr_system == 'FOFB':
             enbllistbpm = self.params.enbllistbpm.reshape(40, -1)
             enbllistbpm[:, [1, 2, 5, 6]] = False
             self.params.enbllistbpm = enbllistbpm.ravel()
-        elif corrtype == 'SOFB':
+        elif corr_system == 'SOFB':
             pass
         else:
             raise Exception('Corretion type must be chosen "SOFB" or "FOFB"')

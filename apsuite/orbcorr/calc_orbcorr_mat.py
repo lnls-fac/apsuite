@@ -11,7 +11,7 @@ class OrbRespmat:
     _FREQ_DELTA = 10
     _ENERGY_DELTA = 1e-5
 
-    def __init__(self, model, acc, dim='4d', corrtype='SOFB'):
+    def __init__(self, model, acc, dim='4d', corr_system='SOFB'):
         """."""
         self.model = model
         self.acc = acc
@@ -29,10 +29,10 @@ class OrbRespmat:
             raise Exception('Set models: BO or SI')
         self.dim = dim
         self.bpm_idx = self._get_idx(self.fam_data['BPM']['index'])
-        if corrtype == 'SOFB':
+        if corr_system == 'SOFB':
             self.ch_idx = self._get_idx(self.fam_data['CH']['index'])
             self.cv_idx = self._get_idx(self.fam_data['CV']['index'])
-        elif corrtype == 'FOFB':
+        elif corr_system == 'FOFB':
             self.ch_idx = self._get_idx(self.fam_data['FCH']['index'])
             self.cv_idx = self._get_idx(self.fam_data['FCV']['index'])
         else:
