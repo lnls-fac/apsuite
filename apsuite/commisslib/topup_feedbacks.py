@@ -2,6 +2,7 @@
 import time as _time
 
 import numpy as np
+import GPy as gpy
 
 from siriuspy.devices import HLTiming, EGun, InjCtrl, CurrInfoAS
 
@@ -108,20 +109,40 @@ class BiasFeedbackParams(_ParamsBaseClass):
         self.max_target_current = 105  # [mA]
         self.default_target_current = 101  # [mA]
         self.coeffs_dcurr_vs_bias = [1, 0, 0]
+        self.min_delta_current = 0.001  # [mA]
+        self.max_delta_current = 1  # [mA]
         self.min_bias_voltage = -49  # [V]
         self.max_bias_voltage = -43  # [V]
         self.ahead_set_time = 10  # [s]
-        self.use_gaussian_process = False
-        self.gaussian_process =
+        self.use_gpmodel = False
+        self.gpmodel_lengthscale = 0.1  # [mA]
+        self.gpmodel_variance = 9  # [V^2]
+        self.gpmodel_noise_var = 0.3  # [V^2]
 
     def __str__(self):
         """."""
         dtmp = '{0:26s} = {1:9d}  {2:s}\n'.format
+        stmp = '{0:26s} = {1:9s}  {2:s}\n'.format
         ftmp = '{0:26s} = {1:9.2f}  {2:s}\n'.format
-        stg = ftmp('min_bias', self.min_bias, '[V]')
-        stg += ftmp('max_bias', self.max_bias, '[V]')
-        stg += dtmp('num_points', self.num_points, '')
-        stg += ftmp('wait_each_point', self.wait_each_point, '[s]')
+
+        stg += ftmp('min_lifetime', self.min_lifetime, '[s]')
+        stg += ftmp('max_lifetime', self.max_lifetime, '[s]')
+        stg += ftmp('default_lifetime', self.default_lifetime, '[s]')
+        stg += ftmp('min_target_current', self.min_target_current, '[mA]')
+        stg += ftmp('max_target_current', self.max_target_current, '[mA]')
+        stg += ftmp(
+            'default_target_current', self.default_target_current, '[mA]')
+        stg += ftmp('min_delta_current', self.min_delta_current, '[mA]')
+        stg += ftmp('max_delta_current', self.max_delta_current, '[mA]')
+        stg += ftmp('min_bias_voltage', self.min_bias_voltage, '[V]')
+        stg += ftmp('max_bias_voltage', self.max_bias_voltage, '[V]')
+        stg += ftmp('ahead_set_time', self.ahead_set_time, '[s]')
+        # stg += ftmp('coeffs_dcurr_vs_bias', self.coeffs_dcurr_vs_bias, ' 0]')
+        stg += stmp('use_gpmodel', str(self.use_gpmodel), '')
+        stg += ftmp('gpmodel_lengthscale', self.gpmodel_lengthscale, '[mA]')
+        stg += ftmp('gpmodel_variance', self.gpmodel_variance, '[V^2]')
+        stg += ftmp('gpmodel_noise_var', self.gpmodel_noise_var, '[V^2]')
+
         return stg
 
 
@@ -133,8 +154,15 @@ class BiasFeedback(_BaseClass):
     def __init__(self, isonline=True):
         """."""
         super().__init__(
-            params=MeasBiasVsInjCurr(), target=self._run, isonline=isonline)
+            params=BiasFeedbackParams(), target=self._run, isonline=isonline)
+        self.params = BiasFeedbackParams()
         self._already_set = False
+        self.gpmodel_kernel = gpy.kern.RBF(
+            input_dim=1, variance=self.params.gpmodel_variance,
+            lengthscale=self.params.gpmodel_lengthscale)
+        self.gpmodel = gpy.models.GPRegression(
+            np.zeros((5, 1)), np.zeros((5, 1)), self.gpmodel_kernel,
+            noise_var=self.params.gpmodel_noise_var)
         if isonline:
             _create_devices(self)
 
@@ -170,15 +198,38 @@ class BiasFeedback(_BaseClass):
         _ = kwgs
         self._already_set = False
 
+        bias = self.devices['egun'].bias.voltage
+        if value > self.params.max_delta_current or \
+                value < self.params.min_delta_current or \
+                bias > self.params.max_bias_voltage or \
+                bias < self.params.min_bias_voltage:
+            return
+
+        self.data['dcurr'].append(value)
+        self.data['bias'].append(bias)
+
+        x = np.array(self.data['dcurr'])
+        y = np.array(self.data['bias'])
+        x.shape = (x.size, 1)
+        y.shape = (y.size, 1)
+
+        y -= np.polynomial.polynomial.polyval(
+            x, self.params.coeffs_dcurr_vs_bias)
+        self.gpmodel.set_XY(x, y)
+
     def get_bias_voltage(self, dcurr):
+        """."""
         bias = np.polynomial.polynomial.polyval(
-            self.params.coeffs_dcurr_vs_bias, dcurr)
+            dcurr, self.params.coeffs_dcurr_vs_bias)
+
         if self.params.use_gaussian_process:
-            bias += self.gaussian_process.get(dcurr)
+            dcurr = np.array(dcurr, ndmin=2)
+            avg, var = self.gpmodel.predict(dcurr)
+            bias += avg[0, 0]
+
         bias = min(bias, self.params.max_bias_voltage)
         bias = max(bias, self.params.min_bias_voltage)
         return bias
-
 
     def get_delta_current_per_pulse(self):
         currinfo = self.devices['currinfo']
