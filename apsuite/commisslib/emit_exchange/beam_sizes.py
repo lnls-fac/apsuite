@@ -13,6 +13,7 @@ from siriuspy.epics import PV
 
 from ...utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
+from ...image import ImageFitting as _ImageFitting
 
 
 class BeamSizesParams(_ParamsBaseClass):
@@ -234,47 +235,31 @@ class BeamSizesAnalysis(_BaseClass):
         usigmay: float
             sigmay fit uncertainty.
         """
-        gauss = BeamSizesAnalysis.gauss
+        gauss = _ImageFitting.FIT_FUNCTIONS.GAUSS
+        imgfit = _ImageFitting(image=image)
+        imgfit.roix = roix
+        imgfit.roiy = roiy
+        imgfit.window = window
+        imgfit.function_proj = gauss
+        win, roi = imgfit.fit_image_projections()
+
+        win_pfitx, win_pfity, \
+        win_pfitx_err, win_pfity_err, \
+        win_arrayx, win_arrayy, \
+        win_projx, win_projy, \
+        win_m1x, win_m1y, \
+        win_m2x, win_m2y = win
+
+        roi_pfitx, roi_pfity, \
+        roi_pfitx_err, roi_pfity_err, \
+        roi_arrayx, roi_arrayy, \
+        roi_projx, roi_projy, \
+        roi_m1x, roi_m1y, \
+        roi_m2x, roi_m2y = roi
 
         roix1, roix2 = roix
         roiy1, roiy2 = roiy
-        roix = slice(roix1, roix2)
-        roiy = slice(roiy1, roiy2)
-        xx = _np.arange(image.shape[1])[roix]
-        xy = _np.arange(image.shape[0])[roiy]
-
         image0 = image
-        image = image[roiy, roix]
-        projx = _np.sum(image, axis=0)
-        projx = _np.array(projx)/_np.sum(projx)
-        projy = _np.sum(image, axis=1)
-        projy = _np.array(projy)/_np.sum(projy)
-
-        xx_mean = _np.sum(xx*projx)
-        xy_mean = _np.sum(xy*projy)
-        xx_std = _np.sqrt(_np.sum((xx-xx_mean)**2*projx))
-        xy_std = _np.sqrt(_np.sum((xy-xy_mean)**2*projy))
-
-        p0x = [_np.max(projx), xx_mean, xx_std, 0]
-        p0y = [_np.max(projy), xy_mean, xy_std, 0]
-        poptx_proj, _ = curve_fit(gauss, xx, projx, p0=p0x)
-        popty_proj, _ = curve_fit(gauss, xy, projy, p0=p0y)
-
-        x_mean_idx = _np.argmin(_np.abs(xx-poptx_proj[1]))
-        y_mean_idx = _np.argmin(_np.abs(xy-popty_proj[1]))
-
-        hsection = image[y_mean_idx-int(window/2):y_mean_idx+int(window/2), :]
-        vsection = image[:, x_mean_idx-int(window/2):x_mean_idx+int(window/2)]
-        hline = _np.sum(hsection, axis=0)
-        hline = _np.array(hline)/_np.sum(hline)
-        vline = _np.sum(vsection, axis=1)
-        vline = _np.array(vline)/_np.sum(vline)
-
-        poptx, pcovx = curve_fit(gauss, xx, hline, p0=poptx_proj)
-        popty, pcovy = curve_fit(gauss, xy, vline, p0=popty_proj)
-        sigmax, sigmay = abs(poptx[2]), abs(popty[2])
-        usigmax, usigmay = _np.sqrt(pcovx[2, 2]), _np.sqrt(pcovy[2, 2])
-
         if plot_flag:
             fig = _plt.figure(figsize=(9, 12))
             gs = _plt.GridSpec(2, 2)
@@ -283,24 +268,24 @@ class BeamSizesAnalysis(_BaseClass):
             ay = _plt.subplot(gs[1, 1])
 
             aimg.imshow(image0)
-            aimg.plot(xx_mean, xy_mean, 'o', ms=5, color='tab:red')
+            aimg.plot(roi_m1x, roi_m1y, 'o', ms=5, color='tab:red')
             w, h = _np.abs(roix2-roix1), _np.abs(roiy2-roiy1)
             rect = _patches.Rectangle(
                 (roix1, roiy1), w, h, linewidth=1, edgecolor='k', fill='False',
                 facecolor='none')
             aimg.add_patch(rect)
 
-            ax.plot(xx, projx, '.', label='data')
-            ax.plot(xx, gauss(xx, *poptx_proj), label='proj')
-            ax.plot(xx, hline/_np.sum(hline), '.', label='line')
-            ax.plot(xx, gauss(xx, *poptx)/_np.sum(hline), label='slice')
+            ax.plot(roi_arrayx, roi_projx, '.', label='data')
+            ax.plot(roi_arrayx, gauss(roi_arrayx, *roi_pfitx), label='proj')
+            ax.plot(win_arrayx, win_projx/_np.sum(win_projx), '.', label='line')
+            ax.plot(win_arrayx, gauss(win_arrayx, *win_pfitx)/_np.sum(win_projx), label='slice')
             ax.set_xlabel('x [pixel]')
             ax.set_ylabel('Density')
 
-            ay.plot(xy, projy, '.', label='data')
-            ay.plot(xy, gauss(xy, *popty_proj), label='proj')
-            ay.plot(xy, vline/_np.sum(vline), '.', label='line')
-            ay.plot(xy, gauss(xy, *popty)/_np.sum(vline), label='slice')
+            ay.plot(roi_arrayy, roi_projy, '.', label='data')
+            ay.plot(roi_arrayy, gauss(roi_arrayy, *roi_pfity), label='proj')
+            ay.plot(win_arrayy, win_projy/_np.sum(win_projy), '.', label='line')
+            ay.plot(win_arrayy, gauss(win_arrayy, *win_pfity)/_np.sum(win_projy), label='slice')
             ay.set_xlabel('y [pixel]')
             ay.set_ylabel('Density')
 
@@ -309,7 +294,11 @@ class BeamSizesAnalysis(_BaseClass):
             fig.tight_layout()
             fig.show()
 
-        return sigmax, usigmax, sigmay, usigmay
+        sigmax = _ImageFitting.pfit_2_sigma(win_pfitx)
+        sigmax_err = _ImageFitting.pfit_2_sigma_err(win_pfitx_err)
+        sigmay = _ImageFitting.pfit_2_sigma(win_pfity)
+        sigmay_err = _ImageFitting.pfit_2_sigma_err(win_pfity_err)
+        return sigmax, sigmax_err, sigmay, sigmay_err
 
     @staticmethod
     def extract_quadrupoles_ramp(ramp):
@@ -323,7 +312,7 @@ class BeamSizesAnalysis(_BaseClass):
         return qf_ramp, qd_ramp
 
     @staticmethod
-    def gauss(x, amp, x0, sigma, off):
+    def gauss(x, x0, sigma, amp, off):
         """."""
         return amp*_np.exp(-(x-x0)**2/(2*sigma**2)) + off
 
