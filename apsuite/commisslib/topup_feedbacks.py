@@ -23,10 +23,10 @@ class MeasBiasVsInjCurrParams(_ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
-        self.min_bias = -49  # [V]
-        self.max_bias = -43  # [V]
-        self.num_points = 30
-        self.wait_each_point = 10  # [s]
+        self.min_bias = -50  # [V]
+        self.max_bias = -37  # [V]
+        self.num_points = 14
+        self.wait_each_point = 3  # [s]
 
     def __str__(self):
         """."""
@@ -52,8 +52,9 @@ class MeasBiasVsInjCurr(_BaseClass):
         if isonline:
             _create_devices(self)
 
-    def _get_info(self, _, value, **kwargs):
+    def _get_info(self, value, **kwargs):
         _ = kwargs
+        print('here')
         egun = self.devices['egun']
         currinfo = self.devices['currinfo']
         self.data['injcurr'].append(value)
@@ -79,20 +80,34 @@ class MeasBiasVsInjCurr(_BaseClass):
         biases = np.linspace(
             self.params.min_bias, self.params.max_bias, self.params.num_points)
 
+        egun.bias.set_voltage(biases[0])
+        _time.sleep(2)
         timing.evg.cmd_turn_on_injection(timeout=30)
+
+        pvo = currinfo.bo.pv_object('Current3GeV-Mon')
+        pvo.auto_monitor = True
+        pvo = egun.bias.pv_object('voltoutsoft')
+        pvo.auto_monitor = True
+        pvo = egun.bias.pv_object('voltinsoft')
+        pvo.auto_monitor = True
         pvo = currinfo.si.pv_object('InjCurr-Mon')
+        pvo.auto_monitor = True
         cbv = pvo.add_callback(self._get_info)
+
         for i, bias in enumerate(biases):
             print(f'  {i:03d}/{self.params.num_points:03d} bias = {bias:.2f}V')
             if self._stopevt.is_set():
                 print('Stopping...')
                 break
+            print(egun.bias.voltage, egun.bias.voltage_mon)
             egun.bias.set_voltage(bias)
             _time.sleep(self.params.wait_each_point)
+
+        pvo.auto_monitor = False
         pvo.remove_callback(cbv)
 
         timing.evg.cmd_turn_off_injection(timeout=30)
-        egun.bias.voltage = ini_bias
+        egun.bias.set_voltage(ini_bias)
         print('Measurement finished!')
 
 
@@ -125,6 +140,7 @@ class BiasFeedbackParams(_ParamsBaseClass):
         stmp = '{0:26s} = {1:9s}  {2:s}\n'.format
         ftmp = '{0:26s} = {1:9.2f}  {2:s}\n'.format
 
+        stg = ''
         stg += ftmp('min_lifetime', self.min_lifetime, '[s]')
         stg += ftmp('max_lifetime', self.max_lifetime, '[s]')
         stg += ftmp('default_lifetime', self.default_lifetime, '[s]')
@@ -142,7 +158,6 @@ class BiasFeedbackParams(_ParamsBaseClass):
         stg += ftmp('gpmodel_lengthscale', self.gpmodel_lengthscale, '[mA]')
         stg += ftmp('gpmodel_variance', self.gpmodel_variance, '[V^2]')
         stg += ftmp('gpmodel_noise_var', self.gpmodel_noise_var, '[V^2]')
-
         return stg
 
 
@@ -243,7 +258,7 @@ class BiasFeedback(_BaseClass):
 
         if ltime/3600 < self.params.min_lifetime or \
                 ltime/3600 > self.params.max_lifetime:
-            ltime = self.param.default_lifetime
+            ltime = self.params.default_lifetime
 
         curr_tar = curr_avg / (1 - per/2/ltime)
         if curr_tar < self.params.min_target_current or \
