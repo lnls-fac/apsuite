@@ -54,7 +54,6 @@ class MeasBiasVsInjCurr(_BaseClass):
 
     def _get_info(self, value, **kwargs):
         _ = kwargs
-        print('here')
         egun = self.devices['egun']
         currinfo = self.devices['currinfo']
         self.data['injcurr'].append(value)
@@ -110,6 +109,10 @@ class MeasBiasVsInjCurr(_BaseClass):
         egun.bias.set_voltage(ini_bias)
         print('Measurement finished!')
 
+    def plot_and_fit_data(self):
+        """."""
+        pass
+
 
 class BiasFeedbackParams(_ParamsBaseClass):
     """."""
@@ -120,19 +123,21 @@ class BiasFeedbackParams(_ParamsBaseClass):
         self.min_lifetime = 10 * 3600  # [s]
         self.max_lifetime = 25 * 3600  # [s]
         self.default_lifetime = 17 * 3600  # [s]
-        self.min_target_current = 97  # [mA]
-        self.max_target_current = 105  # [mA]
-        self.default_target_current = 101  # [mA]
-        self.coeffs_dcurr_vs_bias = [1, 0, 0]
-        self.min_delta_current = 0.001  # [mA]
+        self.min_target_current = 99  # [mA]
+        self.max_target_current = 102  # [mA]
+        self.default_target_current = 100.5  # [mA]
+        self.coeffs_dcurr_vs_bias = [-50.0, 10.0]
+        self.min_delta_current = 0.000  # [mA]
         self.max_delta_current = 1  # [mA]
-        self.min_bias_voltage = -49  # [V]
-        self.max_bias_voltage = -43  # [V]
+        self.min_bias_voltage = -52  # [V]
+        self.max_bias_voltage = -40  # [V]
         self.ahead_set_time = 10  # [s]
         self.use_gpmodel = False
-        self.gpmodel_lengthscale = 0.1  # [mA]
-        self.gpmodel_variance = 9  # [V^2]
+        self.gpmodel_lengthscale = 2  # [mA]
+        self.gpmodel_variance = 24  # [V^2]
         self.gpmodel_noise_var = 0.3  # [V^2]
+        self.gpmodel_max_num_points = 100
+        self.gpmodel_opt_each_pts = 50
 
     def __str__(self):
         """."""
@@ -153,11 +158,15 @@ class BiasFeedbackParams(_ParamsBaseClass):
         stg += ftmp('min_bias_voltage', self.min_bias_voltage, '[V]')
         stg += ftmp('max_bias_voltage', self.max_bias_voltage, '[V]')
         stg += ftmp('ahead_set_time', self.ahead_set_time, '[s]')
-        # stg += ftmp('coeffs_dcurr_vs_bias', self.coeffs_dcurr_vs_bias, ' 0]')
+        stg += stmp('coeffs_dcurr_vs_bias', str(self.coeffs_dcurr_vs_bias), '')
         stg += stmp('use_gpmodel', str(self.use_gpmodel), '')
+        stg += dtmp(
+            'gpmodel_opt_each_pts', self.gpmodel_opt_each_pts,
+            ' (0 for no optimization)')
         stg += ftmp('gpmodel_lengthscale', self.gpmodel_lengthscale, '[mA]')
         stg += ftmp('gpmodel_variance', self.gpmodel_variance, '[V^2]')
         stg += ftmp('gpmodel_noise_var', self.gpmodel_noise_var, '[V^2]')
+        stg += dtmp('gpmodel_max_num_points', self.gpmodel_max_num_points, '')
         return stg
 
 
@@ -172,12 +181,20 @@ class BiasFeedback(_BaseClass):
             params=BiasFeedbackParams(), target=self._run, isonline=isonline)
         self.params = BiasFeedbackParams()
         self._already_set = False
+        # NOTE: 2D Version
+        # self.gpmodel_kernel = gpy.kern.RBF(
+        #     input_dim=2, variance=self.params.gpmodel_variance,
+        #     lengthscale=self.params.gpmodel_lengthscale, active_dims=[0, 1])
+
         self.gpmodel_kernel = gpy.kern.RBF(
             input_dim=1, variance=self.params.gpmodel_variance,
             lengthscale=self.params.gpmodel_lengthscale)
         self.gpmodel = gpy.models.GPRegression(
-            np.zeros((5, 1)), np.zeros((5, 1)), self.gpmodel_kernel,
+            # np.zeros((3, 2)), np.zeros((3, 1)),  # NOTE: 2D Version
+            np.zeros((3, 1)), np.zeros((3, 1)),
+            self.gpmodel_kernel,
             noise_var=self.params.gpmodel_noise_var)
+        self._gpmodel_pts = 0
         if isonline:
             _create_devices(self)
 
@@ -189,6 +206,9 @@ class BiasFeedback(_BaseClass):
         egun = self.devices['egun']
         injctrl = self.devices['injctrl']
         currinfo = self.devices['currinfo']
+
+        self.data['dcurr'] = []
+        self.data['bias'] = []
 
         pvo = currinfo.si.pv_object('InjCurr-Mon')
         cbv = pvo.add_callback(self._update_model)
@@ -210,58 +230,74 @@ class BiasFeedback(_BaseClass):
         pvo.remove_callback(cbv)
 
     def _update_model(self, value, **kwgs):
-        _ = kwgs
         self._already_set = False
 
-        bias = self.devices['egun'].bias.voltage
-        if value > self.params.max_delta_current or \
-                value < self.params.min_delta_current or \
-                bias > self.params.max_bias_voltage or \
-                bias < self.params.min_bias_voltage:
-            return
+        bias = kwgs.get('bias') or self.devices['egun'].bias.voltage
 
         self.data['dcurr'].append(value)
         self.data['bias'].append(bias)
 
-        x = np.array(self.data['dcurr'])
-        y = np.array(self.data['bias'])
-        x.shape = (x.size, 1)
-        y.shape = (y.size, 1)
+        x = np.array(self.data['dcurr'], dtype=float)
+        y = np.array(self.data['bias'], dtype=float)
+
+        x = x[-self.params.gpmodel_max_num_points:]
+        y = y[-self.params.gpmodel_max_num_points:]
 
         y -= np.polynomial.polynomial.polyval(
             x, self.params.coeffs_dcurr_vs_bias)
+
+        # NOTE: 2D Version
+        # tim = -np.arange(x.size)[::-1]
+        # x = np.vstack([x, tim]).T
+
+        x.shape = (x.size, 1)
+        y.shape = (y.size, 1)
         self.gpmodel.set_XY(x, y)
+        self._gpmodel_pts += 1
+        opt = self.params.gpmodel_opt_each_pts
+        if self.params.use_gpmodel and opt and opt <= self._gpmodel_pts:
+            self.gpmodel.optimize_restarts(num_restarts=5, verbose=False)
+            self._gpmodel_pts = 0
 
     def get_bias_voltage(self, dcurr):
         """."""
         bias = np.polynomial.polynomial.polyval(
             dcurr, self.params.coeffs_dcurr_vs_bias)
 
-        if self.params.use_gaussian_process:
-            dcurr = np.array(dcurr, ndmin=2)
-            avg, var = self.gpmodel.predict(dcurr)
-            bias += avg[0, 0]
+        xgp = self.gpmodel.X
+        opt = self.params.gpmodel_opt_each_pts
+        if self.params.use_gpmodel and xgp.size >= opt:
+            if xgp.min() <= dcurr <= xgp.max():
+                # x = np.array([[dcurr, 0]])   # NOTE: 2D Version
+                x = np.array(dcurr, ndmin=2)
+                avg, var = self.gpmodel.predict(x)
+                bias += avg[0, 0]
 
         bias = min(bias, self.params.max_bias_voltage)
         bias = max(bias, self.params.min_bias_voltage)
         return bias
 
-    def get_delta_current_per_pulse(self):
-        currinfo = self.devices['currinfo']
-        injctrl = self.devices['injctrl']
+    def get_delta_current_per_pulse(self, **kwargs):
+        """."""
+        currinfo = self.devices.get('currinfo')
+        injctrl = self.devices.get('injctrl')
 
-        per = injctrl.topup_period
-        nrpul = injctrl.topup_nrpulses
-        curr_avg = injctrl.target_current
-        curr_now = currinfo.current_mon
-        ltime = currinfo.si.lifetime
+        per = kwargs.get('topup_period') or injctrl.topup_period
+        nrpul = kwargs.get('topup_nrpulses') or injctrl.topup_nrpulses
+        curr_avg = kwargs.get('target_current') or injctrl.target_current
+        curr_now = kwargs.get('current_mon') or currinfo.current_mon
+        ltime = kwargs.get('lifetime') or currinfo.si.lifetime
 
-        if ltime/3600 < self.params.min_lifetime or \
-                ltime/3600 > self.params.max_lifetime:
+        if ltime < self.params.min_lifetime or \
+                ltime > self.params.max_lifetime:
             ltime = self.params.default_lifetime
 
-        curr_tar = curr_avg / (1 - per/2/ltime)
+        curr_tar = curr_avg / (1 - per*60/2/ltime)
         if curr_tar < self.params.min_target_current or \
                 curr_tar > self.params.max_target_current:
             curr_tar = self.params.default_target_current
-        return (curr_tar - curr_now) / nrpul
+
+        dcurr = (curr_tar - curr_now) / nrpul
+        dcurr = min(dcurr, self.params.max_delta_current)
+        dcurr = max(dcurr, self.params.min_delta_current)
+        return dcurr
