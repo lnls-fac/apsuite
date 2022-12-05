@@ -1,5 +1,6 @@
 """."""
 import time as _time
+from threading import Thread as _Thread
 
 import numpy as np
 import GPy as gpy
@@ -210,8 +211,15 @@ class BiasFeedback(_BaseClass):
         self.data['dcurr'] = []
         self.data['bias'] = []
 
+        pvo = egun.bias.pv_object('voltoutsoft')
+        pvo.auto_monitor = True
+        pvo = egun.bias.pv_object('voltinsoft')
+        pvo.auto_monitor = True
         pvo = currinfo.si.pv_object('InjCurr-Mon')
-        cbv = pvo.add_callback(self._update_model)
+        pvo.auto_monitor = True
+        pvo = currinfo.bo.pv_object('Current3GeV-Mon')
+        pvo.auto_monitor = True
+        cbv = pvo.add_callback(self._callback_to_thread)
 
         self._already_set = False
         while not self._stopevt.is_set():
@@ -225,16 +233,21 @@ class BiasFeedback(_BaseClass):
                 continue
             dcurr = self.get_delta_current_per_pulse()
             bias = self.get_bias_voltage(dcurr)
-            egun.bias.voltage = bias
+            egun.bias.set_voltage(bias)
+            print(f'dcurr = {dcurr:.3f}, bias = {bias:.2f}')
             self._already_set = True
         pvo.remove_callback(cbv)
+        print('Finished!')
 
-    def _update_model(self, value, **kwgs):
-        self._already_set = False
+    def _callback_to_thread(self, **kwgs):
+        _Thread(target=self._update_model, kwargs=kwgs, daemon=True).start()
 
+    def _update_model(self, **kwgs):
+        _time.sleep(1)
         bias = kwgs.get('bias') or self.devices['egun'].bias.voltage
+        dcurr = kwgs.get('dcurr') or self.devices['currinfo'].si.injcurr
 
-        self.data['dcurr'].append(value)
+        self.data['dcurr'].append(dcurr)
         self.data['bias'].append(bias)
 
         x = np.array(self.data['dcurr'], dtype=float)
@@ -255,9 +268,12 @@ class BiasFeedback(_BaseClass):
         self.gpmodel.set_XY(x, y)
         self._gpmodel_pts += 1
         opt = self.params.gpmodel_opt_each_pts
-        if self.params.use_gpmodel and opt and opt <= self._gpmodel_pts:
+        if self.params.use_gpmodel and opt and opt >= self._gpmodel_pts:
             self.gpmodel.optimize_restarts(num_restarts=5, verbose=False)
             self._gpmodel_pts = 0
+
+        _time.sleep(3)
+        self._already_set = False
 
     def get_bias_voltage(self, dcurr):
         """."""
@@ -285,7 +301,7 @@ class BiasFeedback(_BaseClass):
         per = kwargs.get('topup_period') or injctrl.topup_period
         nrpul = kwargs.get('topup_nrpulses') or injctrl.topup_nrpulses
         curr_avg = kwargs.get('target_current') or injctrl.target_current
-        curr_now = kwargs.get('current_mon') or currinfo.current_mon
+        curr_now = kwargs.get('current_mon') or currinfo.si.current
         ltime = kwargs.get('lifetime') or currinfo.si.lifetime
 
         if ltime < self.params.min_lifetime or \
@@ -293,6 +309,7 @@ class BiasFeedback(_BaseClass):
             ltime = self.params.default_lifetime
 
         curr_tar = curr_avg / (1 - per*60/2/ltime)
+        print(f'curr_tar {curr_tar:.3f}')
         if curr_tar < self.params.min_target_current or \
                 curr_tar > self.params.max_target_current:
             curr_tar = self.params.default_target_current
