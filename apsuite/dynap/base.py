@@ -122,7 +122,7 @@ class BaseClass(_BaseClass):
         nlost = _np.array([l is None for l in lost_plane], dtype=bool)
         nlost = nlost.reshape(shape)
         r_sqr = x_in*x_in + y_in*y_in
-        idx = _np.unravel_index(_np.argmin(r_sqr), r_sqr.shape)
+        idx = _np.unravel_index(_np.argmin(r_sqr), shape)
         tolook = set()
         tolook.add(idx)
         inner = set(idx)
@@ -135,7 +135,8 @@ class BaseClass(_BaseClass):
             ]
         while tolook:
             idx = tolook.pop()
-            isborder = False
+            isborder = not idx[0] or not idx[1] or \
+                idx[0] == shape[0] - 1 or idx[1] == shape[1] - 1
             for nei in neigbs:
                 idxn = idx[0] + nei[0], idx[1] + nei[1]
                 if 0 <= idxn[0] < shape[0] and 0 <= idxn[1] < shape[1]:
@@ -155,11 +156,32 @@ class BaseClass(_BaseClass):
         x_dyn = x_in[border]
         y_dyn = y_in[border]
 
-        r_sqr = x_dyn*x_dyn + y_dyn*y_dyn
-        theta = _np.arctan2(y_dyn, x_dyn)
+        # If I'm not wrong the sorting of the DA points is a particular case
+        # of the Travelling Salesman Problem, which is NP-hard.
+        # I will try two quick approaches here, which "almost" sort it:
 
-        ind = _np.argsort(theta)
-        return x_dyn[ind], y_dyn[ind]
+        # First: sort by angle
+        theta = _np.arctan2(y_dyn, x_dyn)
+        ind = _np.lexsort((-y_dyn, -theta))
+        x_dyn, y_dyn = x_dyn[ind], y_dyn[ind]
+
+        # Second: minimize locally the perimeter of the DA by exchanging
+        # positions of i+1 with i+2:
+        for i in range(x_dyn.size-3):
+            d_nochange = 0
+            for id0, id1 in ((0, 1), (2, 3)):
+                dltx = x_dyn[i+id0] - x_dyn[i+id1]
+                dlty = y_dyn[i+id0] - y_dyn[i+id1]
+                d_nochange += dltx*dltx + dlty*dlty
+            d_change = 0
+            for id0, id1 in ((0, 2), (1, 3)):
+                dltx = x_dyn[i+id0] - x_dyn[i+id1]
+                dlty = y_dyn[i+id0] - y_dyn[i+id1]
+                d_change += dltx*dltx + dlty*dlty
+            if d_change < d_nochange:
+                x_dyn[i+1], x_dyn[i+2] = x_dyn[i+2], x_dyn[i+1]
+                y_dyn[i+1], y_dyn[i+2] = y_dyn[i+2], y_dyn[i+1]
+        return x_dyn, y_dyn
 
     @staticmethod
     def _calc_frequencies(rout, lost_plane):
