@@ -150,9 +150,10 @@ class BeamSizesAnalysis(_BaseClass):
         sclx, scly = data['scl_factx'], data['scl_facty']  # pixel to mm
 
         for image in data['images']:
-            sx, _, sy, _ = self.calc_beam_sizes(
+            beam_stat = self.calc_beam_statistics(
                 image, roix=prms.roix, roiy=prms.roiy, window=prms.line_window,
                 plot_flag=plot_flag)
+            sx, sy = beam_stat['sigmax'], beam_stat['sigmay']
             sigmasx.append(sx*sclx)
             sigmasy.append(sy*scly)
 
@@ -204,7 +205,7 @@ class BeamSizesAnalysis(_BaseClass):
             _plt.show()
 
     @staticmethod
-    def calc_beam_sizes(
+    def calc_beam_statistics(
             image, roix=[500, 800], roiy=[400, 600], window=4,
             plot_flag=False):
         """Compute the beam sizes from an image.
@@ -271,7 +272,7 @@ class BeamSizesAnalysis(_BaseClass):
             aimg.plot(roi_m1x, roi_m1y, 'o', ms=5, color='tab:red')
             w, h = _np.abs(roix2-roix1), _np.abs(roiy2-roiy1)
             rect = _patches.Rectangle(
-                (roix1, roiy1), w, h, linewidth=1, edgecolor='k', fill='False',
+                (roix1, roiy1), w, h, linewidth=1, edgecolor='w', fill='False',
                 facecolor='none')
             aimg.add_patch(rect)
 
