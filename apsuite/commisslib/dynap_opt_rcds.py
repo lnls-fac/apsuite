@@ -173,7 +173,7 @@ class OptimizeDA(_RCDS, _BaseClass):
                 upper.append(upp)
         if not return_limits:
             return _np.array(pos)
-        return _np.array(pos), (lower, upper)
+        return _np.array(pos), (_np.array(lower), _np.array(upper))
 
     def get_strengths_from_machine(self, return_limits=False):
         """."""
