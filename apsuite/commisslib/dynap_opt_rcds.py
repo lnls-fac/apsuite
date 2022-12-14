@@ -195,7 +195,7 @@ class OptimizeDA(_RCDS, _BaseClass):
             raise ValueError(
                 'Length of strengths must match number of sextupole families.')
 
-        for i, stg in strengths:
+        for i, stg in enumerate(strengths):
             if stg is None or _np.isnan(stg):
                 continue
             self.sextupoles[i].strength = stg
