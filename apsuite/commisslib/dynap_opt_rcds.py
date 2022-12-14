@@ -51,13 +51,30 @@ class OptimizeDA(_RCDS, _BaseClass):
         """."""
         _BaseClass.from_dict(self, dic)
 
-    def initialization(self):
+    def initialization(self, init_obj_func=-50):
         """."""
         if self.isonline:
             self.data['timestamp'] = _time.time()
             self.data['strengths'] = [self.get_strengths_from_machine(), ]
+            self.data['obj_funcs'] = init_obj_func
 
     def objective_function(self, pos):
+        """."""
+        evg, currinfo = self.devices['evg'], self.devices['currinfo']
+
+        strengths = self.get_isochrom_strengths(pos)
+        self.set_strengths_to_machine(strengths)
+        self.data['strengths'].append(strengths)
+
+        _time.sleep(1)
+        evg.cmd_turn_on_injection()
+        evg.wait_injection_finish()
+        _time.sleep(3)
+        objective = -currinfo.injeff
+        self.data['obj_funcs'] = objective
+        return objective
+
+    def objective_function_(self, pos):
         """."""
         evg = self.devices['evg']
 
