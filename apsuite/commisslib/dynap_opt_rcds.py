@@ -155,7 +155,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         self.data['measured_noise_level'] = noise_level
         return noise_level, obj
 
-    def get_current_position(self):
+    def get_current_position(self, return_limits=False):
         """Return current strengths of sextupoles used by RCDS.
 
         Returns:
@@ -163,16 +163,31 @@ class OptimizeDA(_RCDS, _BaseClass):
                 optimization.
 
         """
-        strengths0 = self.get_strengths_from_machine()
-        pos0 = []
-        for sxt, stg in zip(self.SEXT_FAMS, strengths0):
+        stren, (lower0, upper0) = self.get_strengths_from_machine(
+            return_limits=True)
+        pos, lower, upper = [], [], []
+        for sxt, stg, upp, low in zip(self.SEXT_FAMS, stren, lower0, upper0):
             if sxt in self.names_sexts2use:
-                pos0.append(stg)
-        return _np.array(pos0)
+                pos.append(stg)
+                lower.append(low)
+                upper.append(upp)
+        if not return_limits:
+            return _np.array(pos)
+        return _np.array(pos), (lower, upper)
 
-    def get_strengths_from_machine(self):
+    def get_strengths_from_machine(self, return_limits=False):
         """."""
-        return _np.array([sx.strengthref_mon for sx in self.sextupoles])
+        val, lower, upper = [], [], []
+        for sxt in self.sextupoles:
+            val.append(sxt.strengthref_mon)
+            if not return_limits:
+                continue
+            lims = sxt.pv_object('SL-Mon').get_ctrlvars()
+            upper.append(lims['upper_disp_limit'])
+            lower.append(lims['lower_disp_limit'])
+        if not return_limits:
+            return _np.array(val)
+        return _np.array(val), (_np.array(lower), _np.array(upper))
 
     def set_strengths_to_machine(self, strengths):
         """."""
