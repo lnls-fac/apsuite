@@ -69,7 +69,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         _time.sleep(1)
         evg.cmd_turn_on_injection()
         evg.wait_injection_finish()
-        _time.sleep(3)
+        _time.sleep(1)
         objective = -currinfo.injeff
         self.data['obj_funcs'] = objective
         return objective
@@ -173,7 +173,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         obj = []
         for i in range(nr_evals):
             obj.append(self.objective_function(pos))
-            print(f'{i+1:02d}/{nr_evals:02d}  --> loss = {obj[-1]:.3f}')
+            print(f'{i+1:02d}/{nr_evals:02d}  --> obj. = {obj[-1]:.3f}')
         noise_level = _np.std(obj)
         self.params.noise_level = noise_level
         self.data['measured_objfuncs_for_noise'] = obj
@@ -240,7 +240,7 @@ class OptimizeDA(_RCDS, _BaseClass):
             PowerSupplyPU.DEVICES.SI_PING_V)
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['evg'] = EVG()
-        self.devices['bpms'] = FamBPMs()
+        # self.devices['bpms'] = FamBPMs()
         self.devices['evt_study'] = Event('Study')
         self.devices['egun'] = EGTriggerPS()
 
