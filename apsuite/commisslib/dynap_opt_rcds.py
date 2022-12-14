@@ -103,6 +103,8 @@ class OptimizeDA(_RCDS, _BaseClass):
         egun.enable = True
         pingh.pulse = False
         pingv.pulse = False
+        currp = self.get_strengths_from_machine()
+        self.set_strengths_to_machine(self.data['strengths'][0])
         _time.sleep(0.1)
         evg.cmd_turn_on_injection()
         niter = int(timeout/0.5)
@@ -113,6 +115,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         evg.cmd_turn_off_injection()
         _time.sleep(0.5)
 
+        self.set_strengths_to_machine(currp)
         evg.nrpulses = 1
         nlk.pulse = False
         egun.enable = False
@@ -200,6 +203,7 @@ class OptimizeDA(_RCDS, _BaseClass):
             if stg is None or _np.isnan(stg):
                 continue
             self.sextupoles[i].strength = stg
+        _time.sleep(2)
 
     def _create_devices(self):
         for fam in self.SEXT_FAMS:
