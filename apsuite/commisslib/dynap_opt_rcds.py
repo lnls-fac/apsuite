@@ -166,7 +166,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         stren, (lower0, upper0) = self.get_strengths_from_machine(
             return_limits=True)
         pos, lower, upper = [], [], []
-        for sxt, stg, upp, low in zip(self.SEXT_FAMS, stren, lower0, upper0):
+        for sxt, stg, low, upp in zip(self.SEXT_FAMS, stren, lower0, upper0):
             if sxt in self.names_sexts2use:
                 pos.append(stg)
                 lower.append(low)
