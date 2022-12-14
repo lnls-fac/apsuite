@@ -47,6 +47,10 @@ class OptimizeDA(_RCDS, _BaseClass):
                 continue
             self.names_sexts2use.append(sext)
 
+    def from_dict(self, dic):
+        """."""
+        _BaseClass.from_dict(self, dic)
+
     def initialization(self):
         """."""
         if self.isonline:
