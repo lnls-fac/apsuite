@@ -56,7 +56,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         if self.isonline:
             self.data['timestamp'] = _time.time()
             self.data['strengths'] = [self.get_strengths_from_machine(), ]
-            self.data['obj_funcs'] = init_obj_func
+            self.data['obj_funcs'] = [init_obj_func, ]
 
     def objective_function(self, pos):
         """."""
@@ -77,7 +77,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         injeff_pv.add_callback(_injeff_cb)
         evg.cmd_turn_on_injection()
         objective = -injeff
-        self.data['obj_funcs'] = objective
+        self.data['obj_funcs'].append(objective)
         injeff_pv.clear_callbacks()
         return objective
 
