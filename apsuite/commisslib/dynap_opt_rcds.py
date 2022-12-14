@@ -76,7 +76,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         sum0 = _np.mean(psum[0:10])
         sumf = _np.mean(psum[-10:])
 
-        loss = 1 - sum0/sumf
+        loss = 1 - sumf/sum0
         loss = max(min(loss, 1), 0)
 
         return loss*100
@@ -147,8 +147,9 @@ class OptimizeDA(_RCDS, _BaseClass):
         if pos is None:
             pos = self.params.initial_position
         obj = []
-        for _ in range(nr_evals):
+        for i in range(nr_evals):
             obj.append(self.objective_function(pos))
+            print(f'{i+1:02d}/{nr_evals:02d}  --> loss = {obj[-1]:.3f}')
         noise_level = _np.std(obj)
         self.params.noise_level = noise_level
         self.data['measured_objfuncs_for_noise'] = obj
