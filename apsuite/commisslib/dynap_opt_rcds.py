@@ -65,14 +65,20 @@ class OptimizeDA(_RCDS, _BaseClass):
         strengths = self.get_isochrom_strengths(pos)
         self.set_strengths_to_machine(strengths)
         self.data['strengths'].append(strengths)
-
         _time.sleep(1)
-        inj0 = currinfo.injeff
+
+        injeff = 0.0
+
+        def _injeff_cb(**kwargs):
+            nonlocal injeff
+            injeff = kwargs['value']
+
+        injeff_pv = currinfo.pv_object('InjEff-Mon')
+        injeff_pv.add_callback(_injeff_cb)
         evg.cmd_turn_on_injection()
-        while inj0 == currinfo.injeff:
-            _time.sleep(0.1)
-        objective = -currinfo.injeff
+        objective = -injeff
         self.data['obj_funcs'] = objective
+        injeff_pv.clear_callbacks()
         return objective
 
     def objective_function_(self, pos):
