@@ -67,9 +67,10 @@ class OptimizeDA(_RCDS, _BaseClass):
         self.data['strengths'].append(strengths)
 
         _time.sleep(1)
+        inj0 = currinfo.injeff
         evg.cmd_turn_on_injection()
-        evg.wait_injection_finish()
-        _time.sleep(1)
+        while inj0 == currinfo.injeff:
+            _time.sleep(0.1)
         objective = -currinfo.injeff
         self.data['obj_funcs'] = objective
         return objective
