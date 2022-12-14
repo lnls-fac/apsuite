@@ -67,7 +67,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         self.data['strengths'].append(strengths)
         _time.sleep(1)
 
-        injeff = 0.0
+        injeff = None
 
         def _injeff_cb(**kwargs):
             nonlocal injeff
@@ -76,6 +76,13 @@ class OptimizeDA(_RCDS, _BaseClass):
         injeff_pv = currinfo.pv_object('InjEff-Mon')
         injeff_pv.add_callback(_injeff_cb)
         evg.cmd_turn_on_injection()
+
+        for _ in range(50):
+            if injeff is not None:
+                break
+            _time.sleep(0.1)
+        else:
+            injeff = 0.0
         objective = -injeff
         self.data['obj_funcs'].append(objective)
         injeff_pv.clear_callbacks()
