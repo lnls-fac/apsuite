@@ -204,16 +204,17 @@ class OptimizeParams:
             'initial_position': self.initial_position,
             }
 
-    def from_dict(self, dic: dict):
+    def from_dict(self, params_dict: dict):
         """."""
-        self.max_number_iters = dic.get(
+        self.max_number_iters = params_dict.get(
             'max_number_iters', self.max_number_iters)
-        self.max_number_evals = dic.get(
+        self.max_number_evals = params_dict.get(
             'max_number_evals', self.max_number_evals)
-        self.boundary_policy = dic.get('boundary_policy', self.boundary_policy)
-        self.limit_lower = dic.get('limit_lower', self.limit_lower)
-        self.limit_upper = dic.get('limit_upper', self.limit_upper)
-        self.initial_position = dic.get(
+        self.boundary_policy = params_dict.get(
+            'boundary_policy', self.boundary_policy)
+        self.limit_lower = params_dict.get('limit_lower', self.limit_lower)
+        self.limit_upper = params_dict.get('limit_upper', self.limit_upper)
+        self.initial_position = params_dict.get(
             'initial_position', self.initial_position)
 
 

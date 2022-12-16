@@ -351,7 +351,8 @@ class OrbitAnalysis:
 
     def plot_orbit_integrated_psd(
             self, bpmidx=0, orbx=None, orby=None, inverse=False,
-            title='', label='', figname='', fig=None, axs=None, color='C0'):
+            title='', label='', figname='', fig=None, axs=None, color='C0',
+            alpha=1.0):
         """."""
         if orbx is None:
             ipsdx = self.analysis['orbx_ipsd']
@@ -367,12 +368,17 @@ class OrbitAnalysis:
             ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
         if fig is None or axs is None:
             fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
-        axs[0].plot(freqx, ipsdx[:, bpmidx], label=label, color=color)
-        axs[1].plot(freqy, ipsdy[:, bpmidx], label=label, color=color)
+        axs[0].plot(freqx, ipsdx[:, bpmidx], label=label,
+            color=color, alpha=alpha)
+        axs[1].plot(freqy, ipsdy[:, bpmidx], label=label,
+            color=color, alpha=alpha)
         if title:
             axs[0].set_title(title)
-        axs[0].legend(
-            loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
+
+        if label:
+            axs[0].legend(
+                loc='upper right', bbox_to_anchor=(1.25, 1.02),
+                prop={'size': 14})
         axs[0].set_ylabel(r'$x$ [$\mu$m]')
         axs[1].set_ylabel(r'$y$ [$\mu$m]')
         axs[1].set_xlabel('Frequency [Hz]')

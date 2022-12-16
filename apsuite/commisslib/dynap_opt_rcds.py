@@ -47,13 +47,37 @@ class OptimizeDA(_RCDS, _BaseClass):
                 continue
             self.names_sexts2use.append(sext)
 
-    def initialization(self):
+    def from_dict(self, dic):
+        """."""
+        _BaseClass.from_dict(self, dic)
+
+    def initialization(self, init_obj_func=-50):
         """."""
         if self.isonline:
             self.data['timestamp'] = _time.time()
             self.data['strengths'] = [self.get_strengths_from_machine(), ]
+            self.data['obj_funcs'] = [init_obj_func, ]
 
     def objective_function(self, pos):
+        """."""
+        evg, currinfo = self.devices['evg'], self.devices['currinfo']
+
+        strengths = self.get_isochrom_strengths(pos)
+        self.set_strengths_to_machine(strengths)
+        self.data['strengths'].append(strengths)
+        _time.sleep(1)
+
+        inj0 = currinfo.injeff
+        evg.cmd_turn_on_injection()
+        for _ in range(50):
+            if inj0 != currinfo.injeff:
+                break
+            _time.sleep(0.1)
+        objective = -currinfo.injeff
+        self.data['obj_funcs'].append(objective)
+        return objective
+
+    def objective_function_(self, pos):
         """."""
         evg = self.devices['evg']
 
@@ -76,7 +100,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         sum0 = _np.mean(psum[0:10])
         sumf = _np.mean(psum[-10:])
 
-        loss = 1 - sum0/sumf
+        loss = 1 - sumf/sum0
         loss = max(min(loss, 1), 0)
 
         return loss*100
@@ -103,6 +127,8 @@ class OptimizeDA(_RCDS, _BaseClass):
         egun.enable = True
         pingh.pulse = False
         pingv.pulse = False
+        currp = self.get_strengths_from_machine()
+        self.set_strengths_to_machine(self.data['strengths'][0])
         _time.sleep(0.1)
         evg.cmd_turn_on_injection()
         niter = int(timeout/0.5)
@@ -113,6 +139,7 @@ class OptimizeDA(_RCDS, _BaseClass):
         evg.cmd_turn_off_injection()
         _time.sleep(0.5)
 
+        self.set_strengths_to_machine(currp)
         evg.nrpulses = 1
         nlk.pulse = False
         egun.enable = False
@@ -147,15 +174,16 @@ class OptimizeDA(_RCDS, _BaseClass):
         if pos is None:
             pos = self.params.initial_position
         obj = []
-        for _ in range(nr_evals):
+        for i in range(nr_evals):
             obj.append(self.objective_function(pos))
+            print(f'{i+1:02d}/{nr_evals:02d}  --> obj. = {obj[-1]:.3f}')
         noise_level = _np.std(obj)
         self.params.noise_level = noise_level
         self.data['measured_objfuncs_for_noise'] = obj
         self.data['measured_noise_level'] = noise_level
         return noise_level, obj
 
-    def get_current_position(self):
+    def get_current_position(self, return_limits=False):
         """Return current strengths of sextupoles used by RCDS.
 
         Returns:
@@ -163,16 +191,31 @@ class OptimizeDA(_RCDS, _BaseClass):
                 optimization.
 
         """
-        strengths0 = self.get_strengths_from_machine()
-        pos0 = []
-        for sxt, stg in zip(self.SEXT_FAMS, strengths0):
+        stren, (lower0, upper0) = self.get_strengths_from_machine(
+            return_limits=True)
+        pos, lower, upper = [], [], []
+        for sxt, stg, low, upp in zip(self.SEXT_FAMS, stren, lower0, upper0):
             if sxt in self.names_sexts2use:
-                pos0.append(stg)
-        return _np.array(pos0)
+                pos.append(stg)
+                lower.append(low)
+                upper.append(upp)
+        if not return_limits:
+            return _np.array(pos)
+        return _np.array(pos), (_np.array(lower), _np.array(upper))
 
-    def get_strengths_from_machine(self):
+    def get_strengths_from_machine(self, return_limits=False):
         """."""
-        return _np.array([sx.strengthref_mon for sx in self.sextupoles])
+        val, lower, upper = [], [], []
+        for sxt in self.sextupoles:
+            val.append(sxt.strengthref_mon)
+            if not return_limits:
+                continue
+            lims = sxt.pv_object('SL-Mon').get_ctrlvars()
+            upper.append(lims['upper_disp_limit'])
+            lower.append(lims['lower_disp_limit'])
+        if not return_limits:
+            return _np.array(val)
+        return _np.array(val), (_np.array(lower), _np.array(upper))
 
     def set_strengths_to_machine(self, strengths):
         """."""
@@ -180,10 +223,11 @@ class OptimizeDA(_RCDS, _BaseClass):
             raise ValueError(
                 'Length of strengths must match number of sextupole families.')
 
-        for i, stg in strengths:
+        for i, stg in enumerate(strengths):
             if stg is None or _np.isnan(stg):
                 continue
             self.sextupoles[i].strength = stg
+        _time.sleep(2)
 
     def _create_devices(self):
         for fam in self.SEXT_FAMS:
@@ -199,7 +243,7 @@ class OptimizeDA(_RCDS, _BaseClass):
             PowerSupplyPU.DEVICES.SI_PING_V)
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['evg'] = EVG()
-        self.devices['bpms'] = FamBPMs()
+        # self.devices['bpms'] = FamBPMs()
         self.devices['evt_study'] = Event('Study')
         self.devices['egun'] = EGTriggerPS()
 
