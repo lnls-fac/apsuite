@@ -81,7 +81,6 @@ class MeasDispChrom(_BaseClass):
             print('SOFB feedback is enable, disabling it...')
             sofb.cmd_turn_off_autocorr()
 
-        # delta_freq = self.params.delta_freq
         npoints = self.params.meas_nrsteps
         sofb.nr_points = self.params.sofb_nrpoints
         freq0 = rfgen.frequency
