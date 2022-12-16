@@ -126,7 +126,6 @@ class RCDS(_Optimize):
     def __init__(self, use_thread=True):
         """."""
         super().__init__(RCDSParams(), use_thread=use_thread)
-        self.final_search_directions = _np.array([], dtype=float)
 
     def bracketing_min(self, pos0, func0, dir, step):
         """Bracket the minimum.
@@ -430,11 +429,11 @@ class RCDS(_Optimize):
         stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
         _log.info(stg)
 
-        self.best_positions = self.params.denormalize_positions(
+        self.data['best_positions'] = self.params.denormalize_positions(
             _np.array(hist_best_pos, ndmin=2))
-        self.best_objfuncs = _np.array(hist_best_func, ndmin=2)
+        self.data['best_objfuncs'] = _np.array(hist_best_func, ndmin=2)
 
-        self.final_search_directions = self.params.denormalize_positions(
+        search_dirs = self.params.denormalize_positions(
             search_dirs, is_pos=False)
-        self.final_search_directions /= _np.linalg.norm(
-            self.final_search_directions, axis=0)
+        search_dirs /= _np.linalg.norm(search_dirs, axis=0)
+        self.data['final_search_directions'] = search_dirs

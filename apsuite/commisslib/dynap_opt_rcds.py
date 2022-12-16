@@ -11,7 +11,7 @@ from ..optimization.rcds import RCDS as _RCDS
 from ..optics_analysis import ChromCorr
 
 
-class OptimizeDA(_RCDS, _BaseClass):
+class OptimizeDA(_RCDS):
     """."""
 
     SEXT_FAMS = (
@@ -246,10 +246,3 @@ class OptimizeDA(_RCDS, _BaseClass):
         # self.devices['bpms'] = FamBPMs()
         self.devices['evt_study'] = Event('Study')
         self.devices['egun'] = EGTriggerPS()
-
-    def save_optimization_data(self, fname):
-        """."""
-        self.data['best_positions'] = self.best_positions
-        self.data['best_objfuncs'] = self.best_objfuncs
-        self.data['final_search_directions'] = self.final_search_directions
-        self.save_data(fname)

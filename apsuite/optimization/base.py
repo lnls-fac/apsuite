@@ -6,8 +6,10 @@ import numpy as _np
 
 from mathphys.functions import get_namedtuple as _get_namedtuple
 
+from ..utils import ParamsBaseClass as _Params, ThreadedMeasBaseClass as _Base
 
-class OptimizeParams:
+
+class OptimizeParams(_Params):
     """."""
 
     _TMPD = '{:30s}: {:10d}\n'
@@ -193,45 +195,50 @@ class OptimizeParams:
             _np.any(pos >= self.limit_upper))
         return not wrong
 
-    def to_dict(self) -> dict:
-        """."""
-        return {
-            'max_number_iters': self.max_number_iters,
-            'max_number_evals': self.max_number_evals,
-            'boundary_policy': self.boundary_policy,
-            'limit_lower': self.limit_lower,
-            'limit_upper': self.limit_upper,
-            'initial_position': self.initial_position,
-            }
 
-    def from_dict(self, params_dict: dict):
-        """."""
-        self.max_number_iters = params_dict.get(
-            'max_number_iters', self.max_number_iters)
-        self.max_number_evals = params_dict.get(
-            'max_number_evals', self.max_number_evals)
-        self.boundary_policy = params_dict.get(
-            'boundary_policy', self.boundary_policy)
-        self.limit_lower = params_dict.get('limit_lower', self.limit_lower)
-        self.limit_upper = params_dict.get('limit_upper', self.limit_upper)
-        self.initial_position = params_dict.get(
-            'initial_position', self.initial_position)
-
-
-class Optimize:
+class Optimize(_Base):
     """."""
 
-    def __init__(self, params, use_thread=True):
+    def __init__(self, params, use_thread=True, isonline=True):
         """."""
+        super().__init__(
+            params=params, target=self._optimize, isonline=isonline)
         self.use_thread = use_thread
-        self.params = params
-
-        self._thread = _Thread()
-        self._stopevt = _Event()
 
         self._num_objective_evals = 0
         self.best_positions = _np.array([], ndmin=2)
         self.best_objfuncs = _np.array([], ndmin=2)
+
+    def to_dict(self) -> dict:
+        """Dump all relevant object properties to dictionary.
+
+        Returns:
+            dict: contains all relevant properties of object.
+
+        """
+        dic = super().to_dict()
+        dic['num_objective_evals'] = self.num_objective_evals
+        dic['use_thread'] = self.use_thread
+        dic['best_positions'] = self.best_positions
+        dic['best_objfuncs'] = self.best_objfuncs
+        return dic
+
+    def from_dict(self, info: dict):
+        """Update all relevant info from dictionary.
+
+        Args:
+            info (dict): dictionary with all relevant info.
+
+        Returns:
+            keys_not_used (set): Set containing keys not used by
+                `self.params` object.
+
+        """
+        super().from_dict(info)
+        self.num_objective_evals = info['num_objective_evals']
+        self.use_thread = info['use_thread']
+        self.best_positions = info['best_positions']
+        self.best_objfuncs = info['best_objfuncs']
 
     @property
     def num_objective_evals(self):
@@ -248,39 +255,9 @@ class Optimize:
     def start(self):
         """."""
         if self.use_thread:
-            if not self._thread.is_alive():
-                self._thread = _Thread(target=self._optimize, daemon=True)
-                self._stopevt.clear()
-                self._thread.start()
+            super().start()
         else:
             self._optimize()
-
-    def stop(self):
-        """."""
-        if self.use_thread:
-            self._stopevt.set()
-
-    def join(self):
-        """."""
-        if self.use_thread:
-            self._thread.join()
-
-    def to_dict(self):
-        """."""
-        return {
-            'params': self.params.to_dict(),
-            'use_thread': self.use_thread,
-            'best_positions': self.best_positions,
-            'best_objfuncs': self.best_objfuncs,
-            }
-
-    def from_dict(self, dic):
-        """."""
-        if 'params' in dic:
-            self.params.from_dict(dic['params'])
-        self.use_thread = dic.get('use_thread', self.use_thread)
-        self.best_positions = dic.get('best_positions', self.best_positions)
-        self.best_objfuncs = dic.get('best_objfuncs', self.best_objfuncs)
 
     def _objective_func(self, pos):
         self._num_objective_evals += 1
