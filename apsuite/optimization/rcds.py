@@ -283,7 +283,7 @@ class RCDS(_Optimize):
 
     def _objective_func(self, pos):
         pos = self.params.denormalize_positions(pos)
-        return super()._objective_func(pos)
+        return super()._objective_func(pos)[0]
 
     def _optimize(self):
         """Xiaobiao's version of Powell's direction search algorithm (RCDS).

@@ -19,6 +19,10 @@ class OptimizePosAng(_RCDS, _BaseClass):
             self._create_devices()
         _RCDS.__init__(self, use_thread=use_thread)
 
+    def from_dict(self, dic):
+        """."""
+        _BaseClass.from_dict(self, dic)
+
     def objective_function(self, pos, apply=True):
         """."""
         if apply:
