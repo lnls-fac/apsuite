@@ -123,9 +123,10 @@ class RCDS(_Optimize):
     _GOLDEN_RATIO = (1 + _np.sqrt(5))/2
     _TINY = 1e-25
 
-    def __init__(self, use_thread=True):
+    def __init__(self, use_thread=True, isonline=True):
         """."""
-        super().__init__(RCDSParams(), use_thread=use_thread)
+        super().__init__(
+            RCDSParams(), use_thread=use_thread, isonline=isonline)
 
     def bracketing_min(self, pos0, func0, dir, step):
         """Bracket the minimum.

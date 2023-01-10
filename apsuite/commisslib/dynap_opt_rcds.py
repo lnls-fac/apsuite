@@ -6,7 +6,6 @@ from pymodels import si as _si
 from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoSI, EVG, \
     Event, FamBPMs, EGTriggerPS
 
-from ..utils import ThreadedMeasBaseClass as _BaseClass
 from ..optimization.rcds import RCDS as _RCDS
 from ..optics_analysis import ChromCorr
 
@@ -27,8 +26,7 @@ class OptimizeDA(_RCDS):
 
     def __init__(self, isonline=True, use_thread=True):
         """."""
-        _BaseClass.__init__(self, isonline=isonline)
-        _RCDS.__init__(self, use_thread=use_thread)
+        _RCDS.__init__(self, isonline=isonline, use_thread=use_thread)
         self.sextupoles = []
         if self.isonline:
             self._create_devices()
@@ -46,10 +44,6 @@ class OptimizeDA(_RCDS):
             if sext in self.names_sexts2corr:
                 continue
             self.names_sexts2use.append(sext)
-
-    def from_dict(self, dic):
-        """."""
-        _BaseClass.from_dict(self, dic)
 
     def initialization(self, init_obj_func=-50):
         """."""
