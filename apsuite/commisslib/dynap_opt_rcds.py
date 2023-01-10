@@ -4,7 +4,7 @@ import numpy as _np
 
 from pymodels import si as _si
 from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoSI, EVG, \
-    Event, FamBPMs, EGTriggerPS
+    Event, EGTriggerPS
 
 from ..optimization.rcds import RCDS as _RCDS
 from ..optics_analysis import ChromCorr
@@ -237,6 +237,5 @@ class OptimizeDA(_RCDS):
             PowerSupplyPU.DEVICES.SI_PING_V)
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['evg'] = EVG()
-        # self.devices['bpms'] = FamBPMs()
         self.devices['evt_study'] = Event('Study')
         self.devices['egun'] = EGTriggerPS()
