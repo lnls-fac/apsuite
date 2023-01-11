@@ -235,7 +235,7 @@ class Optimize(_Base):
 
         """
         super().from_dict(info)
-        self.num_objective_evals = info['num_objective_evals']
+        self._num_objective_evals = info['num_objective_evals']
         self.use_thread = info['use_thread']
         self.best_positions = info['best_positions']
         self.best_objfuncs = info['best_objfuncs']
