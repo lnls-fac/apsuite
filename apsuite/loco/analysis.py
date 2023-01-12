@@ -1,28 +1,19 @@
-from copy import deepcopy as _dcopy
+"""."""
 import numpy as np
 import pandas as pd
-from mathphys.functions import load_pickle, save_pickle
+from mathphys.functions import load_pickle
 
 import pyaccel
 from pymodels import si
 
-import siriuspy.clientconfigdb as servconf
-
 from apsuite.loco.utils import LOCOUtils
-from apsuite.loco.config import LOCOConfigSI
-from apsuite.loco.main import LOCO
 
 from apsuite.orbcorr import OrbRespmat
 from apsuite.optics_analysis.tune_correction import TuneCorr
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as mpl_gs
-import matplotlib.cm as cm
-from matplotlib import rcParams, rc
-import matplotlib.style
-import matplotlib as mpl
-from fpdf import FPDF
-import datetime
+from matplotlib import rc
 
 rc('font', **{'size': 14})
 
@@ -39,6 +30,8 @@ class LOCOAnalysis():
         self.nom_model = None
         self.twi_nom = None
         self.twi_fit = None
+        self.edteng_nom = None
+        self.edteng_fit = None
         self.disp_meas = None
 
     def get_setup(self):
@@ -52,16 +45,23 @@ class LOCOAnalysis():
         """."""
         self.twi_fit, *_ = pyaccel.optics.calc_twiss(
             self.loco_fit['fit_model'], indices='open')
-        # edteng_fit, *_ = pyaccel.optics.calc_edwards_teng(
-        #     self.loco_fit['fit_model'], indices='open')
 
         if self.nom_model is None:
             self.nom_model, _ = self.get_nominal_model()
 
         self.twi_nom, *_ = pyaccel.optics.calc_twiss(
             self.nom_model, indices='open')
-        # edteng_nom, *_ = pyaccel.optics.calc_edwards_teng(
-        #     self.nom_model, indices='open')
+
+    def calc_edteng(self):
+        """."""
+        self.edteng_fit, *_ = pyaccel.optics.calc_edwards_teng(
+            self.loco_fit['fit_model'], indices='open')
+
+        if self.nom_model is None:
+            self.nom_model, _ = self.get_nominal_model()
+
+        self.edteng_nom, *_ = pyaccel.optics.calc_edwards_teng(
+            self.nom_model, indices='open')
 
     def get_nominal_model(self):
         """."""
@@ -90,7 +90,6 @@ class LOCOAnalysis():
         matrix_nominal = OrbRespmat(simod, 'SI', '6d').get_respm()
 
         alpha0 = pyaccel.optics.get_mcf(simod)
-        # print('momentum compaction: {:e}'.format(alpha0))
         idx = pyaccel.lattice.find_indices(
             simod, 'pass_method', 'cavity_pass')[0]
         # rf_freq = setup['rf_frequency']
@@ -295,7 +294,7 @@ class LOCOAnalysis():
             final = init + npoints - 1
             span = np.linspace(init, final, npoints)
             perc = (kf - kn)/kn * 100
-            p = ax1.plot(span, perc, '-o', label=famlist[q], color=clr)
+            ax1.plot(span, perc, '.-', label=famlist[q], color=clr)
             ax1.plot(
                 span, np.repeat(np.mean(perc), npoints), '-',
                 color=clr)
@@ -318,14 +317,15 @@ class LOCOAnalysis():
         }
         df_stats = pd.DataFrame.from_dict(stats).round(4)
         ax1.set_xlabel('quadrupole index')
-        ax1.set_ylabel('quadrupole variation [%]')
+        ax1.set_ylabel('$\Delta K/K_0$ [%]')
+        ax1.set_title('Quadrupoles changes grouped by family')
         ax1.legend(loc='upper left', bbox_to_anchor=(1, 1))
         ax1.grid(alpha=0.5, linestyle='--')
         plt.tight_layout()
         if save:
             if fname is None:
                 fig.savefig(
-                    'quadrupoles_gradients.png', format='png', dpi=1200)
+                    'quadrupoles_gradients.png', format='png', dpi=300)
             else:
                 fig.savefig(fname+'.png', format='png', dpi=300)
         return df_stats
@@ -350,15 +350,23 @@ class LOCOAnalysis():
         kfit = np.array(pyaccel.lattice.get_attribute(
             fit_model, 'KL', qnlist_fit))
         perc = (kfit-knom)/knom * 100
-        ax1.plot(spos[qnidx], perc, '.-', label='deviation')
-        for idx in range(21):
+        ax1.plot(
+            spos[qnidx], perc, '.-',
+            label='deviation', color='tab:orange')
+
+        for idx in range(20):
             ax1.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
+            ax1.annotate(
+                f'{idx+1:02d}', size=10,
+                xy=(spos[-1]/20 * (idx + 1/3), perc.max()*0.90))
+
         ax1.set_xlabel('s [m]')
-        ax1.set_ylabel('relative variation [%]')
+        ax1.set_ylabel('$\Delta K/K_0$ [%]')
+        ax1.set_title('Quadrupoles changes along the ring')
         plt.tight_layout()
         if save:
             if fname is None:
-                fig.savefig('quadrupoles_gradients.png', format='png', dpi=600)
+                fig.savefig('quadrupoles_gradients.png', format='png', dpi=300)
             else:
                 fig.savefig(fname+'.png', format='png', dpi=300)
         return kfit, knom, perc
@@ -369,7 +377,6 @@ class LOCOAnalysis():
         """."""
         _ = plt.figure(figsize=(12, 4))
         gs = mpl_gs.GridSpec(1, 1)
-        # gs.update(left=0.10, right=0.85, hspace=0, wspace=0.25)
         ax1 = plt.subplot(gs[0, 0])
 
         spos = pyaccel.lattice.find_spos(nom_model)
@@ -387,12 +394,17 @@ class LOCOAnalysis():
             percentage = (kfit-knom)/knom * 100
         else:
             percentage = kfit
-        ax1.plot(spos[qsidx], percentage, '.-')
+        ax1.plot(
+            spos[qsidx], percentage, '.-', color='tab:green')
 
-        for idx in range(21):
+        for idx in range(20):
             ax1.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
+            ax1.annotate(
+                f'{idx+1:02d}', size=10,
+                xy=(spos[-1]/20 * (idx + 1/3), percentage.max()*0.90))
         ax1.set_xlabel('s [m]')
-        ax1.set_ylabel('integrated skew quadrupole [1/m]')
+        ax1.set_ylabel('$\Delta$KsL [1/m]')
+        ax1.set_title('Skew quadrupoles changes along the ring')
         plt.tight_layout()
         if save:
             if fname is None:
@@ -411,8 +423,9 @@ class LOCOAnalysis():
         gain_corr = self.loco_fit['gain_corr']
         roll_bpm = self.loco_fit['roll_bpm']
 
-        color_corr = 'tab:red'
-        color_gain_bpm = 'tab:blue'
+        color_ch = 'tab:blue'
+        color_cv = 'tab:red'
+        color_gain_bpm = 'tab:gray'
         color_roll_bpm = 'tab:green'
 
         axs[0].plot(gain_bpm, '.-', color=color_gain_bpm)
@@ -420,31 +433,27 @@ class LOCOAnalysis():
         axs[0].axhline(avg, ls='-', color=color_gain_bpm)
         axs[0].axhline(avg + std, ls='--', color=color_gain_bpm)
         axs[0].axhline(avg - std, ls='--', color=color_gain_bpm)
-        axs[0].grid(True)
-    #     axs[0].set_xlabel('bpm idx')
+        axs[0].grid(alpha=0.5, linestyle='--')
         axs[0].set_ylabel('gain')
         axs[0].set_title('BPM Gains')
 
-        axs[1].plot(gain_corr, '.-', color=color_corr)
-        avg, std,  = np.mean(gain_corr), np.std(gain_corr)
-        axs[1].axhline(avg, ls='-', color=color_corr)
-        axs[1].axhline(avg + std, ls='--', color=color_corr)
-        axs[1].axhline(avg - std, ls='--', color=color_corr)
-        axs[1].grid(True)
-    #     axs[1].set_xlabel('corrector idx')
-        axs[1].set_ylabel('gain')
-        axs[1].set_title('Corrector Gains')
-
-        axs[2].plot(roll_bpm*1e3, '.-', color=color_roll_bpm)
+        axs[1].plot(roll_bpm*1e3, '.-', color=color_roll_bpm)
         avg, std,  = np.mean(roll_bpm)*1e3, np.std(roll_bpm)*1e3
-        axs[2].axhline(avg, ls='-', color=color_roll_bpm)
-        axs[2].axhline(avg + std, ls='--', color=color_roll_bpm)
-        axs[2].axhline(avg - std, ls='--', color=color_roll_bpm)
+        axs[1].axhline(avg, ls='-', color=color_roll_bpm)
+        axs[1].axhline(avg + std, ls='--', color=color_roll_bpm)
+        axs[1].axhline(avg - std, ls='--', color=color_roll_bpm)
 
-        axs[2].grid(True)
-        axs[2].set_xlabel('index')
-        axs[2].set_ylabel('roll [mrad]')
-        axs[2].set_title('BPM Roll')
+        axs[1].grid(alpha=0.5, linestyle='--')
+        axs[1].set_xlabel('index')
+        axs[1].set_ylabel('roll [mrad]')
+        axs[1].set_title('BPM Roll')
+
+        axs[2].plot(gain_corr[:120], '.-', color=color_ch, label='CH')
+        axs[2].plot(gain_corr[120:], '.-', color=color_cv, label='CV')
+        axs[2].legend()
+        axs[2].grid(alpha=0.5, linestyle='--')
+        axs[2].set_ylabel('gain')
+        axs[2].set_title('Corrector Gains')
         plt.tight_layout()
         if save:
             if fname is None:
@@ -452,26 +461,33 @@ class LOCOAnalysis():
             else:
                 plt.savefig(fname+'.png', format='png', dpi=300)
 
-    def beta_and_tune(self):
+    def beta_and_tune(self, twiss=True):
         """."""
-        twi_nom, twi_fit = self.twi_nom, self.twi_fit
-        if twi_nom.spos.size != twi_fit.spos.size:
-            if twi_fit.spos.size > twi_nom.spos.size:
-                spos = twi_fit.spos
-                betax_nom = np.interp(spos, twi_nom.spos, twi_nom.betax)
-                betay_nom = np.interp(spos, twi_nom.spos, twi_nom.betay)
-                betax_fit = twi_fit.betax
-                betay_fit = twi_fit.betay
+        names = ['betax', 'betay', 'mux', 'muy']
+        nom, fit = self.twi_nom, self.twi_fit
+        if not twiss:
+            names = ['beta1', 'beta2', 'mu1', 'mu2']
+            nom, fit = self.edteng_nom, self.edteng_fit
+
+        if nom.spos.size != fit.spos.size:
+            if fit.spos.size > nom.spos.size:
+                spos = fit.spos
+                betax_nom = np.interp(spos, nom.spos, getattr(nom, names[0]))
+                betay_nom = np.interp(spos, nom.spos, getattr(nom, names[1]))
+                betax_fit = getattr(fit, names[0])
+                betay_fit = getattr(fit, names[1])
             else:
-                spos = twi_nom.spos
-                betax_fit = np.interp(spos, twi_fit.spos, twi_fit.betax)
-                betay_fit = np.interp(spos, twi_fit.spos, twi_fit.betay)
-                betax_nom = twi_nom.betax
-                betay_nom = twi_nom.betay
+                spos = nom.spos
+                betax_fit = np.interp(spos, fit.spos, getattr(fit, names[0]))
+                betay_fit = np.interp(spos, fit.spos, getattr(fit, names[1]))
+                betax_nom = getattr(nom, names[0])
+                betay_nom = getattr(nom, names[1])
         else:
-            spos = twi_nom.spos
-            betax_nom, betay_nom = twi_nom.betax, twi_nom.betay
-            betax_fit, betay_fit = twi_fit.betax, twi_fit.betay
+            spos = nom.spos
+            betax_nom = getattr(nom, names[0])
+            betay_nom = getattr(nom, names[1])
+            betax_fit = getattr(fit, names[0])
+            betay_fit = getattr(fit, names[1])
 
         beta_beatx = (betax_fit - betax_nom)/betax_nom * 100
         beta_beaty = (betay_fit - betay_nom)/betay_nom * 100
@@ -480,26 +496,21 @@ class LOCOAnalysis():
         gs = mpl_gs.GridSpec(1, 1)
         ax = plt.subplot(gs[0, 0])
 
-        ax.plot(twi_nom.spos, beta_beatx, label='Horizontal')
-        ax.plot(twi_nom.spos, beta_beaty, label='Vertical')
+        spos = nom.spos
+        ax.plot(spos, beta_beatx, label='Horizontal', color='tab:blue')
+        ax.plot(spos, beta_beaty, label='Vertical', color='tab:red')
 
-        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-        textstr = r"$\Delta \beta_x/\beta_x$ = {:.2f}% (std)".format(
-            np.std(beta_beatx))
-        textstr += "\n"
-        textstr += r"$\Delta \beta_y/\beta_y$ = {:.2f}% (std)".format(
-            np.std(beta_beaty))
-
-        props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
-
-        # place a text box in upper left in axes coords
-        ax.text(0.8, 0.17, textstr, transform=ax.transAxes, fontsize=14,
-                verticalalignment='top', bbox=props)
+        for idx in range(20):
+            ax.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
+            max_val = np.max([beta_beatx.max(), beta_beaty.max()])
+            ax.annotate(
+                f'{idx+1:02d}', size=10,
+                xy=(spos[-1]/20 * (idx + 1/3), max_val*0.90))
 
         ax.set_xlabel('s [m]')
         ax.set_ylabel(r'$\Delta \beta/\beta$ [%]')
-        # ax.set_title(r'Beta-beating - Step $\Delta K$ constraint')
-        ax.legend()
+        ax.legend(loc='lower right', fontsize=10)
+        ax.grid(alpha=0.5, linestyle='--')
         plt.tight_layout()
         plt.savefig(
             'beta_beating.png', dpi=300)
@@ -507,11 +518,11 @@ class LOCOAnalysis():
         tunex_meas = 49 + self.loco_setup['tunex']
         tuney_meas = 14 + self.loco_setup['tuney']
 
-        tunex_nom = twi_nom.mux[-1]/2/np.pi
-        tuney_nom = twi_nom.muy[-1]/2/np.pi
+        tunex_nom = getattr(nom, names[2])[-1]/2/np.pi
+        tuney_nom = getattr(nom, names[3])[-1]/2/np.pi
 
-        tunex_fit = twi_fit.mux[-1]/2/np.pi
-        tuney_fit = twi_fit.muy[-1]/2/np.pi
+        tunex_fit = getattr(fit, names[2])[-1]/2/np.pi
+        tuney_fit = getattr(fit, names[3])[-1]/2/np.pi
 
         diffx = tunex_meas - tunex_fit
         diffy = tuney_meas - tuney_fit
@@ -540,9 +551,9 @@ class LOCOAnalysis():
         df_betabeat.loc[:, tmp.columns] = np.round(tmp, 4)
         return df_tunes.round(6), df_betabeat
 
-    def dispersion(self, disp_meas=None):
+    def dispersion(self, disp_meas=None, twiss=True):
         """."""
-        _ = plt.figure(figsize=(14, 8))
+        _ = plt.figure(figsize=(14, 6))
         gs = mpl_gs.GridSpec(2, 1)
         ax1 = plt.subplot(gs[0, 0])
         ax2 = plt.subplot(gs[1, 0])
@@ -555,13 +566,17 @@ class LOCOAnalysis():
             pyaccel.lattice.find_indices(
                 self.loco_fit['fit_model'], 'fam_name', 'BPM')).flatten()
 
-        twi_nom, twi_fit = self.twi_nom, self.twi_fit
+        names = ['etax', 'etay']
+        nom, fit = self.twi_nom, self.twi_fit
+        if not twiss:
+            names = ['eta1', 'eta2']
+            nom, fit = self.edteng_nom, self.edteng_fit
 
-        disp0x = twi_nom.etax[bpm_idx_nom]*100
-        disp0y = twi_nom.etay[bpm_idx_nom]*100
+        disp0x = getattr(nom, names[0])[bpm_idx_nom]*100
+        disp0y = getattr(nom, names[1])[bpm_idx_nom]*100
 
-        dispx_fit = twi_fit.etax[bpm_idx_fit]*100
-        dispy_fit = twi_fit.etay[bpm_idx_fit]*100
+        dispx_fit = getattr(fit, names[0])[bpm_idx_fit]*100
+        dispy_fit = getattr(fit, names[1])[bpm_idx_fit]*100
 
         if disp_meas is None:
             disp_meas = self.disp_meas
@@ -588,7 +603,7 @@ class LOCOAnalysis():
         ptp_listy = [float(np.ptp(val))*10 for val in erry_list]
 
         stats = {
-            'diff': ['meas - fit', 'nom - fit', 'nom - meas'],
+            'difference': ['meas - fit', 'nom - fit', 'nom - meas'],
             'avg x [mm]': avg_listx,
             'std x [mm]': std_listx,
             'p2p x [mm]': ptp_listx,
@@ -598,8 +613,7 @@ class LOCOAnalysis():
         df_disp = pd.DataFrame.from_dict(stats)
         tmp = df_disp.select_dtypes(include=[np.number])
         df_disp.loc[:, tmp.columns] = np.round(tmp, 4)
-
-        spos = twi_nom.spos[bpm_idx_nom]
+        spos = nom.spos[bpm_idx_nom]
 
         ax1.plot(spos, disp0x, '.-', label='nominal', linewidth=1)
         ax1.plot(spos, dispx_fit, '.-', label='fitting', linewidth=1)
@@ -611,41 +625,23 @@ class LOCOAnalysis():
         ax2.plot(spos, dispy_meas, '.-', label='meas', linewidth=1)
         ax2.plot(spos, dispy_fit-dispy_meas, '.-', label='error', linewidth=1)
 
-        ax1.tick_params(axis='x', which='minor', bottom=True)
-        ax1.tick_params(axis='y', which='minor', bottom=True)
-        ax1.minorticks_on
-
-        # Edit the major and minor ticks of the x and y axes
-        ax1.xaxis.set_tick_params(
-            which='major', size=5, width=1, direction='in', top='on')
-        ax1.xaxis.set_tick_params(
-            which='minor', size=7, width=1, direction='in', top='on')
-        ax1.yaxis.set_tick_params(
-            which='major', size=5, width=1, direction='in', right='on')
-        ax1.yaxis.set_tick_params(
-            which='minor', size=7, width=1, direction='in', right='on')
-
-        # ax1.set_xlabel('bpm idx')
         ax1.set_ylabel(r'$\eta_x$ [cm]')
-        # ax1.set_title('Dispersion function at BPMs')
         ax1.legend(bbox_to_anchor=(1.0, 1.0), frameon=True, fontsize=12)
-
-        ax2.tick_params(axis='x', which='minor', bottom=True)
-        ax2.tick_params(axis='y', which='minor', bottom=True)
-        ax2.minorticks_on
-
-        # Edit the major and minor ticks of the x and y axes
-        ax2.xaxis.set_tick_params(
-            which='major', size=5, width=1, direction='in', top='on')
-        ax2.xaxis.set_tick_params(
-            which='minor', size=7, width=1, direction='in', top='on')
-        ax2.yaxis.set_tick_params(
-            which='major', size=5, width=1, direction='in', right='on')
-        ax2.yaxis.set_tick_params(
-            which='minor', size=7, width=1, direction='in', right='on')
+        ax1.grid(alpha=0.5, linestyle='--')
 
         ax2.set_xlabel('s [m]')
         ax2.set_ylabel(r'$\eta_y$ [cm]')
+        ax2.grid(alpha=0.5, linestyle='--')
+
+        for idx in range(20):
+            ax1.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
+            ax2.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
+            diff1 = abs(dispy_meas)
+            diff2 = abs(dispy_fit-dispy_meas)
+            max_val = np.max([diff1.max(), diff2.max()])
+            ax2.annotate(
+                f'{idx+1:02d}', size=10,
+                xy=(spos[-1]/20 * (idx + 1/3), max_val*0.9))
         plt.tight_layout()
         plt.savefig('dispersion.png', dpi=300)
         return df_disp
