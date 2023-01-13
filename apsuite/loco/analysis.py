@@ -271,7 +271,7 @@ class LOCOAnalysis():
     def plot_quadrupoles_gradients_by_family(
             nom_model, fit_model, save=False, fname=None):
         """."""
-        fig = plt.figure(figsize=(12, 4))
+        fig = plt.figure(figsize=(12, 5))
         gs = mpl_gs.GridSpec(1, 1)
         ax1 = plt.subplot(gs[0, 0])
 
@@ -319,7 +319,7 @@ class LOCOAnalysis():
         ax1.set_xlabel('quadrupole index')
         ax1.set_ylabel('$\Delta K/K_0$ [%]')
         ax1.set_title('Quadrupoles changes grouped by family')
-        ax1.legend(loc='upper left', bbox_to_anchor=(1, 1))
+        ax1.legend(loc='upper left', bbox_to_anchor=(1, 1.0))
         ax1.grid(alpha=0.5, linestyle='--')
         plt.tight_layout()
         if save:
@@ -417,7 +417,16 @@ class LOCOAnalysis():
 
     def plot_gain(self, save=False, fname=None):
         """."""
-        _, axs = plt.subplots(3, 1, figsize=(8, 10))
+        _, axs = plt.subplots(3, 1, figsize=(14, 14))
+
+        if self.nom_model is None:
+            self.nom_model, _ = self.get_nominal_model()
+
+        spos = pyaccel.lattice.find_spos(self.nom_model)
+        fam = si.get_family_data(self.nom_model)
+        bpm_idx = np.array(fam['BPM']['index']).ravel()
+        ch_idx = np.array(fam['CH']['index']).ravel()
+        cv_idx = np.array(fam['CV']['index']).ravel()
 
         gain_bpm = self.loco_fit['gain_bpm']
         gain_corr = self.loco_fit['gain_corr']
@@ -425,35 +434,50 @@ class LOCOAnalysis():
 
         color_ch = 'tab:blue'
         color_cv = 'tab:red'
-        color_gain_bpm = 'tab:gray'
+        color_gainx_bpm = 'tab:blue'
+        color_gainy_bpm = 'tab:red'
         color_roll_bpm = 'tab:green'
-
-        axs[0].plot(gain_bpm, '.-', color=color_gain_bpm)
-        avg, std,  = np.mean(gain_bpm), np.std(gain_bpm)
-        axs[0].axhline(avg, ls='-', color=color_gain_bpm)
-        axs[0].axhline(avg + std, ls='--', color=color_gain_bpm)
-        axs[0].axhline(avg - std, ls='--', color=color_gain_bpm)
+        axs[0].plot(
+            spos[bpm_idx], gain_bpm[:160], '.-',
+            color=color_gainx_bpm, alpha=0.5, label='x')
+        axs[0].plot(
+            spos[bpm_idx], gain_bpm[:160], '.-',
+            color=color_gainy_bpm, alpha=0.5, label='y')
+        axs[0].legend(loc='lower right')
         axs[0].grid(alpha=0.5, linestyle='--')
         axs[0].set_ylabel('gain')
         axs[0].set_title('BPM Gains')
+        for idx in range(20):
+            axs[0].axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
+            axs[0].annotate(
+                f'{idx+1:02d}', size=10,
+                xy=(spos[-1]/20 * (idx + 1/3), gain_bpm.max()*1.04))
 
-        axs[1].plot(roll_bpm*1e3, '.-', color=color_roll_bpm)
-        avg, std,  = np.mean(roll_bpm)*1e3, np.std(roll_bpm)*1e3
-        axs[1].axhline(avg, ls='-', color=color_roll_bpm)
-        axs[1].axhline(avg + std, ls='--', color=color_roll_bpm)
-        axs[1].axhline(avg - std, ls='--', color=color_roll_bpm)
-
+        axs[1].plot(spos[bpm_idx], roll_bpm*1e3, '.-', color=color_roll_bpm)
         axs[1].grid(alpha=0.5, linestyle='--')
         axs[1].set_xlabel('index')
         axs[1].set_ylabel('roll [mrad]')
         axs[1].set_title('BPM Roll')
+        for idx in range(20):
+            axs[1].axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
+            axs[1].annotate(
+                f'{idx+1:02d}', size=10,
+                xy=(spos[-1]/20 * (idx + 1/3),  roll_bpm.max()*1e3*0.95))
 
-        axs[2].plot(gain_corr[:120], '.-', color=color_ch, label='CH')
-        axs[2].plot(gain_corr[120:], '.-', color=color_cv, label='CV')
-        axs[2].legend()
+        axs[2].plot(
+            spos[ch_idx], gain_corr[:120], '.-', color=color_ch, label='CH')
+        axs[2].plot(
+            spos[cv_idx], gain_corr[120:], '.-', color=color_cv, label='CV')
+        axs[2].legend(loc='lower right')
         axs[2].grid(alpha=0.5, linestyle='--')
+        axs[2].set_xlabel('s [m]')
         axs[2].set_ylabel('gain')
         axs[2].set_title('Corrector Gains')
+        for idx in range(20):
+            axs[2].axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
+            axs[2].annotate(
+                f'{idx+1:02d}', size=10,
+                xy=(spos[-1]/20 * (idx + 1/3), gain_corr.max()))
         plt.tight_layout()
         if save:
             if fname is None:
@@ -515,8 +539,8 @@ class LOCOAnalysis():
         plt.savefig(
             'beta_beating.png', dpi=300)
 
-        tunex_meas = 49 + self.loco_setup['tunex']
-        tuney_meas = 14 + self.loco_setup['tuney']
+        tunex_meas = 49 + round(self.loco_setup['tunex'], 4)
+        tuney_meas = 14 + round(self.loco_setup['tuney'], 4)
 
         tunex_nom = getattr(nom, names[2])[-1]/2/np.pi
         tuney_nom = getattr(nom, names[3])[-1]/2/np.pi
@@ -549,7 +573,7 @@ class LOCOAnalysis():
         df_betabeat = pd.DataFrame.from_dict(stats)
         tmp = df_betabeat.select_dtypes(include=[np.number])
         df_betabeat.loc[:, tmp.columns] = np.round(tmp, 4)
-        return df_tunes.round(6), df_betabeat
+        return df_tunes.round(4), df_betabeat
 
     def dispersion(self, disp_meas=None, twiss=True):
         """."""
