@@ -64,8 +64,8 @@ class LOCOReport(FPDF):
             ('Stored current', f"{setup['stored_current']:.2f} mA"),
             ('Orbit response matrix on ServConf', setup['orbmat_name']),
             ('RF Frequency', f"{setup['rf_frequency']/1e6:.6f} MHz"),
-            ('Measured tune x', f"{setup['tunex']:.6f}"),
-            ('Measured tune y', f"{setup['tuney']:.6f}"),
+            ('Measured frac. tune x', f"{setup['tunex']:.4f}"),
+            ('Measured frac. tune y', f"{setup['tuney']:.4f}"),
             ('SOFB buffer average', f"{setup['sofb_nr_points']:d}"),
             )
 
@@ -176,7 +176,7 @@ class LOCOReport(FPDF):
         self.page_title('Normal quadrupoles variations')
         img_w = self.WIDTH - 30
         _xp = (self.WIDTH - img_w) / 2
-        self.image('quad_by_family.png', x=_xp, y=120, w=img_w)
+        self.image('quad_by_family.png', x=_xp, y=110, w=img_w)
         self.image('quad_by_s.png', x=_xp, y=200, w=img_w)
         self.df_to_table(self._df_quad_stats)
 
@@ -188,9 +188,10 @@ class LOCOReport(FPDF):
         _xp = (self.WIDTH - img_w) / 2
         self.image('skewquad_by_s.png', x=_xp, y=30, w=img_w)
         self.page_title('Gains: BPMs and correctors', loc_y=90)
-        img_w = self.WIDTH*0.65
+        img_w = self.WIDTH - 30
         _xp = (self.WIDTH - img_w) / 2
-        self.image('gains.png', x=_xp, y=100, w=img_w, h=self.HEIGHT*0.55)
+        img_h = self.HEIGHT*0.55
+        self.image('gains.png', x=_xp, y=100, w=img_w)
 
     def add_tune_emit_and_optics(self):
         """."""
