@@ -297,7 +297,7 @@ class LOCOReport(FPDF):
 
         loco_anly.save_quadrupoles_variations(
             mod, loco_data['fit_model'], fname=fname_report)
-        loco_anly.save_quadrupoles_variations(
+        loco_anly.save_skew_quadrupoles_variations(
             mod, loco_data['fit_model'], fname=fname_report)
 
         self.loco_data = loco_data
@@ -308,4 +308,4 @@ class LOCOReport(FPDF):
         self.add_skewquadfit_ang_gains()
         self.add_tune_emit_and_optics()
 
-        self.output(fname_report + '.pdf', 'F')
+        self.output('report_' + fname_report + '.pdf', 'F')

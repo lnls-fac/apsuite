@@ -151,12 +151,11 @@ class LOCOAnalysis():
             famidx.append(self.famdata[fam_name]['index'])
         return famidx
 
-    @staticmethod
-    def get_attribute_quad(model):
+    def get_attribute_quad(self, model):
         """."""
         kl_strength = []
         ksl_strength = []
-        famidx = LOCOAnalysis.get_famidx_quad(model)
+        famidx = self.get_famidx_quad(model)
         for q in famidx:
             kl_strength.append(pyaccel.lattice.get_attribute(model, 'KL', q))
             ksl_strength.append(pyaccel.lattice.get_attribute(model, 'KsL', q))
@@ -164,13 +163,12 @@ class LOCOAnalysis():
         ksl_strength = np.array(ksl_strength, dtype=list)
         return kl_strength, ksl_strength
 
-    @staticmethod
-    def get_attribute_sext(model):
+    def get_attribute_sext(self, model):
         """."""
         kl_strength = []
         sl_strength = []
         ksl_strength = []
-        famidx = LOCOAnalysis.get_famidx_sext(model)
+        famidx = self.get_famidx_sext(model)
         for q in famidx:
             kl_strength.append(pyaccel.lattice.get_attribute(model, 'KL', q))
             sl_strength.append(pyaccel.lattice.get_attribute(model, 'SL', q))
@@ -266,9 +264,8 @@ class LOCOAnalysis():
         if save:
             fig.savefig(fname + '.png', dpi=300, format='png')
 
-    @staticmethod
     def plot_quadrupoles_gradients_by_family(
-            nom_model, fit_model, save=False, fname=None):
+            self, nom_model, fit_model, save=False, fname=None):
         """."""
         fig = plt.figure(figsize=(12, 5))
         gs = mpl_gs.GridSpec(1, 1)
@@ -278,8 +275,8 @@ class LOCOAnalysis():
         knom_mean = []
         kfit_std = []
         maxmin = []
-        kfit, *_ = LOCOAnalysis.get_attribute_quad(fit_model)
-        knom, *_ = LOCOAnalysis.get_attribute_quad(nom_model)
+        kfit, *_ = self.get_attribute_quad(fit_model)
+        knom, *_ = self.get_attribute_quad(nom_model)
         count = 0
         famlist = [
             'QFA', 'QDA', 'QFB', 'QDB1', 'QDB2', 'QFP', 'QDP1', 'QDP2',
@@ -340,6 +337,11 @@ class LOCOAnalysis():
         dkl = kl - kl_nom
 
         quad_families = si.families.families_quadrupoles()
+        quadfam_idx = dict()
+        qn = fam['QN']['index']
+        for famname in quad_families:
+            qfam = fam[famname]['index']
+            quadfam_idx[famname] = [qn.index(qidx) for qidx in qfam]
 
         quadfam_averages = dict()
         for famname in quad_families:
@@ -347,13 +349,7 @@ class LOCOAnalysis():
 
         save_pickle(
             data=quadfam_averages,
-            fname='quad_family_average' + fname, overwrite=False)
-
-        quadfam_idx = dict()
-        qn = fam['QN']['index']
-        for famname in quad_families:
-            qfam = fam[famname]['index']
-            quadfam_idx[famname] = [qn.index(qidx) for qidx in qfam]
+            fname='quad_family_average' + fname, overwrite=True)
 
         dkl_no_average = dkl
         for qnames in quad_families:
@@ -384,7 +380,7 @@ class LOCOAnalysis():
         ax1 = plt.subplot(gs[0, 0])
 
         spos = pyaccel.lattice.find_spos(nom_model)
-        fam_nom = self.fam
+        fam_nom = self.famdata
         qnlist_nom = fam_nom['QN']['index']
         qnidx = np.array(qnlist_nom).flatten()
         knom = np.array(pyaccel.lattice.get_attribute(
