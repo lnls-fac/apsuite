@@ -567,6 +567,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         self.event_delay = 0.0
         self.event_mode = 'External'
         self.orbit_timeout = 40
+        self.orbit_nrpoints_before = 0
         self.orbit_nrpoints_after = 20000
         self.orbit_acq_rate = 'Monit1'
         self.orbit_acq_repeat = False
@@ -582,6 +583,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         stg += ftmp('event_delay', self.event_delay, '[us]')
         stg += stmp('event_mode', self.event_mode, '')
         stg += ftmp('orbit_timeout', self.orbit_timeout, '[s]')
+        stg += dtmp('orbit_nrpoints_before', self.orbit_nrpoints_before, '')
         stg += dtmp('orbit_nrpoints_after', self.orbit_nrpoints_after, '')
         stg += stmp('orbit_acq_rate', self.orbit_acq_rate, '')
         stg += dtmp('orbit_acq_repeat', self.orbit_acq_repeat, '')
@@ -656,6 +658,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         prms = self.params
         fambpms.mturn_config_acquisition(
             nr_points_after=prms.orbit_nrpoints_after,
+            nr_points_before=prms.orbit_nrpoints_before,
             acq_rate=prms.orbit_acq_rate,
             repeat=prms.orbit_acq_repeat)
 
