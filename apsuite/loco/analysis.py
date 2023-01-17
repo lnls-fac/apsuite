@@ -1,7 +1,7 @@
 """."""
 import numpy as np
 import pandas as pd
-from mathphys.functions import load_pickle
+from mathphys.functions import load_pickle, save_pickle
 
 import pyaccel
 from pymodels import si
@@ -33,6 +33,7 @@ class LOCOAnalysis():
         self.edteng_nom = None
         self.edteng_fit = None
         self.disp_meas = None
+        self.famdata = None
 
     def get_setup(self):
         """."""
@@ -98,6 +99,8 @@ class LOCOAnalysis():
         rfline = matrix_nominal[:, -1]
         disp_nominal = self._get_dispersion(rfline, alpha0, rf_freq)
         self.nom_model = simod
+
+        self.famdata = si.get_family_data(simod)
         return simod, disp_nominal
 
     def get_loco_results(self):
@@ -131,25 +134,21 @@ class LOCOAnalysis():
 
 # ============= static methods =============
 
-    @staticmethod
-    def get_famidx_quad(model):
+    def get_famidx_quad(self, model):
         """."""
         famidx = []
         famlist = [
             'QFA', 'QDA', 'QFB', 'QDB1', 'QDB2', 'QFP', 'QDP1', 'QDP2',
             'Q1', 'Q2', 'Q3', 'Q4']
-        famdata = si.get_family_data(model)
         for fam_name in famlist:
-            famidx.append(famdata[fam_name]['index'])
+            famidx.append(self.famdata[fam_name]['index'])
         return famidx
 
-    @staticmethod
-    def get_famidx_sext(model):
+    def get_famidx_sext(self, model):
         """."""
         famidx = []
-        famdata = si.get_family_data(model)
         for fam_name in si.families.families_sextupoles:
-            famidx.append(famdata[fam_name]['index'])
+            famidx.append(self.famdata[fam_name]['index'])
         return famidx
 
     @staticmethod
@@ -330,16 +329,62 @@ class LOCOAnalysis():
                 fig.savefig(fname+'.png', format='png', dpi=300)
         return df_stats
 
-    @staticmethod
+    def save_quadrupoles_variations(self, nom_model, fit_model, fname=''):
+        """."""
+        fam = self.famdata
+        qn = np.array(fam['QN']['index']).ravel()
+        kl = np.array(pyaccel.lattice.get_attribute(
+            fit_model, 'KL', indices=qn)).flatten()
+        kl_nom = np.array(pyaccel.lattice.get_attribute(
+            nom_model, 'KL', indices=qn)).ravel()
+        dkl = kl - kl_nom
+
+        quad_families = si.families.families_quadrupoles()
+
+        quadfam_averages = dict()
+        for famname in quad_families:
+            quadfam_averages[famname] = np.mean(dkl[quadfam_idx[famname]])
+
+        save_pickle(
+            data=quadfam_averages,
+            fname='quad_family_average' + fname, overwrite=False)
+
+        quadfam_idx = dict()
+        qn = fam['QN']['index']
+        for famname in quad_families:
+            qfam = fam[famname]['index']
+            quadfam_idx[famname] = [qn.index(qidx) for qidx in qfam]
+
+        dkl_no_average = dkl
+        for qnames in quad_families:
+            idx_list = quadfam_idx[qnames]
+            dkl_no_average[idx_list] -= quadfam_averages[qnames]
+
+        np.savetxt(
+            'quad_trims_deltakl_no_average_' + fname + '_.txt', dkl_no_average)
+
+    def save_skew_quadrupoles_variations(self, nom_model, fit_model, fname=''):
+        """."""
+        fam = self.famdata
+        qs = np.array(fam['QS']['index']).flatten()
+        ksl_fit = np.array(pyaccel.lattice.get_attribute(
+            fit_model, 'KsL', indices=qs)).flatten()
+        ksl_nom = np.array(pyaccel.lattice.get_attribute(
+            nom_model, 'KsL', indices=qs)).flatten()
+        dksl = ksl_fit - ksl_nom
+
+        np.savetxt(
+            'skewquad_deltaksl_' + fname + '_.txt', dksl)
+
     def plot_quadrupoles_gradients_by_s(
-            nom_model, fit_model, save=False, fname=None):
+            self, nom_model, fit_model, save=False, fname=None):
         """."""
         fig = plt.figure(figsize=(12, 4))
         gs = mpl_gs.GridSpec(1, 1)
         ax1 = plt.subplot(gs[0, 0])
 
         spos = pyaccel.lattice.find_spos(nom_model)
-        fam_nom = si.get_family_data(nom_model)
+        fam_nom = self.fam
         qnlist_nom = fam_nom['QN']['index']
         qnidx = np.array(qnlist_nom).flatten()
         knom = np.array(pyaccel.lattice.get_attribute(
@@ -371,16 +416,15 @@ class LOCOAnalysis():
                 fig.savefig(fname+'.png', format='png', dpi=300)
         return kfit, knom, perc
 
-    @staticmethod
     def plot_skew_quadrupoles(
-            nom_model, fit_model, save=False, fname=None):
+            self, nom_model, fit_model, save=False, fname=None):
         """."""
         _ = plt.figure(figsize=(12, 4))
         gs = mpl_gs.GridSpec(1, 1)
         ax1 = plt.subplot(gs[0, 0])
 
         spos = pyaccel.lattice.find_spos(nom_model)
-        fam_nom = si.get_family_data(nom_model)
+        fam_nom = self.famdata
         qslist_nom = fam_nom['QS']['index']
         qsidx = np.array(qslist_nom).flatten()
         knom = np.array(pyaccel.lattice.get_attribute(
@@ -423,7 +467,7 @@ class LOCOAnalysis():
             self.nom_model, _ = self.get_nominal_model()
 
         spos = pyaccel.lattice.find_spos(self.nom_model)
-        fam = si.get_family_data(self.nom_model)
+        fam = self.famdata
         bpm_idx = np.array(fam['BPM']['index']).ravel()
         ch_idx = np.array(fam['CH']['index']).ravel()
         cv_idx = np.array(fam['CV']['index']).ravel()

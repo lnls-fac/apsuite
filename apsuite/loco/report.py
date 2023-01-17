@@ -295,6 +295,11 @@ class LOCOReport(FPDF):
         #   loco_anly.beta_and_tune(twiss=False)
         # self._df_disp = loco_anly.dispersion(twiss=False)
 
+        loco_anly.save_quadrupoles_variations(
+            mod, loco_data['fit_model'], fname=fname_report)
+        loco_anly.save_quadrupoles_variations(
+            mod, loco_data['fit_model'], fname=fname_report)
+
         self.loco_data = loco_data
         self.loco_analysis = loco_anly
 
