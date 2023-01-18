@@ -13,7 +13,9 @@ from apsuite.optics_analysis.tune_correction import TuneCorr
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as mpl_gs
+import matplotlib.cm as cm
 from matplotlib import rc
+from mpl_toolkits.mplot3d import Axes3D
 
 rc('font', **{'size': 14})
 
@@ -213,56 +215,99 @@ class LOCOAnalysis():
         rmslocxx = np.sqrt(np.mean(dloc[:nbpm, :nch]**2))
         rmslocyy = np.sqrt(np.mean(dloc[nbpm:, nch:-1]**2))
 
+        bins = 200
         ayx.hist(
-            dnom[nbpm:, :nch].flatten(), bins=100*2,
+            dnom[nbpm:, :nch].flatten(), bins=bins,
             label=r'nom. $\sigma_{{yx}} = {:.2f}\mu$m'.format(rmsnomyx),
             density=True)
         ayx.hist(
-            dloc[nbpm:, :nch].flatten(), bins=100*2,
+            dloc[nbpm:, :nch].flatten(), bins=bins,
             label=r'fit. $\sigma_{{yx}} = {:.2f}\mu$m'.format(rmslocyx),
-            density=True)
+            density=True, alpha=0.7)
         ayx.set_xlabel(r'$\Delta y$ [$\mu$m]')
-        ayx.set_ylabel(r'# of $M_{yx}$ elements')
+        ayx.set_ylabel(r'$M_{yx}$')
 
         axy.hist(
-            dnom[:nbpm, nch:-1].flatten(), bins=90*2,
+            dnom[:nbpm, nch:-1].flatten(), bins=bins,
             label=r'nom. $\sigma_{{xy}} = {:.2f}\mu$m'.format(rmsnomxy),
             density=True)
         axy.hist(
-            dloc[:160, nch:-1].flatten(), bins=90*2,
+            dloc[:160, nch:-1].flatten(), bins=bins,
             label=r'fit. $\sigma_{{xy}} = {:.2f}\mu$m'.format(rmslocxy),
-            density=True)
+            density=True, alpha=0.7)
         axy.set_xlabel(r'$\Delta x$ [$\mu$m]')
-        axy.set_ylabel(r'# of $M_{xy}$ elements')
+        axy.set_ylabel(r'$M_{xy}$')
 
         axx.hist(
-            dnom[:nbpm, :nch].flatten(), bins=100*2,
+            dnom[:nbpm, :nch].flatten(), bins=bins,
             label=r'nom. $\sigma_{{xx}} = {:.2f}\mu$m'.format(rmsnomxx),
             density=True)
         axx.hist(
-            dloc[:nbpm, :nch].flatten(), bins=100*2,
+            dloc[:nbpm, :nch].flatten(), bins=bins,
             label=r'fit. $\sigma_{{xx}} = {:.2f}\mu$m'.format(rmslocxx),
-            density=True)
+            density=True, alpha=0.7)
         axx.set_xlabel(r'$\Delta x$ [$\mu$m]')
-        axx.set_ylabel(r'# of $M_{xx}$ elements')
+        axx.set_ylabel(r'$M_{xx}$')
 
         ayy.hist(
-            dnom[nbpm:, nch:-1].flatten(), bins=90*2,
+            dnom[nbpm:, nch:-1].flatten(), bins=bins,
             label=r'nom. $\sigma_{{yy}} = {:.2f}\mu$m'.format(rmsnomyy),
             density=True)
         ayy.hist(
-            dloc[nbpm:, nch:-1].flatten(), bins=90*2,
+            dloc[nbpm:, nch:-1].flatten(), bins=bins,
             label=r'fit. $\sigma_{{yy}} = {:.2f}\mu$m'.format(rmslocyy),
-            density=True)
+            density=True, alpha=0.7)
         ayy.set_xlabel(r'$\Delta y$ [$\mu$m]')
-        ayy.set_ylabel(r'# of $M_{yy}$ elements')
+        ayy.set_ylabel(r'$M_{yy}$')
 
-        axx.legend(loc='upper right')
-        axy.legend(loc='upper right')
-        ayx.legend(loc='upper right')
-        ayy.legend(loc='upper right')
+        axx.legend(loc='upper right', fontsize=11)
+        axy.legend(loc='upper right', fontsize=11)
+        ayx.legend(loc='upper right', fontsize=11)
+        ayy.legend(loc='upper right', fontsize=11)
         if save:
             fig.savefig(fname + '.png', dpi=300, format='png')
+
+    def plot_3d_fitting(self, diff1, diff2, fname):
+        """."""
+        nbpm, ncorr = 2*160, 120 + 160 + 1
+        idxbpm = np.linspace(0, nbpm-1, nbpm)
+        idxcorr = np.linspace(0, ncorr-1, ncorr)
+        corrs, bpms = np.meshgrid(idxcorr, idxbpm)
+
+        fig = plt.figure(figsize=(14, 6))
+        ax1 = fig.add_subplot(121, projection='3d')
+
+        diff1[:, :120] *= 15e-6
+        diff1[:, 120:280] *= 1.5*15e-6
+        diff1[:, -1] *= 5*15
+        ax1.plot_surface(
+            bpms, corrs, np.abs(diff1) * 1e6,
+            cmap=cm.coolwarm, linewidth=0, antialiased=False);
+        diff1[:, :120] /= 15e-6
+        diff1[:, 120:280] /= 1.5*15e-6
+        diff1[:, -1] /= 5*15
+        ax1.set_xlabel('BPM index', fontsize=10, labelpad=15)
+        ax1.set_ylabel('Corr. index', fontsize=10, labelpad=15)
+        ax1.set_zlabel(r'$|\chi|$ [$\mu$m]', labelpad=15)
+        ax1.set_title('Measured - Nominal')
+
+        ax2 = fig.add_subplot(122, projection='3d')
+        diff2[:, :120] *= 15e-6
+        diff2[:, 120:280] *= 1.5*15e-6
+        diff2[:, -1] *= 5*15
+        ax2.plot_surface(
+            bpms, corrs, np.abs(diff2) * 1e6,
+            cmap=cm.coolwarm, linewidth=0, antialiased=False);
+        diff2[:, :120] /= 15e-6
+        diff2[:, 120:280] /= 1.5*15e-6
+        diff2[:, -1] /= 5*15
+
+        ax2.set_xlabel('BPM index', fontsize=10, labelpad=15)
+        ax2.set_ylabel('Corr. index', fontsize=10, labelpad=15)
+        ax2.set_zlabel(r'$|\chi|$ [$\mu$m]', labelpad=15)
+        ax2.set_title('Measured - LOCO Fit')
+        plt.tight_layout()
+        fig.savefig(fname+'.png', format='png', dpi=300)
 
     def plot_quadrupoles_gradients_by_family(
             self, nom_model, fit_model, save=False, fname=None):
