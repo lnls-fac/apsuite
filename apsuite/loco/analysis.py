@@ -1,7 +1,7 @@
 """."""
 import numpy as np
 import pandas as pd
-from mathphys.functions import load_pickle
+from mathphys.functions import load_pickle, save_pickle
 
 import pyaccel
 from pymodels import si
@@ -13,7 +13,9 @@ from apsuite.optics_analysis.tune_correction import TuneCorr
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as mpl_gs
+import matplotlib.cm as cm
 from matplotlib import rc
+from mpl_toolkits.mplot3d import Axes3D
 
 rc('font', **{'size': 14})
 
@@ -33,6 +35,7 @@ class LOCOAnalysis():
         self.edteng_nom = None
         self.edteng_fit = None
         self.disp_meas = None
+        self.famdata = None
 
     def get_setup(self):
         """."""
@@ -98,6 +101,8 @@ class LOCOAnalysis():
         rfline = matrix_nominal[:, -1]
         disp_nominal = self._get_dispersion(rfline, alpha0, rf_freq)
         self.nom_model = simod
+
+        self.famdata = si.get_family_data(simod)
         return simod, disp_nominal
 
     def get_loco_results(self):
@@ -131,33 +136,28 @@ class LOCOAnalysis():
 
 # ============= static methods =============
 
-    @staticmethod
-    def get_famidx_quad(model):
+    def get_famidx_quad(self, model):
         """."""
         famidx = []
         famlist = [
             'QFA', 'QDA', 'QFB', 'QDB1', 'QDB2', 'QFP', 'QDP1', 'QDP2',
             'Q1', 'Q2', 'Q3', 'Q4']
-        famdata = si.get_family_data(model)
         for fam_name in famlist:
-            famidx.append(famdata[fam_name]['index'])
+            famidx.append(self.famdata[fam_name]['index'])
         return famidx
 
-    @staticmethod
-    def get_famidx_sext(model):
+    def get_famidx_sext(self, model):
         """."""
         famidx = []
-        famdata = si.get_family_data(model)
         for fam_name in si.families.families_sextupoles:
-            famidx.append(famdata[fam_name]['index'])
+            famidx.append(self.famdata[fam_name]['index'])
         return famidx
 
-    @staticmethod
-    def get_attribute_quad(model):
+    def get_attribute_quad(self, model):
         """."""
         kl_strength = []
         ksl_strength = []
-        famidx = LOCOAnalysis.get_famidx_quad(model)
+        famidx = self.get_famidx_quad(model)
         for q in famidx:
             kl_strength.append(pyaccel.lattice.get_attribute(model, 'KL', q))
             ksl_strength.append(pyaccel.lattice.get_attribute(model, 'KsL', q))
@@ -165,13 +165,12 @@ class LOCOAnalysis():
         ksl_strength = np.array(ksl_strength, dtype=list)
         return kl_strength, ksl_strength
 
-    @staticmethod
-    def get_attribute_sext(model):
+    def get_attribute_sext(self, model):
         """."""
         kl_strength = []
         sl_strength = []
         ksl_strength = []
-        famidx = LOCOAnalysis.get_famidx_sext(model)
+        famidx = self.get_famidx_sext(model)
         for q in famidx:
             kl_strength.append(pyaccel.lattice.get_attribute(model, 'KL', q))
             sl_strength.append(pyaccel.lattice.get_attribute(model, 'SL', q))
@@ -216,60 +215,102 @@ class LOCOAnalysis():
         rmslocxx = np.sqrt(np.mean(dloc[:nbpm, :nch]**2))
         rmslocyy = np.sqrt(np.mean(dloc[nbpm:, nch:-1]**2))
 
+        bins = 200
         ayx.hist(
-            dnom[nbpm:, :nch].flatten(), bins=100*2,
+            dnom[nbpm:, :nch].flatten(), bins=bins,
             label=r'nom. $\sigma_{{yx}} = {:.2f}\mu$m'.format(rmsnomyx),
             density=True)
         ayx.hist(
-            dloc[nbpm:, :nch].flatten(), bins=100*2,
+            dloc[nbpm:, :nch].flatten(), bins=bins,
             label=r'fit. $\sigma_{{yx}} = {:.2f}\mu$m'.format(rmslocyx),
-            density=True)
+            density=True, alpha=0.7)
         ayx.set_xlabel(r'$\Delta y$ [$\mu$m]')
-        ayx.set_ylabel(r'# of $M_{yx}$ elements')
+        ayx.set_ylabel(r'$M_{yx}$')
 
         axy.hist(
-            dnom[:nbpm, nch:-1].flatten(), bins=90*2,
+            dnom[:nbpm, nch:-1].flatten(), bins=bins,
             label=r'nom. $\sigma_{{xy}} = {:.2f}\mu$m'.format(rmsnomxy),
             density=True)
         axy.hist(
-            dloc[:160, nch:-1].flatten(), bins=90*2,
+            dloc[:160, nch:-1].flatten(), bins=bins,
             label=r'fit. $\sigma_{{xy}} = {:.2f}\mu$m'.format(rmslocxy),
-            density=True)
+            density=True, alpha=0.7)
         axy.set_xlabel(r'$\Delta x$ [$\mu$m]')
-        axy.set_ylabel(r'# of $M_{xy}$ elements')
+        axy.set_ylabel(r'$M_{xy}$')
 
         axx.hist(
-            dnom[:nbpm, :nch].flatten(), bins=100*2,
+            dnom[:nbpm, :nch].flatten(), bins=bins,
             label=r'nom. $\sigma_{{xx}} = {:.2f}\mu$m'.format(rmsnomxx),
             density=True)
         axx.hist(
-            dloc[:nbpm, :nch].flatten(), bins=100*2,
+            dloc[:nbpm, :nch].flatten(), bins=bins,
             label=r'fit. $\sigma_{{xx}} = {:.2f}\mu$m'.format(rmslocxx),
-            density=True)
+            density=True, alpha=0.7)
         axx.set_xlabel(r'$\Delta x$ [$\mu$m]')
-        axx.set_ylabel(r'# of $M_{xx}$ elements')
+        axx.set_ylabel(r'$M_{xx}$')
 
         ayy.hist(
-            dnom[nbpm:, nch:-1].flatten(), bins=90*2,
+            dnom[nbpm:, nch:-1].flatten(), bins=bins,
             label=r'nom. $\sigma_{{yy}} = {:.2f}\mu$m'.format(rmsnomyy),
             density=True)
         ayy.hist(
-            dloc[nbpm:, nch:-1].flatten(), bins=90*2,
+            dloc[nbpm:, nch:-1].flatten(), bins=bins,
             label=r'fit. $\sigma_{{yy}} = {:.2f}\mu$m'.format(rmslocyy),
-            density=True)
+            density=True, alpha=0.7)
         ayy.set_xlabel(r'$\Delta y$ [$\mu$m]')
-        ayy.set_ylabel(r'# of $M_{yy}$ elements')
+        ayy.set_ylabel(r'$M_{yy}$')
 
-        axx.legend(loc='upper right')
-        axy.legend(loc='upper right')
-        ayx.legend(loc='upper right')
-        ayy.legend(loc='upper right')
+        axx.legend(loc='upper right', fontsize=11)
+        axy.legend(loc='upper right', fontsize=11)
+        ayx.legend(loc='upper right', fontsize=11)
+        ayy.legend(loc='upper right', fontsize=11)
         if save:
             fig.savefig(fname + '.png', dpi=300, format='png')
 
-    @staticmethod
+    def plot_3d_fitting(self, diff1, diff2, fname):
+        """."""
+        nbpm, ncorr = 2*160, 120 + 160 + 1
+        idxbpm = np.linspace(0, nbpm-1, nbpm)
+        idxcorr = np.linspace(0, ncorr-1, ncorr)
+        corrs, bpms = np.meshgrid(idxcorr, idxbpm)
+
+        fig = plt.figure(figsize=(14, 6))
+        ax1 = fig.add_subplot(121, projection='3d')
+
+        diff1[:, :120] *= 15e-6
+        diff1[:, 120:280] *= 1.5*15e-6
+        diff1[:, -1] *= 5*15
+        ax1.plot_surface(
+            bpms, corrs, np.abs(diff1) * 1e6,
+            cmap=cm.coolwarm, linewidth=0, antialiased=False);
+        diff1[:, :120] /= 15e-6
+        diff1[:, 120:280] /= 1.5*15e-6
+        diff1[:, -1] /= 5*15
+        ax1.set_xlabel('BPM index', fontsize=10, labelpad=15)
+        ax1.set_ylabel('Corr. index', fontsize=10, labelpad=15)
+        ax1.set_zlabel(r'$|\chi|$ [$\mu$m]', labelpad=15)
+        ax1.set_title('Measured - Nominal')
+
+        ax2 = fig.add_subplot(122, projection='3d')
+        diff2[:, :120] *= 15e-6
+        diff2[:, 120:280] *= 1.5*15e-6
+        diff2[:, -1] *= 5*15
+        ax2.plot_surface(
+            bpms, corrs, np.abs(diff2) * 1e6,
+            cmap=cm.coolwarm, linewidth=0, antialiased=False);
+        diff2[:, :120] /= 15e-6
+        diff2[:, 120:280] /= 1.5*15e-6
+        diff2[:, -1] /= 5*15
+
+        ax2.set_xlabel('BPM index', fontsize=10, labelpad=15)
+        ax2.set_ylabel('Corr. index', fontsize=10, labelpad=15)
+        ax2.set_zlabel(r'$|\chi|$ [$\mu$m]', labelpad=15)
+        ax2.set_title('Measured - LOCO Fit')
+        plt.tight_layout()
+        fig.savefig(fname+'.png', format='png', dpi=300)
+
     def plot_quadrupoles_gradients_by_family(
-            nom_model, fit_model, save=False, fname=None):
+            self, nom_model, fit_model, save=False, fname=None):
         """."""
         fig = plt.figure(figsize=(12, 5))
         gs = mpl_gs.GridSpec(1, 1)
@@ -279,8 +320,8 @@ class LOCOAnalysis():
         knom_mean = []
         kfit_std = []
         maxmin = []
-        kfit, *_ = LOCOAnalysis.get_attribute_quad(fit_model)
-        knom, *_ = LOCOAnalysis.get_attribute_quad(nom_model)
+        kfit, *_ = self.get_attribute_quad(fit_model)
+        knom, *_ = self.get_attribute_quad(nom_model)
         count = 0
         famlist = [
             'QFA', 'QDA', 'QFB', 'QDB1', 'QDB2', 'QFP', 'QDP1', 'QDP2',
@@ -330,16 +371,61 @@ class LOCOAnalysis():
                 fig.savefig(fname+'.png', format='png', dpi=300)
         return df_stats
 
-    @staticmethod
+    def save_quadrupoles_variations(self, nom_model, fit_model, fname=''):
+        """."""
+        fam = self.famdata
+        qn = np.array(fam['QN']['index']).ravel()
+        kl = np.array(pyaccel.lattice.get_attribute(
+            fit_model, 'KL', indices=qn)).flatten()
+        kl_nom = np.array(pyaccel.lattice.get_attribute(
+            nom_model, 'KL', indices=qn)).ravel()
+        dkl = kl - kl_nom
+
+        quad_families = si.families.families_quadrupoles()
+        quadfam_idx = dict()
+        qn = fam['QN']['index']
+        for famname in quad_families:
+            qfam = fam[famname]['index']
+            quadfam_idx[famname] = [qn.index(qidx) for qidx in qfam]
+
+        quadfam_averages = dict()
+        for famname in quad_families:
+            quadfam_averages[famname] = np.mean(dkl[quadfam_idx[famname]])
+
+        save_pickle(
+            data=quadfam_averages,
+            fname='quad_family_average' + fname, overwrite=True)
+
+        dkl_no_average = dkl
+        for qnames in quad_families:
+            idx_list = quadfam_idx[qnames]
+            dkl_no_average[idx_list] -= quadfam_averages[qnames]
+
+        np.savetxt(
+            'quad_trims_deltakl_no_average_' + fname + '_.txt', dkl_no_average)
+
+    def save_skew_quadrupoles_variations(self, nom_model, fit_model, fname=''):
+        """."""
+        fam = self.famdata
+        qs = np.array(fam['QS']['index']).flatten()
+        ksl_fit = np.array(pyaccel.lattice.get_attribute(
+            fit_model, 'KsL', indices=qs)).flatten()
+        ksl_nom = np.array(pyaccel.lattice.get_attribute(
+            nom_model, 'KsL', indices=qs)).flatten()
+        dksl = ksl_fit - ksl_nom
+
+        np.savetxt(
+            'skewquad_deltaksl_' + fname + '_.txt', dksl)
+
     def plot_quadrupoles_gradients_by_s(
-            nom_model, fit_model, save=False, fname=None):
+            self, nom_model, fit_model, save=False, fname=None):
         """."""
         fig = plt.figure(figsize=(12, 4))
         gs = mpl_gs.GridSpec(1, 1)
         ax1 = plt.subplot(gs[0, 0])
 
         spos = pyaccel.lattice.find_spos(nom_model)
-        fam_nom = si.get_family_data(nom_model)
+        fam_nom = self.famdata
         qnlist_nom = fam_nom['QN']['index']
         qnidx = np.array(qnlist_nom).flatten()
         knom = np.array(pyaccel.lattice.get_attribute(
@@ -371,16 +457,15 @@ class LOCOAnalysis():
                 fig.savefig(fname+'.png', format='png', dpi=300)
         return kfit, knom, perc
 
-    @staticmethod
     def plot_skew_quadrupoles(
-            nom_model, fit_model, save=False, fname=None):
+            self, nom_model, fit_model, save=False, fname=None):
         """."""
         _ = plt.figure(figsize=(12, 4))
         gs = mpl_gs.GridSpec(1, 1)
         ax1 = plt.subplot(gs[0, 0])
 
         spos = pyaccel.lattice.find_spos(nom_model)
-        fam_nom = si.get_family_data(nom_model)
+        fam_nom = self.famdata
         qslist_nom = fam_nom['QS']['index']
         qsidx = np.array(qslist_nom).flatten()
         knom = np.array(pyaccel.lattice.get_attribute(
@@ -423,7 +508,7 @@ class LOCOAnalysis():
             self.nom_model, _ = self.get_nominal_model()
 
         spos = pyaccel.lattice.find_spos(self.nom_model)
-        fam = si.get_family_data(self.nom_model)
+        fam = self.famdata
         bpm_idx = np.array(fam['BPM']['index']).ravel()
         ch_idx = np.array(fam['CH']['index']).ravel()
         cv_idx = np.array(fam['CV']['index']).ravel()

@@ -170,6 +170,15 @@ class LOCOReport(FPDF):
         self.add_page()
         self.page_body(images)
 
+    def add_histogram(self):
+        """."""
+        self.add_page()
+        self.page_title('Fitting indicators')
+        img_w = self.WIDTH - 30
+        _xp = (self.WIDTH - img_w) / 2
+        self.image('3dplot.png', x=_xp, y=40, w=img_w)
+        self.image('histogram.png', x=_xp-5, y=140, w=img_w)
+
     def add_quadfit(self):
         """."""
         self.add_page()
@@ -190,7 +199,6 @@ class LOCOReport(FPDF):
         self.page_title('Gains: BPMs and correctors', loc_y=90)
         img_w = self.WIDTH - 30
         _xp = (self.WIDTH - img_w) / 2
-        img_h = self.HEIGHT*0.55
         self.image('gains.png', x=_xp, y=100, w=img_w)
 
     def add_tune_emit_and_optics(self):
@@ -276,11 +284,15 @@ class LOCOReport(FPDF):
 
         loco_anly.plot_histogram(
             dnomi, dloco, save=True, fname='histogram')
+        loco_anly.plot_3d_fitting(dnomi, dloco, fname='3dplot')
+
         df_quad_stats = loco_anly.plot_quadrupoles_gradients_by_family(
-            mod, loco_data['fit_model'], save=True, fname='quad_by_family')
+            nom_model=mod, fit_model=loco_data['fit_model'],
+            save=True, fname='quad_by_family')
         self._df_quad_stats = df_quad_stats
         loco_anly.plot_quadrupoles_gradients_by_s(
-            mod, loco_data['fit_model'], save=True, fname='quad_by_s')
+            nom_model=mod,
+            fit_model=loco_data['fit_model'], save=True, fname='quad_by_s')
         loco_anly.plot_skew_quadrupoles(
             mod, loco_data['fit_model'], save=True, fname='skewquad_by_s')
         loco_anly.plot_gain(save=True, fname='gains')
@@ -295,12 +307,18 @@ class LOCOReport(FPDF):
         #   loco_anly.beta_and_tune(twiss=False)
         # self._df_disp = loco_anly.dispersion(twiss=False)
 
+        loco_anly.save_quadrupoles_variations(
+            mod, loco_data['fit_model'], fname=fname_report)
+        loco_anly.save_skew_quadrupoles_variations(
+            mod, loco_data['fit_model'], fname=fname_report)
+
         self.loco_data = loco_data
         self.loco_analysis = loco_anly
 
         self.add_fingerprint_and_config()
+        self.add_histogram()
         self.add_quadfit()
         self.add_skewquadfit_ang_gains()
         self.add_tune_emit_and_optics()
 
-        self.output(fname_report + '.pdf', 'F')
+        self.output('report_' + fname_report + '.pdf', 'F')
