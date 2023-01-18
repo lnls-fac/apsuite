@@ -126,7 +126,7 @@ class BiasFeedbackParams(_ParamsBaseClass):
         self.default_lifetime = 17 * 3600  # [s]
         self.min_target_current = 99  # [mA]
         self.max_target_current = 102  # [mA]
-        self.default_target_current = 100.5  # [mA]
+        self.default_target_current = 100.0  # [mA]
         self.coeffs_dcurr_vs_bias = [-50.0, 10.0]
         self.min_delta_current = 0.000  # [mA]
         self.max_delta_current = 1  # [mA]
@@ -242,10 +242,17 @@ class BiasFeedback(_BaseClass):
     def _callback_to_thread(self, **kwgs):
         _Thread(target=self._update_model, kwargs=kwgs, daemon=True).start()
 
-    def _update_model(self, **kwgs):
-        _time.sleep(1)
-        bias = kwgs.get('bias') or self.devices['egun'].bias.voltage
-        dcurr = kwgs.get('dcurr') or self.devices['currinfo'].si.injcurr
+    def _update_model_orig(self, **kwgs):
+        simul = kwgs.get('simul', False)
+        if not simul:
+            _time.sleep(1)
+
+        bias = kwgs.get('bias')
+        if bias is None:
+            bias = self.devices['egun'].bias.voltage
+        dcurr = kwgs.get('dcurr')
+        if dcurr is None:
+            dcurr = self.devices['currinfo'].si.injcurr
 
         self.data['dcurr'].append(dcurr)
         self.data['bias'].append(bias)
@@ -255,7 +262,6 @@ class BiasFeedback(_BaseClass):
 
         x = x[-self.params.gpmodel_max_num_points:]
         y = y[-self.params.gpmodel_max_num_points:]
-
         y -= np.polynomial.polynomial.polyval(
             x, self.params.coeffs_dcurr_vs_bias)
 
@@ -268,14 +274,15 @@ class BiasFeedback(_BaseClass):
         self.gpmodel.set_XY(x, y)
         self._gpmodel_pts += 1
         opt = self.params.gpmodel_opt_each_pts
-        if self.params.use_gpmodel and opt and opt >= self._gpmodel_pts:
+        if self.params.use_gpmodel and opt and opt <= self._gpmodel_pts:
             self.gpmodel.optimize_restarts(num_restarts=5, verbose=False)
             self._gpmodel_pts = 0
 
-        _time.sleep(3)
+        if not simul:
+            _time.sleep(3)
         self._already_set = False
 
-    def get_bias_voltage(self, dcurr):
+    def get_bias_voltage_orig(self, dcurr):
         """."""
         bias = np.polynomial.polynomial.polyval(
             dcurr, self.params.coeffs_dcurr_vs_bias)
@@ -291,6 +298,63 @@ class BiasFeedback(_BaseClass):
 
         bias = min(bias, self.params.max_bias_voltage)
         bias = max(bias, self.params.min_bias_voltage)
+        return bias
+
+    def _update_model(self, **kwgs):
+        simul = kwgs.get('simul', False)
+        if not simul:
+            _time.sleep(1)
+
+        bias = kwgs.get('bias')
+        if bias is None:
+            bias = self.devices['egun'].bias.voltage
+        dcurr = kwgs.get('dcurr')
+        if dcurr is None:
+            dcurr = self.devices['currinfo'].si.injcurr
+
+        self.data['dcurr'].append(dcurr)
+        self.data['bias'].append(bias)
+
+        x = np.array(self.data['bias'], dtype=float)
+        y = np.array(self.data['dcurr'], dtype=float)
+
+        x = x[-self.params.gpmodel_max_num_points:]
+        y = y[-self.params.gpmodel_max_num_points:]
+        x -= np.polynomial.polynomial.polyval(
+            y, self.params.coeffs_dcurr_vs_bias)
+
+        # NOTE: 2D Version
+        # tim = -np.arange(x.size)[::-1]
+        # x = np.vstack([x, tim]).T
+
+        x.shape = (x.size, 1)
+        y.shape = (y.size, 1)
+        self.gpmodel.set_XY(x, y)
+        self._gpmodel_pts += 1
+        opt = self.params.gpmodel_opt_each_pts
+        if self.params.use_gpmodel and opt and opt <= self._gpmodel_pts:
+            self.gpmodel.optimize_restarts(num_restarts=5, verbose=False)
+            self._gpmodel_pts = 0
+
+        if not simul:
+            _time.sleep(3)
+        self._already_set = False
+
+    def get_bias_voltage(self, dcurr):
+        """."""
+        bias = np.polynomial.polynomial.polyval(
+            dcurr, self.params.coeffs_dcurr_vs_bias)
+
+        xgp = self.gpmodel.X
+        opt = self.params.gpmodel_opt_each_pts
+        if self.params.use_gpmodel and xgp.size >= opt:
+            # x = np.array([[dcurr, 0]])   # NOTE: 2D Version
+            y = np.array(dcurr, ndmin=2)
+            y.shape = (y.size, 1)
+            bias += np.array(self.gpmodel.infer_newX(y)[0]).ravel()
+
+        bias = np.minimum(bias, self.params.max_bias_voltage)
+        bias = np.maximum(bias, self.params.min_bias_voltage)
         return bias
 
     def get_delta_current_per_pulse(self, **kwargs):
