@@ -177,7 +177,7 @@ class LOCOReport(FPDF):
         img_w = self.WIDTH - 30
         _xp = (self.WIDTH - img_w) / 2
         self.image('3dplot.png', x=_xp, y=40, w=img_w)
-        self.image('histogram.png', x=_xp-5, y=150, w=img_w)
+        self.image('histogram.png', x=_xp-5, y=140, w=img_w)
 
     def add_quadfit(self):
         """."""
