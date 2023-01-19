@@ -21,7 +21,8 @@ class MeasParams(_ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
-        self.delta_freq = 200  # [Hz]
+        self.max_delta_freq = +200  # [Hz]
+        self.min_delta_freq = -200  # [Hz]
         self.meas_nrsteps = 8
         self.npoints = 5
         self.wait_tune = 5  # [s]
@@ -32,7 +33,8 @@ class MeasParams(_ParamsBaseClass):
         """."""
         ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
         dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
-        stg = ftmp('delta_freq [Hz]', self.delta_freq, '')
+        stg = ftmp('max_delta_freq [Hz]', self.max_delta_freq, '')
+        stg = ftmp('min_delta_freq [Hz]', self.min_delta_freq, '')
         stg += dtmp('meas_nrsteps', self.meas_nrsteps, '')
         stg += ftmp('wait_tune [s]', self.wait_tune, '')
         stg += ftmp(
@@ -79,7 +81,6 @@ class MeasDispChrom(_BaseClass):
             print('SOFB feedback is enable, disabling it...')
             sofb.cmd_turn_off_autocorr()
 
-        delta_freq = self.params.delta_freq
         npoints = self.params.meas_nrsteps
         sofb.nr_points = self.params.sofb_nrpoints
         freq0 = rfgen.frequency
@@ -87,7 +88,10 @@ class MeasDispChrom(_BaseClass):
         tunex0_bbb = bbbh.sram.spec_marker1_tune
         tuney0_bbb = bbbv.sram.spec_marker1_tune
         orbx0, orby0 = sofb.orbx, sofb.orby
-        span = _np.linspace(freq0-delta_freq/2, freq0+delta_freq/2, npoints)
+
+        min_df = self.params.min_delta_freq
+        max_df = self.params.max_delta_freq
+        span = freq0 + _np.linspace(min_df, max_df, npoints)
 
         freq = []
         tunex, tuney = [], []
