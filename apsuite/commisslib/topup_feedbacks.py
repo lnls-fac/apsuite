@@ -134,11 +134,13 @@ class BiasFeedbackParams(_ParamsBaseClass):
         self.max_bias_voltage = -40  # [V]
         self.ahead_set_time = 10  # [s]
         self.use_gpmodel = False
-        self.gpmodel_lengthscale = 2  # [mA]
-        self.gpmodel_variance = 24  # [V^2]
-        self.gpmodel_noise_var = 0.3  # [V^2]
-        self.gpmodel_max_num_points = 100
-        self.gpmodel_opt_each_pts = 50
+        self.gpmodel_lengthscale = 4  # [V]
+        self.gpmodel_variance = 0.16  # [mA^2]
+        self.gpmodel_noise_var = 0.03  # [mA^2]
+        self.gpmodel_max_num_points = 20
+        self.gpmodel_opt_each_pts = 10
+        self.gpmodel_bidimensional = False
+        self.gpmodel_issparse = False
 
     def __str__(self):
         """."""
@@ -168,6 +170,9 @@ class BiasFeedbackParams(_ParamsBaseClass):
         stg += ftmp('gpmodel_variance', self.gpmodel_variance, '[V^2]')
         stg += ftmp('gpmodel_noise_var', self.gpmodel_noise_var, '[V^2]')
         stg += dtmp('gpmodel_max_num_points', self.gpmodel_max_num_points, '')
+        stg += stmp(
+            'gpmodel_bidimensional', str(self.gpmodel_bidimensional), '')
+        stg += stmp('gpmodel_issparse', str(self.gpmodel_issparse), '')
         return stg
 
 
@@ -176,25 +181,44 @@ class BiasFeedback(_BaseClass):
 
     _DEF_TIMEOUT = 60 * 60  # [s]
 
-    def __init__(self, isonline=True):
+    def __init__(self, isonline=True, params=None):
         """."""
-        super().__init__(
-            params=BiasFeedbackParams(), target=self._run, isonline=isonline)
-        self.params = BiasFeedbackParams()
+        params = params or BiasFeedbackParams()
+        super().__init__(params=params, target=self._run, isonline=isonline)
         self._already_set = False
-        # NOTE: 2D Version
-        # self.gpmodel_kernel = gpy.kern.RBF(
-        #     input_dim=2, variance=self.params.gpmodel_variance,
-        #     lengthscale=self.params.gpmodel_lengthscale, active_dims=[0, 1])
 
-        self.gpmodel_kernel = gpy.kern.RBF(
-            input_dim=1, variance=self.params.gpmodel_variance,
-            lengthscale=self.params.gpmodel_lengthscale)
-        self.gpmodel = gpy.models.GPRegression(
-            # np.zeros((3, 2)), np.zeros((3, 1)),  # NOTE: 2D Version
-            np.zeros((3, 1)), np.zeros((3, 1)),
-            self.gpmodel_kernel,
-            noise_var=self.params.gpmodel_noise_var)
+        bias = np.linspace(
+            self.params.min_bias_voltage,
+            self.params.max_bias_voltage,
+            self.params.gpmodel_max_num_points)
+
+        b, a = self.params.coeffs_dcurr_vs_bias
+        dcurr = np.polynomial.polynomial.polyval(bias, (-b/a, 1/a))
+        y = dcurr[:, None]
+
+        if self.params.gpmodel_bidimensional:
+            self.gpmodel_kernel = gpy.kern.RBF(
+                input_dim=2, variance=self.params.gpmodel_variance,
+                lengthscale=self.params.gpmodel_lengthscale, ARD=True)
+            tim = -np.ones(bias.size, dtype=float)
+            x = np.vstack([bias, tim]).T
+        else:
+            self.gpmodel_kernel = gpy.kern.RBF(
+                input_dim=1, variance=self.params.gpmodel_variance,
+                lengthscale=self.params.gpmodel_lengthscale)
+            x = bias[:, None]
+
+        if self.params.gpmodel_issparse:
+            step = bias.size//6
+            inducing = bias[::step][:, None]
+            self.gpmodel = gpy.models.SparseGPRegression(
+                x, y, self.gpmodel_kernel, Z=inducing)
+        else:
+            self.gpmodel = gpy.models.GPRegression(
+                x, y, self.gpmodel_kernel,
+                noise_var=self.params.gpmodel_noise_var)
+
+        self.gpmodel.likelihood.variance = self.params.gpmodel_noise_var
         self._gpmodel_pts = 0
         if isonline:
             _create_devices(self)
@@ -242,64 +266,6 @@ class BiasFeedback(_BaseClass):
     def _callback_to_thread(self, **kwgs):
         _Thread(target=self._update_model, kwargs=kwgs, daemon=True).start()
 
-    def _update_model_orig(self, **kwgs):
-        simul = kwgs.get('simul', False)
-        if not simul:
-            _time.sleep(1)
-
-        bias = kwgs.get('bias')
-        if bias is None:
-            bias = self.devices['egun'].bias.voltage
-        dcurr = kwgs.get('dcurr')
-        if dcurr is None:
-            dcurr = self.devices['currinfo'].si.injcurr
-
-        self.data['dcurr'].append(dcurr)
-        self.data['bias'].append(bias)
-
-        x = np.array(self.data['dcurr'], dtype=float)
-        y = np.array(self.data['bias'], dtype=float)
-
-        x = x[-self.params.gpmodel_max_num_points:]
-        y = y[-self.params.gpmodel_max_num_points:]
-        y -= np.polynomial.polynomial.polyval(
-            x, self.params.coeffs_dcurr_vs_bias)
-
-        # NOTE: 2D Version
-        # tim = -np.arange(x.size)[::-1]
-        # x = np.vstack([x, tim]).T
-
-        x.shape = (x.size, 1)
-        y.shape = (y.size, 1)
-        self.gpmodel.set_XY(x, y)
-        self._gpmodel_pts += 1
-        opt = self.params.gpmodel_opt_each_pts
-        if self.params.use_gpmodel and opt and opt <= self._gpmodel_pts:
-            self.gpmodel.optimize_restarts(num_restarts=5, verbose=False)
-            self._gpmodel_pts = 0
-
-        if not simul:
-            _time.sleep(3)
-        self._already_set = False
-
-    def get_bias_voltage_orig(self, dcurr):
-        """."""
-        bias = np.polynomial.polynomial.polyval(
-            dcurr, self.params.coeffs_dcurr_vs_bias)
-
-        xgp = self.gpmodel.X
-        opt = self.params.gpmodel_opt_each_pts
-        if self.params.use_gpmodel and xgp.size >= opt:
-            if xgp.min() <= dcurr <= xgp.max():
-                # x = np.array([[dcurr, 0]])   # NOTE: 2D Version
-                x = np.array(dcurr, ndmin=2)
-                avg, var = self.gpmodel.predict(x)
-                bias += avg[0, 0]
-
-        bias = min(bias, self.params.max_bias_voltage)
-        bias = max(bias, self.params.min_bias_voltage)
-        return bias
-
     def _update_model(self, **kwgs):
         simul = kwgs.get('simul', False)
         if not simul:
@@ -315,24 +281,34 @@ class BiasFeedback(_BaseClass):
         self.data['dcurr'].append(dcurr)
         self.data['bias'].append(bias)
 
-        x = np.array(self.data['bias'], dtype=float)
-        y = np.array(self.data['dcurr'], dtype=float)
+        x = self.gpmodel.X[:, 0]
+        y = self.gpmodel.Y[:, 0]
+        xun, cnts = np.unique(x, return_counts=True)
+        if bias in xun:
+            idx = (xun == bias).nonzero()[0][0]
+            if cnts[idx] >= max(2, x.size // 5):
+                print(f'Rejected point! bias={bias:.2f}, counts={cnts[idx]:d}')
+                return
 
+        x = np.r_[x[:-1], bias, self.params.min_bias_voltage]
+        y = np.r_[y[:-1], dcurr, 0]
         x = x[-self.params.gpmodel_max_num_points:]
         y = y[-self.params.gpmodel_max_num_points:]
-        x -= np.polynomial.polynomial.polyval(
-            y, self.params.coeffs_dcurr_vs_bias)
 
-        # NOTE: 2D Version
-        # tim = -np.arange(x.size)[::-1]
-        # x = np.vstack([x, tim]).T
-
-        x.shape = (x.size, 1)
+        if self.params.gpmodel_bidimensional:
+            tim = self.gpmodel.X[:, 1]
+            tim = np.r_[tim[:-1], tim[-1]+1, tim[-1]+1]
+            tim = tim[-self.params.gpmodel_max_num_points:]
+            x = np.vstack([x, tim]).T
+        else:
+            x.shape = (x.size, 1)
         y.shape = (y.size, 1)
+
         self.gpmodel.set_XY(x, y)
-        self._gpmodel_pts += 1
         opt = self.params.gpmodel_opt_each_pts
-        if self.params.use_gpmodel and opt and opt <= self._gpmodel_pts:
+        self._gpmodel_pts += 1
+        if self.params.use_gpmodel and opt and not (self._gpmodel_pts % opt):
+            print('Optimizing Gaussian Process Model')
             self.gpmodel.optimize_restarts(num_restarts=5, verbose=False)
             self._gpmodel_pts = 0
 
@@ -344,18 +320,57 @@ class BiasFeedback(_BaseClass):
         """."""
         bias = np.polynomial.polynomial.polyval(
             dcurr, self.params.coeffs_dcurr_vs_bias)
+        bias = np.array([bias]).ravel()
 
         xgp = self.gpmodel.X
         opt = self.params.gpmodel_opt_each_pts
-        if self.params.use_gpmodel and xgp.size >= opt:
-            # x = np.array([[dcurr, 0]])   # NOTE: 2D Version
-            y = np.array(dcurr, ndmin=2)
-            y.shape = (y.size, 1)
-            bias += np.array(self.gpmodel.infer_newX(y)[0]).ravel()
+        if self.params.use_gpmodel and xgp.shape[0] >= opt:
+            y = np.array(dcurr, ndmin=1)
+            bias = self.gpmodel_infer_newx(y)
 
         bias = np.minimum(bias, self.params.max_bias_voltage)
         bias = np.maximum(bias, self.params.min_bias_voltage)
-        return bias
+        return bias if bias.size > 1 else bias[0]
+
+    def gpmodel_infer_newx(self, y):
+        """Infer x given y for current GP model.
+
+        The GP model object has its own infer_newX method, but it is slow and
+        didn't give good results in my tests. So I decided to implement this
+        simpler version, which works well.
+
+        Args:
+            y (numpy.ndarray, (N,)): y's for which we want to infer x.
+
+        Returns:
+            x: infered x's.
+
+        """
+        x = np.linspace(
+            self.params.min_bias_voltage,
+            self.params.max_bias_voltage, 100)
+
+        ys, _ = self.gpmodel_predict(x)
+
+        idx = np.argmin(np.abs(ys - y[None, :]), axis=0)
+        return x[idx, 0]
+
+    def gpmodel_predict(self, x):
+        """Get the GP model prediction of the injected current.
+
+        Args:
+            x (numpy.ndarray): bias voltage.
+
+        Returns:
+            numpy.ndarray: predicted injected current.
+
+        """
+        x.shape = (x.size, 1)
+        if self.params.gpmodel_bidimensional:
+            tim = np.ones(x.size) * self.gpmodel.X[-1, 1]
+            x = np.vstack([x.ravel(), tim]).T
+
+        return self.gpmodel.predict(x)
 
     def get_delta_current_per_pulse(self, **kwargs):
         """."""
@@ -373,7 +388,6 @@ class BiasFeedback(_BaseClass):
             ltime = self.params.default_lifetime
 
         curr_tar = curr_avg / (1 - per*60/2/ltime)
-        print(f'curr_tar {curr_tar:.3f}')
         if curr_tar < self.params.min_target_current or \
                 curr_tar > self.params.max_target_current:
             curr_tar = self.params.default_target_current
