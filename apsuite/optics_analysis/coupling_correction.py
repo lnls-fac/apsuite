@@ -70,28 +70,21 @@ class CouplingCorr():
     def _nskew(self):
         return len(self.skew_idx)
 
-    def _calc_jacobian_matrix_idx(
-            self, model=None, indices=None, weight_dispy=1):
+    @staticmethod
+    def _calc_jacobian_matrix_idx(indices, *args):
         """."""
-        if model is None:
-            model = self.model
-
-        if indices is None:
-            indices = self.skew_idx
-
-        nvec = self._nbpm * (self._nch + self._ncv + 1)
-        coup_matrix = _np.zeros((nvec, len(indices)))
+        coup_matrix = []
         delta = 1e-6
-
-        modcopy = _dcopy(model)
-        for idx, nmag in enumerate(indices):
+        model, *_ = args
+        for nmag in indices:
             dlt = delta/len(nmag)
             for seg in nmag:
-                modcopy[seg].KsL += dlt
-                elem = self._get_coupling_residue(modcopy, weight_dispy) / dlt
-                modcopy[seg].KsL -= dlt
-            coup_matrix[:, idx] = elem
-        return coup_matrix
+                model[seg].KsL += dlt
+                elem = CouplingCorr._get_coupling_residue(*args)
+                elem /= dlt
+                model[seg].KsL -= dlt
+            coup_matrix.append(elem)
+        return _np.array(coup_matrix).T
 
     def calc_jacobian_matrix(self, model=None, weight_dispy=1):
         """Coupling correction response matrix.
@@ -101,36 +94,43 @@ class CouplingCorr():
         """
         if model is None:
             model = self.model
-        self.coup_matrix = self._parallel_base(
-            model, weight_dispy=weight_dispy)
-        return self.coup_matrix
-
-    def _get_coupling_residue(self, model, weight_dispy=1):
         if None in {self._freq, self._alpha}:
             self._freq = model[self.respm.rf_idx[0]].frequency
             self._alpha = pyaccel.optics.get_mcf(model)
-        self.respm.model = model
-        orbmat = self.respm.get_respm()
-        mxy = orbmat[:self._nbpm, self._nch:-1].ravel()
-        myx = orbmat[self._nbpm:, :self._nch].ravel()
-        dispy = orbmat[self._nbpm:, -1]*weight_dispy
-        dispy *= -self._freq*self._alpha
+        self.coup_matrix = CouplingCorr._parallel_base(
+            self.skew_idx, model, self.respm, self._freq, self._alpha,
+            self._nbpm, self._nch, weight_dispy)
+        return self.coup_matrix
+
+    @staticmethod
+    def _get_coupling_residue(*args):
+        model, obj_respm, freq, alpha, nbpm, nch, weight_dispy = args
+        obj_respm.model = model
+        orbmat = obj_respm.get_respm()
+        mxy = orbmat[:nbpm, nch:-1].ravel()
+        myx = orbmat[nbpm:, :nch].ravel()
+        dispy = orbmat[nbpm:, -1]*weight_dispy
+        dispy *= -freq*alpha
         res = _np.r_[mxy, myx, dispy]
         return res
 
-    def _parallel_base(self, model, weight_dispy=1):
-        slcs = self._get_slices_multiprocessing(len(self.skew_idx))
+    @staticmethod
+    def _parallel_base(*args):
+        idcs, model, obj_respm, freq, alpha, nbpm, nch, weight_dispy = args
+        slcs = CouplingCorr._get_slices_multiprocessing(len(idcs))
         with _mp.Pool(processes=len(slcs)) as pool:
             res = []
             for slc in slcs:
                 res.append(pool.apply_async(
-                    self._calc_jacobian_matrix_idx,
-                    (model, self.skew_idx[slc], weight_dispy)))
+                    CouplingCorr._calc_jacobian_matrix_idx,
+                    (idcs[slc], model, obj_respm, freq,
+                        alpha, nbpm, nch, weight_dispy)))
             mat = [re.get() for re in res]
         mat = _np.concatenate(mat, axis=1)
         return mat
 
-    def _get_slices_multiprocessing(self, npart):
+    @staticmethod
+    def _get_slices_multiprocessing(npart):
         nrproc = _mp.cpu_count() - 3
         nrproc = max(nrproc, 1)
         nrproc = min(nrproc, npart)
