@@ -2,7 +2,8 @@
 
 from copy import deepcopy as _dcopy
 from mathphys.functions import get_namedtuple as _get_namedtuple
-import numpy as np
+import numpy as _np
+import multiprocessing as _mp
 
 import pyaccel
 
@@ -30,6 +31,8 @@ class CouplingCorr():
         else:
             self.skew_idx = skew_list
         self._corr_method = correction_method
+        self._freq = None
+        self._alpha = None
 
     @property
     def corr_method(self):
@@ -67,42 +70,75 @@ class CouplingCorr():
     def _nskew(self):
         return len(self.skew_idx)
 
-    def calc_jacobian_matrix(self, model=None):
-        """Coupling correction response matrix.
-
-        Calculates the variation of off-diagonal elements of orbit response
-        matrix and vertical dispersion given the variation of skew
-        quadrupoles strength.
-        """
+    def _calc_jacobian_matrix_idx(
+            self, model=None, indices=None, weight_dispy=1):
+        """."""
         if model is None:
             model = self.model
 
+        if indices is None:
+            indices = self.skew_idx
+
         nvec = self._nbpm * (self._nch + self._ncv + 1)
-        self.coup_matrix = np.zeros((nvec, len(self.skew_idx)))
+        coup_matrix = _np.zeros((nvec, len(indices)))
         delta = 1e-6
 
-        for idx, nmag in enumerate(self.skew_idx):
-            modcopy = _dcopy(model)
+        modcopy = _dcopy(model)
+        for idx, nmag in enumerate(indices):
             dlt = delta/len(nmag)
             for seg in nmag:
                 modcopy[seg].KsL += dlt
-                elem = self._get_coupling_residue(modcopy) / dlt
-            self.coup_matrix[:, idx] = elem
+                elem = self._get_coupling_residue(modcopy, weight_dispy) / dlt
+                modcopy[seg].KsL -= dlt
+            coup_matrix[:, idx] = elem
+        return coup_matrix
+
+    def calc_jacobian_matrix(self, model=None, weight_dispy=1):
+        """Coupling correction response matrix.
+
+        Calculates the variation of off-diagonal elements of orbit response
+        matrix and vertical dispersion wrt variations of KsL.
+        """
+        if model is None:
+            model = self.model
+        self.coup_matrix = self._parallel_base(
+            model, weight_dispy=weight_dispy)
         return self.coup_matrix
 
     def _get_coupling_residue(self, model, weight_dispy=1):
+        if None in {self._freq, self._alpha}:
+            self._freq = model[self.respm.rf_idx[0]].frequency
+            self._alpha = pyaccel.optics.get_mcf(model)
         self.respm.model = model
         orbmat = self.respm.get_respm()
-        twi, *_ = pyaccel.optics.calc_twiss(model)
-        dispy = twi.etay[self.bpm_idx]
-        # dispy *= (self._nch + self._ncv)*weight_dispy
-        dispy *= weight_dispy
-        mxy = orbmat[:self._nbpm, self._nch:-1]
-        myx = orbmat[self._nbpm:, :self._nch]
-        res = mxy.ravel()
-        res = np.hstack((res, myx.ravel()))
-        res = np.hstack((res, dispy.ravel()))
+        mxy = orbmat[:self._nbpm, self._nch:-1].ravel()
+        myx = orbmat[self._nbpm:, :self._nch].ravel()
+        dispy = orbmat[self._nbpm:, -1]*weight_dispy
+        dispy *= -self._freq*self._alpha
+        res = _np.r_[mxy, myx, dispy]
         return res
+
+    def _parallel_base(self, model, weight_dispy=1):
+        slcs = self._get_slices_multiprocessing(True, len(self.skew_idx))
+        with _mp.Pool(processes=len(slcs)) as pool:
+            res = []
+            for slc in slcs:
+                res.append(pool.apply_async(
+                    self._calc_jacobian_matrix_idx,
+                    (model, self.skew_idx[slc], weight_dispy)))
+            mat = [re.get() for re in res]
+        mat = _np.concatenate(mat, axis=1)
+        return mat
+
+    def _get_slices_multiprocessing(self, npart):
+        nrproc = _mp.cpu_count() - 3
+        nrproc = max(nrproc, 1)
+        nrproc = min(nrproc, npart)
+
+        np_proc = (npart // nrproc)*_np.ones(nrproc, dtype=int)
+        np_proc[:(npart % nrproc)] += 1
+        parts_proc = _np.r_[0, _np.cumsum(np_proc)]
+        return [slice(parts_proc[i], parts_proc[i+1]) for i in range(nrproc)]
 
     def get_ksl(self, model=None, skewidx=None):
         """Return skew quadrupoles strengths."""
@@ -116,7 +152,7 @@ class CouplingCorr():
             for seg in mag:
                 ksl_seg.append(model[seg].KsL)
             ksl_mag.append(sum(ksl_seg))
-        return np.array(ksl_mag)
+        return _np.array(ksl_mag)
 
     def _set_delta_ksl(self, model=None, skewidx=None, delta_ksl=None):
         """Set skew quadrupoles strengths in the model."""
@@ -134,7 +170,7 @@ class CouplingCorr():
     @staticmethod
     def get_figm(res):
         """Calculate figure of merit from residue vector."""
-        return np.sqrt(np.sum(res*res)/res.size)
+        return _np.sqrt(_np.sum(res*res)/res.size)
 
     def coupling_corr_orbrespm_dispy(self,
                                      model,
@@ -148,14 +184,14 @@ class CouplingCorr():
         """
         if jacobian_matrix is None:
             jmat = self.calc_jacobian_matrix(model)
-        umat, smat, vmat = np.linalg.svd(jmat, full_matrices=False)
+        umat, smat, vmat = _np.linalg.svd(jmat, full_matrices=False)
         ismat = 1/smat
-        ismat[np.isnan(ismat)] = 0
-        ismat[np.isinf(ismat)] = 0
+        ismat[_np.isnan(ismat)] = 0
+        ismat[_np.isinf(ismat)] = 0
         if nsv is not None:
             ismat[nsv:] = 0
-        ismat = np.diag(ismat)
-        ijmat = -np.dot(np.dot(vmat.T, ismat), umat.T)
+        ismat = _np.diag(ismat)
+        ijmat = -_np.dot(_np.dot(vmat.T, ismat), umat.T)
         if res0 is None:
             res = self._get_coupling_residue(model, weight_dispy=weight_dispy)
         else:
@@ -165,12 +201,12 @@ class CouplingCorr():
             return CouplingCorr.CORR_STATUS.Sucess
 
         for _ in range(nr_max):
-            dksl = np.dot(ijmat, res)
+            dksl = _np.dot(ijmat, res)
             self._set_delta_ksl(model=model, delta_ksl=dksl)
             res = self._get_coupling_residue(
                 model, weight_dispy=weight_dispy)
             figm = CouplingCorr.get_figm(res)
-            diff_figm = np.abs(bestfigm - figm)
+            diff_figm = _np.abs(bestfigm - figm)
             if figm < bestfigm:
                 bestfigm = figm
             if diff_figm < tol:
