@@ -530,11 +530,6 @@ class LOCOAnalysis():
         axs[0].grid(alpha=0.5, linestyle='--')
         axs[0].set_ylabel('gain')
         axs[0].set_title('BPM Gains')
-        for idx in range(20):
-            axs[0].axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            axs[0].annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), gain_bpm.max()*1.04))
 
         axs[1].plot(spos[bpm_idx], roll_bpm*1e3, '.-', color=color_roll_bpm)
         axs[1].grid(alpha=0.5, linestyle='--')
@@ -742,26 +737,34 @@ class LOCOAnalysis():
         plt.savefig('dispersion.png', dpi=300)
         return df_disp
 
-    def emittance(self):
+    def emittance_and_coupling(self):
         """."""
         eqnom = pyaccel.optics.EqParamsFromBeamEnvelope(self.nom_model)
         eqfit = pyaccel.optics.EqParamsFromBeamEnvelope(
             self.loco_fit['fit_model'])
 
+        if self.edteng_fit is None or self.edteng_nom is None:
+            self.calc_edteng()
+
+        min_sep_nom, *_ = pyaccel.optics.estimate_coupling_parameters(
+            self.edteng_nom)
+        min_sep_fit, *_ = pyaccel.optics.estimate_coupling_parameters(
+            self.edteng_fit)
+
         m2pm = 1e12
         names = [
-            'x [pm.rad]', 'y [pm.rad]',
-            'ratio [%]']
+            'emit_x [pm.rad]', 'emit_y [pm.rad]',
+            'emit_ratio [%]', 'min_tune_sep [%]']
         emit_nom_list = [
                 eqnom.emit1*m2pm, eqnom.emit2*m2pm,
-                eqnom.emit2/eqnom.emit1*100]
+                eqnom.emit2/eqnom.emit1*100, min_sep_nom*100]
         emit_fit_list = [
                 eqfit.emit1*m2pm, eqfit.emit2*m2pm,
-                eqfit.emit2/eqfit.emit1*100]
+                eqfit.emit2/eqfit.emit1*100, min_sep_fit*100]
         emit_nom_list = [float(abs(val)) for val in emit_nom_list]
         emit_fit_list = [float(abs(val)) for val in emit_fit_list]
         emits = {
-            'emittance': names,
+            'parameter': names,
             'initial nom model': emit_nom_list,
             'LOCO model': emit_fit_list}
         df_emits = pd.DataFrame.from_dict(emits)
