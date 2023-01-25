@@ -119,7 +119,7 @@ class CouplingCorr():
         return res
 
     def _parallel_base(self, model, weight_dispy=1):
-        slcs = self._get_slices_multiprocessing(True, len(self.skew_idx))
+        slcs = self._get_slices_multiprocessing(len(self.skew_idx))
         with _mp.Pool(processes=len(slcs)) as pool:
             res = []
             for slc in slcs:
