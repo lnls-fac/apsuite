@@ -8,7 +8,6 @@ import logging as _log
 import numpy as _np
 from scipy.optimize import least_squares
 import matplotlib.pyplot as _plt
-import matplotlib.gridspec as _mpl_gs
 
 from siriuspy.devices import PowerSupply, Tune
 
@@ -40,8 +39,8 @@ class CouplingParams(_ParamsBaseClass):
         self._quadfam_name = 'Q3'
         self.nr_points = 21
         self.time_wait = 5  # [s]
-        self.neg_percent = 0.1/100
-        self.pos_percent = 0.1/100
+        self._lower_percent = -0.1/100
+        self._upper_percent = 0.1/100
         self.coupling_resolution = 0.02/100
 
     @property
@@ -55,6 +54,26 @@ class CouplingParams(_ParamsBaseClass):
         if isinstance(val, str) and val.upper() in self.QUADS:
             self._quadfam_name = val.upper()
 
+    @property
+    def lower_percent(self):
+        """."""
+        return self._lower_percent
+
+    @lower_percent.setter
+    def lower_percent(self, val):
+        """."""
+        self._lower_percent = val
+
+    @property
+    def upper_percent(self):
+        """."""
+        return self._upper_percent
+
+    @upper_percent.setter
+    def upper_percent(self, val):
+        """."""
+        self._upper_percent = val
+
     def __str__(self):
         """."""
         stmp = '{0:22s} = {1:4s}  {2:s}\n'.format
@@ -63,8 +82,8 @@ class CouplingParams(_ParamsBaseClass):
         stg = stmp('quadfam_name', self.quadfam_name, '')
         stg += dtmp('nr_points', self.nr_points, '')
         stg += ftmp('time_wait [s]', self.time_wait, '')
-        stg += ftmp('neg_percent', self.neg_percent, '')
-        stg += ftmp('pos_percent', self.pos_percent, '')
+        stg += ftmp('lower_percent', self.lower_percent, '')
+        stg += ftmp('upper_percent', self.upper_percent, '')
         stg += ftmp('coupling_resolution', self.coupling_resolution, '')
         return stg
 
@@ -117,8 +136,8 @@ class MeasCoupling(_BaseClass):
 
         curr0 = quad.current
         curr_vec = curr0 * _np.linspace(
-            1-self.params.neg_percent,
-            1+self.params.pos_percent,
+            1+self.params.lower_percent,
+            1+self.params.upper_percent,
             self.params.nr_points)
         tunes_vec = _np.zeros((len(curr_vec), 2))
 
@@ -138,6 +157,7 @@ class MeasCoupling(_BaseClass):
         quad.current = curr0
         self.data['timestamp'] = _time.time()
         self.data['qname'] = quad.devname
+        self.data['initial_current'] = curr0
         self.data['current'] = curr_vec
         self.data['tunes'] = tunes_vec
 
@@ -173,12 +193,6 @@ class MeasCoupling(_BaseClass):
         fittune1, fittune2, qcurr_interp = self.get_normal_modes(
             params=fit_vec, curr=qcurr, oversampling=oversampling)
 
-        # fig = _plt.figure(figsize=(8, 6))
-        # grid = _mpl_gs.GridSpec(1, 1)
-        # grid.update(
-        #     left=0.12, right=0.95, bottom=0.15, top=0.9,
-        #     hspace=0.5, wspace=0.35)
-        # axi = _plt.subplot(grid[0, 0])
         fig, axi = _plt.subplots(1, 1, figsize=(8, 6))
 
         axi.set_xlabel(f'{self.data["qname"]} Current [A]')
