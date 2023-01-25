@@ -4,6 +4,8 @@ from apsuite.loco.analysis import LOCOAnalysis
 from fpdf import FPDF
 import datetime
 
+TIME_FMT = '%Y-%m-%d %H:%M:%S'
+
 
 class LOCOReport(FPDF):
     """."""
@@ -30,7 +32,7 @@ class LOCOReport(FPDF):
         self.cell(0, 6, 'SIRIUS LOCO Report', 0, 0, 'C')
         self.set_font('Arial', '', 11)
         today = datetime.date.today()
-        stg = '{:s}'.format(today.strftime("%Y-%m-%d"))
+        stg = '{:s}'.format(today.strftime(TIME_FMT))
         self.cell(0, 6, stg, 0, 0, 'R')
         self.ln(10)
 
@@ -60,7 +62,7 @@ class LOCOReport(FPDF):
 
         self.set_font('Arial', '', 10)
         tstamp = datetime.datetime.fromtimestamp(setup['timestamp'])
-        tstamp = tstamp.strftime('%Y-%m-%d %H:%M:%S')
+        tstamp = tstamp.strftime(TIME_FMT)
         data = (
             ('Measurement timestamp', tstamp),
             ('Stored current', f"{setup['stored_current']:.2f} mA"),
