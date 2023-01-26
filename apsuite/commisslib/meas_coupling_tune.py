@@ -144,9 +144,18 @@ class MeasCoupling(_BaseClass):
         data = self.load_data(fname)
         if 'data' in data:
             self.load_and_apply(fname)
+            self._rename_old_params()
             return
         data['timestamp'] = _os.path.getmtime(fname)
         self.data = data
+
+    def _rename_old_params(self):
+        for attr, new_attr in \
+            [('neg_percent', 'lower_percent'),
+             ('pos_percent', 'upper_percent')]:
+            if hasattr(self.params, attr):
+                setattr(self.params, new_attr, getattr(self.params, attr))
+                delattr(self.params, attr)
 
     def _do_meas(self):
         if not self.isonline:
