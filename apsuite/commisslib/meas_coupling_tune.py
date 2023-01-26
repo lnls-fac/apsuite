@@ -121,6 +121,8 @@ class MeasCoupling(_BaseClass):
         super().__init__(
             params=CouplingParams(), target=self._do_meas, isonline=isonline)
         self.qs_names = None
+        self.apply_factor = 0
+        self.initial_strengths = None
         if self.isonline:
             self._create_devices()
 
@@ -253,7 +255,7 @@ class MeasCoupling(_BaseClass):
         fig.tight_layout()
         return fig, axi
 
-    def adjust_betatron_coupling(self, factor=1):
+    def apply_achromatic_delta_ksl(self, factor=None):
         """Change machine betatron coupling with achromatic QS.
 
         The variation is at the direction of first singular vector obtained
@@ -262,17 +264,17 @@ class MeasCoupling(_BaseClass):
         Args:
             factor (int, optional): Scalar factor that sets the strenght of
             variation in the direction. The relation is typically 1:1 with
-            respect to betatron coupling. Defaults to 1.
-        Returns:
-            init_stren: initial KsL of achromatic skew quadrupoles
+            respect to betatron coupling. Defaults to None.
 
         """
-        vec = factor * MeasCoupling.ACHROM_QS_ADJ
-        init_stren = []
+        self.apply_factor = factor or self.apply_factor
+        dksl = self.apply_factor * MeasCoupling.ACHROM_QS_ADJ
+        init_stren = self.initial_strengths or [None] * len(self.qs_names)
         for idx, name in enumerate(self.qs_names):
-            init_stren.append(self.devices[name].strength)
-            self.devices[name].strength += vec[idx]
-        return _np.array(init_stren)
+            ksl0 = init_stren[idx] or self.devices[name].strength
+            init_stren[idx] = ksl0
+            self.devices[name].strength = ksl0 + dksl[idx]
+        self.initial_strengths = _np.array(init_stren)
 
     @staticmethod
     def get_normal_modes(params, curr, oversampling=1):
