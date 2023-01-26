@@ -22,7 +22,7 @@ class CouplingCorr():
         self.model = model
         self.acc = acc
         self.dim = dim
-        self._corr_method = CouplingCorr.CORR_METHODS.Orbrespm
+        self._corr_method = None
         self.coup_matrix = []
         self.respm = OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
         self.bpm_idx = self.respm.fam_data['BPM']['index']
@@ -30,7 +30,8 @@ class CouplingCorr():
             self.skew_idx = self.respm.fam_data['QS']['index']
         else:
             self.skew_idx = skew_list
-        self._corr_method = correction_method
+        self.corr_method = correction_method or \
+            CouplingCorr.CORR_METHODS.Orbrespm
         self._freq = None
         self._alpha = None
 
@@ -97,10 +98,10 @@ class CouplingCorr():
         if None in {self._freq, self._alpha}:
             self._freq = model[self.respm.rf_idx[0]].frequency
             self._alpha = pyaccel.optics.get_mcf(model)
-        self.coup_matrix = CouplingCorr._parallel_base(
+        coup_matrix = CouplingCorr._parallel_base(
             self.skew_idx, model, self.respm, self._freq, self._alpha,
             self._nbpm, self._nch, weight_dispy)
-        return self.coup_matrix
+        return coup_matrix
 
     @staticmethod
     def _get_coupling_residue(*args):
@@ -173,27 +174,30 @@ class CouplingCorr():
         return _np.sqrt(_np.sum(res*res)/res.size)
 
     def coupling_corr_orbrespm_dispy(self,
-                                     model,
+                                     model=None,
                                      jacobian_matrix=None,
                                      nsv=None, nr_max=10, tol=1e-6,
                                      res0=None, weight_dispy=1):
         """Coupling correction with orbrespm.
 
         Calculates the pseudo-inverse of coupling correction matrix via SVD
-        and minimizes the residue vector [Mxy, Myx, Etay].
+        and minimizes the residue vector [Mxy, Myx, weight*Etay].
         """
-        if jacobian_matrix is None:
-            jmat = self.calc_jacobian_matrix(model)
-        umat, smat, vmat = _np.linalg.svd(jmat, full_matrices=False)
+        self.model = model or self.model
+        self.coup_matrix = jacobian_matrix or self.coup_matrix or \
+            self.calc_jacobian_matrix()
+        umat, smat, vmat = _np.linalg.svd(
+            self.coup_matrix, full_matrices=False)
         ismat = 1/smat
         ismat[_np.isnan(ismat)] = 0
         ismat[_np.isinf(ismat)] = 0
         if nsv is not None:
             ismat[nsv:] = 0
-        ismat = _np.diag(ismat)
-        ijmat = -_np.dot(_np.dot(vmat.T, ismat), umat.T)
+        ijmat = vmat.T @ _np.diag(ismat) @ umat.T
         if res0 is None:
-            res = self._get_coupling_residue(model, weight_dispy=weight_dispy)
+            res = CouplingCorr._get_coupling_residue(
+                model, self.respm, self._freq,
+                self._alpha, self._nbpm, self._nch, weight_dispy)
         else:
             res = res0
         bestfigm = CouplingCorr.get_figm(res)
@@ -201,10 +205,11 @@ class CouplingCorr():
             return CouplingCorr.CORR_STATUS.Sucess
 
         for _ in range(nr_max):
-            dksl = _np.dot(ijmat, res)
+            dksl = -ijmat @ res
             self._set_delta_ksl(model=model, delta_ksl=dksl)
-            res = self._get_coupling_residue(
-                model, weight_dispy=weight_dispy)
+            res = CouplingCorr._get_coupling_residue(
+                model, self.respm, self._freq,
+                self._alpha, self._nbpm, self._nch, weight_dispy)
             figm = CouplingCorr.get_figm(res)
             diff_figm = _np.abs(bestfigm - figm)
             if figm < bestfigm:
@@ -216,7 +221,7 @@ class CouplingCorr():
         return CouplingCorr.CORR_STATUS.Sucess
 
     def coupling_correction(self,
-                            model,
+                            model=None,
                             jacobian_matrix=None,
                             nsv=None, nr_max=10, tol=1e-6,
                             res0=None, weight_dispy=1):
@@ -227,6 +232,7 @@ class CouplingCorr():
         vertical dispersion.
         """
         if self.corr_method == CouplingCorr.CORR_METHODS.Orbrespm:
+            model = model or self.model
             result = self.coupling_corr_orbrespm_dispy(
                 model=model, jacobian_matrix=jacobian_matrix,
                 nsv=nsv, nr_max=nr_max, tol=tol, res0=res0,
