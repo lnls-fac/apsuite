@@ -103,7 +103,7 @@ class MeasCoupling(_BaseClass):
           dependency for tunes!
     """
 
-    # Achromatic skew suadrupole variations to adjust betatron coupling,
+    # Achromatic skew quadrupole variations to adjust betatron coupling,
     # it is the first singular vector from jacobian matrix of
     # apsuite.optics.coupling_correction.calc_jacobian_matrix()
     ACHROM_QS_ADJ = 1e-4 * _np.array(
