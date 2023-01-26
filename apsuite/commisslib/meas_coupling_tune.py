@@ -10,6 +10,7 @@ from scipy.optimize import least_squares
 import matplotlib.pyplot as _plt
 
 from siriuspy.devices import PowerSupply, Tune
+from siriuspy.search import PSSearch as _PSSearch
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
@@ -102,14 +103,41 @@ class MeasCoupling(_BaseClass):
           dependency for tunes!
     """
 
+    # Achromatic skew suadrupole variations to adjust betatron coupling,
+    # it is the first singular vector from jacobian matrix of
+    # apsuite.optics.coupling_correction.calc_jacobian_matrix()
+    ACHROM_QS_ADJ = 1e-4 * _np.array(
+        [1.16394036,  2.11717028,  2.03428669,  0.14010059, -0.13191569,
+         -2.03547313, -2.11611598, -1.16892381,  1.16394036,  2.11717028,
+         2.03428669,  0.14010059, -0.13191569, -2.03547313, -2.11611598,
+         -1.16892381,  1.16394036,  2.11717028,  2.03428669,  0.14010059,
+         -0.13191569, -2.03547313, -2.11611598, -1.16892381,  1.16394036,
+         2.11717028,  2.03428669,  0.14010059, -0.13191569, -2.03547313,
+         -2.11611598, -1.16892381,  1.16394036,  2.11717028,  2.03428669,
+         0.14010059, -0.13191569, -2.03547313, -2.11611598, -1.16892381])
+
     def __init__(self, isonline=True):
         """."""
         super().__init__(
             params=CouplingParams(), target=self._do_meas, isonline=isonline)
+        self.qs_names = None
         if self.isonline:
-            self.devices['quad'] = PowerSupply(
+            self._create_devices()
+
+    def _create_skews(self):
+        qs_names = _PSSearch.get_psnames(
+            {'sec': 'SI', 'dis': 'PS', 'dev': 'QS'})
+        qs_idx = [idx for idx, name in enumerate(qs_names) if 'M' in name]
+        qs_names = [qs_names[idx] for idx in qs_idx]
+        self.qs_names = qs_names
+        for name in qs_names:
+            self.devices[name] = PowerSupply(name)
+
+    def _create_devices(self):
+        self.devices['quad'] = PowerSupply(
                 'SI-Fam:PS-' + self.params.quadfam_name)
-            self.devices['tune'] = Tune(Tune.DEVICES.SI)
+        self.devices['tune'] = Tune(Tune.DEVICES.SI)
+        self._create_skews()
 
     def load_and_apply_old_data(self, fname):
         """."""
@@ -215,6 +243,27 @@ class MeasCoupling(_BaseClass):
             fig.savefig(fname, format='png', dpi=300)
         fig.tight_layout()
         return fig, axi
+
+    def adjust_betatron_coupling(self, factor=1):
+        """Change machine betatron coupling with achromatic QS.
+
+        The variation is at the direction of first singular vector obtained
+        from jacobian coupling matrix.
+
+        Args:
+            factor (int, optional): Scalar factor that sets the strenght of
+            variation in the direction. The relation is typically 1:1 with
+            respect to betatron coupling. Defaults to 1.
+        Returns:
+            init_stren: initial KsL of achromatic skew quadrupoles
+
+        """
+        vec = factor * MeasCoupling.ACHROM_QS_ADJ
+        init_stren = []
+        for idx, name in enumerate(self.qs_names):
+            init_stren.append(self.devices[name].strength)
+            self.devices[name].strength += vec[idx]
+        return _np.array(init_stren)
 
     @staticmethod
     def get_normal_modes(params, curr, oversampling=1):
