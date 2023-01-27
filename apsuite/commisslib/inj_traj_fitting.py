@@ -301,7 +301,6 @@ class SIFitInjTraj(_FitInjTrajBase):
 
     def unreliable_fitting(self):
         """Return '' in case of reliable fitting."""
-        sofb_state = self.devices['sofb'].opmode
         stored = self.devices['dcct'].current > 0.05  # mA
         dpkckr = self.devices['injdpkckr']
         dpkckr_on = dpkckr.pulse and dpkckr.pwrstate
@@ -309,7 +308,10 @@ class SIFitInjTraj(_FitInjTrajBase):
         nlkckr_on = nlkckr.pulse and nlkckr.pwrstate
 
         status = ''
-        if sofb_state not in (2, 3):
+
+        state = self.devices['sofb'].opmode
+        modes = self.devices['sofb'].data.SOFBMode
+        if state not in {modes.MultiTurn, modes.SinglePass}:
             status = 'SOFB is not in MultiTurn or SinglePass Mode.'
         elif not dpkckr_on and not nlkckr_on:
             status = 'Both injection kickers are Off.'
