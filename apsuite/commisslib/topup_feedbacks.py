@@ -2,11 +2,12 @@
 import time as _time
 
 from epics.ca import CAThread as _Thread
-import numpy as np
-import GPy as gpy
+import numpy as _np
+import GPy as _gpy
 
-from mathphys.functions import get_namedtuple
-from siriuspy.devices import HLTiming, EGun, InjCtrl, CurrInfoAS
+from mathphys.functions import get_namedtuple as _get_namedtuple
+from siriuspy.devices import HLTiming as _HLTiming, EGun as _EGun, \
+    InjCtrl as _InjCtrl, CurrInfoAS as _CurrInfoAS
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
@@ -14,13 +15,13 @@ from ..utils import ThreadedMeasBaseClass as _BaseClass, \
 _DTMP = '{0:26s} = {1:9d}  {2:s}\n'.format
 _STMP = '{0:26s} = {1:9s}  {2:s}\n'.format
 _FTMP = '{0:26s} = {1:9.2f}  {2:s}\n'.format
-np_poly = np.polynomial.polynomial
+_np_poly = _np.polynomial.polynomial
 
 
 class BiasFeedbackParams(_ParamsBaseClass):
     """."""
 
-    ModelTypes = get_namedtuple('ModelTypes', ['Linear', 'GaussianProcess'])
+    ModelTypes = _get_namedtuple('ModelTypes', ['Linear', 'GaussianProcess'])
 
     def __init__(self):
         """."""
@@ -112,31 +113,31 @@ class BiasFeedback(_BaseClass):
 
     def initialize_models(self):
         """."""
-        self.data['bias'] = np.linspace(
+        self.data['bias'] = _np.linspace(
             self.params.min_bias_voltage,
             self.params.max_bias_voltage,
             self.params.model_max_num_points)
 
-        self.data['injcurr'] = np_poly.polyval(
+        self.data['injcurr'] = _np_poly.polyval(
             self.data['bias'], self.linmodel_coeffs_inverse)
 
         x = self.data['bias'][:, None].copy()
         y = self.data['injcurr'][:, None].copy()
 
         if self.params.gpmod_2d:
-            kernel = gpy.kern.RBF(input_dim=2, ARD=True)
-            tim = -np.ones(x.size, dtype=float)
-            x = np.vstack([x, tim]).T
+            kernel = _gpy.kern.RBF(input_dim=2, ARD=True)
+            tim = -_np.ones(x.size, dtype=float)
+            x = _np.vstack([x, tim]).T
         else:
-            kernel = gpy.kern.RBF(input_dim=1)
+            kernel = _gpy.kern.RBF(input_dim=1)
             x = x[:, None]
 
         if self.params.gpmod_sparse:
             step = x.size//6
             inducing = x[::step][:, None]
-            gpmodel = gpy.models.SparseGPRegression(x, y, kernel, Z=inducing)
+            gpmodel = _gpy.models.SparseGPRegression(x, y, kernel, Z=inducing)
         else:
-            gpmodel = gpy.models.GPRegression(x, y, kernel)
+            gpmodel = _gpy.models.GPRegression(x, y, kernel)
         return gpmodel
 
     def get_delta_current_per_pulse(self, **kwargs):
@@ -201,10 +202,10 @@ class BiasFeedback(_BaseClass):
         print('Finished!')
 
     def _create_devices(self):
-        self.devices['egun'] = EGun()
-        self.devices['injctrl'] = InjCtrl()
-        self.devices['timing'] = HLTiming()
-        self.devices['currinfo'] = CurrInfoAS()
+        self.devices['egun'] = _EGun()
+        self.devices['injctrl'] = _InjCtrl()
+        self.devices['timing'] = _HLTiming()
+        self.devices['currinfo'] = _CurrInfoAS()
 
     def _callback_to_thread(self, **kwgs):
         _Thread(target=self._update_data, kwargs=kwgs, daemon=True).start()
@@ -218,7 +219,7 @@ class BiasFeedback(_BaseClass):
             injcurr = self.devices['currinfo'].si.injcurr
 
         # Do not overload data with repeated points:
-        xun, cnts = np.unique(self.data['bias'], return_counts=True)
+        xun, cnts = _np.unique(self.data['bias'], return_counts=True)
         if bias in xun:
             idx = (xun == bias).nonzero()[0][0]
             if cnts[idx] >= max(2, self.data['bias'].size // 5):
@@ -226,13 +227,13 @@ class BiasFeedback(_BaseClass):
                 return
         self._npts_after_fit += 1
 
-        self.data['injcurr'] = np.r_[self.data['injcurr'], injcurr]
-        self.data['bias'] = np.r_[self.data['bias'], bias]
+        self.data['injcurr'] = _np.r_[self.data['injcurr'], injcurr]
+        self.data['bias'] = _np.r_[self.data['bias'], bias]
         self._update_models()
 
     def _update_models(self):
-        x = np.r_[self.data['bias'], self.params.initial_offcoeff]
-        y = np.r_[self.data['dcurr'], 0]
+        x = _np.r_[self.data['bias'], self.params.initial_offcoeff]
+        y = _np.r_[self.data['dcurr'], 0]
         x = x[-self.params.model_max_num_points:]
         y = y[-self.params.model_max_num_points:]
 
@@ -241,16 +242,16 @@ class BiasFeedback(_BaseClass):
 
         # Optimize Linear Model
         if do_opt and not self.params.use_gaussproc_model:
-            self.linmodel_angcoeff = np_poly.polyfit(
+            self.linmodel_angcoeff = _np_poly.polyfit(
                 y, x-self.params.initial_offcoeff, deg=[1,])[1]
             self._npts_after_fit = 0
 
         # update Gaussian Process Model data
         if self.params.gpmod_2d:
             tim = self.gpmodel.X[:, 1]
-            tim = np.r_[tim[:-1], tim[-1]+1, tim[-1]+1]
+            tim = _np.r_[tim[:-1], tim[-1]+1, tim[-1]+1]
             tim = tim[-self.params.model_max_num_points:]
-            x = np.vstack([x, tim]).T
+            x = _np.vstack([x, tim]).T
         else:
             x.shape = (x.size, 1)
         y.shape = (y.size, 1)
@@ -264,16 +265,16 @@ class BiasFeedback(_BaseClass):
         self._already_set = False
 
     def _get_bias_voltage_gpmodel(self, injcurr):
-        bias = self._gpmodel_infer_newx(np.array(injcurr, ndmin=1))
-        bias = np.minimum(bias, self.params.max_bias_voltage)
-        bias = np.maximum(bias, self.params.min_bias_voltage)
+        bias = self._gpmodel_infer_newx(_np.array(injcurr, ndmin=1))
+        bias = _np.minimum(bias, self.params.max_bias_voltage)
+        bias = _np.maximum(bias, self.params.min_bias_voltage)
         return bias if bias.size > 1 else bias[0]
 
     def _get_bias_voltage_linear_model(self, injcurr):
-        bias = np_poly.polyval(injcurr, self.linmodel_coeffs)
-        bias = np.minimum(bias, self.params.max_bias_voltage)
-        bias = np.maximum(bias, self.params.min_bias_voltage)
-        bias = np.array([bias]).ravel()
+        bias = _np_poly.polyval(injcurr, self.linmodel_coeffs)
+        bias = _np.minimum(bias, self.params.max_bias_voltage)
+        bias = _np.maximum(bias, self.params.min_bias_voltage)
+        bias = _np.array([bias]).ravel()
         return bias if bias.size > 1 else bias[0]
 
     def _gpmodel_infer_newx(self, y):
@@ -290,12 +291,12 @@ class BiasFeedback(_BaseClass):
             x: infered x's.
 
         """
-        x = np.linspace(
+        x = _np.linspace(
             self.params.min_bias_voltage,
             self.params.max_bias_voltage, 300)
         ys, _ = self._gpmodel_predict(x)
         idm = ys[:, 0].argmax()
-        idx = np.argmin(np.abs(ys[:idm] - y[None, :]), axis=0)
+        idx = _np.argmin(_np.abs(ys[:idm] - y[None, :]), axis=0)
         return x[idx, 0]
 
     def _gpmodel_predict(self, x):
@@ -310,6 +311,6 @@ class BiasFeedback(_BaseClass):
         """
         x.shape = (x.size, 1)
         if self.params.gpmod_2d:
-            tim = np.ones(x.size) * (self.gpmodel.X[-1, 1]+1)
-            x = np.vstack([x.ravel(), tim]).T
+            tim = _np.ones(x.size) * (self.gpmodel.X[-1, 1]+1)
+            x = _np.vstack([x.ravel(), tim]).T
         return self.gpmodel.predict(x)
