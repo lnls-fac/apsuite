@@ -130,7 +130,6 @@ class BiasFeedback(_BaseClass):
             x = _np.vstack([x, tim]).T
         else:
             kernel = _gpy.kern.RBF(input_dim=1)
-            x = x[:, None]
 
         if self.params.gpmod_sparse:
             step = x.size//6
@@ -153,15 +152,15 @@ class BiasFeedback(_BaseClass):
 
         ltime = max(self._MINIMUM_LIFETIME, ltime)
         curr_tar = curr_avg / (1 - per*60/2/ltime)
-        dcurr = (curr_tar - curr_now) / nrpul
-        return dcurr
+        injcurr = (curr_tar - curr_now) / nrpul
+        return injcurr
 
-    def get_bias_voltage(self, dcurr):
+    def get_bias_voltage(self, injcurr):
         """."""
-        dcurr = max(0, dcurr)
+        injcurr = _np.maximum(0, injcurr)
         if self.params.use_gaussproc_model:
-            return self._get_bias_voltage_gpmodel(dcurr)
-        return self._get_bias_voltage_linear_model(dcurr)
+            return self._get_bias_voltage_gpmodel(injcurr)
+        return self._get_bias_voltage_linear_model(injcurr)
 
     # ############ Auxiliary Methods ############
     def _run(self):
@@ -193,10 +192,10 @@ class BiasFeedback(_BaseClass):
             dtim = next_inj - _time.time()
             if self._already_set or dtim > self.params.ahead_set_time:
                 continue
-            dcurr = self.get_delta_current_per_pulse()
-            bias = self.get_bias_voltage(dcurr)
+            injcurr = self.get_delta_current_per_pulse()
+            bias = self.get_bias_voltage(injcurr)
             egun.bias.set_voltage(bias)
-            print(f'dcurr = {dcurr:.3f}, bias = {bias:.2f}')
+            print(f'injcurr = {injcurr:.3f}, bias = {bias:.2f}')
             self._already_set = True
         pvo.remove_callback(cbv)
         print('Finished!')
@@ -233,7 +232,7 @@ class BiasFeedback(_BaseClass):
 
     def _update_models(self):
         x = _np.r_[self.data['bias'], self.params.initial_offcoeff]
-        y = _np.r_[self.data['dcurr'], 0]
+        y = _np.r_[self.data['injcurr'], 0]
         x = x[-self.params.model_max_num_points:]
         y = y[-self.params.model_max_num_points:]
 
