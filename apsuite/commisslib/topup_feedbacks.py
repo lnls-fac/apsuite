@@ -29,11 +29,13 @@ class BiasFeedbackParams(_ParamsBaseClass):
         self.max_bias_voltage = -40  # [V]
         self.ahead_set_time = 10  # [s]
         self.initial_angcoeff = 10  # [V/mA]
+        self.initial_offcoeff = -52  # [V]
         self.model_type = self.ModelTypes.GaussianProcess
         self.model_max_num_points = 20
-        self.model_opt_each_pts = 10
-        self.gaussproc_bidimensional = False
-        self.gaussproc_issparse = False
+        self.model_auto_fit_rate = 10
+        self.model_update_data = True
+        self.gpmod_2d = False
+        self.gpmod_sparse = False
 
     def __str__(self):
         """."""
@@ -41,15 +43,16 @@ class BiasFeedbackParams(_ParamsBaseClass):
         stg += _FTMP('min_bias_voltage', self.min_bias_voltage, '[V]')
         stg += _FTMP('max_bias_voltage', self.max_bias_voltage, '[V]')
         stg += _FTMP('ahead_set_time', self.ahead_set_time, '[s]')
+        stg += _FTMP('initial_offcoeff', self.initial_offcoeff, '[V]')
         stg += _FTMP('initial_angcoeff', self.initial_angcoeff, '[V/mA]')
         stg += _STMP('model_type', self.model_type_str, '')
         stg += _DTMP('model_max_num_points', self.model_max_num_points, '')
         stg += _DTMP(
-            'model_opt_each_pts', self.model_opt_each_pts,
+            'model_auto_fit_rate', self.model_auto_fit_rate,
             ' (0 for no optimization)')
-        stg += _STMP(
-            'gaussproc_bidimensional', str(self.gaussproc_bidimensional), '')
-        stg += _STMP('gaussproc_issparse', str(self.gaussproc_issparse), '')
+        stg += _STMP('model_update_data', str(self.model_update_data), '')
+        stg += _STMP('gpmod_2d', str(self.gpmod_2d), '')
+        stg += _STMP('gpmod_sparse', str(self.gpmod_sparse), '')
         return stg
 
     @property
@@ -87,9 +90,9 @@ class BiasFeedback(_BaseClass):
         self._already_set = False
 
         self.linmodel_angcoeff = self.params.initial_angcoeff
-        self._num_points_after_opt = 0
+        self._npts_after_fit = 0
 
-        self.gpmodel = self.initialize_gpmodel()
+        self.gpmodel = self.initialize_models()
         if isonline:
             self._create_devices()
 
@@ -97,31 +100,40 @@ class BiasFeedback(_BaseClass):
     def linmodel_coeffs(self):
         """."""
         ang = self.linmodel_angcoeff
-        off = self.params.min_bias_voltage
+        off = self.params.initial_offcoeff
         return (off, ang)
 
-    def initialize_gpmodel(self):
+    @property
+    def linmodel_coeffs_inverse(self):
         """."""
-        bias = np.linspace(
+        ang = self.linmodel_angcoeff
+        off = self.params.initial_offcoeff
+        return (-off/ang, 1/ang)
+
+    def initialize_models(self):
+        """."""
+        self.data['bias'] = np.linspace(
             self.params.min_bias_voltage,
             self.params.max_bias_voltage,
             self.params.model_max_num_points)
 
-        off, ang = self.linmodel_coeffs
-        dcurr = np_poly.polyval(bias, (-off/ang, 1/ang))
-        y = dcurr[:, None]
+        self.data['injcurr'] = np_poly.polyval(
+            self.data['bias'], self.linmodel_coeffs_inverse)
 
-        if self.params.gaussproc_bidimensional:
+        x = self.data['bias'][:, None].copy()
+        y = self.data['injcurr'][:, None].copy()
+
+        if self.params.gpmod_2d:
             kernel = gpy.kern.RBF(input_dim=2, ARD=True)
-            tim = -np.ones(bias.size, dtype=float)
-            x = np.vstack([bias, tim]).T
+            tim = -np.ones(x.size, dtype=float)
+            x = np.vstack([x, tim]).T
         else:
             kernel = gpy.kern.RBF(input_dim=1)
-            x = bias[:, None]
+            x = x[:, None]
 
-        if self.params.gaussproc_issparse:
-            step = bias.size//6
-            inducing = bias[::step][:, None]
+        if self.params.gpmod_sparse:
+            step = x.size//6
+            inducing = x[::step][:, None]
             gpmodel = gpy.models.SparseGPRegression(x, y, kernel, Z=inducing)
         else:
             gpmodel = gpy.models.GPRegression(x, y, kernel)
@@ -145,6 +157,7 @@ class BiasFeedback(_BaseClass):
 
     def get_bias_voltage(self, dcurr):
         """."""
+        dcurr = max(0, dcurr)
         if self.params.use_gaussproc_model:
             return self._get_bias_voltage_gpmodel(dcurr)
         return self._get_bias_voltage_linear_model(dcurr)
@@ -159,16 +172,13 @@ class BiasFeedback(_BaseClass):
         injctrl = self.devices['injctrl']
         currinfo = self.devices['currinfo']
 
-        self.data['dcurr'] = []
-        self.data['bias'] = []
-
         pvo = egun.bias.pv_object('voltoutsoft')
         pvo.auto_monitor = True
         pvo = egun.bias.pv_object('voltinsoft')
         pvo.auto_monitor = True
-        pvo = currinfo.si.pv_object('InjCurr-Mon')
-        pvo.auto_monitor = True
         pvo = currinfo.bo.pv_object('Current3GeV-Mon')
+        pvo.auto_monitor = True
+        pvo = currinfo.si.pv_object('InjCurr-Mon')
         pvo.auto_monitor = True
         cbv = pvo.add_callback(self._callback_to_thread)
 
@@ -197,54 +207,46 @@ class BiasFeedback(_BaseClass):
         self.devices['currinfo'] = CurrInfoAS()
 
     def _callback_to_thread(self, **kwgs):
-        _Thread(target=self._update_models, kwargs=kwgs, daemon=True).start()
+        _Thread(target=self._update_data, kwargs=kwgs, daemon=True).start()
 
-    def _update_models(self, **kwgs):
-        simul = kwgs.get('simul', False)
-        if not simul:
-            _time.sleep(1)
-
+    def _update_data(self, **kwgs):
         bias = kwgs.get('bias')
         if bias is None:
             bias = self.devices['egun'].bias.voltage
-        dcurr = kwgs.get('dcurr')
-        if dcurr is None:
-            dcurr = self.devices['currinfo'].si.injcurr
+        injcurr = kwgs.get('injcurr')
+        if injcurr is None:
+            injcurr = self.devices['currinfo'].si.injcurr
 
-        self.data['dcurr'].append(dcurr)
-        self.data['bias'].append(bias)
+        # Do not overload data with repeated points:
+        xun, cnts = np.unique(self.data['bias'], return_counts=True)
+        if bias in xun:
+            idx = (xun == bias).nonzero()[0][0]
+            if cnts[idx] >= max(2, self.data['bias'].size // 5):
+                print(f'Rejected point! bias={bias:.2f}, counts={cnts[idx]:d}')
+                return
+        self._npts_after_fit += 1
 
-        x = np.array(self.data['bias'])
-        y = np.array(self.data['dcurr'])
+        self.data['injcurr'] = np.r_[self.data['injcurr'], injcurr]
+        self.data['bias'] = np.r_[self.data['bias'], bias]
+        self._update_models()
+
+    def _update_models(self):
+        x = np.r_[self.data['bias'], self.params.initial_offcoeff]
+        y = np.r_[self.data['dcurr'], 0]
         x = x[-self.params.model_max_num_points:]
         y = y[-self.params.model_max_num_points:]
 
-        # Do not overload data with repeated points:
-        xun, cnts = np.unique(x, return_counts=True)
-        if bias in xun:
-            idx = (xun == bias).nonzero()[0][0]
-            if cnts[idx] >= max(2, x.size // 5):
-                print(f'Rejected point! bias={bias:.2f}, counts={cnts[idx]:d}')
-                return
-        self._num_points_after_opt += 1
-
-        opt = self.params.model_opt_each_pts
-        do_opt = opt and not (self._num_points_after_opt % opt)
+        fit_rate = self.params.model_auto_fit_rate
+        do_opt = fit_rate and not (self._npts_after_fit % fit_rate)
 
         # Optimize Linear Model
         if do_opt and not self.params.use_gaussproc_model:
             self.linmodel_angcoeff = np_poly.polyfit(
-                y, x-self.params.min_bias_voltage, deg=[1,])[1]
-            self._num_points_after_opt = 0
+                y, x-self.params.initial_offcoeff, deg=[1,])[1]
+            self._npts_after_fit = 0
 
         # update Gaussian Process Model data
-        x = self.gpmodel.X[:, 0]
-        y = self.gpmodel.Y[:, 0]
-        x = np.r_[x[:-1], bias, self.params.min_bias_voltage]
-        y = np.r_[y[:-1], dcurr, 0]
-        x = x[-self.params.model_max_num_points:]
-        y = y[-self.params.model_max_num_points:]
-        if self.params.gaussproc_bidimensional:
+        if self.params.gpmod_2d:
             tim = self.gpmodel.X[:, 1]
             tim = np.r_[tim[:-1], tim[-1]+1, tim[-1]+1]
             tim = tim[-self.params.model_max_num_points:]
@@ -257,20 +259,18 @@ class BiasFeedback(_BaseClass):
         # Optimize Gaussian Process Model
         if do_opt and self.params.use_gaussproc_model:
             self.gpmodel.optimize_restarts(num_restarts=2, verbose=False)
-            self._num_points_after_opt = 0
+            self._npts_after_fit = 0
 
-        if not simul:
-            _time.sleep(3)
         self._already_set = False
 
-    def _get_bias_voltage_gpmodel(self, dcurr):
-        bias = self._gpmodel_infer_newx(np.array(dcurr, ndmin=1))
+    def _get_bias_voltage_gpmodel(self, injcurr):
+        bias = self._gpmodel_infer_newx(np.array(injcurr, ndmin=1))
         bias = np.minimum(bias, self.params.max_bias_voltage)
         bias = np.maximum(bias, self.params.min_bias_voltage)
         return bias if bias.size > 1 else bias[0]
 
-    def _get_bias_voltage_linear_model(self, dcurr):
-        bias = np_poly.polyval(dcurr, self.linmodel_coeffs)
+    def _get_bias_voltage_linear_model(self, injcurr):
+        bias = np_poly.polyval(injcurr, self.linmodel_coeffs)
         bias = np.minimum(bias, self.params.max_bias_voltage)
         bias = np.maximum(bias, self.params.min_bias_voltage)
         bias = np.array([bias]).ravel()
@@ -292,9 +292,10 @@ class BiasFeedback(_BaseClass):
         """
         x = np.linspace(
             self.params.min_bias_voltage,
-            self.params.max_bias_voltage, 100)
+            self.params.max_bias_voltage, 300)
         ys, _ = self._gpmodel_predict(x)
-        idx = np.argmin(np.abs(ys - y[None, :]), axis=0)
+        idm = ys[:, 0].argmax()
+        idx = np.argmin(np.abs(ys[:idm] - y[None, :]), axis=0)
         return x[idx, 0]
 
     def _gpmodel_predict(self, x):
@@ -308,8 +309,7 @@ class BiasFeedback(_BaseClass):
 
         """
         x.shape = (x.size, 1)
-        if self.params.gaussproc_bidimensional:
-            tim = np.ones(x.size) * self.gpmodel.X[-1, 1]
+        if self.params.gpmod_2d:
+            tim = np.ones(x.size) * (self.gpmodel.X[-1, 1]+1)
             x = np.vstack([x.ravel(), tim]).T
-
         return self.gpmodel.predict(x)
