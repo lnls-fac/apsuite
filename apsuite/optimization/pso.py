@@ -49,6 +49,37 @@ class PSO(_Optimize):
         self._best_indiv = _np.array([])
         self._best_global = _np.array([])
 
+    def to_dict(self) -> dict:
+        """Dump all relevant object properties to dictionary.
+
+        Returns:
+            dict: contains all relevant properties of object.
+
+        """
+        dic = super().to_dict()
+        dic['positions'] = self._positions
+        dic['velocity'] = self._velocity
+        dic['best_indiv'] = self._best_indiv
+        dic['best_global'] = self._best_global
+        return dic
+
+    def from_dict(self, info: dict):
+        """Update all relevant info from dictionary.
+
+        Args:
+            info (dict): dictionary with all relevant info.
+
+        Returns:
+            keys_not_used (set): Set containing keys not used by
+                `self.params` object.
+
+        """
+        super().from_dict(info)
+        self._positions = info['positions']
+        self._velocity = info['velocity']
+        self._best_indiv = info['best_indiv']
+        self._best_global = info['best_global']
+
     @property
     def positions(self):
         """."""
