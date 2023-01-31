@@ -293,6 +293,12 @@ class MeasCoupling(_BaseClass):
         self.initial_strengths = _np.array(init_stren)
 
     @staticmethod
+    def calc_expected_delta_tunes(relative_dkl, quadfam='Q3'):
+        """."""
+        rel_dnux, rel_dnuy = MeasCoupling.REL_DELTATUNE_QUADFAM[quadfam]
+        return (rel_dnux*relative_dkl, rel_dnuy*relative_dkl)
+
+    @staticmethod
     def get_normal_modes(params, curr, oversampling=1):
         """Calculate the tune normal modes."""
         curr = MeasCoupling._oversample_vector(curr, oversampling)
