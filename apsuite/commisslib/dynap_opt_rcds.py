@@ -4,14 +4,13 @@ import numpy as _np
 
 from pymodels import si as _si
 from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoSI, EVG, \
-    Event, FamBPMs, EGTriggerPS
+    Event, EGTriggerPS
 
-from ..utils import ThreadedMeasBaseClass as _BaseClass
 from ..optimization.rcds import RCDS as _RCDS
 from ..optics_analysis import ChromCorr
 
 
-class OptimizeDA(_RCDS, _BaseClass):
+class OptimizeDA(_RCDS):
     """."""
 
     SEXT_FAMS = (
@@ -27,8 +26,7 @@ class OptimizeDA(_RCDS, _BaseClass):
 
     def __init__(self, isonline=True, use_thread=True):
         """."""
-        _BaseClass.__init__(self, isonline=isonline)
-        _RCDS.__init__(self, use_thread=use_thread)
+        _RCDS.__init__(self, isonline=isonline, use_thread=use_thread)
         self.sextupoles = []
         if self.isonline:
             self._create_devices()
@@ -46,10 +44,6 @@ class OptimizeDA(_RCDS, _BaseClass):
             if sext in self.names_sexts2corr:
                 continue
             self.names_sexts2use.append(sext)
-
-    def from_dict(self, dic):
-        """."""
-        _BaseClass.from_dict(self, dic)
 
     def initialization(self, init_obj_func=-50):
         """."""
@@ -243,13 +237,5 @@ class OptimizeDA(_RCDS, _BaseClass):
             PowerSupplyPU.DEVICES.SI_PING_V)
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['evg'] = EVG()
-        # self.devices['bpms'] = FamBPMs()
         self.devices['evt_study'] = Event('Study')
         self.devices['egun'] = EGTriggerPS()
-
-    def save_optimization_data(self, fname):
-        """."""
-        self.data['best_positions'] = self.best_positions
-        self.data['best_objfuncs'] = self.best_objfuncs
-        self.data['final_search_directions'] = self.final_search_directions
-        self.save_data(fname)
