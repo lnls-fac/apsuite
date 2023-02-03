@@ -2,14 +2,13 @@
 import time as _time
 
 import numpy as np
+import numpy.polynomial.polynomial as np_poly
 
-import pyaccel
-from siriuspy.namesys import SiriusPVName as _PVName
+import pyaccel as pa
 from siriuspy.devices import SOFB, DevLILLRF
 
-from ..optimization import SimulAnneal
 from ..utils import MeasBaseClass as _BaseClass, \
-    ThreadedMeasBaseClass as _TBaseClass, ParamsBaseClass as _ParamsBaseClass
+    ParamsBaseClass as _ParamsBaseClass
 
 
 class ParamsDisp(_ParamsBaseClass):
@@ -22,27 +21,27 @@ class ParamsDisp(_ParamsBaseClass):
         self.wait_time = 40
         self.timeout_orb = 10
         self.num_points = 10
-        # self.klystron_excit_coefs = [1.098, 66.669]  # old
-        # self.klystron_excit_coefs = [1.01026423, 71.90322743]  # > 2.5nC
-        self.klystron_excit_coefs = [0.80518365, 87.56545895]  # < 2.5nC
+        # self.klystron_excit_coefs = [66.669, 1.098]  # old
+        # self.klystron_excit_coefs = [71.90322743, 1.01026423]  # > 2.5nC
+        self.klystron_excit_coefs = [87.56545895, 0.80518365]  # < 2.5nC
 
 
 class MeasureDispTBBO(_BaseClass):
     """."""
 
-    def __init__(self):
+    def __init__(self, isonline=True):
         """."""
-        super().__init__(ParamsDisp())
-        self.devices = {
-            'bo_sofb': SOFB(SOFB.DEVICES.BO),
-            'tb_sofb': SOFB(SOFB.DEVICES.TB),
-            'kly2': DevLILLRF(DevLILLRF.DEVICES.LI_KLY2),
-            }
+        super().__init__(ParamsDisp(), isonline=isonline)
+        if self.isonline:
+            self.devices = {
+                'bo_sofb': SOFB(SOFB.DEVICES.BO),
+                'tb_sofb': SOFB(SOFB.DEVICES.TB),
+                'kly2': DevLILLRF(DevLILLRF.DEVICES.LI_KLY2)}
 
     @property
     def energy(self):
         """."""
-        return np.polyval(
+        return np_poly.polyval(
             self.params.klystron_excit_coefs, self.devices['kly2'].amplitude)
 
     @property
@@ -111,8 +110,7 @@ def calc_model_dispersionTBBO(model, bpms):
     rin = np.array([
         [0, 0, 0, 0, dene/2, 0],
         [0, 0, 0, 0, -dene/2, 0]]).T
-    rout, *_ = pyaccel.tracking.line_pass(
-        model, rin, bpms)
+    rout, *_ = pa.tracking.line_pass(model, rin, bpms)
     dispx = (rout[0, 0, :] - rout[0, 1, :]) / dene
     dispy = (rout[2, 0, :] - rout[2, 1, :]) / dene
     return np.hstack([dispx, dispy])
