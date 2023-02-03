@@ -1,6 +1,10 @@
+"""Create LOCO Report."""
+
 from apsuite.loco.analysis import LOCOAnalysis
 from fpdf import FPDF
 import datetime
+
+TIME_FMT = '%Y-%m-%d %H:%M:%S'
 
 
 class LOCOReport(FPDF):
@@ -28,7 +32,7 @@ class LOCOReport(FPDF):
         self.cell(0, 6, 'SIRIUS LOCO Report', 0, 0, 'C')
         self.set_font('Arial', '', 11)
         today = datetime.date.today()
-        stg = '{:s}'.format(today.strftime("%Y-%m-%d"))
+        stg = '{:s}'.format(today.strftime(TIME_FMT))
         self.cell(0, 6, stg, 0, 0, 'R')
         self.ln(10)
 
@@ -58,7 +62,7 @@ class LOCOReport(FPDF):
 
         self.set_font('Arial', '', 10)
         tstamp = datetime.datetime.fromtimestamp(setup['timestamp'])
-        tstamp = tstamp.strftime('%Y-%m-%d %H:%M:%S')
+        tstamp = tstamp.strftime(TIME_FMT)
         data = (
             ('Measurement timestamp', tstamp),
             ('Stored current', f"{setup['stored_current']:.2f} mA"),
@@ -206,7 +210,6 @@ class LOCOReport(FPDF):
         self.add_page()
         self.page_title('Global parameters: tunes and emittances')
         self.df_to_table(self._df_tunes, nr_tables=2, idx_table=0)
-        self.set_y(30)
         self.df_to_table(self._df_emits, nr_tables=2, idx_table=1)
         self.set_y(60)
         self.page_title('Optics: beta-beating')
@@ -282,21 +285,24 @@ class LOCOReport(FPDF):
         dnomi = config.matrix - config.goalmat
         dloco = orm_fit - config.goalmat
 
+        label = fname_report
         loco_anly.plot_histogram(
-            dnomi, dloco, save=True, fname='histogram')
-        loco_anly.plot_3d_fitting(dnomi, dloco, fname='3dplot')
+            dnomi, dloco, save=True, fname='histogram' + label)
+        loco_anly.plot_3d_fitting(dnomi, dloco, fname='3dplot' + label)
 
         df_quad_stats = loco_anly.plot_quadrupoles_gradients_by_family(
             nom_model=mod, fit_model=loco_data['fit_model'],
-            save=True, fname='quad_by_family')
+            save=True, fname='quad_by_family' + label)
         self._df_quad_stats = df_quad_stats
         loco_anly.plot_quadrupoles_gradients_by_s(
             nom_model=mod,
-            fit_model=loco_data['fit_model'], save=True, fname='quad_by_s')
+            fit_model=loco_data['fit_model'],
+            save=True, fname='quad_by_s' + label)
         loco_anly.plot_skew_quadrupoles(
-            mod, loco_data['fit_model'], save=True, fname='skewquad_by_s')
-        loco_anly.plot_gain(save=True, fname='gains')
-        self._df_emits = loco_anly.emittance()
+            mod, loco_data['fit_model'], save=True,
+            fname='skewquad_by_s' + label)
+        loco_anly.plot_gain(save=True, fname='gains' + label)
+        self._df_emits = loco_anly.emittance_and_coupling()
 
         loco_anly.calc_twiss()
         self._df_tunes, self._df_betabeat = loco_anly.beta_and_tune(twiss=True)
@@ -308,9 +314,9 @@ class LOCOReport(FPDF):
         # self._df_disp = loco_anly.dispersion(twiss=False)
 
         loco_anly.save_quadrupoles_variations(
-            mod, loco_data['fit_model'], fname=fname_report)
+            mod, loco_data['fit_model'], fname=label)
         loco_anly.save_skew_quadrupoles_variations(
-            mod, loco_data['fit_model'], fname=fname_report)
+            mod, loco_data['fit_model'], fname=label)
 
         self.loco_data = loco_data
         self.loco_analysis = loco_anly
@@ -321,4 +327,4 @@ class LOCOReport(FPDF):
         self.add_skewquadfit_ang_gains()
         self.add_tune_emit_and_optics()
 
-        self.output('report_' + fname_report + '.pdf', 'F')
+        self.output('report_' + label + '.pdf', 'F')

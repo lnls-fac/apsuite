@@ -19,6 +19,9 @@ from mpl_toolkits.mplot3d import Axes3D
 
 rc('font', **{'size': 14})
 
+# difference between sector 20 B1 end and model start marker
+SECTOR_SHIFT = -5.017  # [m]
+
 
 class LOCOAnalysis():
     """."""
@@ -440,12 +443,9 @@ class LOCOAnalysis():
             spos[qnidx], perc, '.-',
             label='deviation', color='tab:orange')
 
-        for idx in range(20):
-            ax1.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            ax1.annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), perc.max()*0.90))
-
+        xdelta = spos[-1]/20
+        ax1 = self._create_sectors_vlines(
+            ax1, xdelta=xdelta, yloc=perc.max()*0.9)
         ax1.set_xlabel('s [m]')
         ax1.set_ylabel('$\Delta K/K_0$ [%]')
         ax1.set_title('Quadrupoles changes along the ring')
@@ -482,11 +482,9 @@ class LOCOAnalysis():
         ax1.plot(
             spos[qsidx], percentage, '.-', color='tab:green')
 
-        for idx in range(20):
-            ax1.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            ax1.annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), percentage.max()*0.90))
+        xdelta = spos[-1]/20
+        ax1 = self._create_sectors_vlines(
+            ax1, xdelta=xdelta, yloc=percentage.max()*0.9)
         ax1.set_xlabel('s [m]')
         ax1.set_ylabel('$\Delta$KsL [1/m]')
         ax1.set_title('Skew quadrupoles changes along the ring')
@@ -532,22 +530,15 @@ class LOCOAnalysis():
         axs[0].grid(alpha=0.5, linestyle='--')
         axs[0].set_ylabel('gain')
         axs[0].set_title('BPM Gains')
-        for idx in range(20):
-            axs[0].axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            axs[0].annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), gain_bpm.max()*1.04))
 
         axs[1].plot(spos[bpm_idx], roll_bpm*1e3, '.-', color=color_roll_bpm)
         axs[1].grid(alpha=0.5, linestyle='--')
         axs[1].set_xlabel('index')
         axs[1].set_ylabel('roll [mrad]')
         axs[1].set_title('BPM Roll')
-        for idx in range(20):
-            axs[1].axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            axs[1].annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3),  roll_bpm.max()*1e3*0.95))
+        xdelta = spos[-1]/20
+        axs[1] = self._create_sectors_vlines(
+            axs[1], xdelta=xdelta, yloc=roll_bpm.max()*0.95*1e3)
 
         axs[2].plot(
             spos[ch_idx], gain_corr[:120], '.-', color=color_ch, label='CH')
@@ -558,11 +549,9 @@ class LOCOAnalysis():
         axs[2].set_xlabel('s [m]')
         axs[2].set_ylabel('gain')
         axs[2].set_title('Corrector Gains')
-        for idx in range(20):
-            axs[2].axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            axs[2].annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), gain_corr.max()))
+        xdelta = spos[-1]/20
+        axs[2] = self._create_sectors_vlines(
+            axs[2], xdelta=xdelta, yloc=gain_corr.max())
         plt.tight_layout()
         if save:
             if fname is None:
@@ -609,13 +598,9 @@ class LOCOAnalysis():
         ax.plot(spos, beta_beatx, label='Horizontal', color='tab:blue')
         ax.plot(spos, beta_beaty, label='Vertical', color='tab:red')
 
-        for idx in range(20):
-            ax.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            max_val = np.max([beta_beatx.max(), beta_beaty.max()])
-            ax.annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), max_val*0.90))
-
+        xdelta = spos[-1]/20
+        max_val = np.max([beta_beatx.max(), beta_beaty.max()])
+        ax = self._create_sectors_vlines(ax, xdelta=xdelta, yloc=max_val*0.9)
         ax.set_xlabel('s [m]')
         ax.set_ylabel(r'$\Delta \beta/\beta$ [%]')
         ax.legend(loc='lower right', fontsize=10)
@@ -742,39 +727,44 @@ class LOCOAnalysis():
         ax2.set_ylabel(r'$\eta_y$ [cm]')
         ax2.grid(alpha=0.5, linestyle='--')
 
-        for idx in range(20):
-            ax1.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            ax2.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            diff1 = abs(dispy_meas)
-            diff2 = abs(dispy_fit-dispy_meas)
-            max_val = np.max([diff1.max(), diff2.max()])
-            ax2.annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), max_val*0.9))
+        diff1 = abs(dispy_meas)
+        diff2 = abs(dispy_fit-dispy_meas)
+        max_val = np.max([diff1.max(), diff2.max()])
+        xdelta = spos[-1]/20
+        self._create_sectors_vlines(ax1, xdelta=xdelta, annotate=False)
+        self._create_sectors_vlines(ax2, xdelta=xdelta, yloc=max_val*0.9)
         plt.tight_layout()
         plt.savefig('dispersion.png', dpi=300)
         return df_disp
 
-    def emittance(self):
+    def emittance_and_coupling(self):
         """."""
         eqnom = pyaccel.optics.EqParamsFromBeamEnvelope(self.nom_model)
         eqfit = pyaccel.optics.EqParamsFromBeamEnvelope(
             self.loco_fit['fit_model'])
 
+        if self.edteng_fit is None or self.edteng_nom is None:
+            self.calc_edteng()
+
+        min_sep_nom, *_ = pyaccel.optics.estimate_coupling_parameters(
+            self.edteng_nom)
+        min_sep_fit, *_ = pyaccel.optics.estimate_coupling_parameters(
+            self.edteng_fit)
+
         m2pm = 1e12
         names = [
-            'x [pm.rad]', 'y [pm.rad]',
-            'ratio [%]']
+            'emit_x [pm.rad]', 'emit_y [pm.rad]',
+            'emit_ratio [%]', 'min_tune_sep [%]']
         emit_nom_list = [
                 eqnom.emit1*m2pm, eqnom.emit2*m2pm,
-                eqnom.emit2/eqnom.emit1*100]
+                eqnom.emit2/eqnom.emit1*100, min_sep_nom*100]
         emit_fit_list = [
                 eqfit.emit1*m2pm, eqfit.emit2*m2pm,
-                eqfit.emit2/eqfit.emit1*100]
+                eqfit.emit2/eqfit.emit1*100, min_sep_fit*100]
         emit_nom_list = [float(abs(val)) for val in emit_nom_list]
         emit_fit_list = [float(abs(val)) for val in emit_fit_list]
         emits = {
-            'emittance': names,
+            'parameter': names,
             'initial nom model': emit_nom_list,
             'LOCO model': emit_fit_list}
         df_emits = pd.DataFrame.from_dict(emits)
@@ -787,3 +777,13 @@ class LOCOAnalysis():
     @staticmethod
     def _get_dispersion(rfline, alpha, rf_freq):
         return - alpha * rf_freq * rfline * 1e2
+
+    @staticmethod
+    def _create_sectors_vlines(ax, xdelta, yloc=0, annotate=True):
+        for idx in range(20):
+            ax.axvline(xdelta*idx + SECTOR_SHIFT, ls='--', color='k', lw=1)
+            if annotate:
+                ax.annotate(
+                    f'{idx+1:02d}', size=10,
+                    xy=(xdelta*(idx + 1/5), yloc))
+        return ax
