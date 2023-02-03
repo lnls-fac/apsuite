@@ -4,7 +4,7 @@ import numpy as _np
 
 from pymodels import si as _si
 from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoSI, EVG, \
-    Event, EGTriggerPS
+    Event, EGTriggerPS, RFGen, InjSysPUModeHandler
 
 from ..optimization.rcds import RCDS as _RCDS
 from ..optics_analysis import ChromCorr
@@ -44,6 +44,8 @@ class OptimizeDA(_RCDS):
             if sext in self.names_sexts2corr:
                 continue
             self.names_sexts2use.append(sext)
+        self.phase_offset = 0 #  to be determined during the experiment
+        self.data['phase_offset'] = self.phase_offset
 
     def initialization(self, init_obj_func=-50):
         """."""
@@ -51,25 +53,65 @@ class OptimizeDA(_RCDS):
             self.data['timestamp'] = _time.time()
             self.data['strengths'] = [self.get_strengths_from_machine(), ]
             self.data['obj_funcs'] = [init_obj_func, ]
+            self._prepare_evg
 
-    def objective_function(self, pos):
+    def objective_function(self, pos, offaxis_weigth=1, onaxis_weigth=1):
         """."""
-        evg, currinfo = self.devices['evg'], self.devices['currinfo']
+        if not offaxis_weigth and not onaxis_weigth:
+            raise ValueError('At least one weigth must be nonzero')
+
+        evg = self.devices['evg']
+        currinfo = self.devices['currinfo']
+        nlk = self.devices['nlk']
+        rfgen = self.devices['rfgen']
+        injsys = self.devices['injsys']
 
         strengths = self.get_isochrom_strengths(pos)
         self.set_strengths_to_machine(strengths)
         self.data['strengths'].append(strengths)
         _time.sleep(1)
 
-        inj0 = currinfo.injeff
-        evg.cmd_turn_on_injection()
-        for _ in range(50):
-            if inj0 != currinfo.injeff:
-                break
-            _time.sleep(0.1)
-        objective = -currinfo.injeff
+        objective = 0
+        if not offaxis_weigth:
+            injsys.cmd_switch_to_optim()
+            # nlk_ref = nlk.strength
+            # nlk.strength = - 2.25 * 1e-3
+            inj0 = currinfo.injeff
+            evg.cmd_turn_on_injection()
+            for _ in range(50): # what about evg.wait_injection_finish(timeout=5)?
+                if inj0 != currinfo.injeff:
+                    break
+                _time.sleep(0.1)
+            objective += offaxis_weigth * currinfo.injeff
+            # nlk.strength = nlk_ref
+            # then kill the beam?
+
+        if not onaxis_weigth:
+            injsys.cmd_switch_to_onaxis()
+            # need to config?
+            phase_ref = rfgen.phase
+            rfgen.phase = self.phase_offset #  to be determined
+            inj0 = currinfo.injeff
+            evg.cmd_turn_on_injection()
+            for _ in range(50):
+                if inj0 != currinfo.injeff:
+                    break
+                _time.sleep(0.1)
+            rfgen.phase = phase_ref
+            objective += onaxis_weigth * currinfo.injeff
+
+        objective /= offaxis_weigth + onaxis_weigth
         self.data['obj_funcs'].append(objective)
+
         return objective
+
+    def _prepare_evg(self):
+        evg = self.devices['evg']
+        # configure to inject on first bucket just once
+        evg.bucketlist = [1]
+        evg.nrpulses = 1
+        evg.cmd_update_events()
+        _time.sleep(1)
 
     def objective_function_(self, pos):
         """."""
@@ -239,3 +281,5 @@ class OptimizeDA(_RCDS):
         self.devices['evg'] = EVG()
         self.devices['evt_study'] = Event('Study')
         self.devices['egun'] = EGTriggerPS()
+        self.devices['rfgen'] = RFGen()
+        self.devices['injsys'] = InjSysPUModeHandler()
