@@ -43,15 +43,20 @@ class OptimizeDAParams(_RCDSParams):
         """."""
         stg = '-----  RCDS Parameters  -----\n\n'
         stg += super().__str__()
-        stg += '-----  OptimizeDA Parameters  -----\n\n'
-        stg += self._TMPF('onaxis_rf_phase', self.onaxis_rf_phase, '[°]')
-        stg += self._TMPF('offaxis_rf_phase', self.offaxis_rf_phase, '[°]')
-        stg += self._TMPF('offaxis_weight', self.offaxis_weight, '')
-        stg += self._TMPF('onaxis_weight', self.onaxis_weight, '')
-        stg += self._TMPS(
+        stg += '\n\n-----  OptimizeDA Parameters  -----\n\n'
+        stg += self._TMPF.format(
+            'onaxis_rf_phase', self.onaxis_rf_phase, '[°]')
+        stg += self._TMPF.format(
+            'offaxis_rf_phase', self.offaxis_rf_phase, '[°]')
+        stg += self._TMPF.format(
+            'offaxis_weight', self.offaxis_weight, '')
+        stg += self._TMPF.format(
+            'onaxis_weight', self.onaxis_weight, '')
+        stg += self._TMPS.format(
             'names_sexts2corr', ', '.join(self.names_sexts2corr), '')
-        stg += self._TMPS(
+        stg += self._TMPS.format(
             'names_sexts2use', ', '.join(self.names_sexts2use), '')
+        return stg
 
 
 class OptimizeDA(_RCDS):

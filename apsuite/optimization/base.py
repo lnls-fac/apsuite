@@ -1,5 +1,4 @@
 """Simulated Annealing Algorithm for Minimization."""
-from threading import Thread as _Thread, Event as _Event
 import logging as _log
 
 import numpy as _np
@@ -12,9 +11,9 @@ from ..utils import ParamsBaseClass as _Params, ThreadedMeasBaseClass as _Base
 class OptimizeParams(_Params):
     """."""
 
-    _TMPD = '{:30s}: {:10d}\n'
-    _TMPF = '{:30s}: {:10.3f}\n'
-    _TMPS = '{:30s}: {:10s}\n'
+    _TMPD = '{:30s}: {:10d} {:s}\n'
+    _TMPF = '{:30s}: {:10.3f} {:s}\n'
+    _TMPS = '{:30s}: {:10s} {:s}\n'
 
     BoundaryPolicy = _get_namedtuple('BoundaryPolicy', ('ToBoundary', 'ToNaN'))
 
@@ -78,11 +77,11 @@ class OptimizeParams(_Params):
     def __str__(self):
         """."""
         stg = ''
-        stg += self._TMPD.format('max_number_iters', self.max_number_iters)
-        stg += self._TMPD.format('max_number_evals', self.max_number_evals)
+        stg += self._TMPD.format('max_number_iters', self.max_number_iters, '')
+        stg += self._TMPD.format('max_number_evals', self.max_number_evals, '')
         stg += self._TMPS.format(
             'boundary_policy',
-            self.BoundaryPolicy._fields[self.boundary_policy])
+            self.BoundaryPolicy._fields[self.boundary_policy], '')
         if self.is_positions_consistent():
             stg += self.print_positions(
                 self.limit_lower, names=['limit_lower'], print_header=True)

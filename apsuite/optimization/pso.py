@@ -28,10 +28,10 @@ class PSOParams(_OptimizeParams):
         """."""
         stg = ''
         stg += self._TMPD.format(
-            'number_of_particles', self.number_of_particles)
-        stg += self._TMPF.format('coeff_inertia', self.coeff_inertia)
-        stg += self._TMPF.format('coeff_individual', self.coeff_individual)
-        stg += self._TMPF.format('coeff_collective', self.coeff_collective)
+            'number_of_particles', self.number_of_particles, '')
+        stg += self._TMPF.format('coeff_inertia', self.coeff_inertia, '')
+        stg += self._TMPF.format('coeff_individual', self.coeff_individual, '')
+        stg += self._TMPF.format('coeff_collective', self.coeff_collective, '')
         stg += super().__str__()
         return stg
 

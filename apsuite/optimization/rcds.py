@@ -38,23 +38,23 @@ class RCDSParams(_OptimizeParams):
     def __str__(self):
         """."""
         stg = ''
-        stg += self._TMPF.format('initial_stepsize', self.initial_stepsize)
-        stg += self._TMPF.format('noise_level', self.noise_level)
-        stg += self._TMPF.format('tolerance', self.tolerance)
+        stg += self._TMPF.format('initial_stepsize', self.initial_stepsize, '')
+        stg += self._TMPF.format('noise_level', self.noise_level, '')
+        stg += self._TMPF.format('tolerance', self.tolerance, '')
         stg += self._TMPF.format(
-            'orthogonality_threshold', self.orthogonality_threshold)
+            'orthogonality_threshold', self.orthogonality_threshold, '')
         stg += self._TMPS.format(
-            'update_search_directions', str(self.update_search_directions))
-        stg += self._TMPD.format('linescan_num_pts', self.linescan_num_pts)
+            'update_search_directions', str(self.update_search_directions), '')
+        stg += self._TMPD.format('linescan_num_pts', self.linescan_num_pts, '')
         stg += self._TMPD.format(
-            'linescan_min_pts_fit', self.linescan_min_pts_fit)
+            'linescan_min_pts_fit', self.linescan_min_pts_fit, '')
         stg += self._TMPS.format(
             'outlier_method',
-            self.OutlierMethod._fields[self.outlier_method])
+            self.OutlierMethod._fields[self.outlier_method], '')
         stg += self._TMPF.format(
-            'outlier_max_err_factor', self.outlier_max_err_factor)
+            'outlier_max_err_factor', self.outlier_max_err_factor, '')
         stg += self._TMPF.format(
-            'outlier_percentile_limit', self.outlier_percentile_limit)
+            'outlier_percentile_limit', self.outlier_percentile_limit, '')
 
         stg += super().__str__()
         names = [f'Search Dir. {i:d}' for i in range(
