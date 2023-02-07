@@ -104,19 +104,24 @@ class OptimizeDA(_RCDS):
         _time.sleep(1)
 
         objective = 0.0
-        if not self.params.offaxis_weight:
+        if self.params.offaxis_weight:
             injctrl.cmd_change_pumode_to_optimization()
+            _time.sleep(6.0)
             injeff = self.inject_beam_and_get_injeff()
             self.data['offaxis_obj_funcs'].append(injeff)
             objective += self.params.offaxis_weight * injeff
 
-        if not self.params.onaxis_weight:
+        if self.params.onaxis_weight:
             injctrl.cmd_change_pumode_to_onaxis()
-            self.devices['egun_trigps'].enable = False
-            self.inject_beam_and_get_injeff()
-            self.devices['egun_trigps'].enable = True
+            self.devices['egun_trigps'].cmd_disable_trigger()
+            _time.sleep(2.0)
+            self.inject_beam_and_get_injeff(get_injcurr=False)
+            _time.sleep(2.0)
+            self.devices['egun_trigps'].cmd_enable_trigger()
+            _time.sleep(2.0)
 
             llrf.set_phase(self.params.onaxis_rf_phase)
+            _time.sleep(2.0)
             injeff = self.inject_beam_and_get_injeff()
             llrf.set_phase(self.params.offaxis_rf_phase)
 
