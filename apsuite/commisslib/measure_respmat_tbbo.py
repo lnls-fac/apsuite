@@ -179,8 +179,8 @@ def calc_model_respmatTBBO(
 
 
 def _get_respmat_line(
-    cumul_mat, indcs, bpms, length, kxl=0, kyl=0, ksxl=0, ksyl=0,
-    cortype='vertical', meth='middle'):
+        cumul_mat, indcs, bpms, length, kxl=0, kyl=0, ksxl=0, ksyl=0,
+        cortype='vertical', meth='middle'):
 
     idx = 3 if cortype.startswith('vertical') else 1
     cor = indcs[0]
