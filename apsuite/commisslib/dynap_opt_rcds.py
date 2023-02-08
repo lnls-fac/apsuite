@@ -105,25 +105,27 @@ class OptimizeDA(_RCDS):
 
         objective = 0.0
         if self.params.offaxis_weight:
-            injctrl.cmd_change_pumode_to_optimization()
-            _time.sleep(6.0)
+            if injctrl.pumode_mon != injctrl.PUModeMon.Optimization:
+                injctrl.cmd_change_pumode_to_optimization()
+                _time.sleep(1.0)
             injeff = self.inject_beam_and_get_injeff()
             self.data['offaxis_obj_funcs'].append(injeff)
             objective += self.params.offaxis_weight * injeff
 
         if self.params.onaxis_weight:
-            injctrl.cmd_change_pumode_to_onaxis()
+            if injctrl.pumode_mon != injctrl.PUModeMon.OnAxis:
+                injctrl.cmd_change_pumode_to_onaxis()
             self.devices['egun_trigps'].cmd_disable_trigger()
-            _time.sleep(2.0)
-            self.inject_beam_and_get_injeff(get_injcurr=False)
-            _time.sleep(2.0)
+            _time.sleep(1.0)
+            self.inject_beam_and_get_injeff(get_injeff=False)
+            _time.sleep(1.0)
             self.devices['egun_trigps'].cmd_enable_trigger()
-            _time.sleep(2.0)
+            _time.sleep(1.0)
 
-            llrf.set_phase(self.params.onaxis_rf_phase)
-            _time.sleep(2.0)
+            llrf.set_phase(self.params.onaxis_rf_phase, wait_mon=True)
+            _time.sleep(0.5)
             injeff = self.inject_beam_and_get_injeff()
-            llrf.set_phase(self.params.offaxis_rf_phase)
+            llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=False)
 
             self.data['onaxis_obj_funcs'].append(injeff)
             objective += self.params.onaxis_weight * injeff
@@ -132,19 +134,20 @@ class OptimizeDA(_RCDS):
         self.data['obj_funcs'].append(objective)
         return -objective
 
-    def inject_beam_and_get_injeff(self, get_injcurr=True):
+    def inject_beam_and_get_injeff(self, get_injeff=True):
         """Inject beam and get injected current, if desired."""
         inj0 = self.devices['currinfo'].injeff
-        self.devices['evg'].cmd_turn_on_injection()
-        _time.sleep(0.2)
+        self.devices['evg'].cmd_turn_on_injection(wait_rb=True)
         self.devices['evg'].wait_injection_finish()
-        if not get_injcurr:
+        if not get_injeff:
             return
 
         for _ in range(50):
             if inj0 != self.devices['currinfo'].injeff:
                 break
             _time.sleep(0.1)
+        else:
+            print('Timed out waiting injeff to update.')
         return self.devices['currinfo'].injeff
 
     def _prepare_evg(self):
