@@ -4,13 +4,13 @@ import numpy as _np
 
 from pymodels import si as _si
 from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoSI, EVG, \
-    Event, EGTriggerPS
+    Event, EGTriggerPS, ASLLRF, InjCtrl
 
-from ..optimization.rcds import RCDS as _RCDS
+from ..optimization.rcds import RCDS as _RCDS, RCDSParams as _RCDSParams
 from ..optics_analysis import ChromCorr
 
 
-class OptimizeDA(_RCDS):
+class OptimizeDAParams(_RCDSParams):
     """."""
 
     SEXT_FAMS = (
@@ -24,19 +24,13 @@ class OptimizeDA(_RCDS):
     SEXT_FAMS_ACHROM = SEXT_FAMS[:6]
     SEXT_FAMS_CHROM = SEXT_FAMS[6:]
 
-    def __init__(self, isonline=True, use_thread=True):
+    def __init__(self):
         """."""
-        _RCDS.__init__(self, isonline=isonline, use_thread=use_thread)
-        self.sextupoles = []
-        if self.isonline:
-            self._create_devices()
-        self.chrom_corr = ChromCorr(_si.create_accelerator(), acc='SI')
-
-        self.full_chrom_mat = _np.zeros((2, len(self.SEXT_FAMS)), dtype=float)
-
-        idcs = [self.SEXT_FAMS.index(sx) for sx in self.chrom_corr.knobs.all]
-        self.full_chrom_mat[:, idcs] = self.chrom_corr.calc_jacobian_matrix()
-
+        super().__init__()
+        self.onaxis_rf_phase = 0  # [°]
+        self.offaxis_rf_phase = 0  # [°]
+        self.offaxis_weight = 1
+        self.onaxis_weight = 1
         self.names_sexts2corr = [
             'SDA2', 'SDB2', 'SDP2', 'SFA2', 'SFB2', 'SFP2']
         self.names_sexts2use = []
@@ -45,107 +39,139 @@ class OptimizeDA(_RCDS):
                 continue
             self.names_sexts2use.append(sext)
 
-    def initialization(self, init_obj_func=-50):
+        self.data['strengths'] = []
+        self.data['obj_funcs'] = []
+        self.data['onaxis_obj_funcs'] = []
+        self.data['offaxis_obj_funcs'] = []
+
+    def __str__(self):
         """."""
+        stg = '-----  RCDS Parameters  -----\n\n'
+        stg += super().__str__()
+        stg += '\n\n-----  OptimizeDA Parameters  -----\n\n'
+        stg += self._TMPF.format(
+            'onaxis_rf_phase', self.onaxis_rf_phase, '[°]')
+        stg += self._TMPF.format(
+            'offaxis_rf_phase', self.offaxis_rf_phase, '[°]')
+        stg += self._TMPF.format(
+            'offaxis_weight', self.offaxis_weight, '')
+        stg += self._TMPF.format(
+            'onaxis_weight', self.onaxis_weight, '')
+        stg += self._TMPS.format(
+            'names_sexts2corr', ', '.join(self.names_sexts2corr), '')
+        stg += self._TMPS.format(
+            'names_sexts2use', ', '.join(self.names_sexts2use), '')
+        return stg
+
+
+class OptimizeDA(_RCDS):
+    """."""
+
+    def __init__(self, isonline=True, use_thread=True):
+        """."""
+        _RCDS.__init__(self, isonline=isonline, use_thread=use_thread)
+        self.params = OptimizeDAParams()
+        self.sextupoles = []
         if self.isonline:
-            self.data['timestamp'] = _time.time()
-            self.data['strengths'] = [self.get_strengths_from_machine(), ]
-            self.data['obj_funcs'] = [init_obj_func, ]
+            self._create_devices()
+        self.chrom_corr = ChromCorr(_si.create_accelerator(), acc='SI')
+
+        self.full_chrom_mat = _np.zeros(
+            (2, len(self.params.SEXT_FAMS)), dtype=float)
+
+        idcs = [
+            self.params.SEXT_FAMS.index(sx)
+            for sx in self.chrom_corr.knobs.all]
+        self.full_chrom_mat[:, idcs] = self.chrom_corr.calc_jacobian_matrix()
+
+    def _initialization(self):
+        """."""
+        if not super()._initialization():
+            return False
+        self.data['timestamp'] = _time.time()
+        self.data['strengths'] = []
+        self.data['obj_funcs'] = []
+        self.data['onaxis_obj_funcs'] = []
+        self.data['offaxis_obj_funcs'] = []
+        self._prepare_evg()
+        return True
 
     def objective_function(self, pos):
         """."""
-        evg, currinfo = self.devices['evg'], self.devices['currinfo']
+        if not self.params.offaxis_weight and not self.params.onaxis_weight:
+            raise ValueError('At least one weigth must be nonzero')
+
+        llrf = self.devices['llrf']
+        injctrl = self.devices['injctrl']
 
         strengths = self.get_isochrom_strengths(pos)
         self.set_strengths_to_machine(strengths)
         self.data['strengths'].append(strengths)
         _time.sleep(1)
 
-        inj0 = currinfo.injeff
-        evg.cmd_turn_on_injection()
+        objective = 0.0
+        if self.params.offaxis_weight:
+            if injctrl.pumode_mon != injctrl.PUModeMon.Optimization:
+                injctrl.cmd_change_pumode_to_optimization()
+                _time.sleep(1.0)
+            injeff = self.inject_beam_and_get_injeff()
+            self.data['offaxis_obj_funcs'].append(injeff)
+            objective += self.params.offaxis_weight * injeff
+
+        if self.params.onaxis_weight:
+            if injctrl.pumode_mon != injctrl.PUModeMon.OnAxis:
+                injctrl.cmd_change_pumode_to_onaxis()
+            self.devices['egun_trigps'].cmd_disable_trigger()
+            _time.sleep(1.0)
+            self.inject_beam_and_get_injeff(get_injeff=False)
+            _time.sleep(1.0)
+            self.devices['egun_trigps'].cmd_enable_trigger()
+            _time.sleep(1.0)
+
+            llrf.set_phase(self.params.onaxis_rf_phase, wait_mon=True)
+            _time.sleep(0.5)
+            injeff = self.inject_beam_and_get_injeff()
+            llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=False)
+
+            self.data['onaxis_obj_funcs'].append(injeff)
+            objective += self.params.onaxis_weight * injeff
+
+        objective /= self.params.offaxis_weight + self.params.onaxis_weight
+        self.data['obj_funcs'].append(objective)
+        return -objective
+
+    def inject_beam_and_get_injeff(self, get_injeff=True):
+        """Inject beam and get injected current, if desired."""
+        inj0 = self.devices['currinfo'].injeff
+        self.devices['evg'].cmd_turn_on_injection(wait_rb=True)
+        self.devices['evg'].wait_injection_finish()
+        if not get_injeff:
+            return
+
         for _ in range(50):
-            if inj0 != currinfo.injeff:
+            if inj0 != self.devices['currinfo'].injeff:
                 break
             _time.sleep(0.1)
-        objective = -currinfo.injeff
-        self.data['obj_funcs'].append(objective)
-        return objective
+        else:
+            print('Timed out waiting injeff to update.')
+        return self.devices['currinfo'].injeff
 
-    def objective_function_(self, pos):
-        """."""
+    def _prepare_evg(self):
         evg = self.devices['evg']
-
-        if not self.inject_beam(min_curr=self.params.min_stored_current):
-            raise ValueError(
-                'It was not possible to inject beam in the machine.')
-
-        strengths = self.get_isochrom_strengths(pos)
-        self.set_strengths_to_machine(strengths)
-        self.data['strengths'].append(strengths)
-
-        _time.sleep(1)
-        bpms = self.devices['bpms']
-        bpms.mturn_reset_flags()
-
-        evg.cmd_turn_on_injection()
-        bpms.mturn_wait_update_flags()
-
-        psum = bpms.get_mturn_orbit(return_sum=True)[2].mean(axis=1)
-        sum0 = _np.mean(psum[0:10])
-        sumf = _np.mean(psum[-10:])
-
-        loss = 1 - sumf/sum0
-        loss = max(min(loss, 1), 0)
-
-        return loss*100
-
-    def inject_beam(self, min_curr=2.0, timeout=10):
-        """Inject current in the storage ring.
-
-        Args:
-            min_curr (float, optional): Desired current in [mA].
-                Defaults to 2.0 mA.
-            timeout (int, optional): Maximum time to wait injection in [s].
-                Defaults to 10 s.
-
-        """
-        evg, currinfo = self.devices['evg'], self.devices['currinfo']
-        egun = self.devices['egun']
-        pingh, pingv = self.devices['pingh'], self.devices['pingv']
-        nlk = self.devices['nlk']
-        if currinfo.current >= min_curr:
-            return True
-
-        evg.nrpulses = 0
-        nlk.pulse = True
-        egun.enable = True
-        pingh.pulse = False
-        pingv.pulse = False
-        currp = self.get_strengths_from_machine()
-        self.set_strengths_to_machine(self.data['strengths'][0])
-        _time.sleep(0.1)
-        evg.cmd_turn_on_injection()
-        niter = int(timeout/0.5)
-        for _ in range(niter):
-            _time.sleep(0.5)
-            if currinfo.current >= min_curr:
-                break
-        evg.cmd_turn_off_injection()
-        _time.sleep(0.5)
-
-        self.set_strengths_to_machine(currp)
+        # configure to inject on first bucket just once
+        evg.bucketlist = [1]
         evg.nrpulses = 1
-        nlk.pulse = False
-        egun.enable = False
-        pingh.pulse = True
-        pingv.pulse = True
-        _time.sleep(0.1)
-        return currinfo.current >= min_curr
+        evg.cmd_update_events()
+        _time.sleep(1)
 
     def get_isochrom_strengths(self, pos):
         """."""
-        idcs_corr = [self.SEXT_FAMS.index(sx) for sx in self.names_sexts2corr]
-        idcs_2use = [self.SEXT_FAMS.index(sx) for sx in self.names_sexts2use]
+        idcs_corr = [
+            self.params.SEXT_FAMS.index(sx)
+            for sx in self.params.names_sexts2corr]
+        idcs_2use = [
+            self.params.SEXT_FAMS.index(sx)
+            for sx in self.params.names_sexts2use]
 
         mat2corr = self.full_chrom_mat[:, idcs_corr]
         imat2corr = _np.linalg.pinv(mat2corr, rcond=1e-15)
@@ -158,7 +184,7 @@ class OptimizeDA(_RCDS):
         dchrom = mat2use @ dpos
         dcorr = - imat2corr @ dchrom
 
-        strengths = _np.full(len(self.SEXT_FAMS), _np.nan)
+        strengths = _np.full(len(self.params.SEXT_FAMS), _np.nan)
         strengths[idcs_2use] = pos
         strengths[idcs_corr] = dcorr + str0[idcs_corr]
         return strengths
@@ -188,8 +214,9 @@ class OptimizeDA(_RCDS):
         stren, (lower0, upper0) = self.get_strengths_from_machine(
             return_limits=True)
         pos, lower, upper = [], [], []
-        for sxt, stg, low, upp in zip(self.SEXT_FAMS, stren, lower0, upper0):
-            if sxt in self.names_sexts2use:
+        for sxt, stg, low, upp in zip(
+                self.params.SEXT_FAMS, stren, lower0, upper0):
+            if sxt in self.params.names_sexts2use:
                 pos.append(stg)
                 lower.append(low)
                 upper.append(upp)
@@ -224,7 +251,7 @@ class OptimizeDA(_RCDS):
         _time.sleep(2)
 
     def _create_devices(self):
-        for fam in self.SEXT_FAMS:
+        for fam in self.params.SEXT_FAMS:
             sext = PowerSupply('SI-Fam:PS-'+fam)
             self.devices[fam] = sext
             self.sextupoles.append(sext)
@@ -238,4 +265,6 @@ class OptimizeDA(_RCDS):
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['evg'] = EVG()
         self.devices['evt_study'] = Event('Study')
-        self.devices['egun'] = EGTriggerPS()
+        self.devices['egun_trigps'] = EGTriggerPS()
+        self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SI)
+        self.devices['injctrl'] = InjCtrl()

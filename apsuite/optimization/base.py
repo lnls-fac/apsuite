@@ -1,5 +1,4 @@
 """Simulated Annealing Algorithm for Minimization."""
-from threading import Thread as _Thread, Event as _Event
 import logging as _log
 
 import numpy as _np
@@ -9,12 +8,18 @@ from mathphys.functions import get_namedtuple as _get_namedtuple
 from ..utils import ParamsBaseClass as _Params, ThreadedMeasBaseClass as _Base
 
 
+class OptimizationAborted(Exception):
+    """."""
+
+    pass
+
+
 class OptimizeParams(_Params):
     """."""
 
-    _TMPD = '{:30s}: {:10d}\n'
-    _TMPF = '{:30s}: {:10.3f}\n'
-    _TMPS = '{:30s}: {:10s}\n'
+    _TMPD = '{:30s}: {:10d} {:s}\n'
+    _TMPF = '{:30s}: {:10.3f} {:s}\n'
+    _TMPS = '{:30s}: {:10s} {:s}\n'
 
     BoundaryPolicy = _get_namedtuple('BoundaryPolicy', ('ToBoundary', 'ToNaN'))
 
@@ -78,12 +83,12 @@ class OptimizeParams(_Params):
     def __str__(self):
         """."""
         stg = ''
-        stg += self._TMPD.format('max_number_iters', self.max_number_iters)
-        stg += self._TMPD.format('max_number_evals', self.max_number_evals)
+        stg += self._TMPD.format('max_number_iters', self.max_number_iters, '')
+        stg += self._TMPD.format('max_number_evals', self.max_number_evals, '')
         stg += self._TMPS.format(
             'boundary_policy',
-            self.BoundaryPolicy._fields[self.boundary_policy])
-        if self.is_positions_consistent():
+            self.BoundaryPolicy._fields[self.boundary_policy], '')
+        if self.are_positions_consistent():
             stg += self.print_positions(
                 self.limit_lower, names=['limit_lower'], print_header=True)
             stg += self.print_positions(
@@ -185,7 +190,7 @@ class OptimizeParams(_Params):
             pos = _np.where(idl, self.limit_lower, pos)
         return pos
 
-    def is_positions_consistent(self, pos=None):
+    def are_positions_consistent(self, pos=None):
         """."""
         pos = pos if pos is not None else self.initial_position
         wrong = (
@@ -202,7 +207,7 @@ class Optimize(_Base):
     def __init__(self, params, use_thread=True, isonline=True):
         """."""
         super().__init__(
-            params=params, target=self._optimize, isonline=isonline)
+            params=params, target=self._target_func, isonline=isonline)
         self.use_thread = use_thread
 
         self._num_objective_evals = 0
@@ -257,23 +262,47 @@ class Optimize(_Base):
         if self.use_thread:
             super().start()
         else:
-            self._optimize()
+            super().target()
+
+    def objective_function(self, pos):
+        """Implement here the objective function."""
+        raise NotImplementedError()
+
+    def _optimize(self):
+        """Implement here optimization algorithm."""
+        raise NotImplementedError()
+
+    def _initialization():
+        """To be called before optimization starts.
+
+        If the return value is False, optimization will not run.
+        """
+        return True
+
+    def _finalization():
+        """To be called after optimization ends."""
+        pass
 
     def _objective_func(self, pos):
         self._num_objective_evals += 1
         pos = self.params.check_and_adjust_boundary(pos)
         res = []
         for posi in _np.array(pos, ndmin=2):
+            if self._stopevt.is_set():
+                raise OptimizationAborted
             if _np.any(_np.isnan(posi)):
                 _log.warning('Position out of boundaries. Returning NaN.')
                 res.append(_np.nan)
-            res.append(self.objective_function(pos))
+            res.append(self.objective_function(posi))
         return _np.array(res)
 
-    def _optimize(self):
-        """."""
-        raise NotImplementedError()
-
-    def objective_function(self, pos):
-        """."""
-        raise NotImplementedError()
+    def _target_func(self):
+        if not self._initialization():
+            _log.error(
+                'Interrupting: There was some problem with initialization. ')
+            return
+        try:
+            self._optimize()
+        except OptimizationAborted:
+            _log.info('Exiting: stop event was set.')
+        self._finalization()

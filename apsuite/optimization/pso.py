@@ -28,10 +28,10 @@ class PSOParams(_OptimizeParams):
         """."""
         stg = ''
         stg += self._TMPD.format(
-            'number_of_particles', self.number_of_particles)
-        stg += self._TMPF.format('coeff_inertia', self.coeff_inertia)
-        stg += self._TMPF.format('coeff_individual', self.coeff_individual)
-        stg += self._TMPF.format('coeff_collective', self.coeff_collective)
+            'number_of_particles', self.number_of_particles, '')
+        stg += self._TMPF.format('coeff_inertia', self.coeff_inertia, '')
+        stg += self._TMPF.format('coeff_individual', self.coeff_individual, '')
+        stg += self._TMPF.format('coeff_collective', self.coeff_collective, '')
         stg += super().__str__()
         return stg
 
@@ -139,7 +139,7 @@ class PSO(_Optimize):
 
     def _optimize(self):
         """."""
-        self.params.is_positions_consistent()
+        self.params.are_positions_consistent()
         self._num_objective_evals = 0
         niter = self.params.max_number_iters
         nevals = self.params.max_number_evals
