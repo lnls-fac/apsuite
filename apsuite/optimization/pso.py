@@ -139,7 +139,7 @@ class PSO(_Optimize):
 
     def _optimize(self):
         """."""
-        self.params.is_positions_consistent()
+        self.params.are_positions_consistent()
         self._num_objective_evals = 0
         niter = self.params.max_number_iters
         nevals = self.params.max_number_evals

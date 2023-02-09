@@ -88,7 +88,7 @@ class OptimizeParams(_Params):
         stg += self._TMPS.format(
             'boundary_policy',
             self.BoundaryPolicy._fields[self.boundary_policy], '')
-        if self.is_positions_consistent():
+        if self.are_positions_consistent():
             stg += self.print_positions(
                 self.limit_lower, names=['limit_lower'], print_header=True)
             stg += self.print_positions(
@@ -190,7 +190,7 @@ class OptimizeParams(_Params):
             pos = _np.where(idl, self.limit_lower, pos)
         return pos
 
-    def is_positions_consistent(self, pos=None):
+    def are_positions_consistent(self, pos=None):
         """."""
         pos = pos if pos is not None else self.initial_position
         wrong = (

@@ -308,7 +308,6 @@ class RCDS(_Optimize):
         Xiaobiao implements his own bracketing and linescan.
 
         """
-        self.params.is_positions_consistent()
         self._num_objective_evals = 0
         search_dirs = self.params.initial_search_directions.copy()
         search_dirs = self.params.normalize_positions(
@@ -323,7 +322,6 @@ class RCDS(_Optimize):
         pos0 = self.params.normalize_positions(self.params.initial_position)
 
         func0 = self._objective_func(pos0)
-        init_func = func0
         pos_min, func_min = pos0, func0
         hist_best_pos, hist_best_func = [pos_min], [func_min]
 
