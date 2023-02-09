@@ -39,6 +39,11 @@ class OptimizeDAParams(_RCDSParams):
                 continue
             self.names_sexts2use.append(sext)
 
+        self.data['strengths'] = []
+        self.data['obj_funcs'] = []
+        self.data['onaxis_obj_funcs'] = []
+        self.data['offaxis_obj_funcs'] = []
+
     def __str__(self):
         """."""
         stg = '-----  RCDS Parameters  -----\n\n'
@@ -79,16 +84,17 @@ class OptimizeDA(_RCDS):
             for sx in self.chrom_corr.knobs.all]
         self.full_chrom_mat[:, idcs] = self.chrom_corr.calc_jacobian_matrix()
 
-    def initialization(self):
+    def _initialization(self):
         """."""
-        if self.isonline:
-            self.data['timestamp'] = _time.time()
-            self.data['strengths'] = [self.get_strengths_from_machine(), ]
-            self.data['obj_funcs'] = []
-            self.data['onaxis_obj_funcs'] = []
-            self.data['offaxis_obj_funcs'] = []
-
-            self._prepare_evg
+        if not super()._initialization():
+            return False
+        self.data['timestamp'] = _time.time()
+        self.data['strengths'] = []
+        self.data['obj_funcs'] = []
+        self.data['onaxis_obj_funcs'] = []
+        self.data['offaxis_obj_funcs'] = []
+        self._prepare_evg()
+        return True
 
     def objective_function(self, pos):
         """."""

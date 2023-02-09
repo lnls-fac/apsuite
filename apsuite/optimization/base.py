@@ -273,8 +273,11 @@ class Optimize(_Base):
         raise NotImplementedError()
 
     def _initialization():
-        """To be called before optimization starts."""
-        pass
+        """To be called before optimization starts.
+
+        If the return value is False, optimization will not run.
+        """
+        return True
 
     def _finalization():
         """To be called after optimization ends."""
@@ -294,7 +297,10 @@ class Optimize(_Base):
         return _np.array(res)
 
     def _target_func(self):
-        self._initialization()
+        if not self._initialization():
+            _log.error(
+                'Interrupting: There was some problem with initialization. ')
+            return
         try:
             self._optimize()
         except OptimizationAborted:

@@ -286,6 +286,10 @@ class RCDS(_Optimize):
         pos = self.params.denormalize_positions(pos)
         return super()._objective_func(pos)[0]
 
+    def _initialization(self):
+        """."""
+        return self.params.are_positions_consistent()
+
     def _finalization(self):
         """."""
         stg = '\n Finished! \n'
