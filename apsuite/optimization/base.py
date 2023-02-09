@@ -8,6 +8,12 @@ from mathphys.functions import get_namedtuple as _get_namedtuple
 from ..utils import ParamsBaseClass as _Params, ThreadedMeasBaseClass as _Base
 
 
+class OptimizationAborted(Exception):
+    """."""
+
+    pass
+
+
 class OptimizeParams(_Params):
     """."""
 
@@ -201,7 +207,7 @@ class Optimize(_Base):
     def __init__(self, params, use_thread=True, isonline=True):
         """."""
         super().__init__(
-            params=params, target=self._optimize, isonline=isonline)
+            params=params, target=self._target_func, isonline=isonline)
         self.use_thread = use_thread
 
         self._num_objective_evals = 0
@@ -256,23 +262,41 @@ class Optimize(_Base):
         if self.use_thread:
             super().start()
         else:
-            self._optimize()
+            super().target()
+
+    def objective_function(self, pos):
+        """Implement here the objective function."""
+        raise NotImplementedError()
+
+    def _optimize(self):
+        """Implement here optimization algorithm."""
+        raise NotImplementedError()
+
+    def _initialization():
+        """To be called before optimization starts."""
+        pass
+
+    def _finalization():
+        """To be called after optimization ends."""
+        pass
 
     def _objective_func(self, pos):
         self._num_objective_evals += 1
         pos = self.params.check_and_adjust_boundary(pos)
         res = []
         for posi in _np.array(pos, ndmin=2):
+            if self._stopevt.is_set():
+                raise OptimizationAborted
             if _np.any(_np.isnan(posi)):
                 _log.warning('Position out of boundaries. Returning NaN.')
                 res.append(_np.nan)
-            res.append(self.objective_function(pos))
+            res.append(self.objective_function(posi))
         return _np.array(res)
 
-    def _optimize(self):
-        """."""
-        raise NotImplementedError()
-
-    def objective_function(self, pos):
-        """."""
-        raise NotImplementedError()
+    def _target_func(self):
+        self._initialization()
+        try:
+            self._optimize()
+        except OptimizationAborted:
+            _log.info('Exiting: stop event was set.')
+        self._finalization()
