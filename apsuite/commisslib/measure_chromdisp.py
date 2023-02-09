@@ -34,7 +34,7 @@ class MeasParams(_ParamsBaseClass):
         ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
         dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
         stg = ftmp('max_delta_freq [Hz]', self.max_delta_freq, '')
-        stg = ftmp('min_delta_freq [Hz]', self.min_delta_freq, '')
+        stg += ftmp('min_delta_freq [Hz]', self.min_delta_freq, '')
         stg += dtmp('meas_nrsteps', self.meas_nrsteps, '')
         stg += ftmp('wait_tune [s]', self.wait_tune, '')
         stg += ftmp(
