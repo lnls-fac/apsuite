@@ -15,19 +15,9 @@ class SimpleScanParams(_OptimizeParams):
 
     def __str__(self):
         """."""
-        stg = self._TMPD.format('number_of_steps', self.number_of_steps)
+        stg = self._TMPD.format('number_of_steps', self.number_of_steps, '')
         stg += super().__str__(self)
         return stg
-
-    def to_dict(self):
-        """."""
-        dic = super().to_dict()
-        dic['number_of_steps'] = self.number_of_steps
-
-    def from_dict(self, dic):
-        """."""
-        super().from_dict(dic)
-        self.number_of_steps = dic.get('number_of_steps', self.number_of_steps)
 
 
 class SimpleScan(_Optimize):

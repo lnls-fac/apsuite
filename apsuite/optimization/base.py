@@ -1,18 +1,25 @@
 """Simulated Annealing Algorithm for Minimization."""
-from threading import Thread as _Thread, Event as _Event
 import logging as _log
 
 import numpy as _np
 
 from mathphys.functions import get_namedtuple as _get_namedtuple
 
+from ..utils import ParamsBaseClass as _Params, ThreadedMeasBaseClass as _Base
 
-class OptimizeParams:
+
+class OptimizationAborted(Exception):
     """."""
 
-    _TMPD = '{:30s}: {:10d}\n'
-    _TMPF = '{:30s}: {:10.3f}\n'
-    _TMPS = '{:30s}: {:10s}\n'
+    pass
+
+
+class OptimizeParams(_Params):
+    """."""
+
+    _TMPD = '{:30s}: {:10d} {:s}\n'
+    _TMPF = '{:30s}: {:10.3f} {:s}\n'
+    _TMPS = '{:30s}: {:10s} {:s}\n'
 
     BoundaryPolicy = _get_namedtuple('BoundaryPolicy', ('ToBoundary', 'ToNaN'))
 
@@ -76,12 +83,12 @@ class OptimizeParams:
     def __str__(self):
         """."""
         stg = ''
-        stg += self._TMPD.format('max_number_iters', self.max_number_iters)
-        stg += self._TMPD.format('max_number_evals', self.max_number_evals)
+        stg += self._TMPD.format('max_number_iters', self.max_number_iters, '')
+        stg += self._TMPD.format('max_number_evals', self.max_number_evals, '')
         stg += self._TMPS.format(
             'boundary_policy',
-            self.BoundaryPolicy._fields[self.boundary_policy])
-        if self.is_positions_consistent():
+            self.BoundaryPolicy._fields[self.boundary_policy], '')
+        if self.are_positions_consistent():
             stg += self.print_positions(
                 self.limit_lower, names=['limit_lower'], print_header=True)
             stg += self.print_positions(
@@ -183,7 +190,7 @@ class OptimizeParams:
             pos = _np.where(idl, self.limit_lower, pos)
         return pos
 
-    def is_positions_consistent(self, pos=None):
+    def are_positions_consistent(self, pos=None):
         """."""
         pos = pos if pos is not None else self.initial_position
         wrong = (
@@ -193,45 +200,50 @@ class OptimizeParams:
             _np.any(pos >= self.limit_upper))
         return not wrong
 
-    def to_dict(self) -> dict:
-        """."""
-        return {
-            'max_number_iters': self.max_number_iters,
-            'max_number_evals': self.max_number_evals,
-            'boundary_policy': self.boundary_policy,
-            'limit_lower': self.limit_lower,
-            'limit_upper': self.limit_upper,
-            'initial_position': self.initial_position,
-            }
 
-    def from_dict(self, params_dict: dict):
-        """."""
-        self.max_number_iters = params_dict.get(
-            'max_number_iters', self.max_number_iters)
-        self.max_number_evals = params_dict.get(
-            'max_number_evals', self.max_number_evals)
-        self.boundary_policy = params_dict.get(
-            'boundary_policy', self.boundary_policy)
-        self.limit_lower = params_dict.get('limit_lower', self.limit_lower)
-        self.limit_upper = params_dict.get('limit_upper', self.limit_upper)
-        self.initial_position = params_dict.get(
-            'initial_position', self.initial_position)
-
-
-class Optimize:
+class Optimize(_Base):
     """."""
 
-    def __init__(self, params, use_thread=True):
+    def __init__(self, params, use_thread=True, isonline=True):
         """."""
+        super().__init__(
+            params=params, target=self._target_func, isonline=isonline)
         self.use_thread = use_thread
-        self.params = params
-
-        self._thread = _Thread()
-        self._stopevt = _Event()
 
         self._num_objective_evals = 0
         self.best_positions = _np.array([], ndmin=2)
         self.best_objfuncs = _np.array([], ndmin=2)
+
+    def to_dict(self) -> dict:
+        """Dump all relevant object properties to dictionary.
+
+        Returns:
+            dict: contains all relevant properties of object.
+
+        """
+        dic = super().to_dict()
+        dic['num_objective_evals'] = self.num_objective_evals
+        dic['use_thread'] = self.use_thread
+        dic['best_positions'] = self.best_positions
+        dic['best_objfuncs'] = self.best_objfuncs
+        return dic
+
+    def from_dict(self, info: dict):
+        """Update all relevant info from dictionary.
+
+        Args:
+            info (dict): dictionary with all relevant info.
+
+        Returns:
+            keys_not_used (set): Set containing keys not used by
+                `self.params` object.
+
+        """
+        super().from_dict(info)
+        self._num_objective_evals = info['num_objective_evals']
+        self.use_thread = info['use_thread']
+        self.best_positions = info['best_positions']
+        self.best_objfuncs = info['best_objfuncs']
 
     @property
     def num_objective_evals(self):
@@ -248,55 +260,49 @@ class Optimize:
     def start(self):
         """."""
         if self.use_thread:
-            if not self._thread.is_alive():
-                self._thread = _Thread(target=self._optimize, daemon=True)
-                self._stopevt.clear()
-                self._thread.start()
+            super().start()
         else:
-            self._optimize()
+            super().target()
 
-    def stop(self):
-        """."""
-        if self.use_thread:
-            self._stopevt.set()
+    def objective_function(self, pos):
+        """Implement here the objective function."""
+        raise NotImplementedError()
 
-    def join(self):
-        """."""
-        if self.use_thread:
-            self._thread.join()
+    def _optimize(self):
+        """Implement here optimization algorithm."""
+        raise NotImplementedError()
 
-    def to_dict(self):
-        """."""
-        return {
-            'params': self.params.to_dict(),
-            'use_thread': self.use_thread,
-            'best_positions': self.best_positions,
-            'best_objfuncs': self.best_objfuncs,
-            }
+    def _initialization():
+        """To be called before optimization starts.
 
-    def from_dict(self, dic):
-        """."""
-        if 'params' in dic:
-            self.params.from_dict(dic['params'])
-        self.use_thread = dic.get('use_thread', self.use_thread)
-        self.best_positions = dic.get('best_positions', self.best_positions)
-        self.best_objfuncs = dic.get('best_objfuncs', self.best_objfuncs)
+        If the return value is False, optimization will not run.
+        """
+        return True
+
+    def _finalization():
+        """To be called after optimization ends."""
+        pass
 
     def _objective_func(self, pos):
         self._num_objective_evals += 1
         pos = self.params.check_and_adjust_boundary(pos)
         res = []
         for posi in _np.array(pos, ndmin=2):
+            if self._stopevt.is_set():
+                raise OptimizationAborted
             if _np.any(_np.isnan(posi)):
                 _log.warning('Position out of boundaries. Returning NaN.')
                 res.append(_np.nan)
-            res.append(self.objective_function(pos))
+            res.append(self.objective_function(posi))
         return _np.array(res)
 
-    def _optimize(self):
-        """."""
-        raise NotImplementedError()
-
-    def objective_function(self, pos):
-        """."""
-        raise NotImplementedError()
+    def _target_func(self):
+        if not self._initialization():
+            _log.error(
+                'Interrupting: There was some problem with initialization. ')
+            return
+        try:
+            self._optimize()
+        except OptimizationAborted:
+            _log.info('Exiting: stop event was set.')
+        self._finalization()

@@ -81,7 +81,9 @@ class _FitInjTrajBase(_BaseClass):
 
     def calc_init_vals(self, trajx, trajy):
         """."""
-        x_ini, y_ini, xl_ini, yl_ini = trajx[0], trajy[0], 0, 0
+        xl_ini, yl_ini = 0, 0
+        x_ini = max(min(trajx[0], 9e-3), -9e-3)
+        y_ini = max(min(trajy[0], 2e-3), -2e-3)
         de_ini = np.mean(trajx) / self.etax_ave
         return np.array([x_ini, xl_ini, y_ini, yl_ini, de_ini])
 

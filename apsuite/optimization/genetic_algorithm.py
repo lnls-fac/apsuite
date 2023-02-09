@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as mplt
 
 
 class GA:
@@ -39,8 +40,83 @@ class GA:
     def _select_parents(self, f):
         """."""
         # Select parents based on best ranked ones
-        ind_sort = np.argsort(f)
+        ind_sort = self.nondominated_sort(f)
         return self._indiv[ind_sort[:self._nparents], :]
+
+    @staticmethod
+    def nondominated_sort(res, max_rank=None):
+        """Perform non-dominated sorting on results.
+
+        I'm still in the search for an algorithm faster than O(MN^2).
+
+        Args:
+            res (numpy.ndarray, NxM): values of M objective functions for N
+                particles.
+            max_rank (int, optional): Maximum rank to sort. Particles with
+                rank greater than `max_rank` will not be properly ranked.
+                Defaults to `None`, which means all particles will be ranked.
+
+        Returns:
+            rank (numpy.ndarray, (N, )): rank of the particles. Pareto front
+                has rank 1.
+
+        """
+        num_res = res.shape[0]
+        rank = np.ones(num_res, dtype=int)
+        max_rank = max_rank or num_res
+        for i in range(num_res):
+            # The 2 lines below are an alternative version of the algorithm:
+            # dres = res - res[i]
+            # rank[i] += np.sum(np.all(dres < 0, axis=1))
+
+            if rank[i] > max_rank:
+                continue
+            dres = res[i+1:] - res[i]
+
+            # First update the rank of the current particle finding all
+            # other particles that dominate it:
+            rank[i] += np.sum(np.all(dres < 0, axis=1))
+            # Now update the rank of all particles dominated by this one:
+            rank[i+1:][np.all(dres > 0, axis=1)] += 1
+        return rank
+
+    @staticmethod
+    def plot_rank(res, rank, dirs=(0, 1), max_rank=None):
+        """Make figure with particles ranking.
+
+        Args:
+            res (numpy.ndarray, (N, M)): values of M objective functions for N
+                particles.
+            rank (numpy.ndarray, (N, )): rank of the particles.
+            dirs (2-tuple, optional): Objective directions to plot.
+                Defaults to (0, 1).
+            max_rank(int, optional): Maximum rank to plot lines connecting
+                particles of the same rank. Defaults to `None`, which means all
+                particles with same rank will be connected..
+
+        Returns:
+            fig (matplotlib.Figure): Figure created.
+            ax (matplotlib.Axes): axes where data was plotted.
+
+        """
+        fig, ax = mplt.subplots(1, 1, figsize=(10, 9))
+        max_rank = max_rank or rank.max()
+        dir1, dir2, *_ = dirs
+        for i in range(1, rank.max()+1):
+            idx = rank == i
+            if not np.any(idx):
+                continue
+            cor = mplt.cm.jet(i/rank.max())
+            res1 = res[idx, dir1]
+            res2 = res[idx, dir2]
+            ax.plot(res1, res2, 'o', color=cor)
+            if i > max_rank:
+                continue
+            sort = np.argsort(np.arctan2(res2, res1))
+            ax.plot(res1[sort], res2[sort], 'o-', color=cor)
+        fig.tight_layout()
+        fig.show()
+        return fig, ax
 
     def _crossover(self, parents):
         """."""
