@@ -142,6 +142,7 @@ class RCDS(_Optimize):
                 list of such evaluations and steps 'xflist', the step for
                 which the minimum is attained 'delta_min', the minimum point
                 'pos_min' and the obj. func minimum value, 'func_min'.
+
         """
         if _np.isnan(func0):
             func0 = self._objective_func(pos0)
@@ -285,6 +286,18 @@ class RCDS(_Optimize):
         pos = self.params.denormalize_positions(pos)
         return super()._objective_func(pos)[0]
 
+    def _finalization(self):
+        """."""
+        stg = '\n Finished! \n'
+        stg += f'Number of iterations: {iter+1:04d}\n'
+        stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
+        init_func = self.data['best_objfuncs'][0]
+        func_min = self.data['best_objfuncs'][-1]
+        stg += f'f_0 = {init_func:.3g}\n'
+        stg += f'f_min = {func_min:.3g}\n'
+        stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
+        _log.info(stg)
+
     def _optimize(self):
         """Xiaobiao's version of Powell's direction search algorithm (RCDS).
 
@@ -398,6 +411,14 @@ class RCDS(_Optimize):
 
             hist_best_pos.append(pos_min)
             hist_best_func.append(func_min)
+            self.data['best_positions'] = self.params.denormalize_positions(
+                _np.array(hist_best_pos, ndmin=2))
+            self.data['best_objfuncs'] = _np.array(hist_best_func, ndmin=2)
+
+            _tmp_sdirs = self.params.denormalize_positions(
+                search_dirs, is_pos=False)
+            _tmp_sdirs /= _np.linalg.norm(_tmp_sdirs, axis=0)
+            self.data['final_search_directions'] = _tmp_sdirs
 
             # Numerical recipes does:
             # cond = 2*(func0-func_min) <= \
@@ -410,7 +431,6 @@ class RCDS(_Optimize):
                     f'Final ObjFun = {func_min:.3g}')
                 break
             elif self._stopevt.is_set():
-                _log.info('Exiting: stop event was set.')
                 break
             elif self._num_objective_evals > max_evals:
                 _log.info('Exiting: Maximum number of evaluations reached.')
@@ -421,20 +441,3 @@ class RCDS(_Optimize):
             _log.info(
                 f'End of iteration {iter+1:04d}: '
                 f'Final ObjFun = {func_min:.3g}')
-
-        stg = '\n Finished! \n'
-        stg += f'Number of iterations: {iter+1:04d}\n'
-        stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
-        stg += f'f_0 = {init_func:.3g}\n'
-        stg += f'f_min = {func_min:.3g}\n'
-        stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
-        _log.info(stg)
-
-        self.data['best_positions'] = self.params.denormalize_positions(
-            _np.array(hist_best_pos, ndmin=2))
-        self.data['best_objfuncs'] = _np.array(hist_best_func, ndmin=2)
-
-        search_dirs = self.params.denormalize_positions(
-            search_dirs, is_pos=False)
-        search_dirs /= _np.linalg.norm(search_dirs, axis=0)
-        self.data['final_search_directions'] = search_dirs
