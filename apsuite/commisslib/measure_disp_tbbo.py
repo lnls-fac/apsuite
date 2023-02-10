@@ -2,14 +2,18 @@
 import time as _time
 
 import numpy as np
+import numpy.polynomial.polynomial as np_poly
 
-import pyaccel
-from siriuspy.namesys import SiriusPVName as _PVName
-from siriuspy.devices import SOFB, DevLILLRF
+import pyaccel as pa
+from siriuspy.devices import SOFB, DevLILLRF, EVG
 
-from ..optimization import SimulAnneal
 from ..utils import MeasBaseClass as _BaseClass, \
-    ThreadedMeasBaseClass as _TBaseClass, ParamsBaseClass as _ParamsBaseClass
+    ParamsBaseClass as _ParamsBaseClass
+
+from scipy.optimize import least_squares
+import matplotlib.pyplot as plt
+from matplotlib import rcParams
+rcParams.update({'font.size': 16, 'lines.linewidth': 2})
 
 
 class ParamsDisp(_ParamsBaseClass):
@@ -18,32 +22,50 @@ class ParamsDisp(_ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
-        self.klystron_delta = -2
-        self.wait_time = 40
+        self.delta_kly2_amp = -2
+        self.wait_kly2 = 10
         self.timeout_orb = 10
-        self.num_points = 10
-        # self.klystron_excit_coefs = [1.098, 66.669]  # old
-        # self.klystron_excit_coefs = [1.01026423, 71.90322743]  # > 2.5nC
-        self.klystron_excit_coefs = [0.80518365, 87.56545895]  # < 2.5nC
+        self.nr_points = 10
+        self.injection_interval = 30
+        # self.kly2_excit_coefs = [66.669, 1.098]  # old
+        # self.kly2_excit_coefs = [71.90322743, 1.01026423]  # > 2.5nC
+        self.kly2_excit_coeffs = [87.56545895, 0.80518365]  # < 2.5nC
+
+    def __str__(self):
+        """."""
+        ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
+        dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
+        stmp = '{0:24s} = {1:}  {2:s}\n'.format
+        stg = ftmp('delta_kly2_amp', self.delta_kly2_amp, '')
+        stg += ftmp('wait_kly2', self.wait_kly2, '[s]')
+        stg += ftmp('timeout_orb', self.timeout_orb, '[s]')
+        stg += ftmp('injection_interval', self.injection_interval, '[s]')
+        stg += dtmp('nr_points', self.nr_points, '')
+        coeffs_stg = ', '.join([f'{c:f}' for c in self.kly2_excit_coeffs])
+        stg += stmp(
+            'kly2_excit_coeffs', f'[{coeffs_stg:s}]', '')
+        return stg
 
 
 class MeasureDispTBBO(_BaseClass):
     """."""
 
-    def __init__(self):
+    def __init__(self, isonline=True):
         """."""
-        super().__init__(ParamsDisp())
-        self.devices = {
-            'bo_sofb': SOFB(SOFB.DEVICES.BO),
-            'tb_sofb': SOFB(SOFB.DEVICES.TB),
-            'kly2': DevLILLRF(DevLILLRF.DEVICES.LI_KLY2),
-            }
+        super().__init__(ParamsDisp(), isonline=isonline)
+        self.isonline = isonline
+        if self.isonline:
+            self.devices = {
+                'bo_sofb': SOFB(SOFB.DEVICES.BO),
+                'tb_sofb': SOFB(SOFB.DEVICES.TB),
+                'kly2': DevLILLRF(DevLILLRF.DEVICES.LI_KLY2),
+                'evg': EVG()}
 
     @property
     def energy(self):
         """."""
-        return np.polyval(
-            self.params.klystron_excit_coefs, self.devices['kly2'].amplitude)
+        return np_poly.polyval(
+            self.params.kly2_excit_coeffs, self.devices['kly2'].amplitude)
 
     @property
     def trajx(self):
@@ -58,204 +80,171 @@ class MeasureDispTBBO(_BaseClass):
             [self.devices['tb_sofb'].trajy, self.devices['bo_sofb'].trajy])
 
     @property
-    def nr_points(self):
+    def traj(self):
         """."""
-        return min(
-            self.devices['tb_sofb'].nr_points,
-            self.devices['bo_sofb'].nr_points)
+        return np.r_[self.trajx, self.trajy]
 
-    @nr_points.setter
-    def nr_points(self, value):
-        self.devices['tb_sofb'].nr_points = int(value)
-        self.devices['bo_sofb'].nr_points = int(value)
-
-    def wait(self, timeout=10):
+    def inject_and_get_traj(self):
         """."""
-        self.devices['tb_sofb'].wait_buffer(timeout=timeout)
-        self.devices['bo_sofb'].wait_buffer(timeout=timeout)
-
-    def reset(self, wait=0):
-        """."""
-        _time.sleep(wait)
-        self.devices['tb_sofb'].cmd_reset()
-        self.devices['bo_sofb'].cmd_reset()
-        _time.sleep(1)
+        evg = self.devices['evg']
+        trajs = []
+        for i in range(self.params.nr_points):
+            traj0 = self.traj
+            evg.cmd_turn_on_injection()
+            t0_ = _time.time()
+            print(
+                f'{i:02d}/{self.params.nr_points:02d} -> ' +
+                'reading initial trajectory...')
+            for _ in range(50):
+                if not np.any(np.isclose(traj0, self.traj)):
+                    break
+                _time.sleep(self.params.timeout_orb/50)
+            else:
+                print('    Timed out waiting traj to update.')
+            print('    Getting trajectory.')
+            trajs.append(self.traj)
+            _time.sleep(self.params.injection_interval - (_time.time() - t0_))
+        return np.mean(trajs, axis=0)
 
     def measure_dispersion(self):
         """."""
-        self.nr_points = self.params.num_points
-        delta = self.params.klystron_delta
+        self.nr_points = self.params.nr_points
+        delta = self.params.delta_kly2_amp
+        kly2_dev = self.devices['kly2']
 
-        self.reset(3)
-        self.wait(self.params.timeout_orb)
-        orb = [-np.hstack([self.trajx, self.trajy]), ]
-        ene0 = self.energy
+        traj0 = self.inject_and_get_traj()
 
-        origamp = self.devices['kly2'].amplitude
-        self.devices['kly2'].amplitude = origamp + delta
+        print('setting new Klystron2 amplitude...')
+        origamp = kly2_dev.amplitude
+        kly2_dev.amplitude = origamp + delta
+        _time.sleep(1)
+        print(f"Klystron2 Amp: {kly2_dev.amplitude:.3f}")
+        _time.sleep(self.params.wait_kly2)
+        print('reading new trajectory...')
+        trajp = self.inject_and_get_traj()
 
-        self.reset(self.params.wait_time)
-        self.wait(self.params.timeout_orb)
-        orb.append(np.hstack([self.trajx, self.trajy]))
-        ene1 = self.energy
+        print('restoring Klystron2 amplitude...')
+        kly2_dev.amplitude = origamp
+        _time.sleep(1)
+        print(f"Klystron2 Amp: {kly2_dev.amplitude:.3f}")
+        print('finished!')
+        return trajp - traj0
 
-        self.devices['kly2'].amplitude = origamp
-
-        d_ene = ene1/ene0 - 1
-        return np.array(orb).sum(axis=0) / d_ene
-
-
-class ParamsDispMat:
-    """."""
-
-    def __init__(self):
+    @staticmethod
+    def calc_model_dispersionTBBO(model, bpms):
         """."""
-        self.deltas = {'QF': 0.1, 'QD': 0.1}
+        dene = 1e-4
+        rin = np.array([
+            [0, 0, 0, 0, dene/2, 0],
+            [0, 0, 0, 0, -dene/2, 0]]).T
+        rout, *_ = pa.tracking.line_pass(model, rin, bpms)
+        dispx = (rout[0, 0, :] - rout[0, 1, :]) / dene
+        dispy = (rout[2, 0, :] - rout[2, 1, :]) / dene
+        return np.hstack([dispx, dispy])
 
-
-class MeasureDispMatTBBO(_TBaseClass):
-    """."""
-
-    def __init__(self, quads):
+    @staticmethod
+    def set_septum_gradient(model, kxl, kyl, ksxl, ksyl):
         """."""
-        super().__init__(ParamsDispMat(), target=self._measure_matrix_thread)
-        self._all_corrs = quads
-        self.measdisp = MeasureDispTBBO()
-        self._matrix = dict()
-        self._corrs_to_measure = []
+        ind = pa.lattice.find_indices(model, 'fam_name', 'InjSeptM66')
+        nrsegs = len(ind)
+        for i in ind:
+            model[i].KxL = kxl/nrsegs
+            model[i].KyL = kyl/nrsegs
+            model[i].KsxL = ksxl/nrsegs
+            model[i].KsyL = ksyl/nrsegs
 
-    @property
-    def connected(self):
+    @staticmethod
+    def get_septum_gradient(model):
         """."""
-        conn = self.measdisp.connected
-        conn &= all(map(lambda x: x.connected, self._all_corrs.values()))
-        return conn
+        ind = pa.lattice.find_indices(model, 'fam_name', 'InjSeptM66')
+        kxl, kyl, ksxl, ksyl = 0, 0, 0, 0
+        for i in ind:
+            kxl += model[i].KxL
+            kyl += model[i].KyL
+            ksxl += model[i].KsxL
+            ksyl += model[i].KsyL
+        return kxl, kyl, ksxl, ksyl
 
-    @property
-    def corr_names(self):
+    @staticmethod
+    def err_func(grads, model, disp_meas):
         """."""
-        return sorted(self._all_corrs.keys())
+        kxl, kyl, ksxl, ksyl = grads
+        MeasureDispTBBO.set_septum_gradient(model, kxl, kyl, ksxl, ksyl)
+        bpm_idx = np.array(pa.lattice.find_indices(
+            model, 'fam_name', 'BPM')).ravel()[1:]
+        disp_model = MeasureDispTBBO.calc_model_dispersionTBBO(model, bpm_idx)
+        err_vec = (disp_model - disp_meas)**2
+        return err_vec
 
-    @property
-    def corrs_to_measure(self):
+    @staticmethod
+    def fit_septum_gradients(model, disp_meas, x0=None, bounds=None):
         """."""
-        if not self._corrs_to_measure:
-            return sorted(self._all_corrs.keys() - self._matrix.keys())
-        return self._corrs_to_measure
+        if x0 is None:
+            x0 = MeasureDispTBBO.get_septum_gradient(model)
 
-    @corrs_to_measure.setter
-    def corrs_to_measure(self, value):
-        self._corrs_to_measure = sorted([_PVName(n) for n in value])
-
-    @property
-    def matrix(self):
-        """."""
-        mat = np.zeros(
-            [len(self._all_corrs), 2*self.measdisp.trajx.size], dtype=float)
-        for i, cor in enumerate(self.corr_names):
-            line = self._matrix.get(cor)
-            if line is not None:
-                mat[i, :] = line
-        return mat
-
-    def _measure_matrix_thread(self):
-        corrs = self.corrs_to_measure
-        print('Starting...')
-        for i, cor in enumerate(corrs):
-            print('{0:2d}|{1:2d}: {20:s}'.format(i, len(corrs), cor), end='')
-            orb = []
-            delta = self._get_delta(cor)
-            origkl = self._all_corrs[cor].strength
-            for sig in (1, -1):
-                print('  pos' if sig > 0 else '  neg\n', end='')
-                self._all_corrs[cor].strength = origkl + sig * delta / 2
-                orb.append(sig*self.measdisp.measure_dispersion())
-                if self._stopevt.is_set():
-                    break
-            else:
-                self._matrix[cor] = np.array(orb).sum(axis=0)/delta
-            self._all_corrs[cor].strength = origkl
-            if self._stopevt.is_set():
-                print('Stopped!')
-                break
+        if bounds is None:
+            fit_grads = least_squares(
+                fun=MeasureDispTBBO.err_func,
+                x0=x0, args=(model, disp_meas), method='lm')
         else:
-            print('Finished!')
+            fit_grads = least_squares(
+                fun=MeasureDispTBBO.err_func, x0=x0,
+                args=(model, disp_meas), bounds=bounds)
+        return fit_grads
 
-    def _get_delta(self, cor):
-        for k, v in self.params.deltas.items():
-            if cor.dev.startswith(k):
-                return v
-        print('ERR: delta not found!')
-        return 0.0
+    @staticmethod
+    def calc_fitting_error(fit_grads):
+        """Least squares fitting error.
 
+        Based on fitting error calculation of scipy.optimization.curve_fit
+        do Moore-Penrose inverse discarding zero singular values.
+        """
+        _, smat, vhmat = np.linalg.svd(
+            fit_grads['jac'], full_matrices=False)
+        thre = np.finfo(float).eps * max(fit_grads['jac'].shape)
+        thre *= smat[0]
+        smat = smat[smat > thre]
+        vhmat = vhmat[:smat.size]
+        pcov = np.dot(vhmat.T / (smat*smat), vhmat)
 
-def calc_model_dispersionTBBO(model, bpms):
-    """."""
-    dene = 0.0001
-    rin = np.array([
-        [0, 0, 0, 0, dene/2, 0],
-        [0, 0, 0, 0, -dene/2, 0]]).T
-    rout, *_ = pyaccel.tracking.line_pass(
-        model, rin, bpms)
-    dispx = (rout[0, 0, :] - rout[0, 1, :]) / dene
-    dispy = (rout[2, 0, :] - rout[2, 1, :]) / dene
-    return np.hstack([dispx, dispy])
-
-
-def calc_model_dispmatTBBO(tb_mod, bo_mod, corr_names, elems, nturns=3,
-                           dKL=None):
-    """."""
-    dKL = 0.0001 if dKL is None else dKL
-
-    model = tb_mod + nturns*bo_mod
-    bpms = pyaccel.lattice.find_indices(model, 'fam_name', 'BPM')
-
-    matrix = np.zeros((len(corr_names), 2*len(bpms)))
-    for idx, corr in enumerate(corr_names):
-        elem = elems[corr]
-        model = tb_mod + nturns*bo_mod
-        disp0 = calc_model_dispersionTBBO(model, bpms)
-        elem.model_strength += dKL
-        model = tb_mod + nturns*bo_mod
-        disp = calc_model_dispersionTBBO(model, bpms)
-        elem.model_strength -= dKL
-        matrix[idx, :] = (disp-disp0)/dKL
-    return matrix
-
-
-class FindSeptQuad(SimulAnneal):
-    """."""
-
-    def __init__(self, tb_model, bo_model, corr_names, elems,
-                 respmat, nturns=5, save=False, in_sept=True):
-        """."""
-        super().__init__(save=save)
-        self.tb_model = tb_model
-        self.bo_model = bo_model
-        self.corr_names = corr_names
-        self.elems = elems
-        self.nturns = nturns
-        self.respmat = respmat
-        self.in_sept = in_sept
-
-    def initialization(self):
-        """."""
-        return
-
-    def calc_obj_fun(self):
-        """."""
-        if self.in_sept:
-            sept_idx = pyaccel.lattice.find_indices(
-                self.tb_model, 'fam_name', 'InjSept')
+        # multiply covariance matrix by residue 2-norm
+        ysize = len(fit_grads['fun'])
+        cost = 2 * fit_grads['cost']  # res.cost is half sum of squares!
+        popt = fit_grads['x']
+        if ysize > popt.size:
+            # normalized by degrees of freedom
+            s_sq = cost / (ysize - popt.size)
+            pcov = pcov * s_sq
         else:
-            sept_idx = self.elems['TB-04:MA-CV-2'].model_indices
-        kxl, kyl, ksxl, ksyl = self._position
-        pyaccel.lattice.set_attribute(self.tb_model, 'KxL', sept_idx, kxl)
-        pyaccel.lattice.set_attribute(self.tb_model, 'KyL', sept_idx, kyl)
-        pyaccel.lattice.set_attribute(self.tb_model, 'KsxL', sept_idx, ksxl)
-        pyaccel.lattice.set_attribute(self.tb_model, 'KsyL', sept_idx, ksyl)
-        respmat = calc_model_dispmatTBBO(
-            self.tb_model, self.bo_model, self.corr_names, self.elems,
-            nturns=self.nturns)
-        respmat -= self.respmat
-        return np.sqrt(np.mean(respmat*respmat))
+            pcov.fill(np.nan)
+            print(
+                '# of fitting parameters larger than # of data points!')
+        return np.sqrt(np.diag(pcov))
+
+    @staticmethod
+    def plot_dispersion(disp_model, disp_meas, nr_bpms):
+        """."""
+        _, axs = plt.subplots(2, 1, figsize=(10, 6))
+        axs[0].plot(
+            disp_model[:nr_bpms], '-o', color='tab:blue', label='model')
+        axs[0].plot(
+            disp_meas[:nr_bpms], 'o--', color='b', alpha=0.75, label='meas')
+
+        axs[1].plot(disp_model[nr_bpms:], '-o', color='tab:red', label='model')
+        axs[1].plot(
+            disp_meas[nr_bpms:],
+            'o--', color='C1', alpha=0.75, label='meas')
+
+        axs[0].axvline(6-1/2, ls='--', color='k')
+        axs[1].axvline(6-1/2, ls='--', color='k')
+
+        axs[0].set_ylabel(r'$\eta_x$ [m]')
+        axs[1].set_ylabel(r'$\eta_y$ [m]')
+        axs[1].set_xlabel('BPM idx')
+        axs[0].set_title('Propagated dispersion function TB-BO')
+
+        axs[0].legend(fontsize=10)
+        axs[1].legend(fontsize=10)
+
+        plt.tight_layout()
+        plt.show()

@@ -1,5 +1,7 @@
 """."""
 import time as _time
+import logging as _log
+
 import numpy as _np
 
 from pymodels import si as _si
@@ -39,11 +41,6 @@ class OptimizeDAParams(_RCDSParams):
                 continue
             self.names_sexts2use.append(sext)
 
-        self.data['strengths'] = []
-        self.data['obj_funcs'] = []
-        self.data['onaxis_obj_funcs'] = []
-        self.data['offaxis_obj_funcs'] = []
-
     def __str__(self):
         """."""
         stg = '-----  RCDS Parameters  -----\n\n'
@@ -71,6 +68,11 @@ class OptimizeDA(_RCDS):
         """."""
         _RCDS.__init__(self, isonline=isonline, use_thread=use_thread)
         self.params = OptimizeDAParams()
+        self.data['strengths'] = []
+        self.data['obj_funcs'] = []
+        self.data['onaxis_obj_funcs'] = []
+        self.data['offaxis_obj_funcs'] = []
+
         self.sextupoles = []
         if self.isonline:
             self._create_devices()
@@ -153,7 +155,7 @@ class OptimizeDA(_RCDS):
                 break
             _time.sleep(0.1)
         else:
-            print('Timed out waiting injeff to update.')
+            _log.warning('Timed out waiting injeff to update.')
         return self.devices['currinfo'].injeff
 
     def _prepare_evg(self):
@@ -196,7 +198,7 @@ class OptimizeDA(_RCDS):
         obj = []
         for i in range(nr_evals):
             obj.append(self.objective_function(pos))
-            print(f'{i+1:02d}/{nr_evals:02d}  --> obj. = {obj[-1]:.3f}')
+            _log.info(f'{i+1:02d}/{nr_evals:02d}  --> obj. = {obj[-1]:.3f}')
         noise_level = _np.std(obj)
         self.params.noise_level = noise_level
         self.data['measured_objfuncs_for_noise'] = obj
