@@ -91,7 +91,7 @@ class OptimizeDA(_RCDS):
         if not super()._initialization():
             return False
         self.data['timestamp'] = _time.time()
-        self.data['strengths'] = []
+        self.data['strengths'] = [self.get_strengths_from_machine()]
         self.data['obj_funcs'] = []
         self.data['onaxis_obj_funcs'] = []
         self.data['offaxis_obj_funcs'] = []
@@ -133,7 +133,7 @@ class OptimizeDA(_RCDS):
             llrf.set_phase(self.params.onaxis_rf_phase, wait_mon=True)
             _time.sleep(0.5)
             injeff = self.inject_beam_and_get_injeff()
-            llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=False)
+            llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=True)
 
             self.data['onaxis_obj_funcs'].append(injeff)
             objective += self.params.onaxis_weight * injeff
