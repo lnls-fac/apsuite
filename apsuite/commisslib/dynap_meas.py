@@ -110,7 +110,7 @@ class MeasDynap(_ThreadBaseClass):
 
     def _get_filename(pingh, pingv, prefix=''):
         fname = 'tbt_' + prefix
-        fname += f'_pingh_m{int(abs(pingh*1000)):03d}urad' #  do pingers read urad?
+        fname += f'_pingh_m{int(abs(pingh*1000)):03d}urad' 
         fname += f'_pingh_p{int(abs(pingv*1000)):03d}urad'
         # fname += f"_drf_{'m' if dfreq<0 else 'p':s}{abs(dfreq):04.0f}hz"
         return fname
@@ -192,20 +192,17 @@ class MeasDynap(_ThreadBaseClass):
         for fname in fnames:
             print(f'Loading file {fname}...')
             data = self.load_data(fname)
-
-            # extract and prepare
             trajsum = data['trajsum'].reshape(-1, 160)
             trajsum_avg = _np.mean(trajsum, axis=1)
             # rehsapes really necessary?
-            trajx = data['trajx'].reshape(-1, 160) * 1e-6
+            trajx = data['trajx'].reshape(-1, 160) * 1e-6  # [um]
             trajy = data['trajy'].reshape(-1, 160) * 1e-6
             loss = (1 - trajsum_avg.min()/trajsum_avg.max()) * 100
             loss = min(max(loss, 0), 100)
-            kickx = data['pingh_kick'] * 1e3
+            kickx = data['pingh_kick'] * 1e3 #  [mrad]
             kicky = data['pingv_kick'] * 1e3
             print(f' loaded!\n')
-            # prepare for fits and select nr of fits
-            vecs = []
+            
             min_sum = self.params.min_sum
             nr_fits = self.params.nr_fits
             if nr_fits is None:
@@ -213,7 +210,8 @@ class MeasDynap(_ThreadBaseClass):
             if not nr_fits.size:
                 nr_fits = trajsum_avg.size
             print(f'Number of fits = {nr_fits}.\n')
-            # fits
+ 
+            vecs = []
             for i in range(nr_fits):
                 print(f'    fitting turn {i:3d}/{nr_fits:3d}...')
                 trajx_i, trajy_i = trajx[i], trajy[i]
@@ -225,17 +223,17 @@ class MeasDynap(_ThreadBaseClass):
                 fits, res, chis = self.fit_traj.do_fitting(
                     trajx_i, trajy_i, tol=1e-8, max_iter=5, full=True,
                     update_jacobian=True)
-                print(f'fitted! Chi = {res[-1]*1000:1.2f}\n')
+                print(f'fitted! Chi = {chis[-1]*1000:1.2f}\n')  # ?
                 vec = fits[-1] * _np.nan if chis[-1] >= 2 else fits[-1]
                 vecs.append(vec)
-            vecs = -_np.array(vecs)
-            # collects min x, max y, min x kick, y max kick, losses and res
+            vecs = _np.array(vecs)
+            
             if not vecs.size:
                 continue
             else:
-                if not _np.isnan(vecs).any():
+                if not _np.isnan(vecs).any():  # ?
                     xmin.append(vecs[:, 0].min())
-                    kxmin.append(vecs[:, 1].min())
+                    kxmin.append(vecs[:, 1].min())  # ?
                     ymax.append(vecs[:, 2].max())
                     kymax.append(vecs[:, 3].max())
                     kicksx.append(kickx)
@@ -243,7 +241,6 @@ class MeasDynap(_ThreadBaseClass):
                     losses.append(loss)
                     residues.append(res)
 
-        # prepares for extraction
         kicksx = _np.array(kicksx, dtype=int)
         kicksy = _np.array(kicksy, dtype=int)
         xmin = _np.array(xmin)
@@ -252,7 +249,7 @@ class MeasDynap(_ThreadBaseClass):
         kxmin = _np.array(kxmin)
         kymax = _np.array(kymax)
 
-        idx_nan = (xmin < -9.5e-3) | (ymax > 3.5e-3)
+        idx_nan = (xmin < -9.5e-3) | (ymax > 3.5e-3)  # ?
         xmin[idx_nan], ymax[idx_nan] = _np.nan, _np.nan
         kxmin[idx_nan], kymax[idx_nan] = _np.nan, _np.nan
         losses[idx_nan] = _np.nan
@@ -306,9 +303,3 @@ class MeasDynap(_ThreadBaseClass):
             print('No figname. Not saving figure.')
         fig.show()
         return fig, ax1
-
-# params
-# aux funcs and methods
-# do measurement
-# process_data
-# plot etc
