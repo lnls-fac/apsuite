@@ -1,3 +1,4 @@
+"""."""
 import numpy as _np
 import matplotlib.pyplot as _mplt
 import matplotlib.gridspec as _mgs
@@ -7,7 +8,7 @@ from apsuite.commisslib.inj_traj_fitting import SIFitInjTraj
 from apsuite.optics_analysis import TuneCorr
 from siriuspy.epics import PV as _PV
 from siriuspy.devices import PowerSupplyPU, Tune, CurrInfoSI, EVG, RFGen, \
-      BunchbyBunch
+      FamBPMs, Trigger
 from apsuite.utils import ParamsBaseClass as _ParamsBaseClass, \
      ThreadedMeasBaseClass as _ThreadBaseClass
 
@@ -16,55 +17,75 @@ class DynapParams(_ParamsBaseClass):
     """."""
 
     def __init__(self):
+        """."""
         super().__init__()
-        self.max_kickx = 770 * 1e-3
-        self.max_kicky = 320 * 1e-3
+        self.max_kickx = 770 * 1e-3  # [mrad]
+        self.max_kicky = 320 * 1e-3  # [mrad]
         self.alphas = _np.linspace(0.8, 1.2, 11)
         self.thetas = _np.linspace(_np.pi/2, _np.pi, 5)
-        self.dcct_offset = 0
-        self.tunex = 0
-        self.tuney = 0
-        self.dfreq = 0
-        self.min_stored_curr = 2 #  [mA]
+        self.dcct_offset = 0  # [mA]
+        self.min_stored_curr = 2  # [mA]
         self.min_sum = None
         self.nr_fits = None
+        self.acq_nrsamples_pre = 10
+        self.acq_nrsamples_post = 2000
+        self.orbit_timeout = 20  # [s]
 
-    def __str__(self) -> str:
+    def __str__(self):
         """."""
         ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
         dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
         stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
 
         stg = ''
-
+        stg += dtmp('max_kickx', self.max_kickx, '[mrad]')
+        stg += dtmp('max_kicky', self.max_kicky, '[mrad]')
+        # stg += alphas = _np.linspace(0.8, 1.2, 11)
+        # stg += thetas = _np.linspace(_np.pi/2, _np.pi, 5)
+        stg += ftmp('dcct_offset', self.dcct_offset, '[mA]')
+        stg += ftmp('min_stored_curr', self.min_stored_curr, '[mA]')
+        stg += stmp('min_sum', self.min_sum, '')
+        stg += stmp('nr_fits', self.nr_fits, '')
+        stg += stmp('acq_nrsamples_pre', self.acq_nrsamples_pre, '')
+        stg += stmp('acq_nrsamples_post', self.acq_nrsamples_post, '')
+        stg += dtmp('orbit_timeout', self.orbit_timeout, '[s]')
         return stg
 
 
 class MeasDynap(_ThreadBaseClass):
     """."""
 
-    def __init__(self, params=None, target=None, isonline=True):
-        self.params = DynapParams()
-        if self.isonline:
-            self._create_devices()
+    def __init__(self, params=None, isonline=True):
+        """."""
+        params = DynapParams() if params is None else params
+        super().__init__(params=params, target=self._start_measurement,
+                         isonline=isonline)
         self.fit_traj = SIFitInjTraj()
         self.tunecorr = TuneCorr(self.fit_traj.model, 'SI',
                                  method='Proportional', grouping='TwoKnobs')
+        if self.isonline:
+            self._create_devices()
 
     def _create_devices(self):
         self.devices['pingh'] = PowerSupplyPU(
             PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
-        self.devices['pingv'] = PowerSupplyPU(PowerSupplyPU.DEVICES.SI_PING_V)
-        self.devices['toca'] = self.fit_traj.devices['sofb']
+        self.devices['pingv'] = PowerSupplyPU(
+            PowerSupplyPU.DEVICES.SI_PING_V)
+        self.devices['fambpms'] = FamBPMs(FamBPMs.DEVICES.SI)
+        self.devices['trigbpm'] = Trigger('SI-Fam:TI-BPM')
+        # self.devices['toca'] = self.fit_traj.devices['sofb']
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['rfgen'] = RFGen()
         self.devices['evg'] = EVG()
-        self.devices['bbbl'] = BunchbyBunch(BunchbyBunch.DEVICES.L)
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
+        # self.devices['exc_tunex'] = _PV('SI-Glob:DI-Tune-H:Enbl-Sts')
+        # self.devices['exc_tuney'] = _PV('SI-Glob:DI-Tune-V:Enbl-Sts')
+        self.devices['exc_tunex_sel'] = _PV('SI-Glob:DI-Tune-H:Enbl-Sel')
+        self.devices['exc_tuney_sel'] = _PV('SI-Glob:DI-Tune-V:Enbl-Sel')
 
     def correct_tunes(self, tunex_goal, tuney_goal):
         """."""
-        print('--- correcting si tunes ---')
+        print('--- correcting SI tunes ---')
         tunecorr = self.tunecorr
         model = self.fit_traj.model
         print('     initial tunes   : ',  tunecorr.get_tunes(model))
@@ -74,38 +95,9 @@ class MeasDynap(_ThreadBaseClass):
                                     jacobian_matrix=tunemat, tol=1e-8)
         print('     final tunes : ', tunecorr.get_tunes(model))
 
-    def save_data(self, overwrite=False, tunex=None, tuney=None,
-                  kickx=None, kicky=None):
+    def save_data(self, kickx, kicky, overwrite=False):
         """."""
-        self.data['timestamp'] = _time.time()
-        self.data['pingh_kick'] = self.devices['pingh'].strength
-        self.data['pingv_kick'] = self.devices['pingv'].strength
-        self.data['pingh_voltage'] = self.devices['pingh'].voltage
-        self.data['pingv_voltage'] = self.devices['pingv'].voltage
-        self.data['pingh_pulse_sts'] = self.devices['pingh'].pulse
-        self.data['pingv_pulse_sts'] = self.devices['pingv'].pulse
-        if tunex is not None:
-            self.data['tunex'] = tunex
-        if tuney is not None:
-            self.data['tuney'] = tuney
-        if tunex is not None:
-            self.data['pingh_kick_sp'] = kickx
-        if tuney is not None:
-            self.data['pingv_kick_sp'] = kicky
-        bbl = self.devices['bbl']
-        self.data['tunes'] = bbl.sram.spec_marker1_freq
-        self.data['tunes'] /= bbl.info.rf_freq_nom * bbl.info.harmonic_number
-        self.data['trajx'] = self.devices['toca'].mt_trajx.reshape(-1, 160)
-        self.data['trajy'] = self.devices['toca'].mt_trajy.reshape(-1, 160)
-        self.data['trajsum'] = self.devices['toca'].mt_sum.reshape(-1, 160)
-        self.data['toca_buffer_count'] = self.devices['toca'].buffer_count
-        self.data['toca_nr_samplespre'] = self.devices['toca'].trigsamplepre
-        self.data['toca_nr_samplespost'] = self.devices['toca'].trigsamplepost
-        self.data['rf_frequency'] = self.devices['rfgen'].frequency
-        self.data['stored_current'] = self.devices['currinfo'].current
-
-        fname = self._get_filename(kickx, kicky, prefix='ad')
-
+        fname = self._get_filename(kickx, kicky, prefix='dynap')
         return super().save_data(fname, overwrite)
 
     def _get_filename(pingh, pingv, prefix=''):
@@ -115,14 +107,17 @@ class MeasDynap(_ThreadBaseClass):
         # fname += f"_drf_{'m' if dfreq<0 else 'p':s}{abs(dfreq):04.0f}hz"
         return fname
 
-    def do_measurement(self, dir_name=None):
+    def _start_measurement(self, dir_name=None):
         """."""
-        if not (dir_name is None):
+        if not self.isonline:
+            raise ValueError('You need to be online to do the measurement')
+
+        if dir_name is not None:
             try:
                 _os.mkdir(dir_name)
                 _os.chdir(dir_name)
-            except  FileExistsError:
-                print('Choose a different directory name')
+            except FileExistsError('Choose a different directory name'):
+                return
 
         max_kickx = self.params.max_kickx
         max_kicky = self.params.max_kicky
@@ -131,18 +126,18 @@ class MeasDynap(_ThreadBaseClass):
 
         pingh = self.devices['pingh']
         pingv = self.devices['pingv']
-        tunex = self.devices['tune'].tunex
-        tuney = self.devices['tune'].tuney
         currinfo = self.devices['currinfo']
-
-        self._check_current_and_inject()
-        curr0 = currinfo.current - self.params.dcct_offset
 
         for theta in thetas:
             for alpha in alphas:
+                curr0 = currinfo.current - self.params.dcct_offset
+
+                if self._stopevt.is_set():
+                    print('Stopping...')
+                    return
+
                 kickx = alpha * max_kickx * _np.cos(theta)
                 kicky = alpha * max_kicky * _np.sin(theta)
-
                 pingh.strength = kickx
                 pingv.strength = kicky
 
@@ -150,16 +145,80 @@ class MeasDynap(_ThreadBaseClass):
                 stg += f'kick y = {kicky*1000:3d} urad'
                 print(stg)
 
-                self.save_data(tunex=tunex, tuney=tuney, kickx=kickx,
-                               kicky=kicky)
+                self.acquire_data()
+                self.save_data(kickx=kickx, kicky=kicky)
 
                 currf = currinfo.current - self.params.dcct_offset
-                loss = (currf-curr0)/curr0 * 100
+                loss = (1 - currf/curr0) * 100
                 print(f'    Beam loss: {loss:.2f}%')
 
-    def load_and_apply(self, fname):
+    def acquire_data(self):
         """."""
-        return super().load_and_apply(fname)
+        fambpms = self.devices['fambpms']
+        evt_study = self.devices['evt_study']  # Linac ?
+
+        # turn off tune excitator ?
+        self.devices['exc_tunex_sel'].value = 0
+        self.devices['exc_tuney_sel'].value = 0
+        _time.sleep(2)
+
+        self._prepare_bpms_acquisition()
+        self._prepare_pulsed_magnets()
+        self._check_current_and_inject()
+        fambpms.mturn_reset_flags()
+        evt_study.cmd_external_trigger()  # linac?
+        fambpms.mturn_wait_update_flags(timeout=self.params.orbit_timeout)
+        trajx, trajy, trajsum = fambpms.get_mturn_orbit(return_sum=True)
+
+        data = dict()
+        data['timestamp'] = _time.time()
+        data['rf_frequency'] = self.devices['rfgen'].frequency
+        data['stored_current'] = self.devices['currinfo'].current
+        data['trajx'], data['trajy'], data['trajsum'] = trajx, trajy, trajsum
+        data['pingh_kick'] = self.devices['pingh'].strength
+        data['pingv_kick'] = self.devices['pingv'].strength
+        data['pingh_voltage'] = self.devices['pingh'].voltage
+        data['pingv_voltage'] = self.devices['pingv'].voltage
+        data['pingh_pulse_sts'] = self.devices['pingh'].pulse
+        data['pingv_pulse_sts'] = self.devices['pingv'].pulse
+        tune = self.devices['tune']
+        data['tunex'], data['tuney'] = tune.tunex, tune.tuney
+        bpm0 = self.devices['fambpms'].devices[0]
+        csbpm = bpm0.csdata
+        data['bpms_acq_rate'] = csbpm.AcqChan._fields[bpm0.acq_channel]
+        data['bpms_nrsamples_pre'] = bpm0.acq_nrsamples_pre  # why not trust params?
+        data['bpms_nrsamples_post'] = bpm0.acq_nrsamples_post
+        data['bpms_trig_delay_raw'] = self.devices['trigbpm'].delay_raw
+        data['bpms_switching_mode'] = csbpm.SwModes._fields[
+            bpm0.switching_mode]
+        data['tunex_enable'] = tune.enablex
+        data['tuney_enable'] = tune.enabley
+
+        self.devices['exc_tunex_sel'].value = 1
+        self.devices['exc_tuney_sel'].value = 1
+        self.data = data
+
+    def _prepare_pulsed_magnets(self):
+        # turn off NLK, septa
+        raise NotImplementedError
+
+    def _prepare_timing(self):
+        """."""
+        trigbpm = self.devices['trigbpm']
+        trigbpm.delay = 0.0
+        trigbpm.nr_pulses = 1
+        trigbpm.source = 'Linac'  # ?
+        self.devices['evg'].cmd_update_events()
+
+    def _prepare_bpms_acquisition(self):
+        """."""
+        fambpms = self.devices['fambpms']
+        prms = self.params
+        fambpms.mturn_config_acquisition(
+            nr_points_after=prms.acq_nrsamples_pre,
+            nr_points_before=prms.acq_nrsamples_post,
+            acq_rate='TbT',
+            repeat=False)
 
     def plot_traj_fit(self):
         """."""
@@ -168,12 +227,13 @@ class MeasDynap(_ThreadBaseClass):
     def _check_current_and_inject(self, min_stored_current):
         evg = self.devices['evg']
         currinfo = self.devices['currinfo']
-
+        # turn on egun
         curr = currinfo.current
         while curr < min_stored_current:
             evg.cmd_turn_on_injection(wait_rb=True)
             evg.wait_injection_finish()
             curr = currinfo.current
+        # turn of egun
         return
 
     def process_dynap_data(self, fnames=None, files_dir_path=None):
@@ -306,9 +366,3 @@ class MeasDynap(_ThreadBaseClass):
             print('No figname. Not saving figure.')
         fig.show()
         return fig, ax1
-
-# params
-# aux funcs and methods
-# do measurement
-# process_data
-# plot etc
