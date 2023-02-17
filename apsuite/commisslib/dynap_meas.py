@@ -223,9 +223,59 @@ class MeasDynap(_ThreadBaseClass):
             acq_rate='TbT',
             repeat=False)
 
-    def plot_traj_fit(self):
+    def plot_traj_fit(self, turn_idx=-1):
         """."""
-        raise NotImplementedError
+        trajx = self.data['trajx'].reshape(-1, 160)[turn_idx]
+        trajy = self.data['trajy'].reshape(-1, 160)[turn_idx]
+        trajsum = self.data['trajsum'].reshape(-1, 160)[turn_idx]
+
+        trajx *= 1e-6  # um -> m
+        trajy *= 1e-6
+
+        vecs = self.fit_traj.do_fitting(trajx, trajy, tol=1e-8, max_iter=20)
+        rx, px, ry, py, de = vecs[-1]
+        tmpl = '{:10s} ' + '{:^10.2f} '*5
+        ttmpl = '{:10s} ' + '{:^10s} '*5
+        print(ttmpl.format('', 'x [mm]', 'xl [mrad]', 'y [mm]',
+                           'yl [mrad]', 'de [%]'))
+        print(tmpl.format('Fit', rx*1e3, px*1e3, ry*1e3, py*1e3, de*1e2))
+
+        fig = _mplt.figure(figsize=(9, 10))
+        gs = _mgs.GridSpec(3, 1)
+        gs.update(left=0.12, right=0.98, top=0.97, bottom=0.08, hspace=0.25)
+        ax = _mplt.subplot(gs[0, 0])
+        ay = _mplt.subplot(gs[1, 0])
+        asum = _mplt.subplot(gs[2, 0])
+
+        bpmpos = self.fit_traj.twiss.spos[self.fit_traj.bpm_idx]
+
+        ax.plot(
+            bpmpos[:trajx.size], 1e3*trajx, '-d', label='trajectory')
+        ay.plot(
+            bpmpos[:trajy.size], 1e3*trajy, '-d', label='trajectory')
+        asum.plot(bpmpos[:trajsum.size], trajsum)
+
+        trajx_fit, trajy_fit = self.fit_traj.calc_traj(
+            *vecs[-1], size=trajx.size)
+        ax.plot(bpmpos[:trajx_fit.size], 1e3*trajx_fit, '-o', label='fitting',
+                linewidth=1)
+        ay.plot(bpmpos[:trajy_fit.size], 1e3*trajy_fit, '-o', label='fitting',
+                linewidth=1)
+
+        title = r"$x$ = {:.3f}mm $x$' = {:.3f}mrad".format(rx*1e3, px*1e3)
+        title += r"$\delta$ = {:.2f}%".format(de*1e2)
+        ax.set_title(title)
+        title = r"$y$ = {:.3f}mm $y$' = {:.3f}mrad".format(ry*1e3, py*1e3)
+        ay.set_title(title)
+        ay.legend()
+        asum.set_xlabel('position [m]')
+        ax.set_ylabel(r'$x$ [mm]')
+        ay.set_ylabel(r'$y$ [mm]')
+        asum.set_ylabel('sum signal [counts]')
+        fig.tight_layout()
+        fig.show()
+        # fix units!
+        return fig, ax, ay, asum
 
     def _check_current_and_inject(self, min_stored_current):
         evg = self.devices['evg']
@@ -264,7 +314,7 @@ class MeasDynap(_ThreadBaseClass):
             loss = min(max(loss, 0), 100)
             kickx = data['pingh_kick'] * 1e3  # [mrad]
             kicky = data['pingv_kick'] * 1e3
-            print(f' loaded!\n')
+            print(f'Loaded!\n')
 
             min_sum = self.params.min_sum
             nr_fits = self.params.nr_fits
@@ -286,7 +336,7 @@ class MeasDynap(_ThreadBaseClass):
                 fits, res, chis = self.fit_traj.do_fitting(
                     trajx_i, trajy_i, tol=1e-8, max_iter=5, full=True,
                     update_jacobian=True)
-                print(f'fitted! Chi = {chis[-1]*1000:1.2f}\n')  # ?
+                print(f'        fitted! Chi = {chis[-1]*1000:1.2f}\n')  # ?
                 vec = fits[-1] * _np.nan if chis[-1] >= 2 else fits[-1]
                 vecs.append(vec)
             vecs = _np.array(vecs)
