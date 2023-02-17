@@ -19,13 +19,13 @@ class DynapParams(_ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
-        self.max_kickx = 770 * 1e-3  # [mrad]
-        self.max_kicky = 320 * 1e-3  # [mrad]
+        self.max_kickx = 0  # [mrad]
+        self.max_kicky = 0  # [mrad]
         self.alphas = _np.linspace(0.8, 1.2, 11)
         self.thetas = _np.linspace(_np.pi/2, _np.pi, 5)
         self.dcct_offset = 0  # [mA]
         self.min_stored_curr = 2  # [mA]
-        self.min_sum = None
+        self.min_sum = 0
         self.nr_fits = None
         self.acq_nrsamples_pre = 10
         self.acq_nrsamples_post = 2000
@@ -44,10 +44,13 @@ class DynapParams(_ParamsBaseClass):
         # stg += thetas = _np.linspace(_np.pi/2, _np.pi, 5)
         stg += ftmp('dcct_offset', self.dcct_offset, '[mA]')
         stg += ftmp('min_stored_curr', self.min_stored_curr, '[mA]')
-        stg += stmp('min_sum', self.min_sum, '')
-        stg += stmp('nr_fits', self.nr_fits, '')
-        stg += stmp('acq_nrsamples_pre', self.acq_nrsamples_pre, '')
-        stg += stmp('acq_nrsamples_post', self.acq_nrsamples_post, '')
+        stg += ftmp('min_sum', self.min_sum, '')
+        if self.nr_fits is None:
+            stg += stmp('nr_fits', 'not set'.rjust(9), '')
+        else:
+            stg += dtmp('nr_fits', self.nr_fits, '')
+        stg += dtmp('acq_nrsamples_pre', self.acq_nrsamples_pre, '')
+        stg += dtmp('acq_nrsamples_post', self.acq_nrsamples_post, '')
         stg += dtmp('orbit_timeout', self.orbit_timeout, '[s]')
         return stg
 
@@ -102,7 +105,7 @@ class MeasDynap(_ThreadBaseClass):
 
     def _get_filename(pingh, pingv, prefix=''):
         fname = 'tbt_' + prefix
-        fname += f'_pingh_m{int(abs(pingh*1000)):03d}urad' 
+        fname += f'_pingh_m{int(abs(pingh*1000)):03d}urad'
         fname += f'_pingh_p{int(abs(pingv*1000)):03d}urad'
         # fname += f"_drf_{'m' if dfreq<0 else 'p':s}{abs(dfreq):04.0f}hz"
         return fname
@@ -238,7 +241,7 @@ class MeasDynap(_ThreadBaseClass):
 
     def process_dynap_data(self, fnames=None, files_dir_path=None):
         """."""
-        if not (files_dir_path is None):
+        if files_dir_path is not None:
             _os.chdir(files_dir_path)
         if fnames is None:
             fnames = _os.listdir()
@@ -259,10 +262,10 @@ class MeasDynap(_ThreadBaseClass):
             trajy = data['trajy'].reshape(-1, 160) * 1e-6
             loss = (1 - trajsum_avg.min()/trajsum_avg.max()) * 100
             loss = min(max(loss, 0), 100)
-            kickx = data['pingh_kick'] * 1e3 #  [mrad]
+            kickx = data['pingh_kick'] * 1e3  # [mrad]
             kicky = data['pingv_kick'] * 1e3
             print(f' loaded!\n')
-            
+
             min_sum = self.params.min_sum
             nr_fits = self.params.nr_fits
             if nr_fits is None:
@@ -270,7 +273,7 @@ class MeasDynap(_ThreadBaseClass):
             if not nr_fits.size:
                 nr_fits = trajsum_avg.size
             print(f'Number of fits = {nr_fits}.\n')
- 
+
             vecs = []
             for i in range(nr_fits):
                 print(f'    fitting turn {i:3d}/{nr_fits:3d}...')
@@ -287,7 +290,7 @@ class MeasDynap(_ThreadBaseClass):
                 vec = fits[-1] * _np.nan if chis[-1] >= 2 else fits[-1]
                 vecs.append(vec)
             vecs = _np.array(vecs)
-            
+
             if not vecs.size:
                 continue
             else:
