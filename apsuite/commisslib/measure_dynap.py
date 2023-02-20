@@ -8,7 +8,7 @@ from apsuite.commisslib.inj_traj_fitting import SIFitInjTraj
 from apsuite.optics_analysis import TuneCorr
 from siriuspy.epics import PV as _PV
 from siriuspy.devices import PowerSupplyPU, Tune, CurrInfoSI, EVG, RFGen, \
-      FamBPMs, Trigger
+      FamBPMs, Trigger, EGTriggerPS
 from apsuite.utils import ParamsBaseClass as _ParamsBaseClass, \
      ThreadedMeasBaseClass as _ThreadBaseClass
 
@@ -85,6 +85,8 @@ class MeasDynap(_ThreadBaseClass):
         # self.devices['exc_tuney'] = _PV('SI-Glob:DI-Tune-V:Enbl-Sts')
         self.devices['exc_tunex_sel'] = _PV('SI-Glob:DI-Tune-H:Enbl-Sel')
         self.devices['exc_tuney_sel'] = _PV('SI-Glob:DI-Tune-V:Enbl-Sel')
+        self.devices['egun_trigps'] = EGTriggerPS()
+
 
     def correct_tunes(self, tunex_goal, tuney_goal):
         """."""
@@ -144,6 +146,8 @@ class MeasDynap(_ThreadBaseClass):
                 pingh.strength = kickx
                 pingv.strength = kicky
 
+                self._check_current_and_inject()
+
                 stg = f'Measuring: kick x = {kickx*1000:3d} urad, '
                 stg += f'kick y = {kicky*1000:3d} urad'
                 print(stg)
@@ -154,11 +158,30 @@ class MeasDynap(_ThreadBaseClass):
                 currf = currinfo.current - self.params.dcct_offset
                 loss = (1 - currf/curr0) * 100
                 print(f'    Beam loss: {loss:.2f}%')
+        print('Measurement complete!')
+        
+        return None
+
+    def _check_current_and_inject(self, min_stored_current):
+            evg = self.devices['evg']
+            currinfo = self.devices['currinfo']
+            
+            self.devices['egun_trigps'].cmd_enable_trigger()
+            _time.sleep(1.0)
+            curr = currinfo.current
+            while curr < min_stored_current:
+                print('Injecting')
+                evg.cmd_turn_on_injection(wait_rb=True)
+                evg.wait_injection_finish()
+                curr = currinfo.current
+            self.devices['egun_trigps'].cmd_disable_trigger()
+            _time.sleep(1.0)
+            return
 
     def acquire_data(self):
         """."""
         fambpms = self.devices['fambpms']
-        evt_study = self.devices['evt_study']  # Linac ?
+        evt_study = self.devices['evt_study']  # how does this change when using Linac evt ?
 
         # turn off tune excitator ?
         self.devices['exc_tunex_sel'].value = 0
@@ -167,9 +190,10 @@ class MeasDynap(_ThreadBaseClass):
 
         self._prepare_bpms_acquisition()
         self._prepare_pulsed_magnets()
-        self._check_current_and_inject()
         fambpms.mturn_reset_flags()
-        evt_study.cmd_external_trigger()  # linac?
+        evt_study.cmd_external_trigger()  # how does this change when using Linac evt ?
+        # to fire the LINAC event should I just fire  evg.cmd_turn_on_injection(wait_rb=True)?
+        # the egun trigger and pulsed mags other than pingers would be down 
         fambpms.mturn_wait_update_flags(timeout=self.params.orbit_timeout)
         trajx, trajy, trajsum = fambpms.get_mturn_orbit(return_sum=True)
 
@@ -189,7 +213,7 @@ class MeasDynap(_ThreadBaseClass):
         bpm0 = self.devices['fambpms'].devices[0]
         csbpm = bpm0.csdata
         data['bpms_acq_rate'] = csbpm.AcqChan._fields[bpm0.acq_channel]
-        data['bpms_nrsamples_pre'] = bpm0.acq_nrsamples_pre  # why not trust params?
+        data['bpms_nrsamples_pre'] = bpm0.acq_nrsamples_pre
         data['bpms_nrsamples_post'] = bpm0.acq_nrsamples_post
         data['bpms_trig_delay_raw'] = self.devices['trigbpm'].delay_raw
         data['bpms_switching_mode'] = csbpm.SwModes._fields[
@@ -197,6 +221,7 @@ class MeasDynap(_ThreadBaseClass):
         data['tunex_enable'] = tune.enablex
         data['tuney_enable'] = tune.enabley
 
+        # turn on tune excitator ?
         self.devices['exc_tunex_sel'].value = 1
         self.devices['exc_tuney_sel'].value = 1
         self.data = data
@@ -211,7 +236,7 @@ class MeasDynap(_ThreadBaseClass):
         trigbpm.delay = 0.0
         trigbpm.nr_pulses = 1
         trigbpm.source = 'Linac'  # ?
-        self.devices['evg'].cmd_update_events()
+        self.devices['evg'].cmd_update_events()   # needed?
 
     def _prepare_bpms_acquisition(self):
         """."""
@@ -229,11 +254,12 @@ class MeasDynap(_ThreadBaseClass):
         trajy = self.data['trajy'].reshape(-1, 160)[turn_idx]
         trajsum = self.data['trajsum'].reshape(-1, 160)[turn_idx]
 
-        trajx *= 1e-6  # um -> m
+        trajx *= 1e-6  # m -> um
         trajy *= 1e-6
 
         vecs = self.fit_traj.do_fitting(trajx, trajy, tol=1e-8, max_iter=20)
         rx, px, ry, py, de = vecs[-1]
+        
         tmpl = '{:10s} ' + '{:^10.2f} '*5
         ttmpl = '{:10s} ' + '{:^10s} '*5
         print(ttmpl.format('', 'x [mm]', 'xl [mrad]', 'y [mm]',
@@ -276,18 +302,6 @@ class MeasDynap(_ThreadBaseClass):
         fig.show()
         # fix units!
         return fig, ax, ay, asum
-
-    def _check_current_and_inject(self, min_stored_current):
-        evg = self.devices['evg']
-        currinfo = self.devices['currinfo']
-        # turn on egun
-        curr = currinfo.current
-        while curr < min_stored_current:
-            evg.cmd_turn_on_injection(wait_rb=True)
-            evg.wait_injection_finish()
-            curr = currinfo.current
-        # turn of egun
-        return
 
     def process_dynap_data(self, fnames=None, files_dir_path=None):
         """."""
