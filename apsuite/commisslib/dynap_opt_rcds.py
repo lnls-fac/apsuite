@@ -114,8 +114,10 @@ class OptimizeDA(_RCDS):
         if pos is not None:
             strengths = self.get_isochrom_strengths(pos)
             self.set_strengths_to_machine(strengths)
-            self.data['strengths'].append(strengths)
             _time.sleep(1)
+        else:
+            strengths = self.get_strengths_from_machine()
+        self.data['strengths'].append(strengths)
 
         injeff_offaxis = 0.0
         if self.params.offaxis_weight:
