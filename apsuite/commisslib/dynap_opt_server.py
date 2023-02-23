@@ -59,6 +59,8 @@ class DynapServerParams(_Params):
             'wait_between_injections', self.wait_between_injections, '[s]')
         stg += self._TMPD('onaxis_nrpulses', self.onaxis_nrpulses, '')
         stg += self._TMPD('offaxis_nrpulses', self.offaxis_nrpulses, '')
+        stg += self._TMPD(
+            'offaxis_nrpulses_discard', self.offaxis_nrpulses_discard, '')
         stg += self._TMPS('is_a_toy_run', str(bool(self.is_a_toy_run)), '')
         stg += self._TMPS('use_median', str(bool(self.use_median)), '')
         return stg
