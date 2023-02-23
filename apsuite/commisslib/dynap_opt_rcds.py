@@ -33,6 +33,11 @@ class OptimizeDAParams(_RCDSParams):
         self.offaxis_rf_phase = 0  # [°]
         self.offaxis_weight = 1
         self.onaxis_weight = 1
+        self.wait_between_injections = 1  # [s]
+        self.onaxis_nrpulses = 5
+        self.offaxis_nrpulses = 20
+        self.offaxis_nrpulses_discard = 4
+        self.use_median = False
         self.names_sexts2corr = [
             'SDA2', 'SDB2', 'SDP2', 'SFA2', 'SFB2', 'SFP2']
         self.names_sexts2use = []
@@ -46,18 +51,21 @@ class OptimizeDAParams(_RCDSParams):
         stg = '-----  RCDS Parameters  -----\n\n'
         stg += super().__str__()
         stg += '\n\n-----  OptimizeDA Parameters  -----\n\n'
-        stg += self._TMPF.format(
-            'onaxis_rf_phase', self.onaxis_rf_phase, '[°]')
-        stg += self._TMPF.format(
-            'offaxis_rf_phase', self.offaxis_rf_phase, '[°]')
-        stg += self._TMPF.format(
-            'offaxis_weight', self.offaxis_weight, '')
-        stg += self._TMPF.format(
-            'onaxis_weight', self.onaxis_weight, '')
-        stg += self._TMPS.format(
+        stg += self._TMPF('onaxis_rf_phase', self.onaxis_rf_phase, '[°]')
+        stg += self._TMPF('offaxis_rf_phase', self.offaxis_rf_phase, '[°]')
+        stg += self._TMPF('offaxis_weight', self.offaxis_weight, '')
+        stg += self._TMPF('onaxis_weight', self.onaxis_weight, '')
+        stg += self._TMPS(
             'names_sexts2corr', ', '.join(self.names_sexts2corr), '')
-        stg += self._TMPS.format(
+        stg += self._TMPS(
             'names_sexts2use', ', '.join(self.names_sexts2use), '')
+        stg += self._TMPF(
+            'wait_between_injections', self.wait_between_injections, '[s]')
+        stg += self._TMPD('onaxis_nrpulses', self.onaxis_nrpulses, '')
+        stg += self._TMPD('offaxis_nrpulses', self.offaxis_nrpulses, '')
+        stg += self._TMPD(
+            'offaxis_nrpulses_discard', self.offaxis_nrpulses_discard, '')
+        stg += self._TMPS('use_median', str(bool(self.use_median)), '')
         return stg
 
 
@@ -98,31 +106,81 @@ class OptimizeDA(_RCDS):
         self._prepare_evg()
         return True
 
-    def objective_function(self, pos):
+    def objective_function(self, pos=None):
         """."""
         if not self.params.offaxis_weight and not self.params.onaxis_weight:
             raise ValueError('At least one weigth must be nonzero')
 
-        llrf = self.devices['llrf']
-        injctrl = self.devices['injctrl']
+        if pos is not None:
+            strengths = self.get_isochrom_strengths(pos)
+            self.set_strengths_to_machine(strengths)
+            self.data['strengths'].append(strengths)
+            _time.sleep(1)
 
-        strengths = self.get_isochrom_strengths(pos)
-        self.set_strengths_to_machine(strengths)
-        self.data['strengths'].append(strengths)
-        _time.sleep(1)
-
-        objective = 0.0
+        injeff_offaxis = 0.0
         if self.params.offaxis_weight:
-            if injctrl.pumode_mon != injctrl.PUModeMon.Optimization:
-                injctrl.cmd_change_pumode_to_optimization()
-                _time.sleep(1.0)
-            injeff = self.inject_beam_and_get_injeff()
-            self.data['offaxis_obj_funcs'].append(injeff)
-            objective += self.params.offaxis_weight * injeff
+            injeff_offaxis = self.inject_beam_offaxis()
 
+        injeff_onaxis = 0.0
         if self.params.onaxis_weight:
-            if injctrl.pumode_mon != injctrl.PUModeMon.OnAxis:
-                injctrl.cmd_change_pumode_to_onaxis()
+            injeff_onaxis = self.inject_beam_onaxis()
+
+        objective = self.params.offaxis_weight * injeff_offaxis
+        objective += self.params.onaxis_weight * injeff_onaxis
+        objective /= self.params.offaxis_weight + self.params.onaxis_weight
+        self.data['obj_funcs'].append(objective)
+        self.data['offaxis_obj_funcs'].append(injeff_offaxis)
+        self.data['onaxis_obj_funcs'].append(injeff_onaxis)
+        return -objective
+
+    def inject_beam_offaxis(self):
+        """."""
+        injctrl = self.devices['injctrl']
+        nr_pulses = self.params.offaxis_nrpulses
+        nr_pulses_discard = self.params.offaxis_nrpulses_discard
+
+        if injctrl.pumode_mon != injctrl.PUModeMon.Optimization:
+            injctrl.cmd_change_pumode_to_optimization()
+            _time.sleep(1.0)
+
+        injeffs = []
+        self.devices['egun_trigps'].cmd_disable_trigger()
+        _time.sleep(0.5)
+        get_injeff = False
+        for i in range(nr_pulses):
+            if self._stopevt.is_set():
+                break
+            if i == nr_pulses_discard:
+                get_injeff = True
+                self.devices['egun_trigps'].cmd_enable_trigger()
+                _time.sleep(0.5)
+
+            injeff = self.inject_beam_and_get_injeff(get_injeff)
+            if injeff is not None:
+                injeffs.append(injeff)
+            _time.sleep(self.params.wait_between_injections)
+
+        self.data['offaxis_obj_funcs'].append(injeffs)
+        fun = _np.median if self.params.use_median else _np.mean
+        return fun(injeffs)
+
+    def inject_beam_onaxis(self):
+        """."""
+        injctrl = self.devices['injctrl']
+        llrf = self.devices['llrf']
+        nr_pulses = self.params.onaxis_nrpulses
+
+        if injctrl.pumode_mon != injctrl.PUModeMon.OnAxis:
+            injctrl.cmd_change_pumode_to_onaxis()
+            _time.sleep(1.0)
+
+        llrf.set_phase(self.params.onaxis_rf_phase, wait_mon=True)
+        _time.sleep(0.5)
+
+        injeffs = []
+        for _ in range(nr_pulses):
+            if self._stopevt.is_set():
+                break
             self.devices['egun_trigps'].cmd_disable_trigger()
             _time.sleep(1.0)
             self.inject_beam_and_get_injeff(get_injeff=False)
@@ -130,17 +188,15 @@ class OptimizeDA(_RCDS):
             self.devices['egun_trigps'].cmd_enable_trigger()
             _time.sleep(1.0)
 
-            llrf.set_phase(self.params.onaxis_rf_phase, wait_mon=True)
-            _time.sleep(0.5)
-            injeff = self.inject_beam_and_get_injeff()
-            llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=True)
+            injeffs.append(self.inject_beam_and_get_injeff())
+            _time.sleep(self.params.wait_between_injections)
 
-            self.data['onaxis_obj_funcs'].append(injeff)
-            objective += self.params.onaxis_weight * injeff
+        llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=True)
+        _time.sleep(0.5)
 
-        objective /= self.params.offaxis_weight + self.params.onaxis_weight
-        self.data['obj_funcs'].append(objective)
-        return -objective
+        self.data['onaxis_obj_funcs'].append(injeffs)
+        fun = _np.median if self.params.use_median else _np.mean
+        return fun(injeffs)
 
     def inject_beam_and_get_injeff(self, get_injeff=True):
         """Inject beam and get injected current, if desired."""
@@ -193,8 +249,6 @@ class OptimizeDA(_RCDS):
 
     def measure_objective_function_noise(self, nr_evals, pos=None):
         """."""
-        if pos is None:
-            pos = self.params.initial_position
         obj = []
         for i in range(nr_evals):
             obj.append(self.objective_function(pos))

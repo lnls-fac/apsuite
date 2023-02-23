@@ -61,8 +61,8 @@ class DynapServerParams(_Params):
         stg += self._TMPD('offaxis_nrpulses', self.offaxis_nrpulses, '')
         stg += self._TMPD(
             'offaxis_nrpulses_discard', self.offaxis_nrpulses_discard, '')
-        stg += self._TMPS('is_a_toy_run', str(bool(self.is_a_toy_run)), '')
         stg += self._TMPS('use_median', str(bool(self.use_median)), '')
+        stg += self._TMPS('is_a_toy_run', str(bool(self.is_a_toy_run)), '')
         return stg
 
 
