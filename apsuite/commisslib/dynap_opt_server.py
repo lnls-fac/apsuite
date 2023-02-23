@@ -56,8 +56,8 @@ class DynapServerParams(_Params):
             'offaxis_rf_phase', self.offaxis_rf_phase, '[°]')
         stg += self._TMPF.format(
             'wait_between_injections', self.wait_between_injections, '[s]')
-        stg += self._TMPF.format('onaxis_nrpulses', self.onaxis_nrpulses, '')
-        stg += self._TMPF.format('offaxis_nrpulses', self.offaxis_nrpulses, '')
+        stg += self._TMPD.format('onaxis_nrpulses', self.onaxis_nrpulses, '')
+        stg += self._TMPD.format('offaxis_nrpulses', self.offaxis_nrpulses, '')
         return stg
 
 
@@ -132,21 +132,19 @@ class DynapServer(_BaseClass):
         strn = _np.array(list(res['strengths'].values()))
         return _np.sum(strn*strn), 0.0
 
-    def objective_function(self, **res):
+    def objective_function(
+            self, strengths=None, offaxis_flag=True, onaxis_flag=True):
         """."""
-        strengths = res.get('strenghts')
         if strengths is not None:
             self.set_relative_strengths_to_machine(strengths)
             self.data['strengths'].append(strengths)
             _time.sleep(1)
 
         injeff_offaxis = 0.0
-        offaxis_flag = res.get('offaxis_flag', True)
         if offaxis_flag:
             injeff_offaxis = self.inject_beam_offaxis()
 
         injeff_onaxis = 0.0
-        onaxis_flag = res.get('onaxis_flag', True)
         if onaxis_flag:
             injeff_onaxis = self.inject_beam_onaxis()
 
@@ -169,7 +167,7 @@ class DynapServer(_BaseClass):
             _time.sleep(self.params.wait_between_injections)
 
         self.data['offaxis_obj_funcs'].append(injeffs)
-        return injeffs
+        return _np.mean(injeffs)
 
     def inject_beam_onaxis(self):
         """."""
@@ -200,7 +198,7 @@ class DynapServer(_BaseClass):
             _time.sleep(self.params.wait_between_injections)
 
         self.data['onaxis_obj_funcs'].append(injeffs)
-        return injeffs
+        return _np.mean(injeffs)
 
     def inject_beam_and_get_injeff(self, get_injeff=True):
         """Inject beam and get injected current, if desired."""
