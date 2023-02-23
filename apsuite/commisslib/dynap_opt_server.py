@@ -91,7 +91,7 @@ class DynapServer(_BaseClass):
             if not _os.path.isfile(fname):
                 _time.sleep(0.2)
                 cnt += 1
-                if cnt % 100:
+                if not cnt % 100:
                     _log.info(f'Waiting input for {cnt*0.2:.2f} s...')
                 continue
             cnt = 0
