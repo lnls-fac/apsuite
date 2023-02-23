@@ -113,10 +113,15 @@ class DynapServer(_BaseClass):
             input_fname = _os.path.join(
                 self.params.folder, self.params.input_fname)
             input_data = self._read_file_get_inputs(input_fname)
-            output = self.objective_function(**input_data)
+            output = self.toy_objective_function(**input_data)
             output_fname = _os.path.join(
                 self.params.folder, self.params.output_fname)
             self._write_output_to_file(output_fname, output)
+
+    def toy_objective_function(self, **res):
+        """."""
+        strn = _np.array(list(res['strengths'].values()))
+        return _np.sum(strn*strn), 0.0
 
     def objective_function(self, **res):
         """."""
