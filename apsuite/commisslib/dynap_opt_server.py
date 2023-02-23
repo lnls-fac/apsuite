@@ -86,13 +86,20 @@ class DynapServer(_BaseClass):
         return True
 
     def _read_file_get_inputs(self, fname, remove=True):
+        cnt = 0
         while not self._stopevt.is_set():
             if not _os.path.isfile(fname):
                 _time.sleep(0.2)
+                cnt += 1
+                if cnt % 100:
+                    print(f'Waiting input for {cnt*0.2:.f} s...')
                 continue
+            cnt = 0
+            print('Input file found.')
             res = _scyio.loadmat(fname, appendmat=False)
             if remove:
                 _os.remove(fname)
+                print('Deleting input file.')
             break
         fams = [str(s[0]) for s in res['g_fam'][0]]
         data = {}
@@ -102,8 +109,10 @@ class DynapServer(_BaseClass):
         return data
 
     def _write_output_to_file(self, fname, output):
+        print('Writing output file...')
         out = {'injeff_offaxis': output[0], 'injeff_onaxis': output[1]}
         _scyio.savemat(fname, out, appendmat=False)
+        print('Done!')
 
     def run_server(self):
         """."""
@@ -131,7 +140,6 @@ class DynapServer(_BaseClass):
             self.data['strengths'].append(strengths)
             _time.sleep(1)
 
-        objective = 0.0
         injeff_offaxis = 0.0
         offaxis_flag = res.get('offaxis_flag', True)
         if offaxis_flag:
