@@ -110,11 +110,11 @@ class DynapServer(_BaseClass):
             break
         if self._stopevt.is_set():
             return
-        fams = [str(s[0]) for s in res['g_fam'][0]]
+        fams = [str(s[0]) for s in res['g_fam'].ravel()]
         data = {}
         data['offaxis_flag'] = bool(res['offaxis_flag'][0][0])
         data['onaxis_flag'] = bool(res['onaxis_flag'][0][0])
-        data['strengths'] = {f: v for f, v in zip(fams, res['dk_21'][0])}
+        data['strengths'] = {f: v for f, v in zip(fams, res['dk_21'].ravel())}
         return data
 
     def _write_output_to_file(self, fname, output):
