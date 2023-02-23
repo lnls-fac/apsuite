@@ -80,7 +80,9 @@ class DynapServer(_BaseClass):
     def _initialization(self):
         """."""
         self.data['timestamp'] = _time.time()
-        self.data['strengths'] = [self.get_strengths_from_machine()]
+        strn = self.get_strengths_from_machine()
+        self.data['strengths'] = [strn]
+        self.data['strengths_rel'] = [_np.zeros(strn.size)]
         self.data['initial_strengths'] = self.get_strengths_from_machine()
         self.data['obj_funcs'] = []
         self.data['onaxis_obj_funcs'] = []
@@ -151,8 +153,9 @@ class DynapServer(_BaseClass):
         """."""
         if strengths is not None:
             self.set_relative_strengths_to_machine(strengths)
-            self.data['strengths'].append(strengths)
+            self.data['strengths_rel'].append(strengths)
             _time.sleep(1)
+            self.data['strengths'].append(self.get_strengths_from_machine())
 
         injeff_offaxis = 0.0
         if offaxis_flag:
