@@ -43,7 +43,9 @@ class DynapServerParams(_Params):
         self.offaxis_rf_phase = 0  # [°]
         self.wait_between_injections = 1  # [s]
         self.onaxis_nrpulses = 5
-        self.offaxis_nrpulses = 5
+        self.offaxis_nrpulses = 20
+        self.offaxis_nrpulses_discard = 4
+        self.use_median = False
         self.is_a_toy_run = False
 
     def __str__(self):
@@ -58,6 +60,7 @@ class DynapServerParams(_Params):
         stg += self._TMPD('onaxis_nrpulses', self.onaxis_nrpulses, '')
         stg += self._TMPD('offaxis_nrpulses', self.offaxis_nrpulses, '')
         stg += self._TMPS('is_a_toy_run', str(bool(self.is_a_toy_run)), '')
+        stg += self._TMPS('use_median', str(bool(self.use_median)), '')
         return stg
 
 
@@ -165,20 +168,32 @@ class DynapServer(_BaseClass):
         """."""
         injctrl = self.devices['injctrl']
         nr_pulses = self.params.offaxis_nrpulses
+        nr_pulses_discard = self.params.offaxis_nrpulses_discard
 
         if injctrl.pumode_mon != injctrl.PUModeMon.Optimization:
             injctrl.cmd_change_pumode_to_optimization()
             _time.sleep(1.0)
 
         injeffs = []
-        for _ in range(nr_pulses):
+        self.devices['egun_trigps'].cmd_disable_trigger()
+        _time.sleep(0.5)
+        get_injeff = False
+        for i in range(nr_pulses):
             if self._stopevt.is_set():
                 break
-            injeffs.append(self.inject_beam_and_get_injeff())
+            if i == nr_pulses_discard:
+                get_injeff = True
+                self.devices['egun_trigps'].cmd_enable_trigger()
+                _time.sleep(0.5)
+
+            injeff = self.inject_beam_and_get_injeff(get_injeff)
+            if injeff is not None:
+                injeffs.append(injeff)
             _time.sleep(self.params.wait_between_injections)
 
         self.data['offaxis_obj_funcs'].append(injeffs)
-        return _np.mean(injeffs)
+        fun = _np.median if self.params.use_median else _np.mean
+        return fun(injeffs)
 
     def inject_beam_onaxis(self):
         """."""
@@ -211,7 +226,8 @@ class DynapServer(_BaseClass):
         _time.sleep(0.5)
 
         self.data['onaxis_obj_funcs'].append(injeffs)
-        return _np.mean(injeffs)
+        fun = _np.median if self.params.use_median else _np.mean
+        return fun(injeffs)
 
     def inject_beam_and_get_injeff(self, get_injeff=True):
         """Inject beam and get injected current, if desired."""
