@@ -16,9 +16,9 @@ from ..utils import ParamsBaseClass as _Params, \
 class DynapServerParams(_Params):
     """."""
 
-    _TMPD = '{:30s}: {:10d} {:s}\n'
-    _TMPF = '{:30s}: {:10.3f} {:s}\n'
-    _TMPS = '{:30s}: {:10s} {:s}\n'
+    _TMPD = '{:30s}: {:10d} {:s}\n'.format
+    _TMPF = '{:30s}: {:10.3f} {:s}\n'.format
+    _TMPS = '{:30s}: {:10s} {:s}\n'.format
 
     SEXT_FAMS = (
         'SDA0', 'SDB0', 'SDP0',
@@ -44,20 +44,20 @@ class DynapServerParams(_Params):
         self.wait_between_injections = 1  # [s]
         self.onaxis_nrpulses = 5
         self.offaxis_nrpulses = 5
+        self.is_a_toy_run = False
 
     def __str__(self):
         """."""
-        stg = self._TMPS.format('folder', self.folder, '')
-        stg += self._TMPS.format('input_fname', self.input_fname, '')
-        stg += self._TMPS.format('output_fname', self.output_fname, '')
-        stg += self._TMPF.format(
-            'onaxis_rf_phase', self.onaxis_rf_phase, '[°]')
-        stg += self._TMPF.format(
-            'offaxis_rf_phase', self.offaxis_rf_phase, '[°]')
-        stg += self._TMPF.format(
+        stg = self._TMPS('folder', self.folder, '')
+        stg += self._TMPS('input_fname', self.input_fname, '')
+        stg += self._TMPS('output_fname', self.output_fname, '')
+        stg += self._TMPF('onaxis_rf_phase', self.onaxis_rf_phase, '[°]')
+        stg += self._TMPF('offaxis_rf_phase', self.offaxis_rf_phase, '[°]')
+        stg += self._TMPF(
             'wait_between_injections', self.wait_between_injections, '[s]')
-        stg += self._TMPD.format('onaxis_nrpulses', self.onaxis_nrpulses, '')
-        stg += self._TMPD.format('offaxis_nrpulses', self.offaxis_nrpulses, '')
+        stg += self._TMPD('onaxis_nrpulses', self.onaxis_nrpulses, '')
+        stg += self._TMPD('offaxis_nrpulses', self.offaxis_nrpulses, '')
+        stg += self._TMPS('is_a_toy_run', str(bool(self.is_a_toy_run)), '')
         return stg
 
 
@@ -101,6 +101,8 @@ class DynapServer(_BaseClass):
                 _os.remove(fname)
                 _log.info('Deleting input file.')
             break
+        if self._stopevt.is_set():
+            return
         fams = [str(s[0]) for s in res['g_fam'][0]]
         data = {}
         data['offaxis_flag'] = bool(res['offaxis_flag'][0][0])
@@ -122,7 +124,16 @@ class DynapServer(_BaseClass):
             input_fname = _os.path.join(
                 self.params.folder, self.params.input_fname)
             input_data = self._read_file_get_inputs(input_fname)
-            output = self.toy_objective_function(**input_data)
+            if self._stopevt.is_set():
+                continue
+
+            if self.params.is_a_toy_run:
+                output = self.toy_objective_function(**input_data)
+            else:
+                output = self.objective_function(**input_data)
+
+            if self._stopevt.is_set():
+                continue
             output_fname = _os.path.join(
                 self.params.folder, self.params.output_fname)
             self._write_output_to_file(output_fname, output)
@@ -179,6 +190,9 @@ class DynapServer(_BaseClass):
             injctrl.cmd_change_pumode_to_onaxis()
             _time.sleep(1.0)
 
+        llrf.set_phase(self.params.onaxis_rf_phase, wait_mon=True)
+        _time.sleep(0.5)
+
         injeffs = []
         for _ in range(nr_pulses):
             if self._stopevt.is_set():
@@ -190,12 +204,11 @@ class DynapServer(_BaseClass):
             self.devices['egun_trigps'].cmd_enable_trigger()
             _time.sleep(1.0)
 
-            llrf.set_phase(self.params.onaxis_rf_phase, wait_mon=True)
-            _time.sleep(0.5)
             injeffs.append(self.inject_beam_and_get_injeff())
-            llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=True)
-
             _time.sleep(self.params.wait_between_injections)
+
+        llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=True)
+        _time.sleep(0.5)
 
         self.data['onaxis_obj_funcs'].append(injeffs)
         return _np.mean(injeffs)
