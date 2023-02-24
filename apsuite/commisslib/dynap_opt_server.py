@@ -41,10 +41,8 @@ class DynapServerParams(_Params):
         self.output_fname = 'output.mat'
         self.onaxis_rf_phase = 0  # [°]
         self.offaxis_rf_phase = 0  # [°]
-        self.wait_between_injections = 1  # [s]
         self.onaxis_nrpulses = 5
         self.offaxis_nrpulses = 20
-        self.offaxis_nrpulses_discard = 4
         self.use_median = False
         self.is_a_toy_run = False
 
@@ -55,12 +53,8 @@ class DynapServerParams(_Params):
         stg += self._TMPS('output_fname', self.output_fname, '')
         stg += self._TMPF('onaxis_rf_phase', self.onaxis_rf_phase, '[°]')
         stg += self._TMPF('offaxis_rf_phase', self.offaxis_rf_phase, '[°]')
-        stg += self._TMPF(
-            'wait_between_injections', self.wait_between_injections, '[s]')
         stg += self._TMPD('onaxis_nrpulses', self.onaxis_nrpulses, '')
         stg += self._TMPD('offaxis_nrpulses', self.offaxis_nrpulses, '')
-        stg += self._TMPD(
-            'offaxis_nrpulses_discard', self.offaxis_nrpulses_discard, '')
         stg += self._TMPS('use_median', str(bool(self.use_median)), '')
         stg += self._TMPS('is_a_toy_run', str(bool(self.is_a_toy_run)), '')
         return stg
@@ -159,9 +153,15 @@ class DynapServer(_BaseClass):
             _time.sleep(1)
             self.data['strengths'].append(self.get_strengths_from_machine())
 
+        if self._stopevt.is_set():
+            return 0.0, 0.0
+
         injeff_offaxis = 0.0
         if offaxis_flag:
             injeff_offaxis = self.inject_beam_offaxis()
+
+        if self._stopevt.is_set():
+            return 0.0, 0.0
 
         injeff_onaxis = 0.0
         if onaxis_flag:
@@ -173,28 +173,12 @@ class DynapServer(_BaseClass):
         """."""
         injctrl = self.devices['injctrl']
         nr_pulses = self.params.offaxis_nrpulses
-        nr_pulses_discard = self.params.offaxis_nrpulses_discard
 
         if injctrl.pumode_mon != injctrl.PUModeMon.Optimization:
             injctrl.cmd_change_pumode_to_optimization()
             _time.sleep(1.0)
 
-        injeffs = []
-        self.devices['egun_trigps'].cmd_disable_trigger()
-        _time.sleep(0.5)
-        get_injeff = False
-        for i in range(nr_pulses):
-            if self._stopevt.is_set():
-                break
-            if i == nr_pulses_discard:
-                get_injeff = True
-                self.devices['egun_trigps'].cmd_enable_trigger()
-                _time.sleep(0.5)
-
-            injeff = self.inject_beam_and_get_injeff(get_injeff)
-            if injeff is not None:
-                injeffs.append(injeff)
-            _time.sleep(self.params.wait_between_injections)
+        injeffs = self.inject_beam_and_get_injeff(nrpulses=nr_pulses)
 
         self.data['offaxis_obj_funcs'].append(injeffs)
         fun = _np.median if self.params.use_median else _np.mean
@@ -213,19 +197,7 @@ class DynapServer(_BaseClass):
         llrf.set_phase(self.params.onaxis_rf_phase, wait_mon=True)
         _time.sleep(0.5)
 
-        injeffs = []
-        for _ in range(nr_pulses):
-            if self._stopevt.is_set():
-                break
-            self.devices['egun_trigps'].cmd_disable_trigger()
-            _time.sleep(1.0)
-            self.inject_beam_and_get_injeff(get_injeff=False)
-            _time.sleep(1.0)
-            self.devices['egun_trigps'].cmd_enable_trigger()
-            _time.sleep(1.0)
-
-            injeffs.append(self.inject_beam_and_get_injeff())
-            _time.sleep(self.params.wait_between_injections)
+        injeffs = self.inject_beam_and_get_injeff(nr_pulses)
 
         llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=True)
         _time.sleep(0.5)
@@ -234,27 +206,37 @@ class DynapServer(_BaseClass):
         fun = _np.median if self.params.use_median else _np.mean
         return fun(injeffs)
 
-    def inject_beam_and_get_injeff(self, get_injeff=True):
+    def inject_beam_and_get_injeff(self, get_injeff=True, nrpulses=1):
         """Inject beam and get injected current, if desired."""
         inj0 = self.devices['currinfo'].injeff
+        self._prepare_evg(nrpulses)
         self.devices['evg'].cmd_turn_on_injection(wait_rb=True)
-        self.devices['evg'].wait_injection_finish()
         if not get_injeff:
+            self.devices['evg'].wait_injection_finish()
             return
 
-        for _ in range(50):
-            if inj0 != self.devices['currinfo'].injeff:
+        injeffs = []
+        cnt = nrpulses
+        for _ in range(5 * nrpulses * 2):
+            injn = self.devices['currinfo'].injeff
+            if inj0 != injn:
+                inj0 = injn
+                injeffs.append(injn)
+                cnt -= 1
+            if cnt == 0:
                 break
             _time.sleep(0.1)
         else:
             _log.warning('Timed out waiting injeff to update.')
-        return self.devices['currinfo'].injeff
 
-    def _prepare_evg(self):
+        self.devices['evg'].wait_injection_finish()
+        return injeffs
+
+    def _prepare_evg(self, nrpulses=1):
         evg = self.devices['evg']
         # configure to inject on first bucket just once
         evg.bucketlist = [1]
-        evg.nrpulses = 1
+        evg.nrpulses = nrpulses
         evg.cmd_update_events()
         _time.sleep(1)
 
