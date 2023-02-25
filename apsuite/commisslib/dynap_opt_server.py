@@ -45,6 +45,8 @@ class DynapServerParams(_Params):
         self.offaxis_rf_phase = 0  # [°]
         self.onaxis_nrpulses = 5
         self.offaxis_nrpulses = 20
+        self.offaxis_inj_with_dpkckr = False
+        self.offaxis_dpkckr_strength = -3.50  # [mrad]
         self.use_median = False
         self.is_a_toy_run = False
 
@@ -58,6 +60,11 @@ class DynapServerParams(_Params):
         stg += self._TMPF('offaxis_rf_phase', self.offaxis_rf_phase, '[°]')
         stg += self._TMPD('onaxis_nrpulses', self.onaxis_nrpulses, '')
         stg += self._TMPD('offaxis_nrpulses', self.offaxis_nrpulses, '')
+        stg += self._TMPF(
+            'offaxis_dpkckr_strength', self.offaxis_dpkckr_strength, '[mrad]')
+        stg += self._TMPS(
+            'offaxis_inj_with_dpkckr',
+            str(bool(self.offaxis_inj_with_dpkckr)), '')
         stg += self._TMPS('use_median', str(bool(self.use_median)), '')
         stg += self._TMPS('is_a_toy_run', str(bool(self.is_a_toy_run)), '')
         return stg
@@ -155,9 +162,14 @@ class DynapServer(_BaseClass):
         injctrl = self.devices['injctrl']
         nr_pulses = self.params.offaxis_nrpulses
 
-        if injctrl.pumode_mon != injctrl.PUModeMon.Optimization:
-            injctrl.cmd_change_pumode_to_optimization()
-            _time.sleep(1.0)
+        if not self.params.offaxis_inj_with_dpkckr:
+            if injctrl.pumode_mon != injctrl.PUModeMon.Optimization:
+                injctrl.cmd_change_pumode_to_optimization()
+                _time.sleep(1.0)
+        else:
+            self.devices['pingh'].set_strength(
+                self.params.offaxis_dpkckr_strength, tol=0.2, timeout=13,
+                wait_mon=True)
 
         injeffs = self.inject_beam_and_get_injeff(nrpulses=nr_pulses)
 
