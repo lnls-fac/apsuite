@@ -3,6 +3,7 @@ import time as _time
 import logging as _log
 import os as _os
 
+import subprocess as _subprocess
 import numpy as _np
 import scipy.io as _scyio
 
@@ -34,6 +35,7 @@ class DynapServerParams(_Params):
     def __init__(self):
         """."""
         super().__init__()
+        self.client = 'localhost'
         self.folder = '/home/sirius/shared/screens-iocs/data_by_day/'
         self.folder += '2023-02-23-SI_nonlinear_optics_opt_RCDS_matlab/'
         self.folder += 'run1/'
@@ -48,6 +50,7 @@ class DynapServerParams(_Params):
 
     def __str__(self):
         """."""
+        stg = self._TMPS('client', self.client, '')
         stg = self._TMPS('folder', self.folder, '')
         stg += self._TMPS('input_fname', self.input_fname, '')
         stg += self._TMPS('output_fname', self.output_fname, '')
@@ -79,43 +82,12 @@ class DynapServer(_BaseClass):
         strn = self.get_strengths_from_machine()
         self.data['strengths'] = [strn]
         self.data['strengths_rel'] = [_np.zeros(strn.size)]
+        self.data['strengths_received'] = [_np.zeros(strn.size)]
         self.data['initial_strengths'] = self.get_strengths_from_machine()
         self.data['obj_funcs'] = []
         self.data['onaxis_obj_funcs'] = []
         self.data['offaxis_obj_funcs'] = []
-        self._prepare_evg()
         return True
-
-    def _read_file_get_inputs(self, fname, remove=True):
-        cnt = 0
-        while not self._stopevt.is_set():
-            if not _os.path.isfile(fname):
-                _time.sleep(0.2)
-                cnt += 1
-                if not cnt % 100:
-                    _log.info(f'Waiting input for {cnt*0.2:.2f} s...')
-                continue
-            cnt = 0
-            _log.info('Input file found.')
-            res = _scyio.loadmat(fname, appendmat=False)
-            if remove:
-                _os.remove(fname)
-                _log.info('Deleting input file.')
-            break
-        if self._stopevt.is_set():
-            return
-        fams = [str(s[0]) for s in res['g_fam'].ravel()]
-        data = {}
-        data['offaxis_flag'] = bool(res['offaxis_flag'][0][0])
-        data['onaxis_flag'] = bool(res['onaxis_flag'][0][0])
-        data['strengths'] = {f: v for f, v in zip(fams, res['dk_21'].ravel())}
-        return data
-
-    def _write_output_to_file(self, fname, output):
-        _log.info('Writing output file...')
-        out = {'injeff_offaxis': output[0], 'injeff_onaxis': output[1]}
-        _scyio.savemat(fname, out, appendmat=False)
-        _log.info('Done!')
 
     def run_server(self):
         """."""
@@ -125,6 +97,7 @@ class DynapServer(_BaseClass):
             input_fname = _os.path.join(
                 self.params.folder, self.params.input_fname)
             input_data = self._read_file_get_inputs(input_fname)
+
             if self._stopevt.is_set():
                 continue
 
@@ -132,24 +105,32 @@ class DynapServer(_BaseClass):
                 output = self.toy_objective_function(**input_data)
             else:
                 output = self.objective_function(**input_data)
+            out = {'injeff_offaxis': output[0], 'injeff_onaxis': output[1]}
 
             if self._stopevt.is_set():
                 continue
             output_fname = _os.path.join(
                 self.params.folder, self.params.output_fname)
-            self._write_output_to_file(output_fname, output)
+            self._write_output_to_file(output_fname, out)
 
     def toy_objective_function(self, **res):
         """."""
         strn = _np.array(list(res['strengths'].values()))
+        self.data['strengths_rel'].append(strn)
         return _np.sum(strn*strn), 0.0
 
     def objective_function(
-            self, strengths=None, offaxis_flag=True, onaxis_flag=True):
+            self, strengths=None, offaxis_flag=True, onaxis_flag=True,
+            relative=True):
         """."""
         if strengths is not None:
-            self.set_relative_strengths_to_machine(strengths)
-            self.data['strengths_rel'].append(strengths)
+            if relative:
+                self.set_relative_strengths_to_machine(strengths)
+                self.data['strengths_rel'].append(strengths)
+            else:
+                self.set_strengths_to_machine(strengths)
+
+            self.data['strengths_received'].append(strengths)
             _time.sleep(1)
             self.data['strengths'].append(self.get_strengths_from_machine())
 
@@ -197,7 +178,7 @@ class DynapServer(_BaseClass):
         llrf.set_phase(self.params.onaxis_rf_phase, wait_mon=True)
         _time.sleep(0.5)
 
-        injeffs = self.inject_beam_and_get_injeff(nr_pulses)
+        injeffs = self.inject_beam_and_get_injeff(nrpulses=nr_pulses)
 
         llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=True)
         _time.sleep(0.5)
@@ -209,7 +190,7 @@ class DynapServer(_BaseClass):
     def inject_beam_and_get_injeff(self, get_injeff=True, nrpulses=1):
         """Inject beam and get injected current, if desired."""
         inj0 = self.devices['currinfo'].injeff
-        self._prepare_evg(nrpulses)
+        self.devices['evg'].set_nrpulses(nrpulses)
         self.devices['evg'].cmd_turn_on_injection(wait_rb=True)
         if not get_injeff:
             self.devices['evg'].wait_injection_finish()
@@ -232,20 +213,14 @@ class DynapServer(_BaseClass):
         self.devices['evg'].wait_injection_finish()
         return injeffs
 
-    def _prepare_evg(self, nrpulses=1):
-        evg = self.devices['evg']
-        # configure to inject on first bucket just once
-        evg.bucketlist = [1]
-        evg.nrpulses = nrpulses
-        evg.cmd_update_events()
-        _time.sleep(1)
-
     def measure_objective_function_noise(
             self, nr_evals, onaxis_flag=True, offaxis_flag=True):
         """."""
         self._initialization()
         obj = []
         for i in range(nr_evals):
+            if self._stopevt.is_set():
+                break
             obj.append(self.objective_function(
                 onaxis_flag=onaxis_flag, offaxis_flag=offaxis_flag))
             _log.info(
@@ -280,6 +255,16 @@ class DynapServer(_BaseClass):
             self.sextupoles[i].strength = initial[i]*(1 + stg)
         _time.sleep(2)
 
+    def set_strengths_to_machine(self, strengths):
+        """."""
+        initial = self.data['initial_strengths']
+        for i, fam in enumerate(self.params.SEXT_FAMS):
+            stg = strengths.get(fam)
+            if stg is None or _np.isnan(stg):
+                continue
+            self.sextupoles[i].strength = stg
+        _time.sleep(2)
+
     def _create_devices(self):
         for fam in self.params.SEXT_FAMS:
             sext = PowerSupply('SI-Fam:PS-'+fam)
@@ -298,3 +283,82 @@ class DynapServer(_BaseClass):
         self.devices['egun_trigps'] = EGTriggerPS()
         self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SI)
         self.devices['injctrl'] = InjCtrl()
+
+    def _read_file_get_inputs(self, fname, remove=True):
+        cnt = 0
+        while not self._stopevt.is_set():
+            if not self._isfile(fname):
+                _time.sleep(0.2)
+                cnt += 1
+                if not cnt % 100:
+                    _log.info(f'Waiting input for {cnt*0.2:.2f} s...')
+                continue
+            cnt = 0
+            _log.info('Input file found.')
+            res = self._load_file(fname)
+            if remove:
+                self._remove_file(fname)
+                _log.info('Deleting input file.')
+            break
+        if self._stopevt.is_set():
+            return
+        fams = [str(s[0]) for s in res['g_fam'].ravel()]
+        data = {}
+        data['offaxis_flag'] = bool(res['offaxis_flag'][0][0])
+        data['onaxis_flag'] = bool(res['onaxis_flag'][0][0])
+        data['relative'] = bool(res.get('relative_flag', [[1]])[0][0])
+        data['strengths'] = {f: v for f, v in zip(fams, res['dk_21'].ravel())}
+        return data
+
+    def _write_output_to_file(self, fname, output):
+        _log.info('Writing output file...')
+        self._save_file(fname, output)
+        _log.info('Done!')
+
+    def _listdir(self, folder):
+        if self.params.client.startswith('local'):
+            return _os.listdir(folder)
+
+        res = _subprocess.run(
+            ['ssh', self.params.client, 'ls ' + folder],
+            stdout=_subprocess.PIPE)
+        stdout = res.stdout.split()
+        return stdout
+
+    def _isfile(self, fname):
+        if self.params.client.startswith('local'):
+            return _os.path.isfile(fname)
+
+        res = _subprocess.run(
+            ['ssh', self.params.client, 'file ' + fname],
+            stdout=_subprocess.PIPE)
+        stdout = res.stdout.split()
+        return b'cannot' not in stdout
+
+    def _load_file(self, fname):
+        if not self.params.client.startswith('local'):
+            _subprocess.run(
+                ['scp', self.params.client + ':' + fname, './'],
+                stdout=_subprocess.PIPE)
+            *_, fname = fname.split('/')
+        res = _scyio.loadmat(fname, appendmat=False)
+        return res
+
+    def _remove_file(self, fname):
+        if self.params.client.startswith('local'):
+            _os.remove(fname)
+            return
+        _subprocess.run(
+            ['ssh', self.params.client, 'rm', '-rf', fname],
+            stdout=_subprocess.PIPE)
+
+    def _save_file(self, fname, out):
+        if self.params.client.startswith('local'):
+            _scyio.savemat(fname, out, appendmat=False)
+            return
+
+        *_, fname_ = fname.split('/')
+        _scyio.savemat(fname_, out, appendmat=False)
+        _subprocess.run(
+            ['scp', './' + fname_, self.params.client + ':' + fname],
+            stdout=_subprocess.PIPE)
