@@ -260,22 +260,23 @@ class DynapServer(_BaseClass):
     def set_relative_strengths_to_machine(self, strengths):
         """."""
         initial = self.data['initial_strengths']
-        for i, fam in enumerate(self.params.SEXT_FAMS):
-            stg = strengths.get(fam)
-            if stg is None or _np.isnan(stg):
-                continue
-            self.sextupoles[i].strength = initial[i]*(1 + stg)
-        _time.sleep(2)
+        strengths = initial * (1 + strengths)
+        self.set_strengths_to_machine(strengths)
 
     def set_strengths_to_machine(self, strengths):
         """."""
-        initial = self.data['initial_strengths']
         for i, fam in enumerate(self.params.SEXT_FAMS):
             stg = strengths.get(fam)
             if stg is None or _np.isnan(stg):
                 continue
             self.sextupoles[i].strength = stg
-        _time.sleep(2)
+
+        # NOTE: the loop below waits sextupoles to reach the set current.
+        for i, stg in enumerate(strengths):
+            if stg is None or _np.isnan(stg):
+                continue
+            self.sextupoles[i].set_strength(
+                stg, tol=1e-3, timeout=10, wait_mon=True)
 
     def _create_devices(self):
         for fam in self.params.SEXT_FAMS:
@@ -322,6 +323,7 @@ class DynapServer(_BaseClass):
         data['strengths'] = {f: v for f, v in zip(fams, res['dk_21'].ravel())}
         return data
 
+    # ------- Auxiliary Methods to load and save input and output files -------
     def _write_output_to_file(self, fname, output):
         _log.info('Writing output file...')
         self._save_file(fname, output)

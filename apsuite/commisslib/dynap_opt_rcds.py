@@ -36,7 +36,8 @@ class OptimizeDAParams(_RCDSParams):
         self.wait_between_injections = 1  # [s]
         self.onaxis_nrpulses = 5
         self.offaxis_nrpulses = 20
-        self.offaxis_nrpulses_discard = 4
+        self.offaxis_inj_with_dpkckr = False
+        self.offaxis_dpkckr_strength = -3.50  # [mrad]
         self.use_median = False
         self.names_sexts2corr = [
             'SDA2', 'SDB2', 'SDP2', 'SFA2', 'SFB2', 'SFP2']
@@ -63,8 +64,11 @@ class OptimizeDAParams(_RCDSParams):
             'wait_between_injections', self.wait_between_injections, '[s]')
         stg += self._TMPD('onaxis_nrpulses', self.onaxis_nrpulses, '')
         stg += self._TMPD('offaxis_nrpulses', self.offaxis_nrpulses, '')
-        stg += self._TMPD(
-            'offaxis_nrpulses_discard', self.offaxis_nrpulses_discard, '')
+        stg += self._TMPF(
+            'offaxis_dpkckr_strength', self.offaxis_dpkckr_strength, '[mrad]')
+        stg += self._TMPS(
+            'offaxis_inj_with_dpkckr',
+            str(bool(self.offaxis_inj_with_dpkckr)), '')
         stg += self._TMPS('use_median', str(bool(self.use_median)), '')
         return stg
 
@@ -114,14 +118,19 @@ class OptimizeDA(_RCDS):
         if pos is not None:
             strengths = self.get_isochrom_strengths(pos)
             self.set_strengths_to_machine(strengths)
-            _time.sleep(1)
         else:
             strengths = self.get_strengths_from_machine()
         self.data['strengths'].append(strengths)
 
+        if self._stopevt.is_set():
+            return 0.0
+
         injeff_offaxis = 0.0
         if self.params.offaxis_weight:
             injeff_offaxis = self.inject_beam_offaxis()
+
+        if self._stopevt.is_set():
+            return 0.0
 
         injeff_onaxis = 0.0
         if self.params.onaxis_weight:
@@ -139,29 +148,17 @@ class OptimizeDA(_RCDS):
         """."""
         injctrl = self.devices['injctrl']
         nr_pulses = self.params.offaxis_nrpulses
-        nr_pulses_discard = self.params.offaxis_nrpulses_discard
 
-        if injctrl.pumode_mon != injctrl.PUModeMon.Optimization:
-            injctrl.cmd_change_pumode_to_optimization()
-            _time.sleep(1.0)
+        if not self.params.offaxis_inj_with_dpkckr:
+            if injctrl.pumode_mon != injctrl.PUModeMon.Optimization:
+                injctrl.cmd_change_pumode_to_optimization()
+                _time.sleep(1.0)
+        else:
+            self.devices['pingh'].set_strength(
+                self.params.offaxis_dpkckr_strength, tol=0.2, timeout=13,
+                wait_mon=True)
 
-        injeffs = []
-        self.devices['egun_trigps'].cmd_disable_trigger()
-        _time.sleep(0.5)
-        get_injeff = False
-        for i in range(nr_pulses):
-            if self._stopevt.is_set():
-                break
-            if i == nr_pulses_discard:
-                get_injeff = True
-                self.devices['egun_trigps'].cmd_enable_trigger()
-                _time.sleep(0.5)
-
-            injeff = self.inject_beam_and_get_injeff(get_injeff)
-            if injeff is not None:
-                injeffs.append(injeff)
-            _time.sleep(self.params.wait_between_injections)
-
+        injeffs = self.inject_beam_and_get_injeff(nrpulses=nr_pulses)
         self.data['offaxis_obj_funcs'].append(injeffs)
         fun = _np.median if self.params.use_median else _np.mean
         return fun(injeffs)
@@ -179,19 +176,7 @@ class OptimizeDA(_RCDS):
         llrf.set_phase(self.params.onaxis_rf_phase, wait_mon=True)
         _time.sleep(0.5)
 
-        injeffs = []
-        for _ in range(nr_pulses):
-            if self._stopevt.is_set():
-                break
-            self.devices['egun_trigps'].cmd_disable_trigger()
-            _time.sleep(1.0)
-            self.inject_beam_and_get_injeff(get_injeff=False)
-            _time.sleep(1.0)
-            self.devices['egun_trigps'].cmd_enable_trigger()
-            _time.sleep(1.0)
-
-            injeffs.append(self.inject_beam_and_get_injeff())
-            _time.sleep(self.params.wait_between_injections)
+        injeffs = self.inject_beam_and_get_injeff(nrpulses=nr_pulses)
 
         llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=True)
         _time.sleep(0.5)
@@ -200,29 +185,31 @@ class OptimizeDA(_RCDS):
         fun = _np.median if self.params.use_median else _np.mean
         return fun(injeffs)
 
-    def inject_beam_and_get_injeff(self, get_injeff=True):
+    def inject_beam_and_get_injeff(self, get_injeff=True, nrpulses=1):
         """Inject beam and get injected current, if desired."""
         inj0 = self.devices['currinfo'].injeff
+        self.devices['evg'].set_nrpulses(nrpulses)
         self.devices['evg'].cmd_turn_on_injection(wait_rb=True)
-        self.devices['evg'].wait_injection_finish()
         if not get_injeff:
+            self.devices['evg'].wait_injection_finish()
             return
 
-        for _ in range(50):
-            if inj0 != self.devices['currinfo'].injeff:
+        injeffs = []
+        cnt = nrpulses
+        for _ in range(5 * nrpulses * 2):
+            injn = self.devices['currinfo'].injeff
+            if inj0 != injn:
+                inj0 = injn
+                injeffs.append(injn)
+                cnt -= 1
+            if cnt == 0:
                 break
             _time.sleep(0.1)
         else:
             _log.warning('Timed out waiting injeff to update.')
-        return self.devices['currinfo'].injeff
 
-    def _prepare_evg(self):
-        evg = self.devices['evg']
-        # configure to inject on first bucket just once
-        evg.bucketlist = [1]
-        evg.nrpulses = 1
-        evg.cmd_update_events()
-        _time.sleep(1)
+        self.devices['evg'].wait_injection_finish()
+        return injeffs
 
     def get_isochrom_strengths(self, pos):
         """."""
@@ -256,7 +243,7 @@ class OptimizeDA(_RCDS):
             obj.append(self.objective_function(pos))
             _log.info(f'{i+1:02d}/{nr_evals:02d}  --> obj. = {obj[-1]:.3f}')
         noise_level = _np.std(obj)
-        self.params.noise_level = noise_level
+        _log.info(f'obj. = {_np.mean(obj):.3f} +- {noise_level:.3f}')
         self.data['measured_objfuncs_for_noise'] = obj
         self.data['measured_noise_level'] = noise_level
         return noise_level, obj
@@ -306,7 +293,13 @@ class OptimizeDA(_RCDS):
             if stg is None or _np.isnan(stg):
                 continue
             self.sextupoles[i].strength = stg
-        _time.sleep(2)
+
+        # NOTE: the loop below waits sextupoles to reach the set current.
+        for i, stg in enumerate(strengths):
+            if stg is None or _np.isnan(stg):
+                continue
+            self.sextupoles[i].set_strength(
+                stg, tol=1e-3, timeout=10, wait_mon=True)
 
     def _create_devices(self):
         for fam in self.params.SEXT_FAMS:
