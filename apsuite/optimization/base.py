@@ -17,9 +17,9 @@ class OptimizationAborted(Exception):
 class OptimizeParams(_Params):
     """."""
 
-    _TMPD = '{:30s}: {:10d} {:s}\n'
-    _TMPF = '{:30s}: {:10.3f} {:s}\n'
-    _TMPS = '{:30s}: {:10s} {:s}\n'
+    _TMPD = '{:30s}: {:10d} {:s}\n'.format
+    _TMPF = '{:30s}: {:10.3f} {:s}\n'.format
+    _TMPS = '{:30s}: {:10s} {:s}\n'.format
 
     BoundaryPolicy = _get_namedtuple('BoundaryPolicy', ('ToBoundary', 'ToNaN'))
 
@@ -83,9 +83,9 @@ class OptimizeParams(_Params):
     def __str__(self):
         """."""
         stg = ''
-        stg += self._TMPD.format('max_number_iters', self.max_number_iters, '')
-        stg += self._TMPD.format('max_number_evals', self.max_number_evals, '')
-        stg += self._TMPS.format(
+        stg += self._TMPD('max_number_iters', self.max_number_iters, '')
+        stg += self._TMPD('max_number_evals', self.max_number_evals, '')
+        stg += self._TMPS(
             'boundary_policy',
             self.BoundaryPolicy._fields[self.boundary_policy], '')
         if self.are_positions_consistent():
