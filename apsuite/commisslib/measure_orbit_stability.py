@@ -656,37 +656,53 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """."""
         fambpms = self.devices['fambpms']
         prms = self.params
-        fambpms.mturn_config_acquisition(
+        ret = fambpms.mturn_config_acquisition(
             nr_points_after=prms.orbit_nrpoints_after,
             nr_points_before=prms.orbit_nrpoints_before,
             acq_rate=prms.orbit_acq_rate,
             repeat=prms.orbit_acq_repeat)
+        return ret
 
     def acquire_data(self):
         """."""
         fambpms = self.devices['fambpms']
         evt_study = self.devices['evt_study']
-        self.prepare_bpms_acquisition()
-        fambpms.mturn_reset_flags()
+        ret = self.prepare_bpms_acquisition()
+        if ret < 0:
+            print(f'BPM {-ret-1:d} did not finish last acquisition.')
+        elif ret > 0:
+            print(f'BPM {ret-1:d} is not ready for acquisition.')
+        get_sum = False
+        fambpms.mturn_reset_flags_and_update_initial_orbit(
+            consider_sum=get_sum)
         evt_study.cmd_external_trigger()
-        fambpms.mturn_wait_update_flags(timeout=self.params.orbit_timeout)
-        orbx, orby = fambpms.get_mturn_orbit()
+        time0 = _time.time()
+        ret = fambpms.mturn_wait_update_orbit(
+            timeout=self.params.orbit_timeout, consider_sum=get_sum)
+        print(f'it took {_time.time()-time0:02f}s to update bpms')
+        if ret != 0:
+            raise Exception(
+                f'There was a problem with acquisition. Error code {ret:d}')
+        orbx, orby = fambpms.get_mturn_orbit(return_sum=get_sum)
 
         data = dict()
         data['timestamp'] = _time.time()
-        data['rf_frequency'] = self.devices['rfgen'].frequency
+        self.rf_freq = self.devices['rfgen'].frequency
+        data['rf_frequency'] = self.rf_freq
         data['stored_current'] = self.devices['currinfo'].current
         data['orbx'], data['orby'] = orbx, orby
         tune = self.devices['tune']
         data['tunex'], data['tuney'] = tune.tunex, tune.tuney
         bpm0 = self.devices['fambpms'].devices[0]
-        csbpm = bpm0.csdata
-        data['bpms_acq_rate'] = csbpm.AcqChan._fields[bpm0.acq_channel]
+        data['bpms_acq_rate'] = bpm0.acq_channel_str
+        data['bpms_sampling_frequency'] = fambpms.get_sampling_frequency(
+            self.rf_freq)
         data['bpms_nrsamples_pre'] = bpm0.acq_nrsamples_pre
         data['bpms_nrsamples_post'] = bpm0.acq_nrsamples_post
         data['bpms_trig_delay_raw'] = self.devices['trigbpm'].delay_raw
-        data['bpms_switching_mode'] = csbpm.SwModes._fields[
-            bpm0.switching_mode]
+        data['bpms_switching_mode'] = bpm0.switching_mode_str
+        data['bpms_switching_frequency'] = fambpms.get_switching_frequency(
+            self.rf_freq)
         data['tunex_enable'] = tune.enablex
         data['tuney_enable'] = tune.enabley
         self.data = data
