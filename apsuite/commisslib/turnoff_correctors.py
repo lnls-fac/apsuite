@@ -160,7 +160,7 @@ class TurnOffCorr(_ThreadBaseClass):
         sibpms.mturn_reset_flags_and_update_initial_orbit(
             consider_sum=False)
         self.devices['event'].cmd_external_trigger()
-        ret = sibpms.mturn_wait_update_orbit(
+        ret = sibpms.mturn_wait_update(
             timeout=prms.orbit_timeout, consider_sum=False)
         if ret != 0:
             print(f'Problem waiting BPMs update. Error code: {ret:d}')

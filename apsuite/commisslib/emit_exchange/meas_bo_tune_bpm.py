@@ -157,7 +157,7 @@ class BOTunebyBPM(_BaseClass):
         if ext_trigger:
             event.cmd_external_trigger()
 
-        ret = bobpms.mturn_wait_update_orbit(
+        ret = bobpms.mturn_wait_update(
             timeout=prms.orbit_timeout, consider_sum=False)
         if ret:
             self.data = dict()

@@ -493,7 +493,7 @@ class MeasACORM(_ThreadBaseClass):
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         print('    Waiting BPMs to update...', end='')
-        ret = self.bpms.mturn_wait_update_orbit(
+        ret = self.bpms.mturn_wait_update(
             timeout=self.params.timeout_bpms, consider_sum=False)
         if ret:
             print(
@@ -544,7 +544,7 @@ class MeasACORM(_ThreadBaseClass):
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         print('    Waiting BPMs to update...', end='')
-        ret = self.bpms.mturn_wait_update_orbit(
+        ret = self.bpms.mturn_wait_update(
             timeout=self.params.timeout_bpms, consider_sum=False)
         if ret:
             print(
@@ -651,7 +651,7 @@ class MeasACORM(_ThreadBaseClass):
             # Wait BPMs PV to update with new data
             t00 = _time.time()
             print('    Waiting BPMs to update...', end='')
-            ret = self.bpms.mturn_wait_update_orbit(
+            ret = self.bpms.mturn_wait_update(
                 timeout=self.params.timeout_bpms, consider_sum=False)
             if ret:
                 print(
