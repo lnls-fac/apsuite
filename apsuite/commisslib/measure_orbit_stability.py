@@ -21,9 +21,6 @@ class OrbitAnalysis:
     NUM_BPMS = _asparams.SI_NUM_BPMS
     HARM_NUM = _asparams.SI_HARM_NUM
     ENERGY_SPREAD = _asparams.SI_ENERGY_SPREAD
-    BPM_SWITCHING_FREQ = _asparams.BPM_SWITCHING_FREQ
-    BPM_FOFB_DOWNSAMPLING = _asparams.BPM_FOFB_DOWNSAMPLING
-    BPM_MONIT1_DOWNSAMPLING = _asparams.BPM_MONIT1_DOWNSAMPLING
 
     def __init__(self, filename='', orm_name=''):
         """Analysis of orbit over time at BPMs for a given acquisition rate.
@@ -196,15 +193,15 @@ class OrbitAnalysis:
 
     def remove_switching_freq(self, orbx=None, orby=None):
         """."""
-        if orbx is None:
-            orbx = self.orbx.copy()
-        if orby is None:
-            orby = self.orby.copy()
+        orbx = orbx or self.orbx.copy()
+        orby = orby or self.orby.copy()
         fs = self.sampling_freq
+        fsw = self.switching_freq or FamBPMs.get_switching_frequency(
+            self.rf_freq)
         fil_orbx, freq = self.filter_matrix(
-            orbx, fmin=0, fmax=self.BPM_SWITCHING_FREQ*0.9, fs=fs)
+            orbx, fmin=0, fmax=fsw*0.9, fs=fs)
         fil_orby, _ = self.filter_matrix(
-            orby, fmin=0, fmax=self.BPM_SWITCHING_FREQ*0.9, fs=fs)
+            orby, fmin=0, fmax=fsw*0.9, fs=fs)
         return fil_orbx, fil_orby, freq
 
     def filter_around_freq(
@@ -395,9 +392,11 @@ class OrbitAnalysis:
             ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
         if fig is None or axs is None:
             fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
-        axs[0].plot(freqx, ipsdx[:, bpmidx], label=label,
+        axs[0].plot(
+            freqx, ipsdx[:, bpmidx], label=label,
             color=color, alpha=alpha)
-        axs[1].plot(freqy, ipsdy[:, bpmidx], label=label,
+        axs[1].plot(
+            freqy, ipsdy[:, bpmidx], label=label,
             color=color, alpha=alpha)
         if title:
             axs[0].set_title(title)
@@ -557,15 +556,6 @@ class OrbitAnalysis:
         return spec, freq
 
     @staticmethod
-    def get_sampling_freq(data):
-        """."""
-        fs = data['rf_frequency'] / OrbitAnalysis.HARM_NUM
-        if data['bpms_acq_rate'] == 'FOFB':
-            return fs / OrbitAnalysis.BPM_FOFB_DOWNSAMPLING
-        elif data['bpms_acq_rate'] == 'Monit1':
-            return fs / OrbitAnalysis.BPM_MONIT1_DOWNSAMPLING
-
-    @staticmethod
     def _calc_pca(data):
         """."""
         umat, svals, vhmat = _np.linalg.svd(data, full_matrices=False)
@@ -609,7 +599,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         self.orbit_timeout = 40
         self.orbit_nrpoints_before = 0
         self.orbit_nrpoints_after = 20000
-        self.orbit_acq_rate = 'Monit1'
+        self.orbit_acq_rate = 'FAcq'
         self.orbit_acq_repeat = False
 
     def __str__(self):
@@ -753,7 +743,6 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """Energy Stability Analysis."""
         self._subtract_average_orb()
         self.get_appropriate_orm_data(orm_name)
-        self.sampling_freq = self.get_sampling_freq(self.data)
         self.energy_stability_analysis(
             central_freq=central_freq, window=window, inverse=inverse,
             use_eta_meas=use_eta_meas)
@@ -763,7 +752,6 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             split_planes=True):
         """Orbit Stability Analysis."""
         self._subtract_average_orb()
-        self.sampling_freq = self.get_sampling_freq(self.data)
         self.orbit_stability_analysis(
             central_freq=central_freq, window=window,
             inverse=inverse, pca=pca, split_planes=split_planes)
@@ -779,4 +767,5 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """."""
         super().load_and_apply(fname)
         self.get_appropriate_orm_data(orm_name)
-        self.sampling_freq = self.get_sampling_freq(self.data)
+        self._get_sampling_freq()
+        self._get_switching_freq()
