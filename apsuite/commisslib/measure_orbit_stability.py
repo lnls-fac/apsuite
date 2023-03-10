@@ -196,8 +196,7 @@ class OrbitAnalysis:
         orbx = orbx or self.orbx.copy()
         orby = orby or self.orby.copy()
         fs = self.sampling_freq
-        fsw = self.switching_freq or FamBPMs.get_switching_frequency(
-            self.rf_freq)
+        fsw = self.switching_freq
         fil_orbx, freq = self.filter_matrix(
             orbx, fmin=0, fmax=fsw*0.9, fs=fs)
         fil_orby, _ = self.filter_matrix(
@@ -523,17 +522,16 @@ class OrbitAnalysis:
         return fig, axs
 
     def _get_sampling_freq(self):
-        acq_rate = self.data['bpms_acq_rate']
-        if isinstance(acq_rate, int):
-            acq_rate = _csbpm.AcqChan._fields[self.acq_channel]
-        fsampling = FamBPMs.get_sampling_frequency(
-            self.data['rf_frequency'], acq_rate)
-        self.sampling_freq = fsampling
+        samp_freq = self.data.get('bpms_sampling_frequency')
+        if samp_freq is None:
+            print('bpms_sampling_frequency is not in the data.')
+        self.sampling_freq = samp_freq
 
     def _get_switching_freq(self):
-        fswitching = FamBPMs.get_switching_frequency(
-            self.data['rf_frequency'])
-        self.sampling_freq = fswitching
+        swc_freq = self.data.get('bpms_switching_frequency')
+        if swc_freq is None:
+            print('bpms_switching_frequency is not in the data.')
+        self.switching_freq = swc_freq
 
     # static methods
     @staticmethod
