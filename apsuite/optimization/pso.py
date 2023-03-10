@@ -27,11 +27,11 @@ class PSOParams(_OptimizeParams):
     def __str__(self):
         """."""
         stg = ''
-        stg += self._TMPD.format(
-            'number_of_particles', self.number_of_particles)
-        stg += self._TMPF.format('coeff_inertia', self.coeff_inertia)
-        stg += self._TMPF.format('coeff_individual', self.coeff_individual)
-        stg += self._TMPF.format('coeff_collective', self.coeff_collective)
+        stg += self._TMPD(
+            'number_of_particles', self.number_of_particles, '')
+        stg += self._TMPF('coeff_inertia', self.coeff_inertia, '')
+        stg += self._TMPF('coeff_individual', self.coeff_individual, '')
+        stg += self._TMPF('coeff_collective', self.coeff_collective, '')
         stg += super().__str__()
         return stg
 
@@ -48,6 +48,37 @@ class PSO(_Optimize):
         self._velocity = _np.array([], ndmin=2)
         self._best_indiv = _np.array([])
         self._best_global = _np.array([])
+
+    def to_dict(self) -> dict:
+        """Dump all relevant object properties to dictionary.
+
+        Returns:
+            dict: contains all relevant properties of object.
+
+        """
+        dic = super().to_dict()
+        dic['positions'] = self._positions
+        dic['velocity'] = self._velocity
+        dic['best_indiv'] = self._best_indiv
+        dic['best_global'] = self._best_global
+        return dic
+
+    def from_dict(self, info: dict):
+        """Update all relevant info from dictionary.
+
+        Args:
+            info (dict): dictionary with all relevant info.
+
+        Returns:
+            keys_not_used (set): Set containing keys not used by
+                `self.params` object.
+
+        """
+        super().from_dict(info)
+        self._positions = info['positions']
+        self._velocity = info['velocity']
+        self._best_indiv = info['best_indiv']
+        self._best_global = info['best_global']
 
     @property
     def positions(self):
@@ -108,7 +139,7 @@ class PSO(_Optimize):
 
     def _optimize(self):
         """."""
-        self.params.is_positions_consistent()
+        self.params.are_positions_consistent()
         self._num_objective_evals = 0
         niter = self.params.max_number_iters
         nevals = self.params.max_number_evals
