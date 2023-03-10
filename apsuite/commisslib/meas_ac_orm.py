@@ -26,7 +26,7 @@ class ACORMParams(_ParamsBaseClass):
         """."""
         super().__init__()
         self.nr_points = 5500
-        self.acq_rate = 'Monit1'
+        self.acq_rate = 'FAcq'
         self.timeout_bpms = 10  # [s]
         self.ch_kick = 5  # [urad]
         self.cv_kick = 5  # [urad]
