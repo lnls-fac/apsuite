@@ -11,6 +11,7 @@ from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
 from siriuspy.devices import Tune, CurrInfoSI, \
     Trigger, Event, EVG, RFGen, FamBPMs
+from siriuspy.diagbeam.bpm.csdev import Const as _csbpm
 
 
 class OrbitAnalysis:
@@ -39,12 +40,13 @@ class OrbitAnalysis:
         self._orbx, self._orby = None, None
         self._orm_meas = None
         self._sampling_freq = None
+        self._switching_freq = None
+        self._rf_freq = None
         self.analysis = dict()
         self.orm_client = _sconf.ConfigDBClient(config_type='si_orbcorr_respm')
         if self.fname:
             self.load_orb()
             self.get_appropriate_orm_data(orm_name)
-            self.sampling_freq = self.get_sampling_freq(self.data)
 
     @property
     def fname(self):
@@ -118,6 +120,24 @@ class OrbitAnalysis:
     def sampling_freq(self, val):
         self._sampling_freq = val
 
+    @property
+    def switching_freq(self):
+        """."""
+        return self._switching_freq
+
+    @switching_freq.setter
+    def switching_freq(self, val):
+        self._switching_freq = val
+
+    @property
+    def rf_freq(self):
+        """."""
+        return self._rf_freq
+
+    @rf_freq.setter
+    def rf_freq(self, val):
+        self._rf_freq = val
+
     def load_orb(self):
         """Load files in old format."""
         data = load_pickle(self.fname)
@@ -127,12 +147,15 @@ class OrbitAnalysis:
         stg = gtmp('filename', self.fname, '')
         stg += gtmp('timestamp', timestamp, '')
         stg += ftmp('stored_current', data['stored_current'], 'mA')
+        stg += ftmp('rf_frequency', data['rf_frequency'], 'Hz')
         stg += ftmp('tunex', data['tunex'], '')
         stg += ftmp('tuney', data['tuney'], '')
         stg += gtmp('tunex_enable', bool(data['tunex_enable']), '')
         stg += gtmp('tuney_enable', bool(data['tuney_enable']), '')
         stg += gtmp('bpms_acq_rate', data['bpms_acq_rate'], '')
         stg += gtmp('bpms_switching_mode', data['bpms_switching_mode'], '')
+        stg += gtmp(
+            'bpms_switching_frequency', data['bpms_switching_frequency'], '')
         stg += gtmp('bpms_nrsamples_pre', data['bpms_nrsamples_pre'], '')
         stg += gtmp('bpms_nrsamples_post', data['bpms_nrsamples_post'], '')
         orbx, orby = data['orbx'], data['orby']
@@ -141,6 +164,9 @@ class OrbitAnalysis:
         orby -= orby.mean(axis=0)[None, :]
         self.data = data
         self.orbx, self.orby = orbx, orby
+        self.rf_freq = data['rf_frequency']
+        self._get_sampling_freq()
+        self._get_switching_freq()
         return stg
 
     def get_appropriate_orm_data(self, orm_name=''):
@@ -153,8 +179,9 @@ class OrbitAnalysis:
         orm_meas = _np.array(
             self.orm_client.get_config_value(name=orm_name))
         orm_meas = _np.reshape(orm_meas, (2*self.NUM_BPMS, -1))
-        rf_freq = self.data['rf_frequency']
-        etaxy = orm_meas[:, -1] * (-self.MOM_COMPACT*rf_freq)  # units of [um]
+        self.rf_freq = self.data['rf_frequency']
+        etaxy = orm_meas[:, -1]
+        etaxy *= (-self.MOM_COMPACT*self.rf_freq)  # units of [um]
         self.etax, self.etay = etaxy[:self.NUM_BPMS], etaxy[self.NUM_BPMS:]
         self.orm = orm_meas
 
@@ -495,6 +522,19 @@ class OrbitAnalysis:
         if figname:
             fig.savefig(figname, dpi=300, format='pdf')
         return fig, axs
+
+    def _get_sampling_freq(self):
+        acq_rate = self.data['bpms_acq_rate']
+        if isinstance(acq_rate, int):
+            acq_rate = _csbpm.AcqChan._fields[self.acq_channel]
+        fsampling = FamBPMs.get_sampling_frequency(
+            self.data['rf_frequency'], acq_rate)
+        self.sampling_freq = fsampling
+
+    def _get_switching_freq(self):
+        fswitching = FamBPMs.get_switching_frequency(
+            self.data['rf_frequency'])
+        self.sampling_freq = fswitching
 
     # static methods
     @staticmethod
