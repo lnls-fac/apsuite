@@ -684,12 +684,11 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """."""
         fambpms = self.devices['fambpms']
         prms = self.params
-        ret = fambpms.mturn_config_acquisition(
+        return fambpms.mturn_config_acquisition(
             nr_points_after=prms.orbit_nrpoints_after,
             nr_points_before=prms.orbit_nrpoints_before,
             acq_rate=prms.orbit_acq_rate,
             repeat=prms.orbit_acq_repeat)
-        return ret
 
     def acquire_data(self):
         """."""
