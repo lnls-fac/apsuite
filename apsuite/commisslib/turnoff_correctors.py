@@ -132,7 +132,7 @@ class TurnOffCorr(_ThreadBaseClass):
         self.devices['rfgen'] = RFGen()
 
     def get_orbit_data(self):
-        """Get orbit data from BPMs in Monit1 acquisition rate.
+        """Get orbit data from BPMs in FAcq acquisition rate.
 
         BPMs must be configured to listen Study event and the Study event
         must be in External mode.
@@ -145,7 +145,7 @@ class TurnOffCorr(_ThreadBaseClass):
             - orby: vertical orbit (nsamples x 160)
             - tunex: horizontal betatron tune
             - tuney: vertical betatron tune
-            - mt_acq_rate: MultiTurn acquisition rate (always Monit1)
+            - mt_acq_rate: MultiTurn acquisition rate (always FAcq)
             - rf_frequency
 
         After running get_orbit_data() the user can save the data to .pickle
@@ -156,16 +156,17 @@ class TurnOffCorr(_ThreadBaseClass):
         sibpms = self.devices['sibpms']
         sibpms.mturn_config_acquisition(
             nr_points_after=prms.nr_points_bpm_acq, nr_points_before=0,
-            acq_rate='Monit1', repeat=False, external=True)
-
-        sibpms.mturn_reset_flags()
+            acq_rate='FAcq', repeat=False, external=True)
+        sibpms.mturn_reset_flags_and_update_initial_orbit(
+            consider_sum=False)
         self.devices['event'].cmd_external_trigger()
-        ret = sibpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
+        ret = sibpms.mturn_wait_update(
+            timeout=prms.orbit_timeout, consider_sum=False)
         if ret != 0:
             print(f'Problem waiting BPMs update. Error code: {ret:d}')
             return dict()
 
-        orbx, orby = sibpms.get_mturn_orbit()
+        orbx, orby = sibpms.get_mturn_orbit(return_sum=False)
         chs_names = [self.sofb_data.ch_names[idx] for idx in prms.chs_idx]
         data = dict()
         data['timestamp'] = _time.time()
@@ -173,7 +174,7 @@ class TurnOffCorr(_ThreadBaseClass):
         data['stored_current'] = self.devices['currinfo'].current
         data['orbx'], data['orby'] = orbx, orby
         data['tunex'], data['tuney'] = tune.tunex, tune.tuney
-        data['mt_acq_rate'] = 'Monit1'
+        data['mt_acq_rate'] = 'FAcq'
         data['rf_frequency'] = self.devices['rfgen'].frequency
         self.data = data
 
