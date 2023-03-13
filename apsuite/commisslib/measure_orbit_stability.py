@@ -724,6 +724,11 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         if ret != 0:
             raise Exception(
                 f'There was a problem with acquisition. Error code {ret:d}')
+        self.data = self.get_data(get_sum=get_sum)
+
+    def get_data(self, get_sum=False):
+        """Get Orbit and auxiliary data."""
+        fambpms = self.devices['fambpms']
         orbx, orby = fambpms.get_mturn_orbit(return_sum=get_sum)
 
         data = dict()
@@ -746,7 +751,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             self.rf_freq)
         data['tunex_enable'] = tune.enablex
         data['tuney_enable'] = tune.enabley
-        self.data = data
+        return data
 
     def process_data_energy(
             self, central_freq=24*64, window=5, inverse=True,
