@@ -592,6 +592,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         """."""
         self.trigbpm_delay = 0.0
         self.trigbpm_nrpulses = 1
+        self.timing_event = 'Study'
         self.event_delay = 0.0
         self.event_mode = 'External'
         self.orbit_timeout = 40
@@ -608,6 +609,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         stg = ''
         stg += ftmp('trigbpm_delay', self.trigbpm_delay, '[us]')
         stg += dtmp('trigbpm_nrpulses', self.trigbpm_nrpulses, '')
+        stg += stmp('timing_event', self.timing_event, '')
         stg += ftmp('event_delay', self.event_delay, '[us]')
         stg += stmp('event_mode', self.event_mode, '')
         stg += ftmp('orbit_timeout', self.orbit_timeout, '[s]')
@@ -667,18 +669,28 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
 
     def prepare_timing(self):
         """."""
+        if self.params.timing_event != 'Study':
+            return
+
         trigbpm = self.devices['trigbpm']
         evt_study = self.devices['evt_study']
 
         trigbpm.delay = self.params.trigbpm_delay
         trigbpm.nr_pulses = self.params.trigbpm_nrpulses
-        trigbpm.source = 'Study'
+        trigbpm.source = self.params.timing_event
 
         evt_study.delay = self.params.event_delay
         evt_study.mode = self.params.event_mode
 
         # Update event configurations in EVG
         self.devices['evg'].cmd_update_events()
+
+    def trigger_timing_signal(self):
+        """."""
+        if self.params.timing_event == 'Study':
+            self.devices['evt_study'].cmd_external_trigger()
+        else:
+            self.devices['evg'].cmd_turn_on_injection()
 
     def prepare_bpms_acquisition(self):
         """."""
@@ -693,16 +705,18 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
     def acquire_data(self):
         """."""
         fambpms = self.devices['fambpms']
-        evt_study = self.devices['evt_study']
         ret = self.prepare_bpms_acquisition()
         if ret < 0:
             print(f'BPM {-ret-1:d} did not finish last acquisition.')
         elif ret > 0:
             print(f'BPM {ret-1:d} is not ready for acquisition.')
+
         get_sum = False
         fambpms.mturn_reset_flags_and_update_initial_orbit(
             consider_sum=get_sum)
-        evt_study.cmd_external_trigger()
+
+        self.trigger_timing_signal()
+
         time0 = _time.time()
         ret = fambpms.mturn_wait_update(
             timeout=self.params.orbit_timeout, consider_sum=get_sum)
