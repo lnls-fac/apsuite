@@ -718,7 +718,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         self.trigger_timing_signal()
 
         time0 = _time.time()
-        ret = fambpms.mturn_wait_update(
+        ret = fambpms.mturn_wait_update_orbit(
             timeout=self.params.orbit_timeout, consider_sum=get_sum)
         print(f'it took {_time.time()-time0:02f}s to update bpms')
         if ret != 0:
