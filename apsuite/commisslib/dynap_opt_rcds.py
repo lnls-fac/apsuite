@@ -112,7 +112,6 @@ class OptimizeDA(_RCDS):
         self.data['obj_funcs'] = []
         self.data['onaxis_obj_funcs'] = []
         self.data['offaxis_obj_funcs'] = []
-        self._prepare_evg()
         return True
 
     def objective_function(self, pos=None):

@@ -722,8 +722,8 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             timeout=self.params.orbit_timeout, consider_sum=get_sum)
         print(f'it took {_time.time()-time0:02f}s to update bpms')
         if ret != 0:
-            raise Exception(
-                f'There was a problem with acquisition. Error code {ret:d}')
+            print(f'There was a problem with acquisition. Error code {ret:d}')
+            return
         self.data = self.get_data(get_sum=get_sum)
 
     def get_data(self, get_sum=False):
