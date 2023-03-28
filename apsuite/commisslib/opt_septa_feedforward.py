@@ -68,15 +68,16 @@ class OptSeptaFFParams(_RCDSParams):
         stg += super().__str__()
         return stg
 
-    def update_limits_and_directions(self):
+    def update_limits_and_directions(
+            self, ps_low=-1, ps_high=1, dly_low=-50, dly_high=50):
         """."""
         init_pos = self.initial_position
         self.initial_search_directions = _np.eye(init_pos.size)
-        self.limit_lower = -_np.ones(init_pos.size)
-        self.limit_upper = _np.ones(init_pos.size)
+        self.limit_lower = _np.ones(init_pos.size) * ps_low
+        self.limit_upper = _np.ones(init_pos.size) * ps_high
         if 'dly' in self.optim_params.lower():
-            self.limit_lower[-1] = -50
-            self.limit_upper[-1] = 50
+            self.limit_lower[-1] = dly_low
+            self.limit_upper[-1] = dly_high
 
 
 class OptSeptaFF(_RCDS):
@@ -97,6 +98,9 @@ class OptSeptaFF(_RCDS):
             _time.sleep(self.params.wait_after_wfm_set)
         else:
             pos = self.get_current_position_from_machine()
+        if 'positions' not in self.data:
+            self.data['positions'] = []
+            self.data['obj_funcs'] = []
         self.data['positions'].append(pos)
 
         if self._stopevt.is_set():
@@ -105,10 +109,10 @@ class OptSeptaFF(_RCDS):
         orb = self.measure_multiturn_orbit()
         if self.params.filter_with_orm:
             orb = self.filter_with_orm(
-                self.params.orm_2_filter, orb,
+                orb, self.params.orm_2_filter,
                 indices=self.params.orm_indices)
         if self.params.filter_with_wavelet:
-            orb = self.filter_data(
+            orb = self.filter_with_wavelet(
                 orb, num_modes=self.params.wavelet_num_modes)
 
         slc_orb = slice(
@@ -118,11 +122,15 @@ class OptSeptaFF(_RCDS):
 
         res = []
         if 'x' in self.params.orbit_planes.lower():
-            res.append(orb[slc_orb, :160][:, slc_bpm])
+            ox_ = orb[slc_orb, :160][:, slc_bpm].copy()
+            ox_ -= orb[:20, :160][:, slc_bpm].mean(axis=0)[None, :]
+            res.append(ox_)
         if 'y' in self.params.orbit_planes.lower():
-            res.append(orb[slc_orb, 160:][:, slc_bpm])
+            oy_ = orb[slc_orb, 160:][:, slc_bpm].copy()
+            oy_ -= orb[:20, 160:][:, slc_bpm].mean(axis=0)[None, :]
+            res.append(oy_)
         res = _np.hstack(res)
-        objective = _np.sum(res*res)
+        objective = res.std()**2
 
         self.data['obj_funcs'].append(objective)
         return objective
@@ -144,16 +152,18 @@ class OptSeptaFF(_RCDS):
         pos = []
         stt = self.params.wfm_index_start
         end = self.params.wfm_index_stop
-        if 'ch' in self.params.optim_params:
-            m2ch = self.devices['ps_m2ch']
+        if 'm1ch' in self.params.optim_params:
             m1ch = self.devices['ps_m1ch']
-            pos.append(m2ch.wfm[stt:end])
             pos.append(m1ch.wfm[stt:end])
-        if 'cv' in self.params.optim_params:
-            m2cv = self.devices['ps_m2cv']
+        if 'm2ch' in self.params.optim_params:
+            m2ch = self.devices['ps_m2ch']
+            pos.append(m2ch.wfm[stt:end])
+        if 'm1cv' in self.params.optim_params:
             m1cv = self.devices['ps_m1cv']
-            pos.append(m2cv.wfm[stt:end])
             pos.append(m1cv.wfm[stt:end])
+        if 'm2cv' in self.params.optim_params:
+            m2cv = self.devices['ps_m2cv']
+            pos.append(m2cv.wfm[stt:end])
         if 'dly' in self.params.optim_params:
             pos.append(self.devices['trigger'].delay)
         return _np.hstack(pos)
@@ -165,22 +175,34 @@ class OptSeptaFF(_RCDS):
 
         npts_wfm = end - stt
         pstt, pend = 0, npts_wfm
-        if 'ch' in self.params.optim_params:
-            m2ch = self.devices['ps_m2ch']
+        if 'm1ch' in self.params.optim_params:
             m1ch = self.devices['ps_m1ch']
-            m2ch.wfm[stt:end] = pos[pstt:pend]
+            wfm = m1ch.wfm
+            wfm[stt:end] = pos[pstt:pend]
+            m1ch.wfm = wfm
             pstt += npts_wfm
             pend += npts_wfm
-            m1ch.wfm[stt:end] = pos[pstt:pend]
+        if 'm2ch' in self.params.optim_params:
+            m2ch = self.devices['ps_m2ch']
+            wfm = m2ch.wfm
+            wfm[stt:end] = pos[pstt:pend]
+            m2ch.wfm = wfm
             pstt += npts_wfm
             pend += npts_wfm
-        if 'cv' in self.params.optim_params:
-            m2cv = self.devices['ps_m2cv']
+        if 'm1cv' in self.params.optim_params:
             m1cv = self.devices['ps_m1cv']
-            m2cv.wfm[stt:end] = pos[pstt:pend]
+            wfm = m1cv.wfm
+            wfm[stt:end] = pos[pstt:pend]
+            m1cv.wfm = wfm
             pstt += npts_wfm
             pend += npts_wfm
-            m1cv.wfm[stt:end] = pos[pstt:pend]
+        if 'm2cv' in self.params.optim_params:
+            m2cv = self.devices['ps_m2cv']
+            wfm = m2cv.wfm
+            wfm[stt:end] = pos[pstt:pend]
+            m2cv.wfm = wfm
+            pstt += npts_wfm
+            pend += npts_wfm
         if 'dly' in self.params.optim_params:
             self.devices['trigger'].delay = pos[-1]
 
@@ -488,14 +510,16 @@ class OptSeptaFF(_RCDS):
         self.devices['ps_m1cv'] = PowerSupply('SI-01M1:PS-FFCV')
 
         # Create objects to interact with BPMs
-        self.devices['fambpms'] = FamBPMs()
+        # self.devices['fambpms'] = FamBPMs()
         self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
 
 
 class CorrectorModel:
     """."""
 
-    def __init__(self, mag_name, mag_resistence=1, mag_inductance=2.62e-3):
+    def __init__(
+            self, mag_name, mag_resistence=0.63905,
+            mag_inductance=2.5813895e-3):
         """."""
         self.mag_name = mag_name
         self.mag_resistence = mag_resistence  # [Ohm]
@@ -510,12 +534,28 @@ class CorrectorModel:
 
         self.mag_model_type = 'iir'  # ('iir', 'physics')
         self.mag_model_iir_num = _np.array([
-            0, 0.00736772190177206, 0.0381989334609554, -0.116198636899350,
-            0.0894474557595205, -0.0148332852289033, -0.00396157902847078, 0])
+            # 0, 0.00736772190177206, 0.0381989334609554, -0.116198636899350,
+            # 0.0894474557595205, -0.0148332852289033, -0.00396157902847078, 0
+            0, 0.00731190543657999, 0.0379093083187051, -0.115317981856320,
+            0.0887697668787149, -0.0147209896017043, -0.00393155560376759, 0
+            ])
         self.mag_model_iir_den = _np.array([
-            1, -4.19172563035355, 7.21031243410994, -6.51988661626645,
-            3.29299728245094, -0.908712830074173, 0.122036143737951,
-            -0.00500020467567861])
+            # 1, -4.19172563035355, 7.21031243410994, -6.51988661626645,
+            # 3.29299728245094, -0.908712830074173, 0.122036143737951,
+            # -0.00500020467567861
+            1, -4.19172156542397, 7.21020130413743, -6.51977136389536,
+            3.29304307894445, -0.908764175487393, 0.122033349406558,
+            -0.00500020467748778
+            ])
+        self.mag_model_duty_iir_num = _np.array([
+            1.24071464455799, -5.03284626154369, 8.27859723722222,
+            -7.05785644802524, 3.28450712690465, -0.789325241177209,
+            0.0762102122722402
+            ])
+        self.mag_model_duty_iir_den = _np.array([
+            1, -4.04974852456402, 6.67309977457816, -5.70003181060390,
+            2.64892481109717, -0.635153655581859, 0.0629339095490494
+            ])
 
         self.loop_period = 20e-6  # [s]
         self.loop_kp = (80 if mag_inductance > 4e-3 else 35)
@@ -544,6 +584,8 @@ class CorrectorModel:
             'mag_model_type', self.mag_model_type, "('iir', 'physics')")
         stg += tmps('mag_model_iir_num', str(self.mag_model_iir_num))
         stg += tmps('mag_model_iir_den', str(self.mag_model_iir_den))
+        stg += tmps('mag_model_duty_iir_num', str(self.mag_model_duty_iir_num))
+        stg += tmps('mag_model_duty_iir_den', str(self.mag_model_duty_iir_den))
         stg += tmpg('loop_period', self.loop_period, '[s]')
         stg += tmpf('loop_kp', self.loop_kp, '[V/A]')
         stg += tmpf('loop_ki', self.loop_ki, '[V/A]')
@@ -577,7 +619,8 @@ class CorrectorModel:
     def simulate_system(
             self, tim, ref_curr, ref_volt=None, incl_magcham=False):
         """."""
-        curr, volt = self.evolve_current_in_time(ref_curr, volt=ref_volt)
+        curr, volt, duty_cycle = self.evolve_current_in_time(
+            ref_curr, volt=ref_volt)
         curr_upsmpl, volt_upsmpl = self.interpolate_time_evolution(
             tim, volt, curr)
 
@@ -585,7 +628,7 @@ class CorrectorModel:
             freq = self.get_frequency_vector(tim.size, T0=tim[1]-tim[0])
             curr_upsmpl = self.apply_corrector_transfer_function(
                 freq, curr_upsmpl)
-        return curr_upsmpl, volt_upsmpl, curr, volt
+        return curr_upsmpl, volt_upsmpl, curr, volt, duty_cycle
 
     def apply_corrector_transfer_function(self, freqs, current):
         """."""
@@ -617,8 +660,10 @@ class CorrectorModel:
         if self.mag_model_type.lower().startswith('iir') and volt is None:
             curr = _scysig.lfilter(
                 self.mag_model_iir_num, self.mag_model_iir_den, ref)
+            duty = _scysig.lfilter(
+                self.mag_model_duty_iir_num, self.mag_model_duty_iir_den, ref)
             volt = self.calc_voltage_from_current(curr)
-            return curr, volt
+            return curr, volt, duty
 
         R = self.mag_resistence
         L = self.mag_inductance
@@ -653,7 +698,10 @@ class CorrectorModel:
             v_l = volt[i]/R
             cur_i = exp_delta * (cur_i[-1] - v_l)
             cur_i += v_l
-        return _np.array(curr), _np.array(volt)[:len(curr)]
+        curr = _np.array(curr)
+        volt = _np.array(volt)[:curr.size]
+        duty = curr * 0
+        return curr, volt, duty
 
     def interpolate_time_evolution(self, tim, digit_volt, digit_curr):
         """."""
@@ -688,14 +736,20 @@ class CorrectorModel:
 
     def optimize_reference(
             self, init_ref, time_goal, goal, slc_knob=None, slc_obj=None,
-            incl_magcham=True):
+            incl_magcham=True, consider_duty=False):
         """."""
         def func(x):
             ref = init_ref.copy()
             ref[slc_knob] = x
-            resp_model, *_ = self.simulate_system(
+            resp_model, *_, duty = self.simulate_system(
                 time_goal, ref, incl_magcham=incl_magcham)
-            return goal[slc_obj] - resp_model[slc_obj]
+            res1 = goal[slc_obj] - resp_model[slc_obj]
+            if not consider_duty:
+                return res1
+            res2 = _np.tanh((_np.abs(duty)-0.95)/0.05 * 5)
+            res2 += 1
+            res2 *= res1.size / res2.size * goal[slc_obj].ptp() * 10
+            return _np.hstack([res1, res2])
 
         slc_knob = slice(None) if slc_knob is None else slc_knob
         slc_obj = slice(None) if slc_obj is None else slc_obj

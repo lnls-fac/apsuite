@@ -11,7 +11,6 @@ from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
 from siriuspy.devices import Tune, CurrInfoSI, \
     Trigger, Event, EVG, RFGen, FamBPMs
-from siriuspy.diagbeam.bpm.csdev import Const as _csbpm
 
 
 class OrbitAnalysis:
@@ -689,8 +688,8 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """."""
         if self.params.timing_event == 'Study':
             self.devices['evt_study'].cmd_external_trigger()
-        else:
-            self.devices['evg'].cmd_turn_on_injection()
+        # else:
+        #     self.devices['evg'].cmd_turn_on_injection()
 
     def prepare_bpms_acquisition(self):
         """."""
