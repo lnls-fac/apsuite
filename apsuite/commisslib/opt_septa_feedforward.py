@@ -44,7 +44,7 @@ class OptSeptaFFParams(_RCDSParams):
     def __str__(self):
         """."""
         stg = ''
-        stg += '-----  Optimize Setpa FF Parameters  -----\n\n'
+        stg += '-----  Optimize Septa FF Parameters  -----\n\n'
         stg += self._TMPF('wait_after_wfm_set', self.wait_after_wfm_set, '[s]')
         stg += self._TMPD('orbit_nrpulses', self.orbit_nrpulses, '')
         stg += self._TMPD('orbit_index_start', self.orbit_index_start, '')
