@@ -26,7 +26,6 @@ class OptSeptaFFParams(_RCDSParams):
         """."""
         super().__init__()
         self.wait_after_wfm_set = 1  # [s]
-        self.orbit_meas_device = 'sofb'
         self.orbit_nrpulses = 20
         self.orbit_index_start = 0
         self.orbit_index_stop = 200
@@ -47,8 +46,6 @@ class OptSeptaFFParams(_RCDSParams):
         stg = ''
         stg += '-----  Optimize Setpa FF Parameters  -----\n\n'
         stg += self._TMPF('wait_after_wfm_set', self.wait_after_wfm_set, '[s]')
-        stg += self._TMPS(
-            'orbit_meas_device', self.orbit_meas_device, '(sofb, fambpms)')
         stg += self._TMPD('orbit_nrpulses', self.orbit_nrpulses, '')
         stg += self._TMPD('orbit_index_start', self.orbit_index_start, '')
         stg += self._TMPD('orbit_index_stop', self.orbit_index_stop, '')
@@ -106,14 +103,15 @@ class OptSeptaFF(_RCDS):
         if self._stopevt.is_set():
             return 0.0
 
+        res = self.get_residue_vector()
+        objective = res.std()**2
+
+        self.data['obj_funcs'].append(objective)
+        return objective
+
+    def get_residue_vector(self):
+        """."""
         orb = self.measure_multiturn_orbit()
-        if self.params.filter_with_orm:
-            orb = self.filter_with_orm(
-                orb, self.params.orm_2_filter,
-                indices=self.params.orm_indices)
-        if self.params.filter_with_wavelet:
-            orb = self.filter_with_wavelet(
-                orb, num_modes=self.params.wavelet_num_modes)
 
         slc_orb = slice(
             self.params.orbit_index_start, self.params.orbit_index_stop)
@@ -129,11 +127,7 @@ class OptSeptaFF(_RCDS):
             oy_ = orb[slc_orb, 160:][:, slc_bpm].copy()
             oy_ -= orb[:20, 160:][:, slc_bpm].mean(axis=0)[None, :]
             res.append(oy_)
-        res = _np.hstack(res)
-        objective = res.std()**2
-
-        self.data['obj_funcs'].append(objective)
-        return objective
+        return _np.hstack(res)
 
     def measure_objective_function_noise(self, nr_evals, pos=None):
         """."""
@@ -209,23 +203,24 @@ class OptSeptaFF(_RCDS):
     def measure_multiturn_orbit(self):
         """."""
         nr_avg = self.params.orbit_nrpulses
-        connector = self.params.orbit_meas_device.lower()
-        if 'sofb' in connector:
-            sofb = self.devices['sofb']
-            sofb.cmd_reset()
-            sofb.nr_points = nr_avg
-            _time.sleep(0.2)
-            sofb.wait_buffer(timeout=nr_avg*0.5*2)
-            orbx = sofb.mt_trajx.reshape(-1, 160)
-            orby = sofb.mt_trajy.reshape(-1, 160)
-            return _np.hstack([orbx, orby])
+        sofb = self.devices['sofb']
+        sofb.cmd_reset()
+        sofb.nr_points = nr_avg
+        _time.sleep(0.2)
+        sofb.wait_buffer(timeout=nr_avg*0.5*2)
+        orbx = sofb.mt_trajx.reshape(-1, 160)
+        orby = sofb.mt_trajy.reshape(-1, 160)
 
-        fambpms = self.devices['fambpms']
-        orbs = [_np.hstack(fambpms.get_mturn_orbit())]
-        for _ in range(1, nr_avg):
-            _time.sleep(0.5)
-            orbs.append(_np.hstack(fambpms.get_mturn_orbit()))
-        return _np.mean(orbs, axis=0)
+        orb = _np.hstack([orbx, orby])
+
+        if self.params.filter_with_orm:
+            orb = self.filter_with_orm(
+                orb, self.params.orm_2_filter,
+                indices=self.params.orm_indices)
+        if self.params.filter_with_wavelet:
+            orb = self.filter_with_wavelet(
+                orb, num_modes=self.params.wavelet_num_modes)
+        return orb
 
     @staticmethod
     def load_orbit(fname, npts_mean=None):
