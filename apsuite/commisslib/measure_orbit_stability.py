@@ -591,6 +591,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         """."""
         self.trigbpm_delay = 0.0
         self.trigbpm_nrpulses = 1
+        self.do_pulse_evg = True
         self.timing_event = 'Study'
         self.event_delay = 0.0
         self.event_mode = 'External'
@@ -608,6 +609,7 @@ class OrbitAcquisitionParams(_ParamsBaseClass):
         stg = ''
         stg += ftmp('trigbpm_delay', self.trigbpm_delay, '[us]')
         stg += dtmp('trigbpm_nrpulses', self.trigbpm_nrpulses, '')
+        stg += stmp('do_pulse_evg', str(self.do_pulse_evg), '')
         stg += stmp('timing_event', self.timing_event, '')
         stg += ftmp('event_delay', self.event_delay, '[us]')
         stg += stmp('event_mode', self.event_mode, '')
@@ -686,10 +688,12 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
 
     def trigger_timing_signal(self):
         """."""
+        if not self.params.do_pulse_evg:
+            return
         if self.params.timing_event == 'Study':
             self.devices['evt_study'].cmd_external_trigger()
-        # else:
-        #     self.devices['evg'].cmd_turn_on_injection()
+        else:
+            self.devices['evg'].cmd_turn_on_injection()
 
     def prepare_bpms_acquisition(self):
         """."""
