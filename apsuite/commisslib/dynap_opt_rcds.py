@@ -47,10 +47,25 @@ class OptimizeDAParams(_RCDSParams):
         self.names_sexts2corr = [
             'SDA2', 'SDB2', 'SDP2', 'SFA2', 'SFB2', 'SFP2']
         self.names_sexts2use = []
-        for sext in self.SEXT_FAMS:
-            if sext in self.names_sexts2corr:
-                continue
-            self.names_sexts2use.append(sext)
+        self.use_chrom_mat_nullspace = True
+        self.knobs = [
+                     ['SDA0'], ['SDB0'], ['SDP0'],
+                     ['SFA0'], ['SFB0'], ['SFP0'],
+                     ['SDA1'], ['SDB1', 'SDP1'],
+                     ['SDA2'], ['SDB2', 'SDP2'],
+                     ['SDA3'], ['SDB3', 'SDP3'],
+                     ['SFA1'],
+                     ['SFA2'], ['SFB2', 'SFP2']
+                     ]
+        if self.use_chrom_mat_nullspace:
+            for knob in self.knobs:
+                for sext in knob:
+                    self.names_sexts2use.append(sext)
+        else:
+            for sext in self.SEXT_FAMS:
+                if sext in self.names_sexts2corr:
+                    continue
+                self.names_sexts2use.append(sext)
 
     def __str__(self):
         """."""
@@ -61,10 +76,6 @@ class OptimizeDAParams(_RCDSParams):
         stg += self._TMPF('offaxis_rf_phase', self.offaxis_rf_phase, '[°]')
         stg += self._TMPF('offaxis_weight', self.offaxis_weight, '')
         stg += self._TMPF('onaxis_weight', self.onaxis_weight, '')
-        stg += self._TMPS(
-            'names_sexts2corr', ', '.join(self.names_sexts2corr), '')
-        stg += self._TMPS(
-            'names_sexts2use', ', '.join(self.names_sexts2use), '')
         stg += self._TMPF(
             'wait_between_injections', self.wait_between_injections, '[s]')
         stg += self._TMPD('onaxis_nrpulses', self.onaxis_nrpulses, '')
@@ -75,6 +86,19 @@ class OptimizeDAParams(_RCDSParams):
             'offaxis_inj_with_dpkckr',
             str(bool(self.offaxis_inj_with_dpkckr)), '')
         stg += self._TMPS('use_median', str(bool(self.use_median)), '')
+        stg += self._TMPS(
+            'use_crhom_mat_nullspace',
+            str(bool(self.use_chrom_mat_nullspace)), '')
+        if self.use_chrom_mat_nullspace:
+            stg += '\n\n-----  Knobs  -----\n\n'
+            for knob in self.knobs:
+                stg += ', '.join(knob) + '\n'
+            stg += f'{len(self.knobs)} user-defined knobs \n'
+        else:
+            stg += self._TMPS(
+                'names_sexts2corr', ', '.join(self.names_sexts2corr), '')
+            stg += self._TMPS(
+                'names_sexts2use', ', '.join(self.names_sexts2use), '')
         return stg
 
 
@@ -102,6 +126,21 @@ class OptimizeDA(_RCDS):
             self.params.SEXT_FAMS.index(sx)
             for sx in self.chrom_corr.knobs.all]
         self.full_chrom_mat[:, idcs] = self.chrom_corr.calc_jacobian_matrix()
+
+        if self.params.use_chrom_mat_nullspace:
+            self.pmat = _np.zeros(
+                (len(self.params.SEXT_FAMS), len(self.params.knobs)),
+                dtype=float)  # matrix that ties families together
+            for i, knob in enumerate(self.params.knobs):
+                for fam in knob:
+                    self.pmat[self.params.SEXT_FAMS.index(fam), i] = 1
+            self.nullspace_dirs = _np.linalg.svd(
+                self.full_chrom_mat @ self.pmat,
+                full_matrices=True)[-1].T[:, 2:]
+            self.knobs2strengths_mat = self.pmat @ self.nullspace_dirs
+            self.strengths2knobs_mat = _np.linalg.pinv(
+                self.knobs2strengths_mat, rcond=1e-15)
+            self.params.initial_search_directions = self.nullspace_dirs
 
     def _initialization(self):
         """."""
@@ -217,6 +256,10 @@ class OptimizeDA(_RCDS):
 
     def get_isochrom_strengths(self, pos):
         """."""
+        if self.params.use_chrom_mat_nullspace:
+            strenghts = self.knobs2strengths_mat @ pos
+            return strenghts
+
         idcs_corr = [
             self.params.SEXT_FAMS.index(sx)
             for sx in self.params.names_sexts2corr]
@@ -269,9 +312,12 @@ class OptimizeDA(_RCDS):
                 pos.append(stg)
                 lower.append(low)
                 upper.append(upp)
+            pos = _np.array(pos)
+        if self.params.use_chrom_mat_nullspace:
+            pos = self.strengths2knobs_mat @ pos
         if not return_limits:
-            return _np.array(pos)
-        return _np.array(pos), (_np.array(lower), _np.array(upper))
+            return pos
+        return pos, (_np.array(lower), _np.array(upper))
 
     def get_strengths_from_machine(self, return_limits=False):
         """."""
