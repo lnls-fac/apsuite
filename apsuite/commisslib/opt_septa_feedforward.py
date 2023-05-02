@@ -104,7 +104,7 @@ class OptSeptaFF(_RCDS):
             return 0.0
 
         res = self.get_residue_vector()
-        objective = res.std()**2
+        objective = _np.sum(res*res)/res.size  # res.std()**2
 
         self.data['obj_funcs'].append(objective)
         return objective
@@ -200,14 +200,15 @@ class OptSeptaFF(_RCDS):
         if 'dly' in self.params.optim_params:
             self.devices['trigger'].delay = pos[-1]
 
-    def measure_multiturn_orbit(self):
+    def measure_multiturn_orbit(self, do_reset=True):
         """."""
         nr_avg = self.params.orbit_nrpulses
         sofb = self.devices['sofb']
-        sofb.cmd_reset()
-        sofb.nr_points = nr_avg
-        _time.sleep(0.2)
-        sofb.wait_buffer(timeout=nr_avg*0.5*2)
+        if do_reset:
+            sofb.cmd_reset()
+            sofb.nr_points = nr_avg
+            _time.sleep(0.2)
+            sofb.wait_buffer(timeout=nr_avg*0.5*2)
         orbx = sofb.mt_trajx.reshape(-1, 160)
         orby = sofb.mt_trajy.reshape(-1, 160)
 
