@@ -140,7 +140,7 @@ class OptimizeDA(_RCDS):
             self.knobs2strengths_mat = self.pmat @ self.nullspace_dirs
             self.strengths2knobs_mat = _np.linalg.pinv(
                 self.knobs2strengths_mat, rcond=1e-15)
-            self.params.initial_search_directions = self.nullspace_dirs
+            self.params.initial_search_directions = self.nullspace_dirs.T
 
     def _initialization(self):
         """."""
