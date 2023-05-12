@@ -138,17 +138,22 @@ class MeasCoupling(_BaseClass):
             params=CouplingParams(), target=self._do_meas, isonline=isonline)
         self.qs_names = None
         self.apply_factor = 0
-        self.initial_strengths = None
         if self.isonline:
             self._create_devices()
+            self.initial_strengths = self.get_initial_strengths()
+
+    def get_initial_strengths(self):
+        """."""
+        ini_stren = [self.devices[name].strength for name in self.qs_names]
+        return _np.array(ini_stren)
 
     def _create_skews(self):
         qs_names = _PSSearch.get_psnames(
             {'sec': 'SI', 'dis': 'PS', 'dev': 'QS'})
         qs_idx = [idx for idx, name in enumerate(qs_names) if 'M' in name]
-        qs_names = [qs_names[idx] for idx in qs_idx]
-        self.qs_names = qs_names
-        for name in qs_names:
+        achrom_qs_names = [qs_names[idx] for idx in qs_idx]
+        self.qs_names = achrom_qs_names
+        for name in self.qs_names:
             self.devices[name] = PowerSupply(name)
 
     def _create_devices(self):
@@ -271,7 +276,7 @@ class MeasCoupling(_BaseClass):
         fig.tight_layout()
         return fig, axi
 
-    def apply_achromatic_delta_ksl(self, factor=None):
+    def apply_achromatic_delta_ksl(self, factor=0):
         """Change machine betatron coupling with achromatic QS.
 
         The variation is at the direction of first singular vector obtained
@@ -283,14 +288,10 @@ class MeasCoupling(_BaseClass):
             respect to betatron coupling. Defaults to None.
 
         """
-        self.apply_factor = factor or self.apply_factor
-        dksl = self.apply_factor * MeasCoupling.ACHROM_QS_ADJ
-        init_stren = self.initial_strengths or [None] * len(self.qs_names)
+        dksl = factor * MeasCoupling.ACHROM_QS_ADJ
         for idx, name in enumerate(self.qs_names):
-            ksl0 = init_stren[idx] or self.devices[name].strength
-            init_stren[idx] = ksl0
+            ksl0 = self.initial_strengths[idx]
             self.devices[name].strength = ksl0 + dksl[idx]
-        self.initial_strengths = _np.array(init_stren)
 
     @staticmethod
     def calc_expected_delta_tunes(relative_dkl, quadfam='Q3'):
