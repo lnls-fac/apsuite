@@ -485,7 +485,7 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         print('    Sending Trigger signal...', end='')
-        self.bpms.mturn_reset_flags_and_update_initial_orbit(
+        self.bpms.mturn_reset_flags_and_update_initial_timestamps(
             consider_sum=False)
         self.devices['evt_study'].cmd_external_trigger()
         print(f'Done! ET: {_time.time()-t00:.2f}s')
@@ -526,7 +526,7 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         print('    Sending Trigger signal...', end='')
-        self.bpms.mturn_reset_flags_and_update_initial_orbit(
+        self.bpms.mturn_reset_flags_and_update_initial_timestamps(
             consider_sum=False)
         self.devices['evt_study'].cmd_external_trigger()
 
@@ -643,7 +643,7 @@ class MeasACORM(_ThreadBaseClass):
             # send event through timing system to start acquisitions
             t00 = _time.time()
             print('    Sending Timing signal...', end='')
-            self.bpms.mturn_reset_flags_and_update_initial_orbit(
+            self.bpms.mturn_reset_flags_and_update_initial_timestamps(
                 consider_sum=False)
             self.devices['evt_study'].cmd_external_trigger()
             print(f'Done! ET: {_time.time()-t00:.2f}s')
