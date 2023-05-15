@@ -1,12 +1,13 @@
 """Classes for FOFB system identification."""
 
-import numpy as _np
 import time as _time
+import numpy as _np
+
+from siriuspy.devices import CurrInfoSI, \
+    Trigger, RFGen, FamFOFBSysId, BPM, HLFOFB, SOFB
 
 from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
-from siriuspy.devices import CurrInfoSI, \
-    Trigger, RFGen, FamFOFBSysId, BPM, HLFOFB, SOFB
 
 
 class FOFBSysIdAcqParams(_ParamsBaseClass):
@@ -67,8 +68,7 @@ class FOFBSysIdAcq(_BaseClass):
     """FOFB system identification acquisition."""
 
     def __init__(self, isonline=True):
-        super().__init__(
-            self, params=FOFBSysIdAcqParams(), isonline=isonline)
+        super().__init__(params=FOFBSysIdAcqParams(), isonline=isonline)
         self._fname = None
         if self.isonline:
             self.create_devices()
