@@ -77,12 +77,13 @@ class CouplingCorr():
         coup_matrix = []
         delta = 1e-6
         model, *_ = args
+        res0 = CouplingCorr._get_coupling_residue(*args)
         for nmag in indices:
             dlt = delta/len(nmag)
             for seg in nmag:
                 model[seg].KsL += dlt
-                elem = CouplingCorr._get_coupling_residue(*args)
-                elem /= dlt
+                resd = CouplingCorr._get_coupling_residue(*args)
+                elem = (resd-res0)/dlt
                 model[seg].KsL -= dlt
             coup_matrix.append(elem)
         return _np.array(coup_matrix).T
