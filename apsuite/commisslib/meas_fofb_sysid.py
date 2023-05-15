@@ -6,6 +6,7 @@ import numpy as _np
 from siriuspy.devices import CurrInfoSI, \
     Trigger, RFGen, FamFOFBSysId, BPM, HLFOFB, SOFB
 
+from ..asparams import SI_NUM_BPMS
 from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
 
@@ -36,8 +37,8 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         self.svd_levels_regularize_matrix = True
         self.svd_levels_reg_sinval_min = 0.01
         self.svd_levels_reg_tikhonov_const = 0
-        self.svd_levels_bpmsx_enbllist = _np.ones(160, dtype=bool)
-        self.svd_levels_bpmsy_enbllist = _np.ones(160, dtype=bool)
+        self.svd_levels_bpmsx_enbllist = _np.ones(SI_NUM_BPMS, dtype=bool)
+        self.svd_levels_bpmsy_enbllist = _np.ones(SI_NUM_BPMS, dtype=bool)
         self.svd_levels_ch_enbllist = _np.ones(80, dtype=bool)
         self.svd_levels_cv_enbllist = _np.ones(80, dtype=bool)
         self.svd_levels_rf_enbllist = _np.ones(1, dtype=bool)
@@ -246,8 +247,8 @@ class FOFBSysIdAcq(_BaseClass):
         off = (lvl1+lvl0)/2
         lvls0 = off - amp * us
         lvls1 = off + amp * us
-        lvls0x, lvls1x = lvls0[:160], lvls1[:160]
-        lvls0y, lvls1y = lvls0[160:], lvls1[160:]
+        lvls0x, lvls1x = lvls0[:SI_NUM_BPMS], lvls1[:SI_NUM_BPMS]
+        lvls0y, lvls1y = lvls0[SI_NUM_BPMS:], lvls1[SI_NUM_BPMS:]
         return lvls0x, lvls0y, lvls1x, lvls1y
 
     def get_levels_corrs_indiv_exc(self, corrname, lvl0=-9000, lvl1=9000):
