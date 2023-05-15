@@ -210,6 +210,7 @@ class LOCOReport(FPDF):
         self.add_page()
         self.page_title('Global parameters: tunes and emittances')
         self.df_to_table(self._df_tunes, nr_tables=2, idx_table=0)
+        self.set_y(28)
         self.df_to_table(self._df_emits, nr_tables=2, idx_table=1)
         self.set_y(60)
         self.page_title('Optics: beta-beating')
@@ -321,10 +322,10 @@ class LOCOReport(FPDF):
         self.loco_data = loco_data
         self.loco_analysis = loco_anly
 
-        self.add_fingerprint_and_config()
-        self.add_histogram()
-        self.add_quadfit()
-        self.add_skewquadfit_ang_gains()
+        # self.add_fingerprint_and_config()
+        # self.add_histogram()
+        # self.add_quadfit()
+        # self.add_skewquadfit_ang_gains()
         self.add_tune_emit_and_optics()
 
         self.output('report_' + label + '.pdf', 'F')
