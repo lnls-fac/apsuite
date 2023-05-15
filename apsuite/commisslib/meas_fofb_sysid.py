@@ -32,6 +32,17 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         # prbs signal
         self.prbs_step_duration = 10
         self.prbs_lfsr_length = 5
+        # prbs SVD levels settings
+        self.svd_levels_regularize_matrix = True
+        self.svd_levels_reg_sinval_min = 0.01
+        self.svd_levels_reg_tikhonov_const = 0
+        self.svd_levels_bpmsx_enbllist = _np.ones(160, dtype=bool)
+        self.svd_levels_bpmsy_enbllist = _np.ones(160, dtype=bool)
+        self.svd_levels_ch_enbllist = _np.ones(80, dtype=bool)
+        self.svd_levels_cv_enbllist = _np.ones(80, dtype=bool)
+        self.svd_levels_rf_enbllist = _np.ones(1, dtype=bool)
+        self.svd_levels_respmat = _np.zeros((320, 161))
+        self.svd_levels_singvalue_idx = 0
         # prbs fofbacc levels
         self.prbs_fofbacc_enbl = False
         self.prbs_fofbacc_lvl0 = _np.array([])
@@ -57,10 +68,43 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         stg += stmp('event', self.event, '')
         stg += ftmp('event_delay', self.event_delay, '[us]')
         stg += stmp('event_mode', self.event_mode, '')
+        stg += dtmp('acq_data_type', self.acq_data_type, '')
         stg += ftmp('acq_timeout', self.acq_timeout, '[s]')
         stg += dtmp('acq_nrpoints_before', self.acq_nrpoints_before, '')
         stg += dtmp('acq_nrpoints_after', self.acq_nrpoints_after, '')
+        stg += dtmp('acq_channel', self.acq_channel, '')
         stg += dtmp('acq_repeat', self.acq_repeat, '')
+        stg += dtmp('acq_external', self.acq_external, '')
+        stg += dtmp('prbs_step_duration', self.prbs_step_duration, '')
+        stg += dtmp('prbs_lfsr_length', self.prbs_lfsr_length, '')
+        stg += dtmp(
+            'svd_levels_regularize_matrix',
+            self.svd_levels_regularize_matrix, '')
+        stg += dtmp(
+            'svd_levels_reg_sinval_min', self.svd_levels_reg_sinval_min, '')
+        stg += dtmp(
+            'svd_levels_reg_tikhonov_const',
+            self.svd_levels_reg_tikhonov_const, '')
+        stg += dtmp(
+            'svd_levels_bpmsx_enbllist', self.svd_levels_bpmsx_enbllist, '')
+        stg += dtmp(
+            'svd_levels_bpmsy_enbllist', self.svd_levels_bpmsy_enbllist, '')
+        stg += dtmp('svd_levels_ch_enbllist', self.svd_levels_ch_enbllist, '')
+        stg += dtmp('svd_levels_cv_enbllist', self.svd_levels_cv_enbllist, '')
+        stg += dtmp('svd_levels_rf_enbllist', self.svd_levels_rf_enbllist, '')
+        stg += dtmp('svd_levels_respmat', self.svd_levels_respmat, '')
+        stg += dtmp(
+            'svd_levels_singvalue_idx', self.svd_levels_singvalue_idx, '')
+        stg += dtmp('prbs_fofbacc_enbl', self.prbs_fofbacc_enbl, '')
+        stg += dtmp('prbs_fofbacc_lvl0', self.prbs_fofbacc_lvl0, '')
+        stg += dtmp('prbs_fofbacc_lvl1', self.prbs_fofbacc_lvl1, '')
+        stg += dtmp('prbs_bpmpos_enbl', self.prbs_bpmpos_enbl, '')
+        stg += dtmp('prbs_bpmposx_lvl0', self.prbs_bpmposx_lvl0, '')
+        stg += dtmp('prbs_bpmposx_lvl1', self.prbs_bpmposx_lvl1, '')
+        stg += dtmp('prbs_bpmposy_lvl0', self.prbs_bpmposy_lvl0, '')
+        stg += dtmp('prbs_bpmposy_lvl1', self.prbs_bpmposy_lvl1, '')
+        stg += dtmp('corr_currloop_kp', self.corr_currloop_kp, '')
+        stg += dtmp('corr_currloop_ti', self.corr_currloop_ti, '')
         return stg
 
 
@@ -93,6 +137,130 @@ class FOFBSysIdAcq(_BaseClass):
     def fname(self, val):
         self._fname = val
 
+    # ---- calculate excitation arrays ----
+
+    def _calc_matrix_regularization(self, respm):
+        """Calculate matriz regularization."""
+        bpmxenbl = self.params.svd_levels_bpmsx_enbllist
+        bpmyenbl = self.params.svd_levels_bpmsy_enbllist
+        chenbl = self.params.svd_levels_ch_enbllist
+        cvenbl = self.params.svd_levels_cv_enbllist
+        rfenbl = self.params.svd_levels_rf_enbllist
+        sinval_min = self.params.svd_levels_reg_sinval_min
+        tikhonov_reg = self.params.svd_levels_reg_tikhonov_const
+
+        selbpm = _np.hstack([bpmxenbl, bpmyenbl])
+        selcorr = _np.hstack([chenbl, cvenbl, rfenbl])
+        selmat = selbpm[:, None] * selcorr[None, :]
+        if selmat.size != respm.size:
+            raise ValueError(
+                f'Incompatiple selection ({selmat.size}) '
+                f'and matrix size {respm.size}')
+        mat = respm.copy()
+        mat = mat[selmat]
+        mat = _np.reshape(mat, [sum(selbpm), sum(selcorr)])
+
+        _uo, _so, _vo = _np.linalg.svd(mat, full_matrices=False)
+
+        # handle singular values
+        # select singular values greater than minimum
+        idcs = _so > sinval_min
+        _sr = _so[idcs]
+        nrs = _np.sum(idcs)
+        if not nrs:
+            raise ValueError('All Singular Values below minimum.')
+        # apply Tikhonov regularization
+        regc = tikhonov_reg
+        regc *= regc
+        inv_s = _np.zeros(_so.size, dtype=float)
+        inv_s[idcs] = _sr/(_sr*_sr + regc)
+        # calculate processed singular values
+        _sp = _np.zeros(_so.size, dtype=float)
+        _sp[idcs] = 1/inv_s[idcs]
+
+        # reconstruct filtered and regularized matrix in physical units
+        matr = _np.dot(_uo*_sp, _vo)
+
+        respmat_proc = _np.zeros(respm.shape, dtype=float)
+        respmat_proc[selmat] = matr.ravel()
+        return respmat_proc
+
+    def _calc_svd(self, respm):
+        """Calculate matrix SVD."""
+        if self.params.svd_levels_regularize_matrix:
+            respm = self._calc_matrix_regularization(respm)
+
+        bpmxenbl = self.params.svd_levels_bpmsx_enbllist
+        bpmyenbl = self.params.svd_levels_bpmsy_enbllist
+        chenbl = self.params.svd_levels_ch_enbllist
+        cvenbl = self.params.svd_levels_cv_enbllist
+        rfenbl = self.params.svd_levels_rf_enbllist
+
+        selbpm = _np.hstack([bpmxenbl, bpmyenbl])
+        selcorr = _np.hstack([chenbl, cvenbl, rfenbl])
+        selmat = selbpm[:, None] * selcorr[None, :]
+        if selmat.size != respm.size:
+            raise ValueError(
+                f'Incompatiple selection ({selmat.size}) '
+                f'and matrix size {respm.size}')
+        mat = respm.copy()
+        mat[selbpm, :] *= 0
+        mat[:, selcorr] *= 0
+
+        # convert matrix to hardware units
+        famsysid = self.devices['famsysid']
+        str2curr = _np.r_[famsysid.strength_2_current_factor, 1.0]
+        # unit convertion: um/urad (1)-> nm/urad (2)-> nm/A
+        matc = mat * 1e3
+        matc = matc / str2curr
+
+        # calculate SVD for converted matrix
+        _uc, _sc, _vc = _np.linalg.svd(matc, full_matrices=False)
+        return _uc, _sc, _vc
+
+    def get_levels_corrs_from_svd(self, lvl0=-9000, lvl1=9000):
+        """Get levels from SVD for corrector devices."""
+        respm = self.params.svd_levels_respmat
+        singval = self.params.svd_levels_singvalue_idx
+
+        u, s, v = self._calc_svd(respm)
+        vs = v[singval]
+        vs /= _np.abs(vs).max()
+        amp = (lvl1-lvl0)/2
+        off = (lvl1+lvl0)/2
+        lvl0 = off - amp * vs
+        lvl1 = off + amp * vs
+        return lvl0, lvl1
+
+    def get_levels_bpms_from_svd(self, lvl0=-9000, lvl1=9000):
+        """Get levels from SVD for BPMs devices.
+
+        # add comments"""
+        respm = self.params.svd_levels_respmat
+        singval = self.params.svd_levels_singvalue_idx
+
+        u, s, v = self._calc_svd(respm)
+        us = u[:, singval]
+        us /= _np.abs(us).max()
+        amp = (lvl1-lvl0)/2
+        off = (lvl1+lvl0)/2
+        lvls0 = off - amp * us
+        lvls1 = off + amp * us
+        lvls0x, lvls1x = lvls0[:160], lvls1[:160]
+        lvls0y, lvls1y = lvls0[160:], lvls1[160:]
+        return lvls0x, lvls0y, lvls1x, lvls1y
+
+    def get_levels_corrs_indiv_exc(self, corrname, lvl0=-9000, lvl1=9000):
+        """Get levels for excitation with only one corrector."""
+        famsysid = self.devices['famsysid']
+        corrindex = famsysid.psnames.index(corrname)
+        lvls0 = _np.zeros(len(famsysid.psnames))
+        lvls0[corrindex] = lvl0
+        lvls1 = _np.zeros(len(famsysid.psnames))
+        lvls1[corrindex] = lvl1
+
+    # ---- interact with devices ----
+
     def prepare_timing(self):
         """Prepare timing for acquisitions."""
         self.devices['trigger'].delay = self.params.trigger_delay
@@ -118,120 +286,14 @@ class FOFBSysIdAcq(_BaseClass):
             step_duration=self.params.prbs_step_duration,
             lfsr_len=self.params.prbs_lfsr_length)
 
-    # def calc_svd(
-    #         self, respm, bpmxenbl=None, bpmyenbl=None,
-    #         chenbl=None, cvenbl=None, rfenbl=None,
-    #         sinval_min=0.2, tikhonov_reg=0):
-    #     fofb = self.devices['fofb']
-    #     bpmxenbl = bpmxenbl or fofb.bpmxenbl
-    #     bpmyenbl = bpmyenbl or fofb.bpmyenbl
-    #     chenbl = chenbl or fofb.chenbl
-    #     cvenbl = cvenbl or fofb.cvenbl
-
-    #     selbpm = _np.hstack([bpmxenbl, bpmyenbl])
-    #     selcorr = _np.hstack([chenbl, cvenbl, rfenbl])
-    #     selmat = selbpm[:, None] * selcorr[None, :]
-    #     if selmat.size != respm.size:
-    #         raise ValueError(
-    #             f'Incompatiple selection ({selmat.size}) and matrix size {respm.size}')
-    #     mat = respm.copy()
-    #     mat = mat[selmat]
-    #     mat = _np.reshape(mat, [sum(selbpm), sum(selcorr)])
-
-    #     try:
-    #         _uo, _so, _vo = _np.linalg.svd(mat, full_matrices=False)
-    #     except _np.linalg.LinAlgError():
-    #         raise ValueError('Could not calculate SVD')
-
-    #     # handle singular values
-    #     # select singular values greater than minimum
-    #     idcs = _so > sinval_min
-    #     _sr = _so[idcs]
-    #     nrs = _np.sum(idcs)
-    #     if not nrs:
-    #         raise ValueError('All Singular Values below minimum.')
-    #     # apply Tikhonov regularization
-    #     regc = tikhonov_reg
-    #     regc *= regc
-    #     inv_s = _np.zeros(_so.size, dtype=float)
-    #     inv_s[idcs] = _sr/(_sr*_sr + regc)
-    #     # calculate processed singular values
-    #     _sp = _np.zeros(_so.size, dtype=float)
-    #     _sp[idcs] = 1/inv_s[idcs]
-
-    #     # check if inverse matrix is valid
-    #     invmat = _np.dot(_vo.T*inv_s, _uo.T)
-    #     if _np.any(_np.isnan(invmat)) or _np.any(_np.isinf(invmat)):
-    #         raise ValueError('Inverse contains nan or inf.')
-
-    #     # reconstruct filtered and regularized matrix in physical units
-    #     matr = np.dot(_uo*_sp, _vo)
-
-    #     # convert matrix to hardware units
-    #     famsysid = self.devices['famsysid']
-    #     str2curr = _np.r_[famsysid.strength_2_current_factor, 1.0]
-    #     currgain = _np.r_[famsysid.curr_gain, 1.0]
-    #     # unit convertion: um/urad (1)-> nm/urad (2)-> nm/A (3)-> nm/counts
-    #     matc = matr * 1e3
-    #     matc = matc / str2curr[selcorr]
-    #     matc = matc * currgain[selcorr]
-
-    #     # obtain pseudoinverse
-    #     # calculate SVD for converted matrix
-    #     _uc, _sc, _vc = np.linalg.svd(matc, full_matrices=False)
-    #     # handle singular value selection
-    #     idcsc = _sc/_sc.max() >= 1e-14
-    #     inv_sc = np.zeros(_so.size, dtype=float)
-    #     inv_sc[idcsc] = 1/_sc[idcsc]
-    #     # calculate pseudoinverse of converted matrix from SVD
-    #     invmatc = np.dot(_vc.T*inv_sc, _uc.T)
-
-    #     return
-
-    # def get_levels_corrs(mat, lvl0=-9000, lvl1=9000, singval=0, bpmxenbl=None, idcs_corr=None):
-    #     if bpmxenbl is None:
-    #         bpmxenbl = _np.ones(mat.shape[0], dtype=bool)
-    #     if idcs_corr is None:
-    #         idcs_corr = _np.ones(mat.shape[1], dtype=bool)
-
-    #     u, s, v = self.calc_svd()
-    #     vs = v[singval]
-    #     vs /= _np.abs(vs).max()
-    #     amp = (lvl1-lvl0)/2
-    #     off = (lvl1+lvl0)/2
-
-    #     lvl0 = _np.zeros(mat.shape[1])
-    #     lvl1 = _np.zeros(mat.shape[1])
-    #     lvl0[idcs_corr] = off - amp * vs
-    #     lvl1[idcs_corr] = off + amp * vs
-    #     return lvl0, lvl1
-
-    # def get_levels_bpms(mat, lvl0=-9000, lvl1=9000, singval=0, bpmxenbl=None, idcs_corr=None):
-    #     if bpmxenbl is None:
-    #         bpmxenbl = _np.ones(mat.shape[0], dtype=bool)
-    #     if idcs_corr is None:
-    #         idcs_corr = _np.ones(mat.shape[1], dtype=bool)
-
-    #     u, s, v = self.calc_svd()
-    #     us = u[:, singval]
-    #     us /= _np.abs(us).max()
-    #     amp = (lvl1-lvl0)/2
-    #     off = (lvl1+lvl0)/2
-
-    #     lvl0 = _np.zeros(mat.shape[0])
-    #     lvl1 = _np.zeros(mat.shape[0])
-    #     lvl0[bpmxenbl] = off - amp * us
-    #     lvl1[bpmxenbl] = off + amp * us
-    #     return lvl0, lvl1
-
     def prepare_fofbacc_prbs(self):
         """Prepare FOFBAcc PRBS levels."""
         famsysid = self.devices['famsysid']
 
-        level0 = self.prbs_fofbacc_lvl0
-        level1 = self.prbs_fofbacc_lvl1
-        famsysid.set_prbs_fofbacc_levels(level0, level1)
-        ret = famsysid.check_prbs_fofbacc_levels(level0, level1)
+        lvl0 = self.params.prbs_fofbacc_lvl0
+        lvl1 = self.params.prbs_fofbacc_lvl1
+        famsysid.set_prbs_fofbacc_levels(lvl0, lvl1)
+        ret = famsysid.check_prbs_fofbacc_levels(lvl0, lvl1)
         if not ret:
             print('FOFBAcc PRBS levels not applied')
 
@@ -242,21 +304,21 @@ class FOFBSysIdAcq(_BaseClass):
         if not ret:
             print('FOFBAcc PRBS enable state not applied')
 
-    def prepare_bpms_prbs(self):
+    def prepare_bpms_prbs(self, from_svd=False):
         """Prepare BPM Pos PRBS levels."""
         famsysid = self.devices['famsysid']
+        lvl0x = self.params.prbs_bpmposx_lvl0
+        lvl1x = self.params.prbs_bpmposx_lvl1
 
-        level0 = self.params.prbs_bpmposx_lvl0
-        level1 = self.params.prbs_bpmposx_lvl1
-        famsysid.set_prbs_bpmposx_levels(level0, level1)
-        ret = famsysid.check_prbs_bpmposx_levels(level0, level1)
+        famsysid.set_prbs_bpmposx_levels(lvl0x, lvl1x)
+        ret = famsysid.check_prbs_bpmposx_levels(lvl0x, lvl1x)
         if not ret:
             print('BPM PosX PRBS levels not applied')
 
-        level0 = self.params.prbs_bpmposy_lvl0
-        level1 = self.params.prbs_bpmposy_lvl1
-        famsysid.set_prbs_bpmposy_levels(level0, level1)
-        ret = famsysid.check_prbs_bpmposy_levels(level0, level1)
+        lvl0y = self.params.prbs_bpmposy_lvl0
+        lvl1y = self.params.prbs_bpmposy_lvl1
+        famsysid.set_prbs_bpmposy_levels(lvl0y, lvl1y)
+        ret = famsysid.check_prbs_bpmposy_levels(lvl0y, lvl1y)
         if not ret:
             print('BPM PosY PRBS levels not applied')
 
@@ -359,6 +421,7 @@ class FOFBSysIdAcq(_BaseClass):
         data['fofb_tikhonov_reg_const'] = fofb.tikhonov_reg_const
         data['fofb_singvalsraw_mon'] = fofb.singvalsraw_mon
         data['fofb_singvals_mon'] = fofb.singvals_mon
+        data['fofb_respmat'] = fofb.respmat
         data['fofb_respmat_mon'] = fofb.respmat_mon
         data['fofb_invrespmat_mon'] = fofb.invrespmat_mon
 
@@ -380,7 +443,8 @@ class FOFBSysIdAcq(_BaseClass):
         data['sofb_cvenbl'] = sofb.cvenbl
         data['sofb_rfenbl'] = sofb.rfenbl
         data['sofb_singval_min'] = sofb.singval_min
-        data['sofb_respmat_mon'] = sofb.respmat
+        data['sofb_respmat'] = sofb.respmat
+        data['sofb_respmat_mon'] = sofb.respmat_mon
         data['sofb_invrespmat_mon'] = sofb.invrespmat
 
         # auxiliary data
