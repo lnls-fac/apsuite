@@ -715,13 +715,13 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             print(f'BPM {ret-1:d} is not ready for acquisition.')
 
         get_sum = False
-        fambpms.mturn_reset_flags_and_update_initial_orbit(
+        fambpms.mturn_reset_flags_and_update_initial_timestamps(
             consider_sum=get_sum)
 
         self.trigger_timing_signal()
 
         time0 = _time.time()
-        ret = fambpms.mturn_wait_update_orbit(
+        ret = fambpms.mturn_wait_update(
             timeout=self.params.orbit_timeout, consider_sum=get_sum)
         print(f'it took {_time.time()-time0:02f}s to update bpms')
         if ret != 0:

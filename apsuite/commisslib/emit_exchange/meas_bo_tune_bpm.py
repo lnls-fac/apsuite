@@ -149,7 +149,7 @@ class BOTunebyBPM(_BaseClass):
         bobpms = self.devices['bobpms']
         event = self.devices['event']
 
-        bobpms.mturn_reset_flags_and_update_initial_orbit(
+        bobpms.mturn_reset_flags_and_update_initial_timestamps(
             consider_sum=False)
         # Inject and start acquisition
         if injection:
