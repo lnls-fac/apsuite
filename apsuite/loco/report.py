@@ -322,10 +322,10 @@ class LOCOReport(FPDF):
         self.loco_data = loco_data
         self.loco_analysis = loco_anly
 
-        # self.add_fingerprint_and_config()
-        # self.add_histogram()
-        # self.add_quadfit()
-        # self.add_skewquadfit_ang_gains()
+        self.add_fingerprint_and_config()
+        self.add_histogram()
+        self.add_quadfit()
+        self.add_skewquadfit_ang_gains()
         self.add_tune_emit_and_optics()
 
         self.output('report_' + label + '.pdf', 'F')
