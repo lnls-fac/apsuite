@@ -93,11 +93,6 @@ class FOFBSysIdAcq(_BaseClass):
     def fname(self, val):
         self._fname = val
 
-    @property
-    def data(self):
-        """Data."""
-        return self._data
-
     def prepare_timing(self):
         """Prepare timing for acquisitions."""
         self.devices['trigger'].delay = self.params.trigger_delay
@@ -314,7 +309,7 @@ class FOFBSysIdAcq(_BaseClass):
                 f'FOFB controller {ret} has data different from controller 1.')
             return
 
-        self._data = self.get_data()
+        self.data = self.get_data()
 
     def get_data(self):
         """Get data."""
