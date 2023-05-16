@@ -228,9 +228,9 @@ class FOFBSysIdAcq(_BaseClass):
             lvl1 (int): maximum level for PRBS level 1
 
         Returns:
-            lvls0 (numpy.ndarray, SI_NUM_BPMS):
+            lvls0 (numpy.ndarray, 160):
                 array with FOFBAcc level for PRBS level 0
-            lvls1 (numpy.ndarray, SI_NUM_BPMS):
+            lvls1 (numpy.ndarray, 160):
                 array with FOFBAcc level for PRBS level 1
 
         """
@@ -250,7 +250,7 @@ class FOFBSysIdAcq(_BaseClass):
         lvls1 = _np.zeros(respm.shape[1])
         lvls0[selcorr] = off - amp * vs
         lvls1[selcorr] = off + amp * vs
-        return lvls0, lvls1
+        return lvls0[:-1], lvls1[:-1]
 
     def get_levels_bpms_from_svd(self, lvl0, lvl1):
         """Get levels from SVD for BPMs devices.
