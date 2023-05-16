@@ -68,7 +68,6 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         stg += stmp('event', self.event, '')
         stg += ftmp('event_delay', self.event_delay, '[us]')
         stg += stmp('event_mode', self.event_mode, '')
-        stg += dtmp('acq_data_type', self.acq_data_type, '')
         stg += ftmp('acq_timeout', self.acq_timeout, '[s]')
         stg += dtmp('acq_nrpoints_before', self.acq_nrpoints_before, '')
         stg += dtmp('acq_nrpoints_after', self.acq_nrpoints_after, '')
@@ -344,7 +343,7 @@ class FOFBSysIdAcq(_BaseClass):
         if not ret:
             print('FOFBAcc PRBS enable state not applied')
 
-    def prepare_bpms_prbs(self, from_svd=False):
+    def prepare_bpms_prbs(self):
         """Prepare BPM Pos PRBS levels."""
         famsysid = self.devices['famsysid']
         lvl0x = self.params.prbs_bpmposx_lvl0
@@ -424,7 +423,6 @@ class FOFBSysIdAcq(_BaseClass):
 
         # prbs data
         data['prbs_data'] = famsysid.prbs_data
-        data['prbs_sync_enbl'] = famsysid.prbs_sync_enbl
         data['prbs_step_duration'] = famsysid.prbs_step_duration
         data['prbs_lfsr_len'] = famsysid.prbs_lfsr_len
 
