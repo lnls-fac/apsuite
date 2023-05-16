@@ -95,7 +95,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
                     str(self.svd_levels_cv_enbllist), '')
         stg += stmp('svd_levels_rf_enbllist',
                     str(self.svd_levels_rf_enbllist), '')
-        stg += ftmp('svd_levels_respmat', str(self.svd_levels_respmat), '')
+        stg += stmp('svd_levels_respmat', str(self.svd_levels_respmat), '')
         stg += dtmp(
             'svd_levels_singmode_idx', self.svd_levels_singmode_idx, '')
         stg += stmp('prbs_fofbacc_enbl', str(self.prbs_fofbacc_enbl), '')
