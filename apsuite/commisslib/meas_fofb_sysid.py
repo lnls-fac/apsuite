@@ -140,15 +140,13 @@ class FOFBSysIdAcq(_BaseClass):
 
     # ---- calculate excitation arrays ----
 
-    def _calc_matrix_regularization(self, respm):
-        """Calculate matriz regularization."""
+    def _calc_svd(self, respm):
+        """Calculate matrix SVD."""
         bpmxenbl = self.params.svd_levels_bpmsx_enbllist
         bpmyenbl = self.params.svd_levels_bpmsy_enbllist
         chenbl = self.params.svd_levels_ch_enbllist
         cvenbl = self.params.svd_levels_cv_enbllist
         rfenbl = self.params.svd_levels_rf_enbllist
-        sinval_min = self.params.svd_levels_reg_sinval_min
-        tikhonov_reg = self.params.svd_levels_reg_tikhonov_const
 
         selbpm = _np.hstack([bpmxenbl, bpmyenbl])
         selcorr = _np.hstack([chenbl, cvenbl, rfenbl])
@@ -159,9 +157,23 @@ class FOFBSysIdAcq(_BaseClass):
                 f'and matrix size {respm.size}')
         mat = respm.copy()
         mat = mat[selmat]
-        mat = _np.reshape(mat, [sum(selbpm), sum(selcorr)])
+        mat = _np.reshape(mat, [selbpm.sum(), selcorr.sum()])
 
-        _uo, _so, _vo = _np.linalg.svd(mat, full_matrices=False)
+        # calculate SVD for converted matrix
+        _uc, _sc, _vc = _np.linalg.svd(mat, full_matrices=False)
+        u11 = _np.zeros((respm.shape[0], _sc.size))
+        v11 = _np.zeros((_sc.size, respm.shape[1]))
+        u11[selbpm, :] = _uc
+        v11[:, selcorr] = _vc
+
+        return u11, _sc, v11
+
+    def _calc_matrix_regularization(self, respm):
+        """Calculate matriz regularization."""
+        sinval_min = self.params.svd_levels_reg_sinval_min
+        tikhonov_reg = self.params.svd_levels_reg_tikhonov_const
+
+        _uo, _so, _vo = self._calc_svd(respm)
 
         # handle singular values
         # select singular values greater than minimum
@@ -180,44 +192,26 @@ class FOFBSysIdAcq(_BaseClass):
         _sp[idcs] = 1/inv_s[idcs]
 
         # reconstruct filtered and regularized matrix in physical units
-        matr = _np.dot(_uo*_sp, _vo)
-
-        respmat_proc = _np.zeros(respm.shape, dtype=float)
-        respmat_proc[selmat] = matr.ravel()
+        respmat_proc = _np.dot(_uo*_sp, _vo)
         return respmat_proc
 
-    def _calc_svd(self, respm):
-        """Calculate matrix SVD."""
-        if self.params.svd_levels_regularize_matrix:
-            respm = self._calc_matrix_regularization(respm)
-
-        bpmxenbl = self.params.svd_levels_bpmsx_enbllist
-        bpmyenbl = self.params.svd_levels_bpmsy_enbllist
-        chenbl = self.params.svd_levels_ch_enbllist
-        cvenbl = self.params.svd_levels_cv_enbllist
-        rfenbl = self.params.svd_levels_rf_enbllist
-
-        selbpm = _np.hstack([bpmxenbl, bpmyenbl])
-        selcorr = _np.hstack([chenbl, cvenbl, rfenbl])
-        selmat = selbpm[:, None] * selcorr[None, :]
-        if selmat.size != respm.size:
-            raise ValueError(
-                f'Incompatiple selection ({selmat.size}) '
-                f'and matrix size {respm.size}')
-        mat = respm.copy()
-        mat = mat[selmat]
-        mat = _np.reshape(mat, [sum(selbpm), sum(selcorr)])
-
+    def _convert_respmat_from_phys2hard_units(self, respm):
         # convert matrix to hardware units
         famsysid = self.devices['famsysid']
         str2curr = _np.r_[famsysid.strength_2_current_factor, 1.0]
         # unit convertion: um/urad (1)-> nm/urad (2)-> nm/A
-        matc = mat * 1e3
-        matc = matc / str2curr[selcorr]
+        matc = respm * 1e3
+        matc = matc / str2curr
+        return respm
 
-        # calculate SVD for converted matrix
-        _uc, _sc, _vc = _np.linalg.svd(matc, full_matrices=False)
-        return _uc, _sc, _vc
+    def _convert_respmat_from_hard2phys_units(self, respm):
+        # convert matrix to physics units
+        famsysid = self.devices['famsysid']
+        str2curr = _np.r_[famsysid.strength_2_current_factor, 1.0]
+        # unit convertion: nm/A -> nm/urad (1) -> um/urad (2)
+        matc = respm * str2curr
+        matc /= 1e3
+        return respm
 
     def get_levels_corrs_from_svd(self, lvl0, lvl1):
         """Get levels from SVD for corrector devices.
@@ -233,22 +227,20 @@ class FOFBSysIdAcq(_BaseClass):
                 array with FOFBAcc level for PRBS level 1
 
         """
-        chenbl = self.params.svd_levels_ch_enbllist
-        cvenbl = self.params.svd_levels_cv_enbllist
-        rfenbl = self.params.svd_levels_rf_enbllist
-        selcorr = _np.hstack([chenbl, cvenbl, rfenbl])
         respm = self.params.svd_levels_respmat
         singval = self.params.svd_levels_singmode_idx
 
-        u, s, v = self._calc_svd(respm)
+        if self.params.svd_levels_regularize_matrix:
+            respm = self._calc_matrix_regularization(respm)
+        respm = self._convert_respmat_from_phys2hard_units(respm)
+
+        *_, v = self._calc_svd(respm)
         vs = v[singval]
         vs /= _np.abs(vs).max()
         amp = (lvl1-lvl0)/2
         off = (lvl1+lvl0)/2
-        lvls0 = _np.zeros(respm.shape[1])
-        lvls1 = _np.zeros(respm.shape[1])
-        lvls0[selcorr] = off - amp * vs
-        lvls1[selcorr] = off + amp * vs
+        lvls0 = off - amp * vs
+        lvls1 = off + amp * vs
         return lvls0[:-1], lvls1[:-1]
 
     def get_levels_bpms_from_svd(self, lvl0, lvl1):
@@ -269,21 +261,20 @@ class FOFBSysIdAcq(_BaseClass):
                 array with BPM Pos Y level for PRBS level 1
 
         """
-        bpmxenbl = self.params.svd_levels_bpmsx_enbllist
-        bpmyenbl = self.params.svd_levels_bpmsy_enbllist
-        selbpm = _np.hstack([bpmxenbl, bpmyenbl])
         respm = self.params.svd_levels_respmat
         singval = self.params.svd_levels_singmode_idx
 
-        u, s, v = self._calc_svd(respm)
+        if self.params.svd_levels_regularize_matrix:
+            respm = self._calc_matrix_regularization(respm)
+        respm = self._convert_respmat_from_phys2hard_units(respm)
+
+        u, *_ = self._calc_svd(respm)
         us = u[:, singval]
         us /= _np.abs(us).max()
         amp = (lvl1-lvl0)/2
         off = (lvl1+lvl0)/2
-        lvls0 = _np.zeros(respm.shape[0])
-        lvls1 = _np.zeros(respm.shape[0])
-        lvls0[selbpm] = off - amp * us
-        lvls1[selbpm] = off + amp * us
+        lvls0 = off - amp * us
+        lvls1 = off + amp * us
         lvls0x, lvls1x = lvls0[:SI_NUM_BPMS], lvls1[:SI_NUM_BPMS]
         lvls0y, lvls1y = lvls0[SI_NUM_BPMS:], lvls1[SI_NUM_BPMS:]
         return lvls0x, lvls0y, lvls1x, lvls1y
