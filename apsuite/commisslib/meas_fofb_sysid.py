@@ -220,7 +220,7 @@ class FOFBSysIdAcq(_BaseClass):
         _uc, _sc, _vc = _np.linalg.svd(matc, full_matrices=False)
         return _uc, _sc, _vc
 
-    def get_levels_corrs_from_svd(self, lvl0=-9000, lvl1=9000):
+    def get_levels_corrs_from_svd(self, lvl0, lvl1):
         """Get levels from SVD for corrector devices.
 
         Args:
@@ -252,7 +252,7 @@ class FOFBSysIdAcq(_BaseClass):
         lvls1[selcorr] = off + amp * vs
         return lvls0, lvls1
 
-    def get_levels_bpms_from_svd(self, lvl0=-9000, lvl1=9000):
+    def get_levels_bpms_from_svd(self, lvl0, lvl1):
         """Get levels from SVD for BPMs devices.
 
         Args:
@@ -289,7 +289,7 @@ class FOFBSysIdAcq(_BaseClass):
         lvls0y, lvls1y = lvls0[SI_NUM_BPMS:], lvls1[SI_NUM_BPMS:]
         return lvls0x, lvls0y, lvls1x, lvls1y
 
-    def get_levels_corrs_indiv_exc(self, corrname, lvl0=-9000, lvl1=9000):
+    def get_levels_corrs_indiv_exc(self, corrname, lvl0, lvl1):
         """Get levels for excitation with only one corrector."""
         famsysid = self.devices['famsysid']
         corrindex = famsysid.psnames.index(corrname)
