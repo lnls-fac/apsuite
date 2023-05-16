@@ -81,31 +81,33 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         stg += dtmp(
             'svd_levels_regularize_matrix',
             self.svd_levels_regularize_matrix, '')
-        stg += ftmp(
-            'svd_levels_reg_sinval_min', self.svd_levels_reg_sinval_min, '')
-        stg += ftmp(
-            'svd_levels_reg_tikhonov_const',
-            self.svd_levels_reg_tikhonov_const, '')
-        stg += dtmp(
-            'svd_levels_bpmsx_enbllist', self.svd_levels_bpmsx_enbllist, '')
-        stg += dtmp(
-            'svd_levels_bpmsy_enbllist', self.svd_levels_bpmsy_enbllist, '')
-        stg += dtmp('svd_levels_ch_enbllist', self.svd_levels_ch_enbllist, '')
-        stg += dtmp('svd_levels_cv_enbllist', self.svd_levels_cv_enbllist, '')
-        stg += dtmp('svd_levels_rf_enbllist', self.svd_levels_rf_enbllist, '')
-        stg += ftmp('svd_levels_respmat', self.svd_levels_respmat, '')
+        stg += ftmp('svd_levels_reg_sinval_min',
+                    self.svd_levels_reg_sinval_min, '')
+        stg += ftmp('svd_levels_reg_tikhonov_const',
+                    self.svd_levels_reg_tikhonov_const, '')
+        stg += dtmp('svd_levels_bpmsx_enbllist',
+                    str(self.svd_levels_bpmsx_enbllist), '')
+        stg += dtmp('svd_levels_bpmsy_enbllist',
+                    str(self.svd_levels_bpmsy_enbllist), '')
+        stg += dtmp('svd_levels_ch_enbllist',
+                    str(self.svd_levels_ch_enbllist), '')
+        stg += dtmp('svd_levels_cv_enbllist',
+                    str(self.svd_levels_cv_enbllist), '')
+        stg += dtmp('svd_levels_rf_enbllist',
+                    str(self.svd_levels_rf_enbllist), '')
+        stg += ftmp('svd_levels_respmat', str(self.svd_levels_respmat), '')
         stg += dtmp(
             'svd_levels_singmode_idx', self.svd_levels_singmode_idx, '')
-        stg += dtmp('prbs_fofbacc_enbl', self.prbs_fofbacc_enbl, '')
-        stg += ftmp('prbs_fofbacc_lvl0', self.prbs_fofbacc_lvl0, '')
-        stg += ftmp('prbs_fofbacc_lvl1', self.prbs_fofbacc_lvl1, '')
-        stg += dtmp('prbs_bpmpos_enbl', self.prbs_bpmpos_enbl, '')
-        stg += ftmp('prbs_bpmposx_lvl0', self.prbs_bpmposx_lvl0, '')
-        stg += ftmp('prbs_bpmposx_lvl1', self.prbs_bpmposx_lvl1, '')
-        stg += ftmp('prbs_bpmposy_lvl0', self.prbs_bpmposy_lvl0, '')
-        stg += ftmp('prbs_bpmposy_lvl1', self.prbs_bpmposy_lvl1, '')
-        stg += ftmp('corr_currloop_kp', self.corr_currloop_kp, '')
-        stg += ftmp('corr_currloop_ti', self.corr_currloop_ti, '')
+        stg += stmp('prbs_fofbacc_enbl', str(self.prbs_fofbacc_enbl), '')
+        stg += stmp('prbs_fofbacc_lvl0', str(self.prbs_fofbacc_lvl0), '')
+        stg += stmp('prbs_fofbacc_lvl1', str(self.prbs_fofbacc_lvl1), '')
+        stg += stmp('prbs_bpmpos_enbl', str(self.prbs_bpmpos_enbl), '')
+        stg += stmp('prbs_bpmposx_lvl0', str(self.prbs_bpmposx_lvl0), '')
+        stg += stmp('prbs_bpmposx_lvl1', str(self.prbs_bpmposx_lvl1), '')
+        stg += stmp('prbs_bpmposy_lvl0', str(self.prbs_bpmposy_lvl0), '')
+        stg += stmp('prbs_bpmposy_lvl1', str(self.prbs_bpmposy_lvl1), '')
+        stg += stmp('corr_currloop_kp', str(self.corr_currloop_kp), '')
+        stg += stmp('corr_currloop_ti', str(self.corr_currloop_ti), '')
         return stg
 
 
