@@ -23,7 +23,6 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         self.event_delay = 0.0
         self.event_mode = 'External'
         # acquisition
-        self.acq_data_type = 2  # sysid
         self.acq_timeout = 40
         self.acq_nrpoints_before = 0
         self.acq_nrpoints_after = 93000
@@ -46,17 +45,17 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         self.svd_levels_singmode_idx = 0
         # prbs fofbacc levels
         self.prbs_fofbacc_enbl = False
-        self.prbs_fofbacc_lvl0 = _np.array([])
-        self.prbs_fofbacc_lvl1 = _np.array([])
+        self.prbs_fofbacc_lvl0 = _np.zeros(160)
+        self.prbs_fofbacc_lvl1 = _np.zeros(160)
         # prbs bpmpos levels
         self.prbs_bpmpos_enbl = False
-        self.prbs_bpmposx_lvl0 = _np.array([])
-        self.prbs_bpmposx_lvl1 = _np.array([])
-        self.prbs_bpmposy_lvl0 = _np.array([])
-        self.prbs_bpmposy_lvl1 = _np.array([])
+        self.prbs_bpmposx_lvl0 = _np.zeros(160)
+        self.prbs_bpmposx_lvl1 = _np.zeros(160)
+        self.prbs_bpmposy_lvl0 = _np.zeros(160)
+        self.prbs_bpmposy_lvl1 = _np.zeros(160)
         # power supply current loop
-        self.corr_currloop_kp = _np.array([])
-        self.corr_currloop_ti = _np.array([])
+        self.corr_currloop_kp = 5000000*_np.ones(160)
+        self.corr_currloop_ti = 2000*_np.ones(160)
 
     def __str__(self):
         ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
@@ -207,15 +206,15 @@ class FOFBSysIdAcq(_BaseClass):
                 f'Incompatiple selection ({selmat.size}) '
                 f'and matrix size {respm.size}')
         mat = respm.copy()
-        mat[selbpm, :] *= 0
-        mat[:, selcorr] *= 0
+        mat = mat[selmat]
+        mat = _np.reshape(mat, [sum(selbpm), sum(selcorr)])
 
         # convert matrix to hardware units
         famsysid = self.devices['famsysid']
         str2curr = _np.r_[famsysid.strength_2_current_factor, 1.0]
         # unit convertion: um/urad (1)-> nm/urad (2)-> nm/A
         matc = mat * 1e3
-        matc = matc / str2curr
+        matc = matc / str2curr[selcorr]
 
         # calculate SVD for converted matrix
         _uc, _sc, _vc = _np.linalg.svd(matc, full_matrices=False)
@@ -235,6 +234,10 @@ class FOFBSysIdAcq(_BaseClass):
                 array with FOFBAcc level for PRBS level 1
 
         """
+        chenbl = self.params.svd_levels_ch_enbllist
+        cvenbl = self.params.svd_levels_cv_enbllist
+        rfenbl = self.params.svd_levels_rf_enbllist
+        selcorr = _np.hstack([chenbl, cvenbl, rfenbl])
         respm = self.params.svd_levels_respmat
         singval = self.params.svd_levels_singmode_idx
 
@@ -243,9 +246,11 @@ class FOFBSysIdAcq(_BaseClass):
         vs /= _np.abs(vs).max()
         amp = (lvl1-lvl0)/2
         off = (lvl1+lvl0)/2
-        lvl0 = off - amp * vs
-        lvl1 = off + amp * vs
-        return lvl0, lvl1
+        lvls0 = _np.zeros(respm.shape[1])
+        lvls1 = _np.zeros(respm.shape[1])
+        lvls0[selcorr] = off - amp * vs
+        lvls1[selcorr] = off + amp * vs
+        return lvls0, lvls1
 
     def get_levels_bpms_from_svd(self, lvl0=-9000, lvl1=9000):
         """Get levels from SVD for BPMs devices.
@@ -265,6 +270,9 @@ class FOFBSysIdAcq(_BaseClass):
                 array with BPM Pos Y level for PRBS level 1
 
         """
+        bpmxenbl = self.params.svd_levels_bpmsx_enbllist
+        bpmyenbl = self.params.svd_levels_bpmsy_enbllist
+        selbpm = _np.hstack([bpmxenbl, bpmyenbl])
         respm = self.params.svd_levels_respmat
         singval = self.params.svd_levels_singmode_idx
 
@@ -273,8 +281,10 @@ class FOFBSysIdAcq(_BaseClass):
         us /= _np.abs(us).max()
         amp = (lvl1-lvl0)/2
         off = (lvl1+lvl0)/2
-        lvls0 = off - amp * us
-        lvls1 = off + amp * us
+        lvls0 = _np.zeros(respm.shape[0])
+        lvls1 = _np.zeros(respm.shape[0])
+        lvls0[selbpm] = off - amp * us
+        lvls1[selbpm] = off + amp * us
         lvls0x, lvls1x = lvls0[:SI_NUM_BPMS], lvls1[:SI_NUM_BPMS]
         lvls0y, lvls1y = lvls0[SI_NUM_BPMS:], lvls1[SI_NUM_BPMS:]
         return lvls0x, lvls0y, lvls1x, lvls1y
