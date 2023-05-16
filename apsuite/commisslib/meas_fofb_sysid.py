@@ -85,15 +85,15 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
                     self.svd_levels_reg_sinval_min, '')
         stg += ftmp('svd_levels_reg_tikhonov_const',
                     self.svd_levels_reg_tikhonov_const, '')
-        stg += dtmp('svd_levels_bpmsx_enbllist',
+        stg += stmp('svd_levels_bpmsx_enbllist',
                     str(self.svd_levels_bpmsx_enbllist), '')
-        stg += dtmp('svd_levels_bpmsy_enbllist',
+        stg += stmp('svd_levels_bpmsy_enbllist',
                     str(self.svd_levels_bpmsy_enbllist), '')
-        stg += dtmp('svd_levels_ch_enbllist',
+        stg += stmp('svd_levels_ch_enbllist',
                     str(self.svd_levels_ch_enbllist), '')
-        stg += dtmp('svd_levels_cv_enbllist',
+        stg += stmp('svd_levels_cv_enbllist',
                     str(self.svd_levels_cv_enbllist), '')
-        stg += dtmp('svd_levels_rf_enbllist',
+        stg += stmp('svd_levels_rf_enbllist',
                     str(self.svd_levels_rf_enbllist), '')
         stg += ftmp('svd_levels_respmat', str(self.svd_levels_respmat), '')
         stg += dtmp(
