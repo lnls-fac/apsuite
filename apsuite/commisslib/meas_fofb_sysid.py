@@ -43,7 +43,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         self.svd_levels_cv_enbllist = _np.ones(80, dtype=bool)
         self.svd_levels_rf_enbllist = _np.ones(1, dtype=bool)
         self.svd_levels_respmat = _np.zeros((320, 161))
-        self.svd_levels_singvalue_idx = 0
+        self.svd_levels_singmode_idx = 0
         # prbs fofbacc levels
         self.prbs_fofbacc_enbl = False
         self.prbs_fofbacc_lvl0 = _np.array([])
@@ -95,7 +95,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         stg += dtmp('svd_levels_rf_enbllist', self.svd_levels_rf_enbllist, '')
         stg += dtmp('svd_levels_respmat', self.svd_levels_respmat, '')
         stg += dtmp(
-            'svd_levels_singvalue_idx', self.svd_levels_singvalue_idx, '')
+            'svd_levels_singmode_idx', self.svd_levels_singmode_idx, '')
         stg += dtmp('prbs_fofbacc_enbl', self.prbs_fofbacc_enbl, '')
         stg += dtmp('prbs_fofbacc_lvl0', self.prbs_fofbacc_lvl0, '')
         stg += dtmp('prbs_fofbacc_lvl1', self.prbs_fofbacc_lvl1, '')
@@ -220,9 +220,21 @@ class FOFBSysIdAcq(_BaseClass):
         return _uc, _sc, _vc
 
     def get_levels_corrs_from_svd(self, lvl0=-9000, lvl1=9000):
-        """Get levels from SVD for corrector devices."""
+        """Get levels from SVD for corrector devices.
+
+        Args:
+            lvl0 (int): maximum level for PRBS level 0
+            lvl1 (int): maximum level for PRBS level 1
+
+        Returns:
+            lvls0 (numpy.ndarray, SI_NUM_BPMS):
+                array with FOFBAcc level for PRBS level 0
+            lvls1 (numpy.ndarray, SI_NUM_BPMS):
+                array with FOFBAcc level for PRBS level 1
+
+        """
         respm = self.params.svd_levels_respmat
-        singval = self.params.svd_levels_singvalue_idx
+        singval = self.params.svd_levels_singmode_idx
 
         u, s, v = self._calc_svd(respm)
         vs = v[singval]
@@ -236,9 +248,23 @@ class FOFBSysIdAcq(_BaseClass):
     def get_levels_bpms_from_svd(self, lvl0=-9000, lvl1=9000):
         """Get levels from SVD for BPMs devices.
 
-        # add comments"""
+        Args:
+            lvl0 (int): maximum level for PRBS level 0
+            lvl1 (int): maximum level for PRBS level 1
+
+        Returns:
+            lvls0x (numpy.ndarray, SI_NUM_BPMS):
+                array with BPM Pos X level for PRBS level 0
+            lvls0y (numpy.ndarray, SI_NUM_BPMS):
+                array with BPM Pos Y level for PRBS level 0
+            lvls1x (numpy.ndarray, SI_NUM_BPMS):
+                array with BPM Pos X level for PRBS level 1
+            lvls1y (numpy.ndarray, SI_NUM_BPMS):
+                array with BPM Pos Y level for PRBS level 1
+
+        """
         respm = self.params.svd_levels_respmat
-        singval = self.params.svd_levels_singvalue_idx
+        singval = self.params.svd_levels_singmode_idx
 
         u, s, v = self._calc_svd(respm)
         us = u[:, singval]
@@ -259,6 +285,7 @@ class FOFBSysIdAcq(_BaseClass):
         lvls0[corrindex] = lvl0
         lvls1 = _np.zeros(len(famsysid.psnames))
         lvls1[corrindex] = lvl1
+        return lvls0, lvls1
 
     # ---- interact with devices ----
 
