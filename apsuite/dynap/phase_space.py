@@ -269,4 +269,4 @@ class PhaseSpace(_BaseClass):
 
         axx.legend(loc='best')
 
-        return fig, phx, phy, tune
+        return fig, phx, phy, tune, axx, ayy, ade
