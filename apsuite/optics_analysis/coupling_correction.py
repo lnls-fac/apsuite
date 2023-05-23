@@ -23,7 +23,6 @@ class CouplingCorr():
         self.acc = acc
         self.dim = dim
         self._corr_method = None
-        self.coup_matrix = []
         self.respm = OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
         self.bpm_idx = self.respm.fam_data['BPM']['index']
         if skew_list is None:
@@ -184,12 +183,9 @@ class CouplingCorr():
         and minimizes the residue vector [Mxy, Myx, weight*Etay].
         """
         self.model = model or self.model
-        if not self.coup_matrix.any() or jacobian_matrix is not None:
-            self.coup_matrix = jacobian_matrix or self.coup_matrix
-        else:
-            self.calc_jacobian_matrix()
-        umat, smat, vmat = _np.linalg.svd(
-            self.coup_matrix, full_matrices=False)
+        jac = jacobian_matrix
+        jac = jac if jac is not None else self.calc_jacobian_matrix()
+        umat, smat, vmat = _np.linalg.svd(jac, full_matrices=False)
         ismat = 1/smat
         ismat[_np.isnan(ismat)] = 0
         ismat[_np.isinf(ismat)] = 0
