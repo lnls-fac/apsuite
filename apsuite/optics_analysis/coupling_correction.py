@@ -184,7 +184,9 @@ class CouplingCorr():
         and minimizes the residue vector [Mxy, Myx, weight*Etay].
         """
         self.model = model or self.model
-        self.coup_matrix = jacobian_matrix or self.coup_matrix or \
+        if not self.coup_matrix.any() or jacobian_matrix is not None:
+            self.coup_matrix = jacobian_matrix or self.coup_matrix
+        else:
             self.calc_jacobian_matrix()
         umat, smat, vmat = _np.linalg.svd(
             self.coup_matrix, full_matrices=False)
