@@ -53,6 +53,8 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         self.prbs_bpmposx_lvl1 = _np.zeros(160)
         self.prbs_bpmposy_lvl0 = _np.zeros(160)
         self.prbs_bpmposy_lvl1 = _np.zeros(160)
+        self.prbs_bpms_to_get_data = _np.ones(160, dtype=bool)
+        self.prbs_corrs_to_get_data = _np.ones(160, dtype=bool)
         # power supply current loop
         self.corr_currloop_kp = 5000000*_np.ones(160)
         self.corr_currloop_ti = 2000*_np.ones(160)
@@ -380,13 +382,17 @@ class FOFBSysIdAcq(_BaseClass):
         elif ret > 0:
             print(f'FOFB controller {ret} is not ready for acquisition.')
 
-        self.devices['famsysid'].update_initial_timestamps()
+        self.devices['famsysid'].update_initial_timestamps(
+            bpmenbl=self.params.prbs_bpms_to_get_data,
+            correnbl=self.params.prbs_corrs_to_get_data)
 
         self.trigger_timing_signal()
 
         time0 = _time.time()
         ret = self.devices['famsysid'].wait_update_data(
-            timeout=self.params.acq_timeout)
+            timeout=self.params.acq_timeout,
+            bpmenbl=self.params.prbs_bpms_to_get_data,
+            correnbl=self.params.prbs_corrs_to_get_data)
         print(f'It took {_time.time()-time0:02f}s to update bpms')
         if ret != 0:
             print(f'There was a problem with acquisition. Error code {ret:d}')
