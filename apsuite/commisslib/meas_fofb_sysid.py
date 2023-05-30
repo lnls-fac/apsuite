@@ -436,7 +436,9 @@ class FOFBSysIdAcq(_BaseClass):
         data['corr_currloop_ti'] = famsysid.currloop_ti
 
         # acquisition
-        orbx, orby, currdata, kickdata = famsysid.get_data()
+        orbx, orby, currdata, kickdata = famsysid.get_data(
+            bpmenbl=self.params.prbs_bpms_to_get_data,
+            correnbl=self.params.prbs_corrs_to_get_data)
         data['orbx'], data['orby'] = orbx, orby
         data['currdata'], data['kickdata'] = currdata, kickdata
 
