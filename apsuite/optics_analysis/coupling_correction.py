@@ -31,8 +31,8 @@ class CouplingCorr():
             self.skew_idx = skew_list
         self.corr_method = correction_method or \
             CouplingCorr.CORR_METHODS.Orbrespm
-        self._freq = None
-        self._alpha = None
+        self._freq = model[self.respm.rf_idx[0]].frequency
+        self._alpha = pyaccel.optics.get_mcf(model)
 
     @property
     def corr_method(self):
