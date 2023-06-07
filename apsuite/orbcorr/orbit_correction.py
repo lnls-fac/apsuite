@@ -34,12 +34,13 @@ class OrbitCorr:
 
     CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
 
-    def __init__(self, model, acc, params=None, corr_system='SOFB'):
+    def __init__(self, model, acc, dim='6d', params=None, corr_system='SOFB'):
         """."""
         self.acc = acc
+        self.dim = dim
         self.params = params or CorrParams()
         self.respm = OrbRespmat(
-            model=model, acc=self.acc, dim='6d', corr_system=corr_system)
+            model=model, acc=self.acc, dim=self.dim, corr_system=corr_system)
         self.respm.model.cavity_on = True
         self.params.enbllistbpm = _np.ones(
             self.respm.bpm_idx.size*2, dtype=bool)
@@ -137,7 +138,12 @@ class OrbitCorr:
 
     def get_orbit(self):
         """."""
-        cod = pyaccel.tracking.find_orbit6(self.respm.model, indices='open')
+        if self.dim == '6d':
+            cod = pyaccel.tracking.find_orbit6(
+                self.respm.model, indices='open')
+        else:
+            cod = pyaccel.tracking.find_orbit4(
+                self.respm.model, indices='open')
         codx = cod[0, self.respm.bpm_idx].ravel()
         cody = cod[2, self.respm.bpm_idx].ravel()
         res = _np.r_[codx, cody]
