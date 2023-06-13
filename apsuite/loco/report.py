@@ -210,6 +210,7 @@ class LOCOReport(FPDF):
         self.add_page()
         self.page_title('Global parameters: tunes and emittances')
         self.df_to_table(self._df_tunes, nr_tables=2, idx_table=0)
+        self.set_y(28)
         self.df_to_table(self._df_emits, nr_tables=2, idx_table=1)
         self.set_y(60)
         self.page_title('Optics: beta-beating')
