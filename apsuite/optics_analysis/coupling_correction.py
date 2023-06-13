@@ -76,14 +76,16 @@ class CouplingCorr():
         coup_matrix = []
         delta = 1e-6
         model, *_ = args
+        res0 = CouplingCorr._get_coupling_residue(*args)
         for nmag in indices:
             dlt = delta/len(nmag)
             for seg in nmag:
                 model[seg].KsL += dlt
-                elem = CouplingCorr._get_coupling_residue(*args)
-                elem /= dlt
-                model[seg].KsL -= dlt
+            resd = CouplingCorr._get_coupling_residue(*args)
+            elem = (resd - res0)/delta
             coup_matrix.append(elem)
+            for seg in nmag:
+                model[seg].KsL -= dlt
         return _np.array(coup_matrix).T
 
     def calc_jacobian_matrix(self, model=None, weight_dispy=1):
