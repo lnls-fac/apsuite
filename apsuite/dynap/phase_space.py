@@ -264,9 +264,9 @@ class PhaseSpace(_BaseClass):
 
         axx.set_xlabel('X [mm]')
         ayy.set_xlabel('Y [mm]')
-        ade.set_xlabel(r'$\delta$ [%]')
+        ade.set_xlabel(r'$\delta$ [\%]')
         axx.set_ylabel(r'$\Delta\nu$')
 
         axx.legend(loc='best')
 
-        return fig, phx, phy, tune
+        return fig, [[phx, phy, tune], [axx, ayy, ade]]
