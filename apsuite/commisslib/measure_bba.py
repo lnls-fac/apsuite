@@ -1343,8 +1343,8 @@ class DoBBA(_BaseClass):
         for i in range(int(nrsteps)):
             sofb.mancorrgainch = (i+1)/nrsteps * 100
             sofb.mancorrgaincv = (i+1)/nrsteps * 100
-            _time.sleep(self.params.wait_sofb)
             sofb.cmd_applycorr_all()
+            _time.sleep(self.params.wait_sofb)
             _time.sleep(self.params.wait_correctors)
         sofb.deltakickch, sofb.deltakickcv = dch*0, dcv*0
         sofb.mancorrgainch, sofb.mancorrgaincv = factch, factcv
