@@ -109,8 +109,8 @@ if __name__ == '__main__':
 
             x[mach, :] = x_
             y[mach, :] = y_
-            filename = 'x_y_dynapt_test_424242_DELTA52_nonsymm_mach_'
-            filename += str(i)
+        filename = 'x_y_dynapt_test_424242_DELTA52_nonsymm_config_'
+        filename += str(i)
         save_pickle((x, y), filename)
 
     # Calc DA with ID symmetrization
@@ -145,5 +145,5 @@ if __name__ == '__main__':
 
             x[mach, :] = x_
             y[mach, :] = y_
-            filename = 'x_y_dynapt_test_424242_DELTA52_symm_mach_' + str(i)
+        filename = 'x_y_dynapt_test_424242_DELTA52_symm_config_' + str(i)
         save_pickle((x, y), filename)
