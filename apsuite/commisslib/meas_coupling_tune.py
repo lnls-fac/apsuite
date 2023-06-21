@@ -139,9 +139,9 @@ class MeasCoupling(_BaseClass):
             params=CouplingParams(), target=self._do_meas, isonline=isonline)
         self.qs_names = None
         self.apply_factor = 0
+        self.initial_strengths = None
         if self.isonline:
             self._create_devices()
-            self.initial_strengths = self.get_initial_strengths()
 
     def get_initial_strengths(self):
         """."""
@@ -290,6 +290,10 @@ class MeasCoupling(_BaseClass):
 
         """
         dksl = factor * MeasCoupling.ACHROM_QS_ADJ
+
+        if self.initial_strengths is None:
+            self.initial_strengths = self.get_initial_strengths()
+
         for idx, name in enumerate(self.qs_names):
             ksl0 = self.initial_strengths[idx]
             self.devices[name].strength = ksl0 + dksl[idx]
