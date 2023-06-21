@@ -104,8 +104,8 @@ class MeasCoupling(_BaseClass):
     """
 
     # Achromatic skew quadrupole variations to adjust betatron coupling,
-    # it is -(v[0] + v[3])/np.sqrt(2) where v is the singular vector
-    # from jacobian matrix of
+    # it is -(v1 + v4)/np.sqrt(2) where v1 and v4 are the first and fourth
+    # left-singular vectors of jacobian matrix calculated with
     # apsuite.optics.coupling_correction.calc_jacobian_matrix()
     ACHROM_QS_ADJ = 1e-4 * _np.array(
         [0.53393553, -1.83813959, -1.98690077, -1.75364868, -1.56156276,
@@ -280,8 +280,9 @@ class MeasCoupling(_BaseClass):
     def apply_achromatic_delta_ksl(self, factor=0):
         """Change machine betatron coupling with achromatic QS.
 
-        The variation is at the direction of first singular vector obtained
-        from jacobian coupling matrix.
+        The variation is at the direction -(v1 + v4)/np.sqrt(2) where v1 and v4
+        are the first and fourth left-singular vectors of the coupling
+        jacobian matrix.
 
         Args:
             factor (int, optional): Scalar factor that sets the strenght of
