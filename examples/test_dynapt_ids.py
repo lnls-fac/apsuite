@@ -63,7 +63,7 @@ if __name__ == '__main__':
     lattice_errors.rescale_girder = 1
 
     lattice_errors.do_bba = True
-    lattice_errors.ocorr_params.minsingval = 0.2
+    lattice_errors.ocorr_params.minsingval = 0.5
     lattice_errors.ocorr_params.maxnriters = 15
     lattice_errors.ocorr_params.tolerance = 1e-9
     # data_mach = lattice_errors.generate_machines(nr_steps=nr_steps)
