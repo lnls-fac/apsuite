@@ -9,6 +9,7 @@ from apsuite import lattice_errors_new
 from apsuite.orbcorr import OrbitCorr, CorrParams
 from mathphys.functions import save_pickle, load_pickle
 import idanalysis.optics as opt
+from apsuite.dynap import DynapXY
 
 if __name__ == '__main__':
 
@@ -30,9 +31,10 @@ if __name__ == '__main__':
     # create a seed
     seed = 424242
 
+    nr_mach = 20
     # create manage errors object
     lattice_errors = lattice_errors_new.ManageErrors()
-    lattice_errors.nr_mach = 20
+    lattice_errors.nr_mach = nr_mach
     lattice_errors.nominal_model = model
     lattice_errors.famdata = famdata
     # lattice_errors.reset_seed()
@@ -54,28 +56,29 @@ if __name__ == '__main__':
     else:
         nr_steps = 8
 
-    lattice_errors.ramp_with_ids = False
+    lattice_errors.ramp_with_ids = True
     lattice_errors.nr_mach = 20
-    # correction with girder errors: 8 steps
+
     lattice_errors.apply_girder = True
     lattice_errors.rescale_girder = 1
 
     lattice_errors.do_bba = True
-    lattice_errors.ocorr_params.minsingval = 0.5
-    lattice_errors.ocorr_params.maxnriters = 10
+    lattice_errors.ocorr_params.minsingval = 0.2
+    lattice_errors.ocorr_params.maxnriters = 15
     lattice_errors.ocorr_params.tolerance = 1e-9
-    data_mach = lattice_errors.generate_machines(nr_steps=nr_steps)
+    # data_mach = lattice_errors.generate_machines(nr_steps=nr_steps)
 
     filenames = [
-        '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phasepos00p000_gap00p0-shifted_on_axis.txt',
-        '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phasepos00p000_gap13p1-shifted_on_axis.txt',
-        '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phasepos00p000_gap26p2-shifted_on_axis.txt',
-        '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phaseneg13p125_gap13p1-shifted_on_axis.txt',
-        '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phaseneg13p125_gap26p2-shifted_on_axis.txt',
-        '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phaseneg26p250_gap13p1-shifted_on_axis.txt',
-        '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phaseneg26p250_gap26p2-shifted_on_axis.txt'
-    ]
 
+
+        '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phasepos00p000_gap00p0-shifted_on_axis.txt',
+        # '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phasepos00p000_gap13p1-shifted_on_axis.txt',
+        # '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phasepos00p000_gap26p2-shifted_on_axis.txt',
+        # '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phaseneg13p125_gap13p1-shifted_on_axis.txt',
+        # '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phaseneg13p125_gap26p2-shifted_on_axis.txt',
+        # '/home/gabriel/repos/idanalysis/scripts/delta52/results/measurements/kickmaps/kickmap-ID_width45_phaseneg26p250_gap13p1-shifted_on_axis.txt',
+
+    ]
 
     # Calc DA without ID symmetrization
     for i, filename in enumerate(filenames):
@@ -87,63 +90,29 @@ if __name__ == '__main__':
             fam_name='DELTA52', nr_steps=40,
             rescale_kicks=1, rescale_length=1)
         ids.append(delta52)
-
         lattice_errors.ids = ids
 
-        #  Calc DA
-        nturns = 2048
-        nrtheta = 9
-        mindeltar = 0.1e-3
-        x, y = np.zeros((20, nrtheta)), np.zeros((20, nrtheta))
-        for mach in np.arange(0, 20):
-            model_ = lattice_errors.models[mach]
-            model = lattice_errors.insert_kickmap(model_)
-            model.radiation_on = 0
-            model.cavity_on = False
-            model.vchamber_on = True
-            x_, y_ = opt.calc_dynapt_xy(model,
-                                        nrturns=nturns,
-                                        nrtheta=nrtheta,
-                                        mindeltar=mindeltar,
-                                        print_flag=False)
+        fname = '20_machines_seed_' + str(seed) + '_sext_ramp.pickle'
+        data_mach = load_pickle(fname)
+        mach = 0
+        model_ = data_mach[mach]['model']
+        model = lattice_errors.insert_kickmap(model_)
+        model.radiation_on = 0
+        model.cavity_on = False
+        model.vchamber_on = True
 
-            x[mach, :] = x_
-            y[mach, :] = y_
-        filename = 'x_y_dynapt_test_424242_DELTA52_nonsymm_config_'
-        filename += str(i)
-        save_pickle((x, y), filename)
+        dynapxy = DynapXY(model)
+        dynapxy.params.x_nrpts = 40
+        dynapxy.params.y_nrpts = 20
+        dynapxy.params.nrturns = 2*1024
+        print(dynapxy)
+        dynapxy.do_tracking()
+        dynapxy.process_data()
+        fig, axx, ayy = dynapxy.make_figure_diffusion(
+            orders=(1, 2, 3, 4),
+            nuy_bounds=(14.12, 14.45),
+            nux_bounds=(49.05, 49.50))
 
-    # Calc DA with ID symmetrization
-    for i, filename in enumerate(filenames):
-        ids = list()
-        IDModel = pymodels.si.IDModel
-        delta52 = IDModel(
-            subsec=IDModel.SUBSECTIONS.ID10SB,
-            file_name=filename,
-            fam_name='DELTA52', nr_steps=40,
-            rescale_kicks=1, rescale_length=1)
-        ids.append(delta52)
-
-        lattice_errors.ids = ids
-        lattice_errors.corr_ids()
-
-        #  Calc DA
-        nturns = 2048
-        nrtheta = 9
-        mindeltar = 0.1e-3
-        x, y = np.zeros((20, nrtheta)), np.zeros((20, nrtheta))
-        for mach in np.arange(0, 20):
-            model = lattice_errors.models[mach]
-            model.radiation_on = 0
-            model.cavity_on = False
-            model.vchamber_on = True
-            x_, y_ = opt.calc_dynapt_xy(model,
-                                        nrturns=nturns,
-                                        nrtheta=nrtheta,
-                                        mindeltar=mindeltar,
-                                        print_flag=False)
-
-            x[mach, :] = x_
-            y[mach, :] = y_
-        filename = 'x_y_dynapt_test_424242_DELTA52_symm_config_' + str(i)
-        save_pickle((x, y), filename)
+        figname = 'dynapt_DELTA52' + str(seed) + '_config_' + str(i) + '.png'
+        fig.savefig(figname, dpi=300, format='png')
+        fig.clf()
