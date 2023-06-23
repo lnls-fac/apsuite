@@ -32,7 +32,10 @@ class CorrParams:
 class OrbitCorr:
     """."""
 
-    CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
+    CORR_STATUS = _get_namedtuple('CorrStatus',
+                                  ['Tolerance_fail',
+                                   'Sucess',
+                                   'Convergence_fail'])
 
     def __init__(self, model, acc, dim='6d', params=None, corr_system='SOFB'):
         """."""
@@ -120,7 +123,7 @@ class OrbitCorr:
         if bestfigm < self.params.tolerance:
             return OrbitCorr.CORR_STATUS.Sucess
 
-        for _ in range(self.params.maxnriters):
+        for j in range(self.params.maxnriters):
             dkicks = -1*_np.dot(ismat, dorb)
             kicks = self._process_kicks(dkicks)
             self.set_kicks(kicks)
@@ -130,10 +133,12 @@ class OrbitCorr:
             diff_figm = _np.abs(bestfigm - figm)
             if figm < bestfigm:
                 bestfigm = figm
+            else:
+                return OrbitCorr.CORR_STATUS.Convergence_fail
             if diff_figm < self.params.tolerance:
                 break
         else:
-            return OrbitCorr.CORR_STATUS.Fail
+            return OrbitCorr.CORR_STATUS.Tolerance_fail
         return OrbitCorr.CORR_STATUS.Sucess
 
     def get_orbit(self):
