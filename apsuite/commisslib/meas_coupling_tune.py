@@ -104,17 +104,18 @@ class MeasCoupling(_BaseClass):
     """
 
     # Achromatic skew quadrupole variations to adjust betatron coupling,
-    # it is the first singular vector from jacobian matrix of
+    # it is -(v1 + v4)/np.sqrt(2) where v1 and v4 are the first and fourth
+    # left-singular vectors of jacobian matrix calculated with
     # apsuite.optics.coupling_correction.calc_jacobian_matrix()
     ACHROM_QS_ADJ = 1e-4 * _np.array(
-        [1.16394036,  2.11717028,  2.03428669,  0.14010059, -0.13191569,
-         -2.03547313, -2.11611598, -1.16892381,  1.16394036,  2.11717028,
-         2.03428669,  0.14010059, -0.13191569, -2.03547313, -2.11611598,
-         -1.16892381,  1.16394036,  2.11717028,  2.03428669,  0.14010059,
-         -0.13191569, -2.03547313, -2.11611598, -1.16892381,  1.16394036,
-         2.11717028,  2.03428669,  0.14010059, -0.13191569, -2.03547313,
-         -2.11611598, -1.16892381,  1.16394036,  2.11717028,  2.03428669,
-         0.14010059, -0.13191569, -2.03547313, -2.11611598, -1.16892381])
+        [0.53393553, -1.83813959, -1.98690077, -1.75364868, -1.56156276,
+         0.88701644,  1.14972317,  2.1831073,  0.53393553, -1.83813959,
+         -1.98690077, -1.75364868, -1.56156276,  0.88701644,  1.14972317,
+         2.1831073,  0.53393553, -1.83813959, -1.98690077, -1.75364868,
+         -1.56156276,  0.88701644,  1.14972317,  2.1831073,  0.53393553,
+         -1.83813959, -1.98690077, -1.75364868, -1.56156276,  0.88701644,
+         1.14972317,  2.1831073,  0.53393553, -1.83813959, -1.98690077,
+         -1.75364868, -1.56156276,  0.88701644,  1.14972317,  2.1831073])
 
     # Tune variation matrix for a relative change in quadrupole family strength
     # The values correspond to beta*KL/4\pi
@@ -142,13 +143,18 @@ class MeasCoupling(_BaseClass):
         if self.isonline:
             self._create_devices()
 
+    def get_initial_strengths(self):
+        """."""
+        ini_stren = [self.devices[name].strength for name in self.qs_names]
+        return _np.array(ini_stren)
+
     def _create_skews(self):
         qs_names = _PSSearch.get_psnames(
             {'sec': 'SI', 'dis': 'PS', 'dev': 'QS'})
         qs_idx = [idx for idx, name in enumerate(qs_names) if 'M' in name]
-        qs_names = [qs_names[idx] for idx in qs_idx]
-        self.qs_names = qs_names
-        for name in qs_names:
+        achrom_qs_names = [qs_names[idx] for idx in qs_idx]
+        self.qs_names = achrom_qs_names
+        for name in self.qs_names:
             self.devices[name] = PowerSupply(name)
 
     def _create_devices(self):
@@ -271,11 +277,12 @@ class MeasCoupling(_BaseClass):
         fig.tight_layout()
         return fig, axi
 
-    def apply_achromatic_delta_ksl(self, factor=None):
+    def apply_achromatic_delta_ksl(self, factor=0):
         """Change machine betatron coupling with achromatic QS.
 
-        The variation is at the direction of first singular vector obtained
-        from jacobian coupling matrix.
+        The variation is at the direction -(v1 + v4)/np.sqrt(2) where v1 and v4
+        are the first and fourth left-singular vectors of the coupling
+        jacobian matrix.
 
         Args:
             factor (int, optional): Scalar factor that sets the strenght of
@@ -283,14 +290,14 @@ class MeasCoupling(_BaseClass):
             respect to betatron coupling. Defaults to None.
 
         """
-        self.apply_factor = factor or self.apply_factor
-        dksl = self.apply_factor * MeasCoupling.ACHROM_QS_ADJ
-        init_stren = self.initial_strengths or [None] * len(self.qs_names)
+        dksl = factor * MeasCoupling.ACHROM_QS_ADJ
+
+        if self.initial_strengths is None:
+            self.initial_strengths = self.get_initial_strengths()
+
         for idx, name in enumerate(self.qs_names):
-            ksl0 = init_stren[idx] or self.devices[name].strength
-            init_stren[idx] = ksl0
+            ksl0 = self.initial_strengths[idx]
             self.devices[name].strength = ksl0 + dksl[idx]
-        self.initial_strengths = _np.array(init_stren)
 
     @staticmethod
     def calc_expected_delta_tunes(relative_dkl, quadfam='Q3'):
