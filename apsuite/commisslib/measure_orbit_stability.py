@@ -625,6 +625,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
     """."""
 
     BPM_TRIGGER = 'SI-Fam:TI-BPM'
+    PSM_TRIGGER = 'SI-Fam:TI-BPM-PsMtn'
 
     def __init__(self, isonline=True, ispost_mortem=False):
         """."""
@@ -642,7 +643,10 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         self.devices['fambpms'] = FamBPMs(
             FamBPMs.DEVICES.SI, ispost_mortem=self._ispost_mortem)
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        self.devices['trigbpm'] = Trigger(OrbitAcquisition.BPM_TRIGGER)
+        trigname = self.BPM_TRIGGER
+        if self._ispost_mortem:
+            trigname = self.PSM_TRIGGER
+        self.devices['trigbpm'] = Trigger(trigname)
         self.devices['evt_study'] = Event('Study')
         self.devices['evg'] = EVG()
         self.devices['rfgen'] = RFGen()
