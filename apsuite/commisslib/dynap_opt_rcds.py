@@ -162,7 +162,8 @@ class OptimizeDA(_RCDS):
                 self.params.offaxis_dpkckr_strength, tol=0.2, timeout=13,
                 wait_mon=True)
 
-        injeffs = self.inject_beam_and_get_injeff(nrpulses=nr_pulses)
+        # injeffs = self.inject_beam_and_get_injeff(nrpulses=nr_pulses)
+        injeffs = self.inject_beam_and_get_injeff_cold_config(nrpulses=nr_pulses)
         self.data['offaxis_obj_funcs'].append(injeffs)
         fun = _np.median if self.params.use_median else _np.mean
         return fun(injeffs)
@@ -212,6 +213,18 @@ class OptimizeDA(_RCDS):
         else:
             _log.warning('Timed out waiting injeff to update.')
 
+        self.devices['evg'].wait_injection_finish()
+        return injeffs
+
+    def inject_beam_and_get_injeff_cold_config(self, nrpulses=1):
+        """Inject beam and get injected current."""
+        self.devices['evg'].set_nrpulses(1)
+        injeffs = []
+        for _ in range(nrpulses):
+            self.devices['evg'].cmd_turn_on_injection(wait_rb=True)
+            _time.sleep(self.params.wait_between_injections)
+            injn = self.devices['currinfo'].injeff
+            injeffs.append(injn)
         self.devices['evg'].wait_injection_finish()
         return injeffs
 
