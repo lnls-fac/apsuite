@@ -29,7 +29,7 @@ if __name__ == '__main__':
     model.vchamber_on = False
     famdata = pymodels.si.families.get_family_data(model)
     # create a seed
-    seed = 4738
+    seed = 4736
 
     nr_mach = 20
     # create manage errors object
@@ -45,22 +45,19 @@ if __name__ == '__main__':
     lattice_errors.load_error_file(
         str(nr_mach) + '_errors_seed_'+str(lattice_errors.seed))
 
-    lattice_errors.load_jacobians = False
-    lattice_errors.save_jacobians = True
+    lattice_errors.load_jacobians = True
+    lattice_errors.orbcorr_params.minsingval = 0.2
+    lattice_errors.orbcorr_params.maxnriters = 15
+    lattice_errors.orbcorr_params.tolerance = 1e-9
+    lattice_errors.orbcorr_params.maxdeltakickch = 50e-6
+    lattice_errors.orbcorr_params.maxdeltakickcv = 50e-6
     lattice_errors.configure_corrections()
-    nr_steps = 3
-
-    lattice_errors.ramp_with_ids = False
+    nr_steps = 5
 
     lattice_errors.apply_girder = True
     lattice_errors.rescale_girder = 1
 
     lattice_errors.do_bba = True
     lattice_errors.do_opt_corr = True
-    lattice_errors.ocorr_params.minsingval = 0.2
-    lattice_errors.ocorr_params.maxnriters = 15
-    lattice_errors.ocorr_params.tolerance = 1e-9
-    lattice_errors.ocorr_params.maxdeltakickch = 50e-6
-    lattice_errors.ocorr_params.maxdeltakickcv = 50e-6
 
     data_mach = lattice_errors.generate_machines(nr_steps=nr_steps)
