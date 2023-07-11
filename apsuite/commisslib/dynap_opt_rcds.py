@@ -166,7 +166,8 @@ class OptimizeDA(_RCDS):
         if self.params.cold_injection:
             injeffs = self.inject_beam_and_get_injeff_cold_config(
                 nrpulses=nr_pulses)
-        injeffs = self.inject_beam_and_get_injeff(nrpulses=nr_pulses)
+        else:
+            injeffs = self.inject_beam_and_get_injeff(nrpulses=nr_pulses)
 
         self.data['offaxis_obj_funcs'].append(injeffs)
         fun = _np.median if self.params.use_median else _np.mean
@@ -188,7 +189,8 @@ class OptimizeDA(_RCDS):
         if self.params.cold_injection:
             injeffs = self.inject_beam_and_get_injeff_cold_config(
                 nrpulses=nr_pulses)
-        injeffs = self.inject_beam_and_get_injeff(nrpulses=nr_pulses)
+        else:
+            injeffs = self.inject_beam_and_get_injeff(nrpulses=nr_pulses)
 
 
         llrf.set_phase(self.params.offaxis_rf_phase, wait_mon=True)
