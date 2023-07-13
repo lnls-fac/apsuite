@@ -449,6 +449,8 @@ class FOFBSysIdAcq(_BaseClass):
         data['fofb_loop_gain_v_mon'] = fofb.loop_gain_v_mon
         data['fofb_ch_accsatmax'] = fofb.ch_accsatmax
         data['fofb_cv_accsatmax'] = fofb.cv_accsatmax
+        data['fofb_refx'] = fofb.refx
+        data['fofb_refy'] = fofb.refy
         data['fofb_bpmxenbl'] = fofb.bpmxenbl
         data['fofb_bpmyenbl'] = fofb.bpmyenbl
         data['fofb_chenbl'] = fofb.chenbl
@@ -474,6 +476,8 @@ class FOFBSysIdAcq(_BaseClass):
         data['sofb_loop_pid_rf_kp'] = sofb.loop_pid_rf_kp
         data['sofb_loop_pid_rf_ki'] = sofb.loop_pid_rf_ki
         data['sofb_loop_pid_rf_kd'] = sofb.loop_pid_rf_kd
+        data['sofb_refx'] = sofb.refx
+        data['sofb_refy'] = sofb.refy
         data['sofb_bpmxenbl'] = sofb.bpmxenbl
         data['sofb_bpmyenbl'] = sofb.bpmyenbl
         data['sofb_chenbl'] = sofb.chenbl
