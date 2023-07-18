@@ -34,7 +34,7 @@ class OptimizeDAParams(_RCDSParams):
     def __init__(self):
         """."""
         super().__init__()
-        self.cold_injection = False
+        self.cold_config = False
         self.onaxis_rf_phase = 0  # [°]
         self.offaxis_rf_phase = 0  # [°]
         self.offaxis_weight = 1
@@ -76,6 +76,7 @@ class OptimizeDAParams(_RCDSParams):
             'offaxis_inj_with_dpkckr',
             str(bool(self.offaxis_inj_with_dpkckr)), '')
         stg += self._TMPS('use_median', str(bool(self.use_median)), '')
+        stg += self._TMPS('cold_config', str(bool(self.cold_config)), '')
         return stg
 
 
@@ -162,8 +163,8 @@ class OptimizeDA(_RCDS):
             self.devices['pingh'].set_strength(
                 self.params.offaxis_dpkckr_strength, tol=0.2, timeout=13,
                 wait_mon=True)
-            
-        if self.params.cold_injection:
+
+        if self.params.cold_config:
             injeffs = self.inject_beam_and_get_injeff_cold_config(
                 nrpulses=nr_pulses)
         else:
@@ -186,7 +187,7 @@ class OptimizeDA(_RCDS):
         llrf.set_phase(self.params.onaxis_rf_phase, wait_mon=True)
         _time.sleep(0.5)
 
-        if self.params.cold_injection:
+        if self.params.cold_config:
             injeffs = self.inject_beam_and_get_injeff_cold_config(
                 nrpulses=nr_pulses)
         else:
