@@ -163,7 +163,8 @@ class OptimizeDA(_RCDS):
             self.devices['pingh'].set_strength(
                 self.params.offaxis_dpkckr_strength, tol=0.2, timeout=13,
                 wait_mon=True)
-
+        # TO-DO: avoid this repetition
+        # refactor objective function to incorporate both the cold and warm configs
         if self.params.cold_config:
             injeffs = self.inject_beam_and_get_injeff_cold_config(
                 nrpulses=nr_pulses)
