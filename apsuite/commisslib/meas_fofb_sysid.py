@@ -418,6 +418,9 @@ class FOFBSysIdAcq(_BaseClass):
         data['psnames'] = famsysid.psnames
         data['bpmnames'] = famsysid.bpmnames
 
+        # timeframe data
+        data['timeframe_data'] = famsysid.timeframe_data
+
         # prbs data
         data['prbs_data'] = famsysid.prbs_data
         data['prbs_step_duration'] = famsysid.prbs_step_duration
