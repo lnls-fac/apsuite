@@ -339,7 +339,7 @@ class FOFBSysIdAcq(_BaseClass):
         lvl0 = self.params.prbs_fofbacc_lvl0
         lvl1 = self.params.prbs_fofbacc_lvl1
         famsysid.set_prbs_fofbacc_levels(lvl0, lvl1)
-        ret = famsysid.check_prbs_fofbacc_levels(lvl0, lvl1)
+        ret = famsysid.wait_prbs_fofbacc_levels(lvl0, lvl1)
         if not ret:
             print('FOFBAcc PRBS levels not applied')
             return False
@@ -361,7 +361,7 @@ class FOFBSysIdAcq(_BaseClass):
         lvl1x = self.params.prbs_bpmposx_lvl1
 
         famsysid.set_prbs_bpmposx_levels(lvl0x, lvl1x)
-        ret = famsysid.check_prbs_bpmposx_levels(lvl0x, lvl1x)
+        ret = famsysid.wait_prbs_bpmposx_levels(lvl0x, lvl1x)
         if not ret:
             print('BPM PosX PRBS levels not applied')
             return False
@@ -369,7 +369,7 @@ class FOFBSysIdAcq(_BaseClass):
         lvl0y = self.params.prbs_bpmposy_lvl0
         lvl1y = self.params.prbs_bpmposy_lvl1
         famsysid.set_prbs_bpmposy_levels(lvl0y, lvl1y)
-        ret = famsysid.check_prbs_bpmposy_levels(lvl0y, lvl1y)
+        ret = famsysid.wait_prbs_bpmposy_levels(lvl0y, lvl1y)
         if not ret:
             print('BPM PosY PRBS levels not applied')
             return False
