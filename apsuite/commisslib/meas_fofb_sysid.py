@@ -323,10 +323,14 @@ class FOFBSysIdAcq(_BaseClass):
             lfsr_len=self.params.prbs_lfsr_length)
         if not ret:
             print('Could not configurate PRBS.')
+            return False
 
         ret = famsysid.set_prbs_mov_avg_taps(self.params.prbs_mov_avg_taps)
         if not ret:
             print('Could not set number of taps of moving average filter.')
+            return False
+
+        return True
 
     def prepare_fofbacc_prbs(self):
         """Prepare FOFBAcc PRBS levels."""
@@ -338,6 +342,7 @@ class FOFBSysIdAcq(_BaseClass):
         ret = famsysid.check_prbs_fofbacc_levels(lvl0, lvl1)
         if not ret:
             print('FOFBAcc PRBS levels not applied')
+            return False
 
         if self.params.prbs_fofbacc_enbl:
             ret = famsysid.cmd_prbs_fofbacc_enable()
@@ -345,6 +350,9 @@ class FOFBSysIdAcq(_BaseClass):
             ret = famsysid.cmd_prbs_fofbacc_disable()
         if not ret:
             print('FOFBAcc PRBS enable state not applied')
+            return False
+
+        return True
 
     def prepare_bpms_prbs(self):
         """Prepare BPM Pos PRBS levels."""
@@ -356,6 +364,7 @@ class FOFBSysIdAcq(_BaseClass):
         ret = famsysid.check_prbs_bpmposx_levels(lvl0x, lvl1x)
         if not ret:
             print('BPM PosX PRBS levels not applied')
+            return False
 
         lvl0y = self.params.prbs_bpmposy_lvl0
         lvl1y = self.params.prbs_bpmposy_lvl1
@@ -363,6 +372,7 @@ class FOFBSysIdAcq(_BaseClass):
         ret = famsysid.check_prbs_bpmposy_levels(lvl0y, lvl1y)
         if not ret:
             print('BPM PosY PRBS levels not applied')
+            return False
 
         if self.params.prbs_bpmpos_enbl:
             ret = famsysid.cmd_prbs_bpms_enable()
@@ -370,6 +380,9 @@ class FOFBSysIdAcq(_BaseClass):
             ret = famsysid.cmd_prbs_bpms_disable()
         if not ret:
             print('BPM Pos PRBS enable state not applied')
+            return False
+
+        return True
 
     def prepare_acquisition(self):
         """Prepare acquisition."""
@@ -389,8 +402,10 @@ class FOFBSysIdAcq(_BaseClass):
         ret = self.prepare_acquisition()
         if ret < 0:
             print(f'FOFB controller {-ret} did not finish last acquisition.')
+            return False
         elif ret > 0:
             print(f'FOFB controller {ret} is not ready for acquisition.')
+            return False
 
         self.devices['famsysid'].update_initial_timestamps(
             bpmenbl=self.params.prbs_bpms_to_get_data,
@@ -406,18 +421,20 @@ class FOFBSysIdAcq(_BaseClass):
         print(f'It took {_time.time()-time0:02f}s to update bpms')
         if ret != 0:
             print(f'There was a problem with acquisition. Error code {ret:d}')
-            return
+            return False
 
         ret = self.check_data_valid()
         if ret < 0:
             print(f'FOFB controller 1 TimeFrameData is not monotonic.')
-            return
+            return False
         if ret > 0:
             print(
                 f'FOFB controller {ret} has data different from controller 1.')
-            return
+            return False
 
         self.data = self.get_data()
+
+        return True
 
     def get_data(self):
         """Get data."""
