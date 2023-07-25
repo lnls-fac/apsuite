@@ -32,6 +32,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         # prbs signal
         self.prbs_step_duration = 10
         self.prbs_lfsr_length = 5
+        self.prbs_mov_avg_taps = 4
         # prbs SVD levels settings
         self.svd_levels_regularize_matrix = True
         self.svd_levels_reg_sinval_min = 0.01
@@ -78,6 +79,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         stg += dtmp('acq_external', self.acq_external, '')
         stg += dtmp('prbs_step_duration', self.prbs_step_duration, '')
         stg += dtmp('prbs_lfsr_length', self.prbs_lfsr_length, '')
+        stg += dtmp('prbs_mov_avg_taps', self.prbs_mov_avg_taps, '')
         stg += dtmp(
             'svd_levels_regularize_matrix',
             self.svd_levels_regularize_matrix, '')
@@ -314,9 +316,17 @@ class FOFBSysIdAcq(_BaseClass):
 
     def prepare_prbs(self):
         """Prepare PRBS signal for all FOFB controllers."""
-        return self.devices['famsysid'].config_prbs(
+        famsysid = self.devices['famsysid']
+
+        ret = famsysid.config_prbs(
             step_duration=self.params.prbs_step_duration,
             lfsr_len=self.params.prbs_lfsr_length)
+        if not ret:
+            print('Could not configurate PRBS.')
+
+        ret = famsysid.set_prbs_mov_avg_taps(self.params.prbs_mov_avg_taps)
+        if not ret:
+            print('Could not set number of taps of moving average filter.')
 
     def prepare_fofbacc_prbs(self):
         """Prepare FOFBAcc PRBS levels."""
