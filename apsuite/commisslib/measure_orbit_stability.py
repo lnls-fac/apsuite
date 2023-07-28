@@ -625,12 +625,14 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
     """."""
 
     BPM_TRIGGER = 'SI-Fam:TI-BPM'
+    PSM_TRIGGER = 'SI-Fam:TI-BPM-PsMtn'
 
-    def __init__(self, isonline=True):
+    def __init__(self, isonline=True, ispost_mortem=False):
         """."""
         _BaseClass.__init__(
             self, params=OrbitAcquisitionParams(), isonline=isonline)
         OrbitAnalysis.__init__(self)
+        self._ispost_mortem = ispost_mortem
 
         if self.isonline:
             self.create_devices()
@@ -638,9 +640,13 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
     def create_devices(self):
         """."""
         self.devices['currinfo'] = CurrInfoSI()
-        self.devices['fambpms'] = FamBPMs(FamBPMs.DEVICES.SI)
+        self.devices['fambpms'] = FamBPMs(
+            FamBPMs.DEVICES.SI, ispost_mortem=self._ispost_mortem)
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        self.devices['trigbpm'] = Trigger(OrbitAcquisition.BPM_TRIGGER)
+        trigname = self.BPM_TRIGGER
+        if self._ispost_mortem:
+            trigname = self.PSM_TRIGGER
+        self.devices['trigbpm'] = Trigger(trigname)
         self.devices['evt_study'] = Event('Study')
         self.devices['evg'] = EVG()
         self.devices['rfgen'] = RFGen()
@@ -735,6 +741,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         orbx, orby = fambpms.get_mturn_orbit(return_sum=get_sum)
 
         data = dict()
+        data['ispost_mortem'] = self._ispost_mortem
         data['timestamp'] = _time.time()
         self.rf_freq = self.devices['rfgen'].frequency
         data['rf_frequency'] = self.rf_freq
