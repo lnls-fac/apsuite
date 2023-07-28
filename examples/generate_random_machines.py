@@ -13,6 +13,7 @@ from apsuite.dynap import DynapXY
 
 if __name__ == '__main__':
 
+    # Configure errors
     dips_error = lattice_errors_new.DipolesErrors()
     quads_error = lattice_errors_new.QuadsErrors()
     quads_skew_error = lattice_errors_new.QuadsSkewErrors()
@@ -22,30 +23,33 @@ if __name__ == '__main__':
     error_configs = [dips_error, quads_error, sexts_error, quads_skew_error,
                      bpms_error, girder_error]
 
-    # get family data
+    # Create nominal model and get family data
     model = pymodels.si.create_accelerator()
     model.cavity_on = False
     model.radiation_on = 0
     model.vchamber_on = False
     famdata = pymodels.si.families.get_family_data(model)
-    # create a seed
-    seed = 952448
 
-    nr_mach = 20
-    # create manage errors object
+    # Create manage errors object
     lattice_errors = lattice_errors_new.ManageErrors()
+    nr_mach = 20
     lattice_errors.nr_mach = nr_mach
     lattice_errors.nominal_model = model
     lattice_errors.famdata = famdata
-    # lattice_errors.reset_seed()
-    lattice_errors.seed = seed
+    lattice_errors.reset_seed()
     lattice_errors.error_configs = error_configs
     lattice_errors.cutoff = 1
+
+    # Generate errors and load file
     errors = lattice_errors.generate_errors(save_errors=True)
     lattice_errors.load_error_file(
         str(nr_mach) + '_errors_seed_'+str(lattice_errors.seed))
 
-    lattice_errors.load_jacobians = True
+    # If running for the first time there will be no jacobian to load
+    lattice_errors.load_jacobians = False
+    lattice_errors.save_jacobians = True
+
+    # Configure orbit corretion
     lattice_errors.orbcorr_params.minsingval = 0.2
     lattice_errors.orbcorr_params.maxnriters = 15
     lattice_errors.orbcorr_params.tolerance = 1e-9
@@ -54,12 +58,7 @@ if __name__ == '__main__':
     lattice_errors.orbcorr_params.maxkickch = 300e-6  # rad
     lattice_errors.orbcorr_params.maxkickcv = 300e-6  # rad
     lattice_errors.configure_corrections()
+
+    # Apply errors in all machines
     nr_steps = 5
-
-    lattice_errors.apply_girder = True
-    lattice_errors.rescale_girder = 1
-
-    lattice_errors.do_bba = True
-    lattice_errors.do_opt_corr = True
-    lattice_errors.corr_multipoles = True
     data_mach = lattice_errors.generate_machines(nr_steps=nr_steps)
