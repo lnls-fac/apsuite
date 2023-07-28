@@ -44,13 +44,13 @@ class TbT(_FrozenClass):
 
         # --- select type of tbtanalysis: 'CHROMX' or 'CHROMY'
         self._select_kicktype = kicktype # This will be updated with data
-        
+
         # --- data selection attributes ---
         self._select_idx_bpm = 0
         self._select_idx_kick = 0
         self._select_idx_turn_start = 0
         self._select_idx_turn_stop = None
-        
+
         self._tunes_frac = 0.0
         self._tunes_frac_err = 0.0
 
@@ -83,7 +83,7 @@ class TbT(_FrozenClass):
         else:
             self.chrom = self._data.get('chromy', TbT.NOM_CHROMX)
             self.chrom_err = self._data.get('chromy_err', TbT.NOM_CHROM_ERR)
-        
+
         self.select_idx_turn_stop = self.data_nr_turns
 
         # --- model ---
@@ -244,7 +244,7 @@ class TbT(_FrozenClass):
         return traj_mea
 
     # --- beam parameters ---
-      
+
     @property
     def tunes_frac(self):
         """Return fitting parameter tunes_frac."""
@@ -492,7 +492,7 @@ class TbT(_FrozenClass):
             self.k_decoh = TbT.NOM_KXX_DECOH_NORM
         else:
             self.k_decoh = TbT.NOM_KYY_DECOH_NORM
-            
+
     def init_twiss_from_model(self, update=False, goal_tunes=None):
         """."""
         if update or goal_tunes or self._model_twiss is None:
@@ -511,7 +511,7 @@ class TbT(_FrozenClass):
             self.beta = 1e6 * self._model_twiss.betay[bpms_idx[self.select_idx_bpm]]
             self.eta = 1e6 * self._model_twiss.etay[bpms_idx[self.select_idx_bpm]]
         self.sigma = _np.sqrt(emit * self.beta + 0*(self.eta * self.espread)**2)
-        
+
     # --- search methods ---
 
     def search_tunes(
@@ -528,7 +528,7 @@ class TbT(_FrozenClass):
         select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop = \
             self._get_sel_args(
                 select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop)
-        
+
         if select_idx_kick != self.select_idx_kick:
             self.select_idx_kick = select_idx_kick
         if select_idx_bpm != self.select_idx_bpm:
@@ -537,7 +537,7 @@ class TbT(_FrozenClass):
         traj_mea = self.select_get_traj(
             select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
             select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
-        
+
         # search tunes using FFT on selected data
         title = 'FFT, nr_turns: {}, idx_kick: {}, idx_bpm: {}'.format(
             select_idx_turn_stop, select_idx_kick, select_idx_bpm)
@@ -608,9 +608,9 @@ class TbT(_FrozenClass):
 
         # search beta and mu with 3 periods of betatron oscillations
         self.espread = TbT.NOM_ESPREAD * 1.0
-        
+
         self.select_idx_turn_stop = int(3 / self.tune_frac)
-    
+
         self.search_r0_mu()
 
     def filter_data(self, tune=None, tune_sigma=0.01, real_flag=True):
@@ -618,7 +618,7 @@ class TbT(_FrozenClass):
         if tune is None:
             self.search_tunes()
             tune = self.tune_frac
-        
+
         key = 'trajx' if self.select_plane_x else 'trajy'
         for idxkick in range(self.data_nr_kicks):
             for idxbpm in range(self.data_nr_bpms):
@@ -631,7 +631,7 @@ class TbT(_FrozenClass):
     def fit_leastsqr(self):
         """."""
         init_params, offset, traj_mea = self._get_fit_inputs()
-        
+
         tune_frac = self.tune_frac
         beta = self.beta
         sigma = self.sigma
@@ -661,7 +661,8 @@ class TbT(_FrozenClass):
 
         residue_vec = self._calc_residue_vector(
             params, self._select_kicktype, traj_mea,
-            self.select_idx_turn_start, self.select_idx_turn_stop, offset, tune_frac, beta, sigma)
+            self.select_idx_turn_start, self.select_idx_turn_stop,
+            offset, tune_frac, beta, sigma)
 
         return _np.sqrt(_np.sum(residue_vec**2)/len(residue_vec))
 
@@ -669,7 +670,7 @@ class TbT(_FrozenClass):
         """."""
         params, offset, traj_mea = self._get_fit_inputs()
         args = [
-            self.select_idx_turn_start, self.select_idx_turn_stop, offset, 
+            self.select_idx_turn_start, self.select_idx_turn_stop, offset,
             self.tune_frac, self.beta, self.sigma]
 
         traj_fit, *_ = TbT.calc_traj(self.select_kicktype, params, *args)
@@ -698,7 +699,7 @@ class TbT(_FrozenClass):
         # set initial fit parameters
         self.init_twiss_from_model()
         self.init_k_decoh()
-        
+
         # does fitting
         self.fit_leastsqr()
 
@@ -733,8 +734,8 @@ class TbT(_FrozenClass):
             mu_err[idx] = self.mu_err
             tune_frac_err[idx] = self.tune_frac_err
             chrom_decoh_err[idx] = self.chrom_decoh_err
-                
-        # unwrap phase    
+
+        # unwrap phase
         if unwrap:
             mu = _np.unwrap(mu)
             changed = True
@@ -788,7 +789,7 @@ class TbT(_FrozenClass):
             dtune_frac_err[idx] = self.dtune_frac_err
             k_decoh_err[idx] = self.k_decoh_err
             sigma_err[idx] = self.sigma_err
-                
+
             # traj_mea, traj_fit = self.fit_trajs()
             # _plt.plot(traj_mea)
             # _plt.plot(traj_fit)
@@ -968,20 +969,31 @@ class TbT(_FrozenClass):
             self.data_kicks[self.select_idx_kick]*1e3)
         # rst += '| niter          : {}\n'.format(self.fit_simulann_niter)
         rst += '|-- Fit Params -- \n'
-        rst += '| espread        : {:.5f} ± {:.5f} %\n'.format(100*self.espread, 100*self.espread_err)
-        rst += '| tunes_frac     : {:.6f} ± {:.6f}\n'.format(self.tunes_frac, self.tunes_frac_err)
+        rst += '| espread        : {:.5f} ± {:.5f} %\n'.format(
+            100*self.espread, 100*self.espread_err)
+        rst += '| tunes_frac     : {:.6f} ± {:.6f}\n'.format(
+            self.tunes_frac, self.tunes_frac_err)
         rst += '| --------------- \n'
-        rst += '| chrom         : {:+.3f} ± {:.3f}\n'.format(self.chrom, self.chrom_err)
-        rst += '| tune0_frac    : {:.6f} ± {:.6f}\n'.format(self.tune0_frac, self.tune0_frac_err)
-        rst += '| tune_frac     : {:.6f} ± {:.6f}\n'.format(self.tune_frac, self.tune_frac_err)
-        rst += '| dtune_frac    : {:.6f} ± {:.6f}\n'.format(self.dtune_frac, self.dtune_frac_err)
-        rst += '| r0            : {:.5f} ± {:.5f} um\n'.format(self.r0, self.r0_err)
-        rst += '| mu            : {:.5f} ± {:.5f} rad\n'.format(self.mu, self.mu_err)
-        rst += '| chrom_decoh   : {:.5f} ± {:.5f}\n'.format(self.chrom_decoh, self.chrom_decoh_err)
+        rst += '| chrom         : {:+.3f} ± {:.3f}\n'.format(
+            self.chrom, self.chrom_err)
+        rst += '| tune0_frac    : {:.6f} ± {:.6f}\n'.format(
+            self.tune0_frac, self.tune0_frac_err)
+        rst += '| tune_frac     : {:.6f} ± {:.6f}\n'.format(
+            self.tune_frac, self.tune_frac_err)
+        rst += '| dtune_frac    : {:.6f} ± {:.6f}\n'.format(
+            self.dtune_frac, self.dtune_frac_err)
+        rst += '| r0            : {:.5f} ± {:.5f} um\n'.format(
+            self.r0, self.r0_err)
+        rst += '| mu            : {:.5f} ± {:.5f} rad\n'.format(
+            self.mu, self.mu_err)
+        rst += '| chrom_decoh   : {:.5f} ± {:.5f}\n'.format(
+            self.chrom_decoh, self.chrom_decoh_err)
         rst += '| beta          : {:.2f} m\n'.format(self.beta/1e6)
         rst += '| eta           : {:.2f} cm\n'.format(self.eta/1e4)
-        rst += '| sigma         : {:.2f} ± {:.2f} um\n'.format(self.sigma, self.sigma_err)
-        rst += '| k_decoh      : {:.5f} ± {:.5f} 1/um\n'.format(self.k_decoh, self.k_decoh_err)
+        rst += '| sigma         : {:.2f} ± {:.2f} um\n'.format(
+            self.sigma, self.sigma_err)
+        rst += '| k_decoh      : {:.5f} ± {:.5f} 1/um\n'.format(
+            self.k_decoh, self.k_decoh_err)
         rst += '|--------------- \n'
         rst += '| residue        : {:.5f} um\n'.format(self.fit_residue())
         rst += ' ---------------- \n'

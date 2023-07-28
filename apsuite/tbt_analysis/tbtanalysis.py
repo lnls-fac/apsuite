@@ -43,13 +43,13 @@ class TbTAnalysis(_FrozenClass):
 
         # --- select type of tbtanalysis: 'CHROMX' or 'CHROMY'
         self._select_kicktype = kicktype # This will be updated with data
-        
+
         # --- data selection attributes ---
         self._select_idx_bpm = 0
         self._select_idx_kick = 0
         self._select_idx_turn_start = 0
         self._select_idx_turn_stop = None
-        
+
         self._tunes_frac = 0.0
 
         self._rx_offset = None
@@ -277,7 +277,7 @@ class TbTAnalysis(_FrozenClass):
         return traj_mea
 
     # --- beam parameters ---
-      
+
     @property
     def tunes_frac(self):
         """Return fitting parameter tunes_frac."""
@@ -538,7 +538,7 @@ class TbTAnalysis(_FrozenClass):
     @property
     def ry_offset(self):
         return self._ry_offset
-   
+
     @property
     def ry0(self):
         """."""
@@ -684,7 +684,7 @@ class TbTAnalysis(_FrozenClass):
         el4 = 2*k_decoh*self.ry0*self.ry0_err
         error = _np.sqrt(el2**2+el3**2+el4**4)
         return error
-    
+
     @property
     def chromy_decoh_err(self):
         """."""
@@ -743,7 +743,7 @@ class TbTAnalysis(_FrozenClass):
             self.kxx_decoh = TbTAnalysis.NOM_KXX_DECOH_NORM
         else:
             self.kyy_decoh = TbTAnalysis.NOM_KYY_DECOH_NORM
-            
+
     def init_twiss_from_model(self, update=False, goal_tunes=None):
         """."""
         if update or goal_tunes or self._model_twiss is None:
@@ -762,7 +762,7 @@ class TbTAnalysis(_FrozenClass):
             self.sigmax = _np.sqrt(emitx * self.betax + 0*(self.etax * self.espread)**2)
         else:
             self.sigmay = _np.sqrt(emity * self.betay + 0*(self.etay * self.espread)**2)
-        
+
     # --- search methods ---
 
     def search_tunes(
@@ -779,7 +779,7 @@ class TbTAnalysis(_FrozenClass):
         select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop = \
             self._get_sel_args(
                 select_idx_kick, select_idx_bpm, select_idx_turn_start, select_idx_turn_stop)
-        
+
         if select_idx_kick != self.select_idx_kick:
             self.select_idx_kick = select_idx_kick
         if select_idx_bpm != self.select_idx_bpm:
@@ -788,7 +788,7 @@ class TbTAnalysis(_FrozenClass):
         traj_mea = self.select_get_traj(
             select_idx_kick=select_idx_kick, select_idx_bpm=select_idx_bpm,
             select_idx_turn_start=select_idx_turn_start, select_idx_turn_stop=select_idx_turn_stop)
-        
+
         # search tunes using FFT on selected data
         title = 'FFT, nr_turns: {}, idx_kick: {}, idx_bpm: {}'.format(
             select_idx_turn_stop, select_idx_kick, select_idx_bpm)
@@ -866,7 +866,7 @@ class TbTAnalysis(_FrozenClass):
 
         # search beta and mu with 3 periods of betatron oscillations
         self.espread = TbTAnalysis.NOM_ESPREAD * 1.0
-        
+
         if self.select_plane_x:
             self.select_idx_turn_stop = int(3 / self.tunex_frac)
         else:
@@ -879,7 +879,7 @@ class TbTAnalysis(_FrozenClass):
     def fit_leastsqr(self):
         """."""
         init_params, offset, traj_mea = self._get_fit_inputs()
-        
+
         if self.select_plane_x:
             tune_frac = self.tunex_frac
             beta = self.betax
@@ -918,7 +918,8 @@ class TbTAnalysis(_FrozenClass):
 
         residue_vec = self._calc_residue_vector(
             params, self._select_kicktype, traj_mea,
-            self.select_idx_turn_start, self.select_idx_turn_stop, offset, tune_frac, beta, sigma)
+            self.select_idx_turn_start, self.select_idx_turn_stop,
+            offset, tune_frac, beta, sigma)
 
         return _np.sqrt(_np.sum(residue_vec**2)/len(residue_vec))
 
@@ -927,11 +928,11 @@ class TbTAnalysis(_FrozenClass):
         params, offset, traj_mea = self._get_fit_inputs()
         if self.select_plane_x:
             args = [
-                self.select_idx_turn_start, self.select_idx_turn_stop, offset, 
+                self.select_idx_turn_start, self.select_idx_turn_stop, offset,
                 self.tunex_frac, self.betax, self.sigmax]
         else:
             args = [
-                self.select_idx_turn_start, self.select_idx_turn_stop, offset, 
+                self.select_idx_turn_start, self.select_idx_turn_stop, offset,
                 self.tuney_frac, self.betay, self.sigmay]
 
         traj_fit, *_ = TbTAnalysis.calc_traj(self.select_kicktype, params, *args)
@@ -960,7 +961,7 @@ class TbTAnalysis(_FrozenClass):
         # set initial fit parameters
         self.init_twiss_from_model()
         self.init_k_decoh()
-        
+
         # does fitting
         self.fit_leastsqr()
 
@@ -1005,8 +1006,8 @@ class TbTAnalysis(_FrozenClass):
                 mux_err[idx] = self.muy_err
                 tunex_frac_err[idx] = self.tuney_frac_err
                 chromx_decoh_err[idx] = self.chromy_decoh_err
-            
-        # unwrap phase    
+
+        # unwrap phase
         if unwrap:
             mux = _np.unwrap(mux)
             changed = True
@@ -1073,7 +1074,7 @@ class TbTAnalysis(_FrozenClass):
                 dtunex_frac_err[idx] = self.dtuney_frac_err
                 kxx_decoh_err[idx] = self.kyy_decoh_err
                 sigmax_err[idx] = self.sigmay_err
-        
+
             # traj_mea, traj_fit = self.fit_trajs()
             # _plt.plot(traj_mea)
             # _plt.plot(traj_fit)
@@ -1159,7 +1160,8 @@ class TbTAnalysis(_FrozenClass):
         nu ~ nu0 + k_decoh * a**2
         See Laurent Nadolski Thesis, Chapter 4, pg. 123, Eq. 4.28
         """
-        select_idx_turn_start, select_idx_turn_stop, offset, tune_frac, beta, sigma = args
+        (select_idx_turn_start, select_idx_turn_stop,
+         offset, tune_frac, beta, sigma) = args
 
         tunes_frac = params[0]
         chrom_decoh = params[1]
@@ -1364,9 +1366,11 @@ class TbTAnalysis(_FrozenClass):
     @staticmethod
     def _calc_residue_vector(
             params, kicktype, traj_mea,
-            select_idx_turn_start, select_idx_turn_stop, offset, tune_frac, beta, sigma):
+            select_idx_turn_start, select_idx_turn_stop,
+            offset, tune_frac, beta, sigma):
         """."""
-        args = [select_idx_turn_start, select_idx_turn_stop, offset, tune_frac, beta, sigma]
+        args = [select_idx_turn_start, select_idx_turn_stop,
+                offset, tune_frac, beta, sigma]
         traj_fit, *_ = TbTAnalysis.calc_traj(kicktype, params, *args)
         traj_res = traj_mea - traj_fit
         return traj_res
