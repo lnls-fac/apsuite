@@ -157,7 +157,7 @@ class TurnOffCorr(_ThreadBaseClass):
         sibpms.mturn_config_acquisition(
             nr_points_after=prms.nr_points_bpm_acq, nr_points_before=0,
             acq_rate='FAcq', repeat=False, external=True)
-        sibpms.mturn_reset_flags_and_update_initial_orbit(
+        sibpms.mturn_reset_flags_and_update_initial_timestamps(
             consider_sum=False)
         self.devices['event'].cmd_external_trigger()
         ret = sibpms.mturn_wait_update(
