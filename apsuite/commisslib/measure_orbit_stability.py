@@ -200,34 +200,20 @@ class OrbitAnalysis:
             intpsd = _np.sqrt(2*_np.cumsum(spec2, axis=0))
         return intpsd
 
-    def remove_switching_freq(
-            self, orbx=None, orby=None):
+    def filter_switching(self, orb):
         """."""
-        orbx = orbx or self.orbx.copy()
-        orby = orby or self.orby.copy()
         fs = self.sampling_freq
-
         fsw = self.switching_freq
-        freq_band = self.frequency_band_filter
-        fmin, fmax = fsw-freq_band, fsw+freq_band
-        fil_orbx = self.filter_matrix(
-            orbx, fmin=fmin, fmax=fmax, fsampling=fs, keep_within_range=False)
-        fil_orby = self.filter_matrix(
-            orby, fmin=fmin, fmax=fmax, fsampling=fs, keep_within_range=False)
-
-        # if sampling frequency is greater than 2x swiching frequency,
-        # then remove switching harmonics
-        if fs > 2*fsw:
-            max_harms = (fs/2) // fsw
-            for harm in range(2, max_harms):
-                fmin, fmax = harm*fsw-freq_band, harm*fsw+freq_band
-                fil_orbx = self.filter_matrix(
-                    fil_orbx, fmin=fmin, fmax=fmax,
-                    fsampling=fs, keep_within_range=False)
-                fil_orby = self.filter_matrix(
-                    fil_orby, fmin=fmin, fmax=fmax,
-                    fsampling=fs, keep_within_range=False)
-        return fil_orbx, fil_orby
+        frev = self.rf_freq/self.HARM_NUM
+        if fs == frev:
+            fil_orb = self.filter_switching_tbt(orb, fs, fsw)
+        else:
+            freq_band = self.frequency_band_filter
+            fmin, fmax = fsw-freq_band, fsw+freq_band
+            fil_orb = self.filter_matrix(
+                orb, fmin=fmin, fmax=fmax, fsampling=fs,
+                keep_within_range=False)
+        return fil_orb
 
     def filter_around_freq(
             self, orbx=None, orby=None, central_freq=24*64, window=5):
@@ -272,7 +258,8 @@ class OrbitAnalysis:
                 Defaults to True.
 
         """
-        orbx_ns, orby_ns = self.remove_switching_freq()
+        orbx_ns = self.filter_switching(self.orbx)
+        orby_ns = self.filter_switching(self.orby)
         orbx, orby = self.filter_around_freq(
             orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
@@ -331,7 +318,8 @@ class OrbitAnalysis:
                 x and y data.
 
         """
-        orbx_ns, orby_ns = self.remove_switching_freq()
+        orbx_ns = self.filter_switching(self.orbx)
+        orby_ns = self.filter_switching(self.orby)
         orbx_fil, orby_fil = self.filter_around_freq(
             orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
@@ -589,6 +577,40 @@ class OrbitAnalysis:
         return _np.fft.irfft(dft, axis=0)
 
     @staticmethod
+    def filter_switching_tbt(orb, freq_sampling, freq_switching):
+        """
+        Filter out the switching frequency from the TbT data.
+
+        Parameters:
+            orb (numpy.ndarray): Input signal of shape (Nsamples, Nbpms).
+            freq_sampling (float): Sampling frequency of the input signal.
+            freq_switching (float): Switching frequency to be filtered out.
+
+        Returns:
+            numpy.ndarray: Signal with the switching frequency removed, same
+            shape as the input.
+
+        """
+        # Calculate the number of samples per switching cycle
+        sw_sample_size = round(freq_sampling/freq_switching)
+        osiz = orb.shape[0]
+        nr_sws = osiz // sw_sample_size
+        siz = nr_sws * sw_sample_size
+
+        # Divide data into 3D array with switching cycles
+        orb_reshape = orb[:siz].T.reshape(orb.shape[1], -1, sw_sample_size)
+
+        # Average to get the switching signature
+        sw_sig = orb_reshape.mean(axis=1)
+
+        # Replicate the switching signature to match the size of original data
+        sw_pert = _np.tile(sw_sig, (1, nr_sws))
+        if osiz > siz:
+            sw_pert = _np.hstack([sw_pert, sw_sig[:, :osiz-siz]])
+        # Subtract the replicated switching signature from the original data
+        return orb - sw_pert.T
+
+    @staticmethod
     def calc_spectrum(data, fs=1):
         """."""
         dft = _np.fft.rfft(data, axis=0)
@@ -811,7 +833,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             self, central_freq=24*64, window=5, inverse=True,
             orm_name='', use_eta_meas=True):
         """Energy Stability Analysis."""
-        self._subtract_average_orb()
+        self.subtract_average_orb()
         self.get_appropriate_orm_data(orm_name)
         self.energy_stability_analysis(
             central_freq=central_freq, window=window, inverse=inverse,
@@ -821,12 +843,13 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             self, central_freq=60, window=10, inverse=False, pca=True,
             split_planes=True):
         """Orbit Stability Analysis."""
-        self._subtract_average_orb()
+        self.subtract_average_orb()
         self.orbit_stability_analysis(
             central_freq=central_freq, window=window,
             inverse=inverse, pca=pca, split_planes=split_planes)
 
-    def _subtract_average_orb(self):
+    def subtract_average_orb(self):
+        """."""
         orbx = self.data['orbx'].copy()
         orby = self.data['orby'].copy()
         orbx -= orbx.mean(axis=0)[None, :]
