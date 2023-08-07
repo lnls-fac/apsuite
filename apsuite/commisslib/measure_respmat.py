@@ -70,10 +70,18 @@ class MeasureRespMat(_BaseClass):
         self._get_loco_setup(self.params.respmat_name)
         if self._stopevt.is_set():
             return
+
+        tune = self.devices['tune']
+        self.data['tunex_before'] = tune.tunex
+        self.data['tuney_before'] = tune.tuney
+
         respmat = self._measure_respm()
         respmat = respmat.reshape((-1, self.devices['sofb'].data.nr_corrs))
         self.data['respmat'] = respmat
         self.confdb.insert_config(self.params.respmat_name, respmat)
+
+        self.data['tunex_after'] = tune.tunex
+        self.data['tuney_after'] = tune.tuney
 
         sofb.nr_points = init_nr
         sofb.measrespmat_kickch = init_kickx

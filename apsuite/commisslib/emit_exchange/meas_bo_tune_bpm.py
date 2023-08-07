@@ -149,18 +149,21 @@ class BOTunebyBPM(_BaseClass):
         bobpms = self.devices['bobpms']
         event = self.devices['event']
 
+        bobpms.mturn_reset_flags_and_update_initial_timestamps(
+            consider_sum=False)
         # Inject and start acquisition
         if injection:
             self.devices['evg'].cmd_turn_on_injection()
         if ext_trigger:
             event.cmd_external_trigger()
 
-        ret = bobpms.mturn_wait_update_flags(timeout=prms.bpms_timeout)
+        ret = bobpms.mturn_wait_update(
+            timeout=prms.orbit_timeout, consider_sum=False)
         if ret:
             self.data = dict()
             raise AssertionError(
                 f'Problem waiting BPMs update. Error code: {ret:d}')
-        orbx, orby = bobpms.get_mturn_orbit()
+        orbx, orby = bobpms.get_mturn_orbit(return_sum=False)
 
         self.data['orbx'], self.data['orby'] = orbx, orby
         self.data['timestamp'] = _time.time()
