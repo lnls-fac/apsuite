@@ -149,9 +149,10 @@ class BeamSizesAnalysis(_BaseClass):
         sclx, scly = data['scl_factx'], data['scl_facty']  # pixel to mm
 
         for image in data['images']:
-            sx, _, sy, _ = self.calc_beam_sizes(
+            beam_stat = self.calc_beam_statistics(
                 image, roix=prms.roix, roiy=prms.roiy, window=prms.line_window,
                 plot_flag=plot_flag)
+            sx, sy = beam_stat['sigmax'], beam_stat['sigmay']
             sigmasx.append(sx*sclx)
             sigmasy.append(sy*scly)
 
@@ -203,7 +204,7 @@ class BeamSizesAnalysis(_BaseClass):
             _plt.show()
 
     @staticmethod
-    def calc_beam_sizes(
+    def calc_beam_statistics(
             image, roix=[500, 800], roiy=[400, 600], window=4,
             plot_flag=False):
         """Compute the beam sizes from an image.
@@ -273,6 +274,8 @@ class BeamSizesAnalysis(_BaseClass):
         poptx, pcovx = curve_fit(gauss, xx, hline, p0=poptx_proj)
         popty, pcovy = curve_fit(gauss, xy, vline, p0=popty_proj)
         sigmax, sigmay = abs(poptx[2]), abs(popty[2])
+        centrx, centry = abs(poptx[1]), abs(popty[1])
+        ucentrx, ucentry = _np.sqrt(pcovx[1, 1]), _np.sqrt(pcovy[1, 1])
         usigmax, usigmay = _np.sqrt(pcovx[2, 2]), _np.sqrt(pcovy[2, 2])
 
         if plot_flag:
@@ -283,24 +286,25 @@ class BeamSizesAnalysis(_BaseClass):
             ay = _plt.subplot(gs[1, 1])
 
             aimg.imshow(image0)
-            aimg.plot(xx_mean, xy_mean, 'o', ms=5, color='tab:red')
+            aimg.plot(centrx, centry, 'o', ms=5, color='tab:red')
             w, h = _np.abs(roix2-roix1), _np.abs(roiy2-roiy1)
             rect = _patches.Rectangle(
-                (roix1, roiy1), w, h, linewidth=1, edgecolor='k', fill='False',
+                (roix1, roiy1), w, h, linewidth=1, edgecolor='w', fill='False',
                 facecolor='none')
             aimg.add_patch(rect)
 
-            ax.plot(xx, projx, '.', label='data')
-            ax.plot(xx, gauss(xx, *poptx_proj), label='proj')
-            ax.plot(xx, hline/_np.sum(hline), '.', label='line')
-            ax.plot(xx, gauss(xx, *poptx)/_np.sum(hline), label='slice')
+
+            ax.plot(xx, projx, '.', label='roi-data', color=[0, 0, 1])
+            ax.plot(xx, gauss(xx, *poptx_proj), label='roi-fit', color=[0, 0, 0.5])
+            ax.plot(xx, hline/_np.sum(hline), '.', label='win-data', color=[0, 1, 0],)
+            ax.plot(xx, gauss(xx, *poptx)/_np.sum(hline), label='win-fit', color=[0, 0.5, 0])
             ax.set_xlabel('x [pixel]')
             ax.set_ylabel('Density')
 
-            ay.plot(xy, projy, '.', label='data')
-            ay.plot(xy, gauss(xy, *popty_proj), label='proj')
-            ay.plot(xy, vline/_np.sum(vline), '.', label='line')
-            ay.plot(xy, gauss(xy, *popty)/_np.sum(vline), label='slice')
+            ay.plot(xy, projy, '.', label='roi-data', color=[0, 0, 1])
+            ay.plot(xy, gauss(xy, *popty_proj), label='roi-fit', color=[0, 0, 0.5])
+            ay.plot(xy, vline/_np.sum(vline), '.', label='win-data', color=[0, 1, 0],)
+            ay.plot(xy, gauss(xy, *popty)/_np.sum(vline), label='win-fit', color=[0, 0.5, 0])
             ay.set_xlabel('y [pixel]')
             ay.set_ylabel('Density')
 
@@ -309,7 +313,16 @@ class BeamSizesAnalysis(_BaseClass):
             fig.tight_layout()
             fig.show()
 
-        return sigmax, usigmax, sigmay, usigmay
+        fit_data = {}
+        fit_data['centrx'] = centrx
+        fit_data['centry'] = centry
+        fit_data['sigmax'] = sigmax
+        fit_data['sigmay'] = sigmay
+        fit_data['centrx_error'] = ucentrx
+        fit_data['centry_error'] = ucentry
+        fit_data['sigmax_error'] = usigmax
+        fit_data['sigmay_error'] = usigmay
+        return fit_data
 
     @staticmethod
     def extract_quadrupoles_ramp(ramp):

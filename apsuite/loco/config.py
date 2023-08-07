@@ -102,6 +102,7 @@ class LOCOConfig:
         self.deltakl_normalization = None
         self.tolerance_delta = None
         self.tolerance_overfit = None
+        self.nr_fit_parameters = None
 
         self._process_input(kwargs)
 
@@ -168,6 +169,7 @@ class LOCOConfig:
         stg += stmp('BPM gains', self.fit_gain_bpm, '')
         stg += stmp('Corrector gains', self.fit_gain_corr, '')
         stg += stmp('BPM roll', self.fit_roll_bpm, '')
+        stg += dtmp('Nr. fit parameters:', self.nr_fit_parameters, '')
         return stg
 
     @property
@@ -282,6 +284,7 @@ class LOCOConfig:
         self.update_skew_quad_knobs()
         self.update_weight()
         self.update_svd(self.svd_method, self.svd_sel, self.svd_thre)
+        self.nr_fit_parameters = self.get_nr_fit_parameters()
 
     def update_model(self, model, dim):
         """."""
@@ -292,21 +295,26 @@ class LOCOConfig:
         self.respm = _OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
         self._create_indices()
 
-    def update_svd(self, svd_method, svd_sel=None, svd_thre=None):
+    def update_svd(
+            self, svd_method, svd_sel=None, svd_thre=None,
+            flat_print=False):
         """."""
         self.svd_sel = svd_sel
         self.svd_thre = svd_thre
         if svd_method == LOCOConfig.SVD.Selection:
             if svd_sel is not None:
-                print(
-                    'svd_selection: {:d} values will be used.'.format(
-                        self.svd_sel))
+                if flat_print:
+                    print(
+                        'svd_selection: {:d} values will be used.'.format(
+                            self.svd_sel))
             else:
-                print('svd_selection: all values will be used.')
+                if flat_print:
+                    print('svd_selection: all values will be used.')
         if svd_method == LOCOConfig.SVD.Threshold:
             if svd_thre is None:
                 self.svd_thre = LOCOConfig.DEFAULT_SVD_THRESHOLD
-            print('svd_threshold: {:f}'.format(self.svd_thre))
+            if flat_print:
+                print('svd_threshold: {:f}'.format(self.svd_thre))
 
     def update_goalmat(self, goalmat, use_dispersion, use_offdiagonal):
         """."""
@@ -532,6 +540,37 @@ class LOCOConfig:
         self.gir_indices = _pyaccel.lattice.find_indices(
             self.model, 'fam_name', 'girder')
         self.gir_indices = _np.reshape(self.gir_indices, (-1, 2))
+
+    def get_nr_fit_parameters(self):
+        """."""
+        idx = 0
+        if self.fit_quadrupoles:
+            idx += len(self.quad_indices)
+        if self.fit_sextupoles:
+            idx += len(self.sext_indices)
+        if self.fit_dipoles:
+            idx += len(self.dip_indices)
+        if self.fit_quadrupoles_coupling:
+            idx += len(self.quad_indices_ks)
+        if self.fit_sextupoles_coupling:
+            idx += len(self.sext_indices)
+        if self.fit_dipoles_coupling:
+            idx += len(self.dip_indices_ks)
+        if self.fit_gain_bpm:
+            idx += 2*self.nr_bpm
+        if self.fit_roll_bpm:
+            idx += self.nr_bpm
+        if self.fit_gain_corr:
+            idx += self.nr_corr
+        if self.fit_dipoles_kick:
+            idx += len(self.dip_indices)
+        if self.fit_energy_shift:
+            idx += self.nr_corr
+        if self.fit_skew_quadrupoles:
+            idx += len(self.skew_quad_indices)
+        if self.fit_girder_shift:
+            idx += self.gir_indices.shape[0]
+        return idx
 
     def _process_input(self, kwargs):
         for key, value in kwargs.items():
