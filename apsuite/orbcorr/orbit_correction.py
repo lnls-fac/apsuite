@@ -123,7 +123,7 @@ class OrbitCorr:
         if bestfigm < self.params.tolerance:
             return OrbitCorr.CORR_STATUS.Sucess
 
-        for j in range(self.params.maxnriters):
+        for _ in range(self.params.maxnriters):
             dkicks = -1*_np.dot(ismat, dorb)
             kicks = self._process_kicks(dkicks)
             self.set_kicks(kicks)

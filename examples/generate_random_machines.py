@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 import pyaccel
 import pymodels
-from apsuite import lattice_errors_new
+from apsuite import lattice_errors
 from apsuite.orbcorr import OrbitCorr, CorrParams
 from mathphys.functions import save_pickle, load_pickle
 import idanalysis.optics as opt
@@ -14,12 +14,12 @@ from apsuite.dynap import DynapXY
 if __name__ == '__main__':
 
     # Configure errors
-    dips_error = lattice_errors_new.DipolesErrors()
-    quads_error = lattice_errors_new.QuadsErrors()
-    quads_skew_error = lattice_errors_new.QuadsSkewErrors()
-    sexts_error = lattice_errors_new.SextsErrors()
-    girder_error = lattice_errors_new.GirderErrors()
-    bpms_error = lattice_errors_new.BpmsErrors()
+    dips_error = lattice_errors.DipolesErrors()
+    quads_error = lattice_errors.QuadsErrors()
+    quads_skew_error = lattice_errors.QuadsSkewErrors()
+    sexts_error = lattice_errors.SextsErrors()
+    girder_error = lattice_errors.GirderErrors()
+    bpms_error = lattice_errors.BPMErrors()
     error_configs = [dips_error, quads_error, sexts_error, quads_skew_error,
                      bpms_error, girder_error]
 
@@ -31,7 +31,7 @@ if __name__ == '__main__':
     famdata = pymodels.si.families.get_family_data(model)
 
     # Create manage errors object
-    lattice_errors = lattice_errors_new.ManageErrors()
+    lattice_errors = lattice_errors.ManageErrors()
     nr_mach = 20
     lattice_errors.nr_mach = nr_mach
     lattice_errors.nominal_model = model
