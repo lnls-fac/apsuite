@@ -38,6 +38,7 @@ class OrbitAnalysis:
         self._sampling_freq = None
         self._switching_freq = None
         self._rf_freq = None
+        self._frequency_band_filter = None
         self.analysis = dict()
         self.orm_client = _sconf.ConfigDBClient(config_type='si_orbcorr_respm')
         if self.fname:
@@ -126,6 +127,15 @@ class OrbitAnalysis:
         self._switching_freq = val
 
     @property
+    def frequency_band_filter(self):
+        """."""
+        return self._frequency_band_filter
+
+    @frequency_band_filter.setter
+    def frequency_band_filter(self, val):
+        self._frequency_band_filter = val
+
+    @property
     def rf_freq(self):
         """."""
         return self._rf_freq
@@ -190,17 +200,34 @@ class OrbitAnalysis:
             intpsd = _np.sqrt(2*_np.cumsum(spec2, axis=0))
         return intpsd
 
-    def remove_switching_freq(self, orbx=None, orby=None):
+    def remove_switching_freq(
+            self, orbx=None, orby=None):
         """."""
         orbx = orbx or self.orbx.copy()
         orby = orby or self.orby.copy()
         fs = self.sampling_freq
+
         fsw = self.switching_freq
-        fil_orbx, freq = self.filter_matrix(
-            orbx, fmin=0, fmax=fsw*0.9, fs=fs)
-        fil_orby, _ = self.filter_matrix(
-            orby, fmin=0, fmax=fsw*0.9, fs=fs)
-        return fil_orbx, fil_orby, freq
+        freq_band = self.frequency_band_filter
+        fmin, fmax = fsw-freq_band, fsw+freq_band
+        fil_orbx = self.filter_matrix(
+            orbx, fmin=fmin, fmax=fmax, fsampling=fs, keep_within_range=False)
+        fil_orby = self.filter_matrix(
+            orby, fmin=fmin, fmax=fmax, fsampling=fs, keep_within_range=False)
+
+        # if sampling frequency is greater than 2x swiching frequency,
+        # then remove switching harmonics
+        if fs > 2*fsw:
+            max_harms = (fs/2) // fsw
+            for harm in range(2, max_harms):
+                fmin, fmax = harm*fsw-freq_band, harm*fsw+freq_band
+                fil_orbx = self.filter_matrix(
+                    fil_orbx, fmin=fmin, fmax=fmax,
+                    fsampling=fs, keep_within_range=False)
+                fil_orby = self.filter_matrix(
+                    fil_orby, fmin=fmin, fmax=fmax,
+                    fsampling=fs, keep_within_range=False)
+        return fil_orbx, fil_orby
 
     def filter_around_freq(
             self, orbx=None, orby=None, central_freq=24*64, window=5):
@@ -212,8 +239,8 @@ class OrbitAnalysis:
         fmin = central_freq - window/2
         fmax = central_freq + window/2
         fs = self.sampling_freq
-        fil_orbx, _ = self.filter_matrix(orbx, fmin=fmin, fmax=fmax, fs=fs)
-        fil_orby, _ = self.filter_matrix(orby, fmin=fmin, fmax=fmax, fs=fs)
+        fil_orbx = self.filter_matrix(orbx, fmin=fmin, fmax=fmax, fsampling=fs)
+        fil_orby = self.filter_matrix(orby, fmin=fmin, fmax=fmax, fsampling=fs)
         return fil_orbx, fil_orby
 
     def energy_stability_analysis(
@@ -245,7 +272,7 @@ class OrbitAnalysis:
                 Defaults to True.
 
         """
-        orbx_ns, orby_ns, _ = self.remove_switching_freq()
+        orbx_ns, orby_ns = self.remove_switching_freq()
         orbx, orby = self.filter_around_freq(
             orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
@@ -304,7 +331,7 @@ class OrbitAnalysis:
                 x and y data.
 
         """
-        orbx_ns, orby_ns, _ = self.remove_switching_freq()
+        orbx_ns, orby_ns = self.remove_switching_freq()
         orbx_fil, orby_fil = self.filter_around_freq(
             orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
@@ -312,6 +339,8 @@ class OrbitAnalysis:
         orby_spec, freqy = self.calc_spectrum(orby_fil, fs=self.sampling_freq)
         ipsdx = self.calc_integrated_spectrum(orbx_spec, inverse=inverse)
         ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
+        self.analysis['orbx_filtered'] = orbx_fil
+        self.analysis['orby_filtered'] = orby_fil
         self.analysis['orb_freqmax'] = central_freq + window/2
         self.analysis['orb_freqmin'] = central_freq - window/2
         self.analysis['orbx_spectrum'] = orbx_spec
@@ -534,15 +563,30 @@ class OrbitAnalysis:
 
     # static methods
     @staticmethod
-    def filter_matrix(matrix, fmin=0, fmax=None, fs=1):
-        """."""
-        if fmax is None:
-            fmax = fs/2
+    def filter_matrix(matrix, fmin, fmax, fsampling, keep_within_range=True):
+        """Filter acquisition matrix considering a frequency range.
+
+        Args:
+            matrix (numpy.array): 2d-array with timesamples along rows and
+            BPMs indices along columns.
+            fmin (float): minimum frequency in range.
+            fmax (float): maximum frequency in range.
+            fsampling (float): sampling frequency on matrix
+            keep_within_range (bool, optional): Defaults to True.
+
+        Returns:
+            filtered matrix (numpy.array): same structure as matrix.
+
+        """
         dft = _np.fft.rfft(matrix, axis=0)
-        freq = _np.fft.rfftfreq(matrix.shape[0], d=1/fs)
-        idcs = (freq < fmin) | (freq > fmax)
-        dft[idcs] = 0
-        return _np.fft.irfft(dft, axis=0), freq
+        freq = _np.fft.rfftfreq(matrix.shape[0], d=1/fsampling)
+        if keep_within_range:
+            idcs = (freq < fmin) | (freq > fmax)
+            dft[idcs] = 0
+        else:
+            idcs = (freq > fmin) & (freq < fmax)
+            dft[idcs] = 0
+        return _np.fft.irfft(dft, axis=0)
 
     @staticmethod
     def calc_spectrum(data, fs=1):
