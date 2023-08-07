@@ -13,7 +13,6 @@ import scipy.integrate as _scy_int
 from siriuspy.devices import BPM, CurrInfoSI, EGun, RFGen, RFCav, \
     Tune, Trigger, Event, EVG, SOFB, BunchbyBunch
 from siriuspy.epics import PV
-from siriuspy.currinfo import MeasFillingPattern
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
@@ -173,8 +172,6 @@ class MeasTouschekLifetime(_BaseClass):
             self.devices['tune'] = Tune(Tune.DEVICES.SI)
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
             self.devices['bbbl'] = BunchbyBunch(BunchbyBunch.DEVICES.L)
-            self.devices['fpm'] = MeasFillingPattern(
-                MeasFillingPattern.DEVICES.SI)
             self.pvs['avg_pressure'] = PV(MeasTouschekLifetime.AVG_PRESSURE_PV)
 
     @property
@@ -842,7 +839,6 @@ class MeasTouschekLifetime(_BaseClass):
         rfcav = self.devices['rfcav']
         rfgen = self.devices['rfgen']
         bbbl = self.devices['bbbl']
-        fpm = self.devices['fpm']
         press = self.pvs['avg_pressure']
         bpm = self.devices[parms.bpm_name]
         bpm.cmd_sync_tbt()  # Sync TbT BPM
@@ -872,11 +868,6 @@ class MeasTouschekLifetime(_BaseClass):
         meas['antenna_c'] = antnc
         meas['antenna_d'] = antnd
         _time.sleep(parms.acquisition_period/3)
-
-        # wfmt, wfmd = fpm.get_data()
-        # meas['fpm_time'] = _time.time()
-        # meas['fpm_wfm_time'] = wfmt
-        # meas['fpm_wfm_amp'] = wfmd
 
         # Get other relevant parameters
         meas['current'] = curr.current
