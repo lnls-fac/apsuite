@@ -20,5 +20,8 @@ setup(
         'Topic :: Scientific/Engineering'
     ],
     packages=find_packages(),
-    package_data={'apsuite': ['VERSION']},
+    package_data={
+        'apsuite': ['VERSION'],
+        'apsuite.loco': ['*.jpg', ],
+    },
     zip_safe=False)

@@ -33,7 +33,7 @@ class MeasDispTS(_MeasBaseClass):
 
     This class assumes BO, TS and SI SOFB are properly configured.
     All of them must be with the SyncWithInjection selected.
-    BO must be in Monit1 Rate with the index at the end of the ramp.
+    BO must be in FAcq Rate with the index at the end of the ramp.
     """
 
     def __init__(self, isonline=True):
