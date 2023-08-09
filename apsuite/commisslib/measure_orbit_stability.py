@@ -1,5 +1,6 @@
 """."""
 import numpy as _np
+import scipy.fft as _sp_fft
 import matplotlib.pyplot as _plt
 import datetime as _datetime
 import time as _time
@@ -38,7 +39,6 @@ class OrbitAnalysis:
         self._sampling_freq = None
         self._switching_freq = None
         self._rf_freq = None
-        self._frequency_band_filter = None
         self.analysis = dict()
         self.orm_client = _sconf.ConfigDBClient(config_type='si_orbcorr_respm')
         if self.fname:
@@ -127,15 +127,6 @@ class OrbitAnalysis:
         self._switching_freq = val
 
     @property
-    def frequency_band_filter(self):
-        """."""
-        return self._frequency_band_filter
-
-    @frequency_band_filter.setter
-    def frequency_band_filter(self, val):
-        self._frequency_band_filter = val
-
-    @property
     def rf_freq(self):
         """."""
         return self._rf_freq
@@ -202,18 +193,14 @@ class OrbitAnalysis:
 
     def filter_switching(self, orb):
         """."""
-        fs = self.sampling_freq
-        fsw = self.switching_freq
-        frev = self.rf_freq/self.HARM_NUM
-        if fs == frev:
-            fil_orb = self.filter_switching_tbt(orb, fs, fsw)
-        else:
-            freq_band = self.frequency_band_filter
-            fmin, fmax = fsw-freq_band, fsw+freq_band
-            fil_orb = self.filter_matrix(
-                orb, fmin=fmin, fmax=fmax, fsampling=fs,
-                keep_within_range=False)
-        return fil_orb
+        fsmp = self.sampling_freq
+        fswt = self.switching_freq
+        sw_mode = self.data['bpms_switching_mode']
+        # remove switching only if switching mode was on during acquisition
+        # AND the sampling frequency is greater than switching frequency
+        if fsmp / fswt > 1 and sw_mode == 'switching':
+            return self.filter_switching_cycles(orb, fsmp, fswt)
+        return orb
 
     def filter_around_freq(
             self, orbx=None, orby=None, central_freq=24*64, window=5):
@@ -225,8 +212,10 @@ class OrbitAnalysis:
         fmin = central_freq - window/2
         fmax = central_freq + window/2
         fs = self.sampling_freq
-        fil_orbx = self.filter_matrix(orbx, fmin=fmin, fmax=fmax, fsampling=fs)
-        fil_orby = self.filter_matrix(orby, fmin=fmin, fmax=fmax, fsampling=fs)
+        fil_orbx = self.filter_orbit_frequencies(
+            orbx, fmin=fmin, fmax=fmax, fsampling=fs)
+        fil_orby = self.filter_orbit_frequencies(
+            orby, fmin=fmin, fmax=fmax, fsampling=fs)
         return fil_orbx, fil_orby
 
     def energy_stability_analysis(
@@ -551,7 +540,8 @@ class OrbitAnalysis:
 
     # static methods
     @staticmethod
-    def filter_matrix(matrix, fmin, fmax, fsampling, keep_within_range=True):
+    def filter_orbit_frequencies(
+            orb, fmin, fmax, fsampling, keep_within_range=True):
         """Filter acquisition matrix considering a frequency range.
 
         Args:
@@ -566,18 +556,18 @@ class OrbitAnalysis:
             filtered matrix (numpy.array): same structure as matrix.
 
         """
-        dft = _np.fft.rfft(matrix, axis=0)
-        freq = _np.fft.rfftfreq(matrix.shape[0], d=1/fsampling)
+        dft = _sp_fft.rfft(orb, axis=0)
+        freq = _sp_fft.rfftfreq(orb.shape[0], d=1/fsampling)
         if keep_within_range:
             idcs = (freq < fmin) | (freq > fmax)
             dft[idcs] = 0
         else:
             idcs = (freq > fmin) & (freq < fmax)
             dft[idcs] = 0
-        return _np.fft.irfft(dft, axis=0)
+        return _sp_fft.irfft(dft, axis=0)
 
     @staticmethod
-    def filter_switching_tbt(orb, freq_sampling, freq_switching):
+    def filter_switching_cycles(orb, freq_sampling, freq_switching):
         """
         Filter out the switching frequency from the TbT data.
 
