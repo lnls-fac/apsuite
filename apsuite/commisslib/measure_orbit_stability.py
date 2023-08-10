@@ -1,5 +1,6 @@
 """."""
 import numpy as _np
+import scipy.fft as _sp_fft
 import matplotlib.pyplot as _plt
 import datetime as _datetime
 import time as _time
@@ -183,24 +184,24 @@ class OrbitAnalysis:
 
     def calc_integrated_spectrum(self, spec, inverse=False):
         """."""
-        spec2 = spec*spec
+        spec_abs = _np.abs(spec)
+        spec2 = spec_abs*spec_abs
         if inverse:
             intpsd = _np.sqrt(2*_np.cumsum(spec2[::-1], axis=0))[::-1]
         else:
             intpsd = _np.sqrt(2*_np.cumsum(spec2, axis=0))
         return intpsd
 
-    def remove_switching_freq(self, orbx=None, orby=None):
+    def filter_switching(self, orb):
         """."""
-        orbx = orbx or self.orbx.copy()
-        orby = orby or self.orby.copy()
-        fs = self.sampling_freq
-        fsw = self.switching_freq
-        fil_orbx, freq = self.filter_matrix(
-            orbx, fmin=0, fmax=fsw*0.9, fs=fs)
-        fil_orby, _ = self.filter_matrix(
-            orby, fmin=0, fmax=fsw*0.9, fs=fs)
-        return fil_orbx, fil_orby, freq
+        fsmp = self.sampling_freq
+        fswt = self.switching_freq
+        sw_mode = self.data['bpms_switching_mode']
+        # remove switching only if switching mode was on during acquisition
+        # AND the sampling frequency is greater than switching frequency
+        if fsmp / fswt > 1 and sw_mode == 'switching':
+            return self.filter_switching_cycles(orb, fsmp, fswt)
+        return orb
 
     def filter_around_freq(
             self, orbx=None, orby=None, central_freq=24*64, window=5):
@@ -212,8 +213,10 @@ class OrbitAnalysis:
         fmin = central_freq - window/2
         fmax = central_freq + window/2
         fs = self.sampling_freq
-        fil_orbx, _ = self.filter_matrix(orbx, fmin=fmin, fmax=fmax, fs=fs)
-        fil_orby, _ = self.filter_matrix(orby, fmin=fmin, fmax=fmax, fs=fs)
+        fil_orbx = self.filter_orbit_frequencies(
+            orbx, fmin=fmin, fmax=fmax, fsampling=fs)
+        fil_orby = self.filter_orbit_frequencies(
+            orby, fmin=fmin, fmax=fmax, fsampling=fs)
         return fil_orbx, fil_orby
 
     def energy_stability_analysis(
@@ -245,7 +248,8 @@ class OrbitAnalysis:
                 Defaults to True.
 
         """
-        orbx_ns, orby_ns, _ = self.remove_switching_freq()
+        orbx_ns = self.filter_switching(self.orbx)
+        orby_ns = self.filter_switching(self.orby)
         orbx, orby = self.filter_around_freq(
             orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
@@ -304,7 +308,8 @@ class OrbitAnalysis:
                 x and y data.
 
         """
-        orbx_ns, orby_ns, _ = self.remove_switching_freq()
+        orbx_ns = self.filter_switching(self.orbx)
+        orby_ns = self.filter_switching(self.orby)
         orbx_fil, orby_fil = self.filter_around_freq(
             orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
@@ -312,6 +317,8 @@ class OrbitAnalysis:
         orby_spec, freqy = self.calc_spectrum(orby_fil, fs=self.sampling_freq)
         ipsdx = self.calc_integrated_spectrum(orbx_spec, inverse=inverse)
         ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
+        self.analysis['orbx_filtered'] = orbx_fil
+        self.analysis['orby_filtered'] = orby_fil
         self.analysis['orb_freqmax'] = central_freq + window/2
         self.analysis['orb_freqmin'] = central_freq - window/2
         self.analysis['orbx_spectrum'] = orbx_spec
@@ -357,8 +364,10 @@ class OrbitAnalysis:
 
         if fig is None or axs is None:
             fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
-        axs[0].plot(freqx, orbx_spec[:, bpmidx], label=label, color=color)
-        axs[1].plot(freqy, orby_spec[:, bpmidx], label=label, color=color)
+        axs[0].plot(
+            freqx, _np.abs(orbx_spec)[:, bpmidx], label=label, color=color)
+        axs[1].plot(
+            freqy, _np.abs(orby_spec)[:, bpmidx], label=label, color=color)
         if title:
             axs[0].set_title(title)
         axs[0].legend(
@@ -534,22 +543,71 @@ class OrbitAnalysis:
 
     # static methods
     @staticmethod
-    def filter_matrix(matrix, fmin=0, fmax=None, fs=1):
-        """."""
-        if fmax is None:
-            fmax = fs/2
-        dft = _np.fft.rfft(matrix, axis=0)
-        freq = _np.fft.rfftfreq(matrix.shape[0], d=1/fs)
-        idcs = (freq < fmin) | (freq > fmax)
-        dft[idcs] = 0
-        return _np.fft.irfft(dft, axis=0), freq
+    def filter_orbit_frequencies(
+            orb, fmin, fmax, fsampling, keep_within_range=True):
+        """Filter acquisition matrix considering a frequency range.
+
+        Args:
+            matrix (numpy.array): 2d-array with timesamples along rows and
+            BPMs indices along columns.
+            fmin (float): minimum frequency in range.
+            fmax (float): maximum frequency in range.
+            fsampling (float): sampling frequency on matrix
+            keep_within_range (bool, optional): Defaults to True.
+
+        Returns:
+            filtered matrix (numpy.array): same structure as matrix.
+
+        """
+        dft = _sp_fft.rfft(orb, axis=0)
+        freq = _sp_fft.rfftfreq(orb.shape[0], d=1/fsampling)
+        if keep_within_range:
+            idcs = (freq < fmin) | (freq > fmax)
+            dft[idcs] = 0
+        else:
+            idcs = (freq > fmin) & (freq < fmax)
+            dft[idcs] = 0
+        return _sp_fft.irfft(dft, axis=0)
+
+    @staticmethod
+    def filter_switching_cycles(orb, freq_sampling, freq_switching):
+        """
+        Filter out the switching frequency from the TbT data.
+
+        Parameters:
+            orb (numpy.ndarray): Input signal of shape (Nsamples, Nbpms).
+            freq_sampling (float): Sampling frequency of the input signal.
+            freq_switching (float): Switching frequency to be filtered out.
+
+        Returns:
+            numpy.ndarray: Signal with the switching frequency removed, same
+            shape as the input.
+
+        """
+        # Calculate the number of samples per switching cycle
+        sw_sample_size = round(freq_sampling/freq_switching)
+        osiz = orb.shape[0]
+        nr_sws = osiz // sw_sample_size
+        siz = nr_sws * sw_sample_size
+
+        # Divide data into 3D array with switching cycles
+        orb_reshape = orb[:siz].T.reshape(orb.shape[1], -1, sw_sample_size)
+
+        # Average to get the switching signature
+        sw_sig = orb_reshape.mean(axis=1)
+
+        # Replicate the switching signature to match the size of original data
+        sw_pert = _np.tile(sw_sig, (1, nr_sws))
+        if osiz > siz:
+            sw_pert = _np.hstack([sw_pert, sw_sig[:, :osiz-siz]])
+        # Subtract the replicated switching signature from the original data
+        return orb - sw_pert.T
 
     @staticmethod
     def calc_spectrum(data, fs=1):
         """."""
-        dft = _np.fft.rfft(data, axis=0)
-        freq = _np.fft.rfftfreq(data.shape[0], d=1/fs)
-        spec = _np.abs(dft)/data.shape[0]
+        spec = _sp_fft.rfft(data, axis=0)/data.shape[0]
+        freq = _sp_fft.rfftfreq(data.shape[0], d=1/fs)
         return spec, freq
 
     @staticmethod
@@ -767,7 +825,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             self, central_freq=24*64, window=5, inverse=True,
             orm_name='', use_eta_meas=True):
         """Energy Stability Analysis."""
-        self._subtract_average_orb()
+        self.subtract_average_orb()
         self.get_appropriate_orm_data(orm_name)
         self.energy_stability_analysis(
             central_freq=central_freq, window=window, inverse=inverse,
@@ -777,12 +835,13 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             self, central_freq=60, window=10, inverse=False, pca=True,
             split_planes=True):
         """Orbit Stability Analysis."""
-        self._subtract_average_orb()
+        self.subtract_average_orb()
         self.orbit_stability_analysis(
             central_freq=central_freq, window=window,
             inverse=inverse, pca=pca, split_planes=split_planes)
 
-    def _subtract_average_orb(self):
+    def subtract_average_orb(self):
+        """."""
         orbx = self.data['orbx'].copy()
         orby = self.data['orby'].copy()
         orbx -= orbx.mean(axis=0)[None, :]
