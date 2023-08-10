@@ -100,9 +100,9 @@ class ManageErrors():
         return self._seed
 
     @seed.setter
-    def reset_seed(self, value):
+    def seed(self, value):
         self._seed = value
-        _np.random.seed(seed=self._seed)
+        self.reset_seed()
 
     @property
     def error_configs(self):
@@ -320,10 +320,12 @@ class ManageErrors():
         else:
             self._corr_multipoles = value
 
+    def reset_seed(self):
+        _np.random.seed(seed=self._seed)
+
     def generate_new_seed(self):
         """Generate a random seed."""
         self.seed = int(_time.time_ns() % 1e6)
-        print('New seed: ', self.seed)
 
     def _generate_normal_dist(self, sigma, dim, mean=0):
         """_summary_
