@@ -46,10 +46,6 @@ class ManageErrors():
         self._do_opt_corr = True
         self._corr_multipoles = True
 
-        # debug tools
-        self.apply_girder = True
-        self.rescale_girder = 1
-
     @property
     def machines_data(self):
         """Dictionary with the data of all machines.
@@ -104,7 +100,7 @@ class ManageErrors():
         return self._seed
 
     @seed.setter
-    def seed(self, value):
+    def reset_seed(self, value):
         self._seed = value
         _np.random.seed(seed=self._seed)
 
@@ -324,7 +320,7 @@ class ManageErrors():
         else:
             self._corr_multipoles = value
 
-    def reset_seed(self):
+    def generate_new_seed(self):
         """Generate a random seed."""
         self.seed = int(_time.time_ns() % 1e6)
         print('New seed: ', self.seed)
@@ -465,24 +461,14 @@ class ManageErrors():
         """
         print('Applying errors...', end='')
         for fam, family in self.fam_errors_dict.items():
-            if fam != 'girder':
-                apply_flag = True
-                rescale = 1
-            elif fam == 'girder' and self.apply_girder:
-                apply_flag = True
-                rescale = self.rescale_girder
-            else:
-                apply_flag = False
-
-            if apply_flag:
-                inds = family['index']
-                error_types = [err for err in family.keys() if err != 'index']
-                for error_type in error_types:
-                    if error_type != 'multipoles':
-                        errors = family[error_type]
-                        self._functions[error_type](
-                            self.models[mach], inds,
-                            rescale*errors[mach]/nr_steps)
+            inds = family['index']
+            error_types = [err for err in family.keys() if err != 'index']
+            for error_type in error_types:
+                if error_type != 'multipoles':
+                    errors = family[error_type]
+                    self._functions[error_type](
+                        self.models[mach], inds,
+                        errors[mach]/nr_steps)
 
         print('Done!')
 
@@ -496,24 +482,15 @@ class ManageErrors():
         """
         print('Restoring machine...', end='')
         for fam, family in self.fam_errors_dict.items():
-            if fam != 'girder':
-                apply_flag = True
-                rescale = -1
-            elif fam == 'girder' and self.apply_girder:
-                apply_flag = True
-                rescale = -1*self.rescale_girder
-            else:
-                apply_flag = False
 
-            if apply_flag:
-                inds = family['index']
-                error_types = [err for err in family.keys() if err != 'index']
-                for error_type in error_types:
-                    if error_type != 'multipoles':
-                        errors = family[error_type]
-                        self._functions[error_type](
-                            self.models[mach], inds,
-                            rescale*errors[mach]/nr_steps)
+            inds = family['index']
+            error_types = [err for err in family.keys() if err != 'index']
+            for error_type in error_types:
+                if error_type != 'multipoles':
+                    errors = family[error_type]
+                    self._functions[error_type](
+                        self.models[mach], inds,
+                        errors[mach]/nr_steps)
 
         print('Done!')
 
@@ -596,10 +573,9 @@ class ManageErrors():
         orb0[orb_len:] += _pyaccel.lattice.get_error_misalignment_y(
                 self.models[mach], bpms).ravel()
 
-        if 'girder' in self.fam_errors_dict.keys() and self.apply_girder:
-            bpm_girder_errors = self.rescale_girder*self._get_girder_errors(
-                nr_steps, step, bpms, mach)
-            orb0 -= bpm_girder_errors
+        bpm_girder_errors = self._get_girder_errors(
+            nr_steps, step, bpms, mach)
+        orb0 -= bpm_girder_errors
 
         return orb0
 
@@ -871,23 +847,19 @@ class ManageErrors():
             respmats['coupmat'] = coupmat
             save_pickle(respmats, 'respmats', overwrite=True)
 
-    def save_machines(self, sulfix=None):
+    def save_machines(self, sufix=None):
         """Save all random machines in a pickle.
 
         Args:
-            sulfix (string, optional): sulfix will be added in the filename.
+            sufix (string, optional): sufix will be added in the filename.
                 Defaults to None.
         """
         filename = str(self.nr_mach) + '_machines_seed_' + str(self.seed)
         if self.ramp_with_ids:
             filename += '_'
             filename += self.ids[0].fam_name
-        if sulfix is not None:
-            filename += sulfix
-        if not self.do_bba:
-            filename += '_no_bba'
-        if not self.apply_girder:
-            filename += '_no_girder'
+        if sufix is not None:
+            filename += sufix
 
         save_pickle(self.machines_data, filename, overwrite=True)
 
@@ -1051,11 +1023,11 @@ class ManageErrors():
         print()
         return model
 
-    def corr_ids(self, sulfix=None):
+    def corr_ids(self, sufix=None):
         """Do all corrections after the ID insertion.
 
         Args:
-            sulfix (string, optional): sulfix will be added in the filename.
+            sufix (string, optional): sufix will be added in the filename.
                 Defaults to None.
         """
         data_mach = self.load_machines()
@@ -1100,6 +1072,6 @@ class ManageErrors():
             model_dict['data'] = step_data
             data[mach] = model_dict
         self.machines_data = data
-        sulfix_ = '_' + self.ids[0].fam_name + '_symm'
-        sulfix = sulfix_ + sulfix
-        self.save_machines(sulfix=sulfix)
+        sufix_ = '_' + self.ids[0].fam_name + '_symm'
+        sufix = sufix_ + sufix
+        self.save_machines(sufix=sufix)

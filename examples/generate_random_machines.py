@@ -36,7 +36,7 @@ if __name__ == '__main__':
     lattice_errors.nr_mach = nr_mach
     lattice_errors.nominal_model = model
     lattice_errors.famdata = famdata
-    lattice_errors.reset_seed()
+    lattice_errors.generate_new_seed()
     lattice_errors.error_configs = error_configs
     lattice_errors.cutoff = 1
 
@@ -46,8 +46,8 @@ if __name__ == '__main__':
         str(nr_mach) + '_errors_seed_'+str(lattice_errors.seed))
 
     # If running for the first time there will be no jacobian to load
-    lattice_errors.load_jacobians = False
-    lattice_errors.save_jacobians = True
+    lattice_errors.load_jacobians = True
+    lattice_errors.save_jacobians = False
 
     # Configure orbit corretion
     lattice_errors.orbcorr_params.minsingval = 0.2
