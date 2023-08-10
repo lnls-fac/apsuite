@@ -184,7 +184,8 @@ class OrbitAnalysis:
 
     def calc_integrated_spectrum(self, spec, inverse=False):
         """."""
-        spec2 = spec*spec
+        spec_abs = _np.abs(spec)
+        spec2 = spec_abs*spec_abs
         if inverse:
             intpsd = _np.sqrt(2*_np.cumsum(spec2[::-1], axis=0))[::-1]
         else:
@@ -363,8 +364,10 @@ class OrbitAnalysis:
 
         if fig is None or axs is None:
             fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
-        axs[0].plot(freqx, orbx_spec[:, bpmidx], label=label, color=color)
-        axs[1].plot(freqy, orby_spec[:, bpmidx], label=label, color=color)
+        axs[0].plot(
+            freqx, _np.abs(orbx_spec)[:, bpmidx], label=label, color=color)
+        axs[1].plot(
+            freqy, _np.abs(orby_spec)[:, bpmidx], label=label, color=color)
         if title:
             axs[0].set_title(title)
         axs[0].legend(
@@ -603,9 +606,8 @@ class OrbitAnalysis:
     @staticmethod
     def calc_spectrum(data, fs=1):
         """."""
-        dft = _np.fft.rfft(data, axis=0)
-        freq = _np.fft.rfftfreq(data.shape[0], d=1/fs)
-        spec = _np.abs(dft)/data.shape[0]
+        spec = _sp_fft.rfft(data, axis=0)/data.shape[0]
+        freq = _sp_fft.rfftfreq(data.shape[0], d=1/fs)
         return spec, freq
 
     @staticmethod
