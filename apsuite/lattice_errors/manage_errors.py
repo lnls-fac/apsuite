@@ -386,12 +386,12 @@ class ManageErrors():
                         multipole_dict_s = dict()
                         for order, mp_value in sigma['normal'].items():
                             error_ = self._generate_normal_dist(
-                                        sigma=mp_value, dim=(2*self.nr_mach,
+                                        sigma=mp_value, dim=(self.nr_mach,
                                                              len(idcs)))
                             multipole_dict_n[order] = error_
                         for order, mp_value in sigma['skew'].items():
                             error_ = self._generate_normal_dist(
-                                        sigma=mp_value, dim=(2*self.nr_mach,
+                                        sigma=mp_value, dim=(self.nr_mach,
                                                              len(idcs)))
                             multipole_dict_s[order] = error_
                         error['normal'] = multipole_dict_n
@@ -399,7 +399,7 @@ class ManageErrors():
                         error['r0'] = sigma['r0']
                     else:
                         error = self._generate_normal_dist(
-                            sigma=sigma, dim=(2*self.nr_mach, len(idcs)))
+                            sigma=sigma, dim=(self.nr_mach, len(idcs)))
                     error_type_dict[error_type] = error
                 error_type_dict['index'] = idcs
                 fam_errors_dict[fam_name] = error_type_dict
@@ -430,7 +430,7 @@ class ManageErrors():
             ids = self.ids
         else:
             ids = None
-        for _ in range(2*self.nr_mach):
+        for _ in range(self.nr_mach):
             model = _pymodels.si.create_accelerator(ids=ids)
             model.cavity_on = False
             model.radiation_on = 0
@@ -893,7 +893,7 @@ class ManageErrors():
         self._create_models()
 
         data = dict()
-        for mach in range(2*self.nr_mach):
+        for mach in range(self.nr_mach):
             print('Machine ', mach)
 
             step_data = dict()
