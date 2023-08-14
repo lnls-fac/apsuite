@@ -360,7 +360,7 @@ class GenerateMachines():
                     errors = family[error_type]
                     self._functions[error_type](
                         self.models[mach], inds,
-                        errors[mach]/nr_steps)
+                        -1*errors[mach]/nr_steps)
 
         print('Done!')
 
