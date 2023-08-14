@@ -1,7 +1,7 @@
 """."""
 
-from .error_types import DipolesErrors, QuadsErrors, SextsErrors,\
-    QuadsSkewErrors, MultipolesErrors, GirderErrors, BPMErrors
-from .manage_errors import ManageErrors
+from .create_errors import DipolesErrors, QuadsErrors, SextsErrors,\
+    QuadsSkewErrors, MultipolesErrors, GirderErrors, BPMErrors, GenerateErrors
+from .create_machines import GenerateMachines
 
-del error_types, manage_errors
+del create_errors, create_machines

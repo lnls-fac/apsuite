@@ -1,15 +1,7 @@
 #!/usr/bin/env python-sirius
 
-import numpy as np
-import matplotlib.pyplot as plt
-
-import pyaccel
 import pymodels
 from apsuite import lattice_errors
-from apsuite.orbcorr import OrbitCorr, CorrParams
-from mathphys.functions import save_pickle, load_pickle
-import idanalysis.optics as opt
-from apsuite.dynap import DynapXY
 
 if __name__ == '__main__':
 
@@ -30,35 +22,41 @@ if __name__ == '__main__':
     model.vchamber_on = False
     famdata = pymodels.si.families.get_family_data(model)
 
-    # Create manage errors object
-    lattice_errors = lattice_errors.ManageErrors()
+    # Create GenerateErrors object
     nr_mach = 20
-    lattice_errors.nr_mach = nr_mach
-    lattice_errors.nominal_model = model
-    lattice_errors.famdata = famdata
-    lattice_errors.generate_new_seed()
-    lattice_errors.error_configs = error_configs
-    lattice_errors.cutoff = 1
+    generate_errors = lattice_errors.GenerateErrors()
+    generate_errors.nr_mach = nr_mach
+    generate_errors.generate_new_seed()
+    print(generate_errors.seed)
+    generate_errors.famdata = famdata
+    generate_errors.error_configs = error_configs
+    generate_errors.cutoff = 1
+    *_, = generate_errors.generate_errors(save_errors=True)
+    errors = generate_errors.load_error_file(
+        str(nr_mach) + '_errors_seed_' + str(generate_errors.seed))
 
-    # Generate errors and load file
-    errors = lattice_errors.generate_errors(save_errors=True)
-    lattice_errors.load_error_file(
-        str(nr_mach) + '_errors_seed_'+str(lattice_errors.seed))
+    # Create GenerateMachines object
+    random_machines = lattice_errors.GenerateMachines()
+    random_machines.nr_mach = nr_mach
+    random_machines.nominal_model = model
+    random_machines.famdata = famdata
+    random_machines.seed = generate_errors.seed
+    random_machines.fam_errors_dict = errors
 
     # If running for the first time there will be no jacobian to load
-    lattice_errors.load_jacobians = True
-    lattice_errors.save_jacobians = False
+    random_machines.load_jacobians = True
+    random_machines.save_jacobians = False
 
     # Configure orbit corretion
-    lattice_errors.orbcorr_params.minsingval = 0.2
-    lattice_errors.orbcorr_params.maxnriters = 15
-    lattice_errors.orbcorr_params.tolerance = 1e-9
-    lattice_errors.orbcorr_params.maxdeltakickch = 50e-6
-    lattice_errors.orbcorr_params.maxdeltakickcv = 50e-6
-    lattice_errors.orbcorr_params.maxkickch = 300e-6  # rad
-    lattice_errors.orbcorr_params.maxkickcv = 300e-6  # rad
-    lattice_errors.configure_corrections()
+    random_machines.orbcorr_params.minsingval = 0.2
+    random_machines.orbcorr_params.maxnriters = 15
+    random_machines.orbcorr_params.tolerance = 1e-9
+    random_machines.orbcorr_params.maxdeltakickch = 50e-6
+    random_machines.orbcorr_params.maxdeltakickcv = 50e-6
+    random_machines.orbcorr_params.maxkickch = 300e-6  # rad
+    random_machines.orbcorr_params.maxkickcv = 300e-6  # rad
+    random_machines.configure_corrections()
 
     # Apply errors in all machines
     nr_steps = 5
-    data_mach = lattice_errors.generate_machines(nr_steps=nr_steps)
+    data_mach = random_machines.generate_machines(nr_steps=nr_steps)
