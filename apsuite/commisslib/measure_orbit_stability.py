@@ -769,7 +769,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             acq_rate=prms.orbit_acq_rate,
             repeat=prms.orbit_acq_repeat)
 
-    def acquire_data(self):
+    def acquire_data(self, get_sum=False):
         """."""
         fambpms = self.devices['fambpms']
         ret = self.prepare_bpms_acquisition()
@@ -778,7 +778,6 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         elif ret > 0:
             print(f'BPM {ret-1:d} is not ready for acquisition.')
 
-        get_sum = False
         fambpms.mturn_reset_flags_and_update_initial_timestamps(
             consider_sum=get_sum)
 
@@ -796,7 +795,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
     def get_data(self, get_sum=False):
         """Get Orbit and auxiliary data."""
         fambpms = self.devices['fambpms']
-        orbx, orby = fambpms.get_mturn_orbit(return_sum=get_sum)
+        mturn_orbit = fambpms.get_mturn_orbit(return_sum=get_sum)
 
         data = dict()
         data['ispost_mortem'] = self._ispost_mortem
@@ -804,7 +803,9 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         self.rf_freq = self.devices['rfgen'].frequency
         data['rf_frequency'] = self.rf_freq
         data['stored_current'] = self.devices['currinfo'].current
-        data['orbx'], data['orby'] = orbx, orby
+        data['orbx'], data['orby'] = mturn_orbit[0], mturn_orbit[1]
+        if get_sum:
+            data['sumdata'] = mturn_orbit[2]
         tune = self.devices['tune']
         data['tunex'], data['tuney'] = tune.tunex, tune.tuney
         bpm0 = self.devices['fambpms'].devices[0]
