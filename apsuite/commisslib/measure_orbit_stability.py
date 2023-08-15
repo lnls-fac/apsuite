@@ -773,10 +773,11 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """."""
         fambpms = self.devices['fambpms']
         ret = self.prepare_bpms_acquisition()
+        tag = self._bpm_tag(idx=abs(ret)-1)
         if ret < 0:
-            print(f'BPM {-ret-1:d} did not finish last acquisition.')
+            print(tag + ' did not finish last acquisition.')
         elif ret > 0:
-            print(f'BPM {ret-1:d} is not ready for acquisition.')
+            print(tag + ' is not ready for acquisition.')
 
         fambpms.mturn_reset_flags_and_update_initial_timestamps(
             consider_sum=get_sum)
@@ -788,7 +789,12 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
             timeout=self.params.orbit_timeout, consider_sum=get_sum)
         print(f'it took {_time.time()-time0:02f}s to update bpms')
         if ret != 0:
-            print(f'There was a problem with acquisition. Error code {ret:d}')
+            print(f'There was a problem with acquisition')
+            if ret > 0:
+                tag = self._bpm_tag(idx=ret-1)
+                print('This BPM did not update: ' + tag)
+            elif ret == -1:
+                print('Initial timestamps were not defined')
             return
         self.data = self.get_data(get_sum=get_sum)
 
@@ -855,3 +861,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         self.get_appropriate_orm_data(orm_name)
         self._get_sampling_freq()
         self._get_switching_freq()
+
+    def _bpm_tag(self, idx):
+        names = self.devices['fambpms'].bpm_names
+        return f'{names[idx]:s} (idx={idx:d})'
