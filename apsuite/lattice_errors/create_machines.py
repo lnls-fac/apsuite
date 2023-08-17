@@ -43,6 +43,7 @@ class GenerateMachines():
         self._ramp_with_ids = False
         self._do_opt_corr = True
         self._corr_multipoles = True
+        self._do_coupling_corr = True
 
     @property
     def machines_data(self):
@@ -291,6 +292,23 @@ class GenerateMachines():
         else:
             self._corr_multipoles = value
 
+    @property
+    def do_coupling_corr(self):
+        """Option to correct coupling.
+
+        Returns:
+            bool: If true coupling corrections will
+                 be done.
+        """
+        return self._do_coupling_corr
+
+    @do_coupling_corr.setter
+    def do_coupling_corr(self, value):
+        if type(value) != bool:
+            raise ValueError('do_coupling_corr must be bool type')
+        else:
+            self._do_coupling_corr = value
+
     def _create_models(self):
         """Create the models in which the errors will be applied."""
         models_ = list()
@@ -480,36 +498,36 @@ class GenerateMachines():
         """
         print('Correcting orbit...', end='')
         self.orbcorr.respm.model = self.models[mach]
-        self.orbcorr_status = self.orbcorr.correct_orbit(
-                jacobian_matrix=self.orbmat, goal_orbit=orb0)
-        if self.orbcorr_status == 0:
+        corr_status = self.orbcorr.correct_orbit(
+                jacobian_matrix=jac, goal_orbit=orb0)
+        if corr_status == 0:
             print('Could not achieve tolerance!\n')
-        elif self.orbcorr_status == 2:
+        elif corr_status == 2:
             print('Correction could not converge!\n')
         else:
             print('Done!\n')
 
-        return self.orbcorr.get_orbit(), self.orbcorr.get_kicks()
+        return self.orbcorr.get_orbit(), self.orbcorr.get_kicks(), corr_status
 
-    def _correct_orbit_iter(self, orb0, mach, nr_steps):
+    def _correct_orbit_iter(self, orb0, mach):
         """Correct orbit iteratively
 
         Args:
             orb0 (1D numpy array): Reference orbit
             mach (int): Index of the machine.
-            nr_steps (int): Number of steps the ramp of errors and sextupoles
-                will be done.
 
         Returns:
             1D numpy array, 1D numpy array: Returns corrected orbit and kicks.
         """
-        orb_temp, kicks_temp = self._correct_orbit_once(orb0, mach)
+        kicks_before = self.orbcorr.get_kicks()
         init_minsingval = _copy.copy(self.orbcorr_params.minsingval)
-        while self.orbcorr_status == 2:
-            self.orbcorr.set_kicks(self.kicks_)
-            self._restore_error_step(nr_steps, mach)
+
+        orb_temp, kicks_temp, corr_status = self._correct_orbit_once(
+                                                                orb0, mach)
+        while corr_status == 2:
+            self.orbcorr.set_kicks(kicks_before)
             self.orbcorr_params.minsingval += 0.05
-            if self.orbcorr_params.minsingval > 0.5:
+            if self.orbcorr_params.minsingval > 1.0:
                 print('Correcting optics...')
                 res = self._correct_optics(mach)
                 res = True if res == 1 else False
@@ -517,11 +535,12 @@ class GenerateMachines():
                 print()
                 self.orbcorr_params.minsingval = init_minsingval
             print('min singval: ', self.orbcorr_params.minsingval)
-            orb_temp, kicks_temp = self._correct_orbit_once(
+            orb_temp, kicks_temp, corr_status = self._correct_orbit_once(
                 orb0, mach)
+
         self.orbf_, self.kicks_ = orb_temp, kicks_temp
         self.orbcorr_params.minsingval = init_minsingval
-        return self.orbf_, self.kicks_
+        return self.orbf_, self.kicks_, corr_status
 
     def _config_tune_corr(self, jac=None):
         """Configure TuneCorr object. This is an object of the class
@@ -650,7 +669,6 @@ class GenerateMachines():
         print('Correcting optics...')
         for i in range(1):
             res = self._correct_optics(mach)
-            # self._correct_orbit_once(orb0, mach)
         res = True if res == 1 else False
         print('Optics correction tolerance achieved: ', res)
         print()
@@ -666,16 +684,17 @@ class GenerateMachines():
                         tunes[0], tunes[1]))
         print()
 
-        # Correct coupling
-        print('Correcting coupling:')
-        mintune = self._calc_coupling(mach)
-        print('Minimum tune separation before corr: {:.3f} %'.format(
-                 100*mintune))
-        self._correct_coupling(mach)
-        mintune = self._calc_coupling(mach)
-        print('Minimum tune separation after corr: {:.3f} %'.format(
+        if self.do_coupling_corr:
+            # Correct coupling
+            print('Correcting coupling:')
+            mintune = self._calc_coupling(mach)
+            print('Minimum tune separation before corr: {:.3f} %'.format(
+                     100*mintune))
+            self._correct_coupling(mach)
+            mintune = self._calc_coupling(mach)
+            print('Minimum tune separation after corr: {:.3f} %'.format(
                                 100*mintune))
-        print()
+            print()
 
         ed_tang, *_ = _pyaccel.optics.calc_edwards_teng(self.models[mach])
         twiss, *_ = _pyaccel.optics.calc_twiss(self.models[mach])
@@ -787,10 +806,11 @@ class GenerateMachines():
                     orb0_ = _np.zeros(2*len(self.bba_quad_idcs))
 
                 # Correct orbit
-                orbf_, kicks_ = self._correct_orbit_iter(orb0_, mach, nr_steps)
+                orbf_, kicks_, corr_status = self._correct_orbit_iter(
+                                                            orb0_, mach)
 
                 step_dict = dict()
-                step_dict['orbcorr_status'] = self.orbcorr_status
+                step_dict['orbcorr_status'] = corr_status
                 step_dict['ref_orb'] = orb0_
                 step_dict['orbit'] = orbf_
                 step_dict['corr_kicks'] = kicks_
@@ -800,11 +820,11 @@ class GenerateMachines():
                     self.models[mach], 'SL', index, (step + 1)*values/nr_steps)
 
             # Perform one last orbit correction after turning ON sextupoles
-            orbf_, kicks_ = self._correct_orbit_iter(orb0_, mach, nr_steps)
+            orbf_, kicks_, corr_status = self._correct_orbit_iter(orb0_, mach)
 
             # Save last orbit corr data
             step_dict = dict()
-            step_dict['orbcorr_status'] = self.orbcorr_status
+            step_dict['orbcorr_status'] = corr_status
             step_dict['ref_orb'] = orb0_
             step_dict['orbit'] = orbf_
             step_dict['corr_kicks'] = kicks_
@@ -818,11 +838,9 @@ class GenerateMachines():
                     twiss, edtang, twiss0 = self._do_all_opt_corrections(
                         mach)
 
-                orbf_, kicks_ = self._correct_orbit_once(orb0_, mach)
-
                 dbetax = (twiss.betax - twiss0.betax)/twiss0.betax
                 dbetay = (twiss.betay - twiss0.betay)/twiss0.betay
-                step_dict['orbcorr_status'] = self.orbcorr_status
+                step_dict['orbcorr_status'] = corr_status
                 step_dict['ref_orb'] = orb0_
                 step_dict['orbit'] = orbf_
                 step_dict['corr_kicks'] = kicks_
@@ -840,7 +858,7 @@ class GenerateMachines():
                         mach)
                 dbetax = (twiss.betax - twiss0.betax)/twiss0.betax
                 dbetay = (twiss.betay - twiss0.betay)/twiss0.betay
-                step_dict['orbcorr_status'] = self.orbcorr_status
+                step_dict['orbcorr_status'] = corr_status
                 step_dict['ref_orb'] = orb0_
                 step_dict['orbit'] = orbf_
                 step_dict['corr_kicks'] = kicks_

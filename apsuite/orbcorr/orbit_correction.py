@@ -3,6 +3,7 @@
 from copy import deepcopy as _dcopy
 from mathphys.functions import get_namedtuple as _get_namedtuple
 import numpy as _np
+import matplotlib.pyplot as _plt
 
 import pyaccel
 
@@ -125,7 +126,7 @@ class OrbitCorr:
 
         for _ in range(self.params.maxnriters):
             dkicks = -1*_np.dot(ismat, dorb)
-            kicks = self._process_kicks(dkicks)
+            kicks, flag_null_space = self._process_kicks(dkicks)
             self.set_kicks(kicks)
             orb = self.get_orbit()
             dorb = orb - goal_orbit
@@ -133,7 +134,7 @@ class OrbitCorr:
             diff_figm = _np.abs(bestfigm - figm)
             if figm < bestfigm:
                 bestfigm = figm
-            else:
+            if flag_null_space:
                 return OrbitCorr.CORR_STATUS.Convergence_fail
             if diff_figm < self.params.tolerance:
                 break
@@ -213,20 +214,30 @@ class OrbitCorr:
         que = [(-par.maxkickch - kickch) / dkickch, ]
         que.append((par.maxkickch - kickch) / dkickch)
         que = _np.max(que, axis=0)
-        dkickch *= min(_np.min(que), 1.0)
+        coef_ch = min(_np.min(que), 1.0)
 
         que = [(-par.maxkickcv - kickcv) / dkickcv, ]
         que.append((par.maxkickcv - kickcv) / dkickcv)
         que = _np.max(que, axis=0)
-        dkickcv *= min(_np.min(que), 1.0)
+        coef_cv = min(_np.min(que), 1.0)
 
         if self.params.enblrf and dkickrf != 0:
             que = [(-par.maxkickrf - kickrf) / dkickrf, ]
             que.append((par.maxkickrf - kickrf) / dkickrf)
             que = _np.max(que, axis=0)
-            dkickrf *= min(_np.min(que), 1.0)
+            coef_rf = min(_np.min(que), 1.0)
+
+        min_coef = min(coef_ch, coef_cv, coef_rf)
+
+        dkickch *= min_coef
+        dkickcv *= min_coef
+        dkickrf *= min_coef
 
         kicks[:nch] += dkickch
         kicks[nch:nch+ncv] += dkickcv
         kicks[-1] += dkickrf
-        return kicks
+        if min_coef == 0:
+            flag_null_space = True
+        else:
+            flag_null_space = False
+        return kicks, flag_null_space

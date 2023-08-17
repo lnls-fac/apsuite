@@ -12,8 +12,8 @@ if __name__ == '__main__':
     sexts_error = lattice_errors.SextsErrors()
     girder_error = lattice_errors.GirderErrors()
     bpms_error = lattice_errors.BPMErrors()
-    error_configs = [dips_error, quads_error, sexts_error, quads_skew_error,
-                     bpms_error, girder_error]
+    error_configs = [dips_error, quads_error, quads_skew_error,
+                     sexts_error, bpms_error, girder_error]
 
     # Create nominal model and get family data
     model = pymodels.si.create_accelerator()
@@ -27,6 +27,8 @@ if __name__ == '__main__':
     generate_errors = lattice_errors.GenerateErrors()
     generate_errors.nr_mach = nr_mach
     generate_errors.generate_new_seed()
+    # generate_errors.seed = 302336
+    generate_errors.reset_seed()
     print(generate_errors.seed)
     generate_errors.famdata = famdata
     generate_errors.error_configs = error_configs
@@ -55,8 +57,11 @@ if __name__ == '__main__':
     random_machines.orbcorr_params.maxdeltakickcv = 50e-6
     random_machines.orbcorr_params.maxkickch = 300e-6  # rad
     random_machines.orbcorr_params.maxkickcv = 300e-6  # rad
+    random_machines.do_opt_corr = True
+    random_machines.do_coupling_corr = True
+    random_machines.corr_multipoles = True
     random_machines.configure_corrections()
 
     # Apply errors in all machines
-    nr_steps = 5
+    nr_steps = 2
     data_mach = random_machines.generate_machines(nr_steps=nr_steps)
