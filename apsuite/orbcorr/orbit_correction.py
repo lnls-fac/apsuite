@@ -3,7 +3,6 @@
 from copy import deepcopy as _dcopy
 from mathphys.functions import get_namedtuple as _get_namedtuple
 import numpy as _np
-import matplotlib.pyplot as _plt
 
 import pyaccel
 
