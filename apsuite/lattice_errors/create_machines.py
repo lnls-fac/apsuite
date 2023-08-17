@@ -499,7 +499,7 @@ class GenerateMachines():
         print('Correcting orbit...', end='')
         self.orbcorr.respm.model = self.models[mach]
         corr_status = self.orbcorr.correct_orbit(
-                jacobian_matrix=jac, goal_orbit=orb0)
+                jacobian_matrix=self.orbmat, goal_orbit=orb0)
         if corr_status == 0:
             print('Could not achieve tolerance!\n')
         elif corr_status == 2:

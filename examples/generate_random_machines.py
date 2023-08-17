@@ -63,5 +63,5 @@ if __name__ == '__main__':
     random_machines.configure_corrections()
 
     # Apply errors in all machines
-    nr_steps = 2
+    nr_steps = 3
     data_mach = random_machines.generate_machines(nr_steps=nr_steps)
