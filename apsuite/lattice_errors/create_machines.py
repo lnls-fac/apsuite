@@ -527,7 +527,15 @@ class GenerateMachines():
         while corr_status == 2 or cod_peak >= 100:
             self.orbcorr.set_kicks(kicks_before)
             self.orbcorr_params.minsingval += 0.05
-            if self.orbcorr_params.minsingval > 1.0:
+            if init_minsingval > 0.7:
+                print('Correcting optics...')
+                res = self._correct_optics(mach)
+                res = True if res == 1 else False
+                print('Optics correction tolerance achieved: ', res)
+                print()
+                init_minsingval = self.original_minsingval
+                self.orbcorr_params.minsingval = init_minsingval
+            if self.orbcorr_params.minsingval > 0.8:
                 self.orbcorr_params.minsingval = init_minsingval
                 return False
             print('Minimum singular value: {:.2f}'.format(
@@ -538,7 +546,7 @@ class GenerateMachines():
 
         self.orbf_, self.kicks_ = orb_temp, kicks_temp
         self.orbcorr_params.minsingval = init_minsingval
-        return self.orbf_, self.kicks_, corr_status
+        return self.orbf_, self.kicks_, corr_status, init_minsingval
 
     def _config_tune_corr(self, jac=None):
         """Configure TuneCorr object. This is an object of the class
@@ -778,7 +786,7 @@ class GenerateMachines():
         self._create_models()
 
         data = dict()
-        original_minsingval = _copy.copy(self.orbcorr_params.minsingval)
+        self.original_minsingval = _copy.copy(self.orbcorr_params.minsingval)
         for mach in range(self.nr_mach):
             print('Machine ', mach)
 
@@ -792,7 +800,7 @@ class GenerateMachines():
 
             step_data = dict()
             corr_sucess = False
-            init_minsingval = original_minsingval
+            init_minsingval = self.original_minsingval
             while corr_sucess is not True:
                 print('Initial singular value: {:.2f}'.format(init_minsingval))
                 original_kicks = self.orbcorr.get_kicks()
@@ -812,7 +820,7 @@ class GenerateMachines():
                                                    init_minsingval)
                     if res is not False:
                         corr_sucess = True
-                        orbf_, kicks_, corr_status = res
+                        orbf_, kicks_, corr_status, init_minsingval = res
                     else:
                         self._restore_error(step+1, nr_steps, mach)
                         self.orbcorr.set_kicks(original_kicks)
@@ -838,9 +846,9 @@ class GenerateMachines():
                                                init_minsingval)
                 if res is not False:
                     corr_sucess = True
-                    orbf_, kicks_, corr_status = res
+                    orbf_, kicks_, corr_status, init_minsingval = res
                 else:
-                    self._restore_error(nr_steps, nr_steps, mach)
+                    self._restore_error(step+1, nr_steps, mach)
                     self.orbcorr.set_kicks(original_kicks)
                     _pyaccel.lattice.set_attribute(
                             self.models[mach], 'SL', index, zeros)
