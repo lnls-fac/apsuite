@@ -360,7 +360,7 @@ class GenerateMachines():
 
         print('Done!')
 
-    def _restore_error_step(self, nr_steps, mach):
+    def _restore_error(self, step, nr_steps, mach):
         """Restore one step fraction of the errors.
 
         Args:
@@ -378,7 +378,7 @@ class GenerateMachines():
                     errors = family[error_type]
                     self._functions[error_type](
                         self.models[mach], inds,
-                        -1*errors[mach]/nr_steps)
+                        -step*errors[mach]/nr_steps)
 
         print('Done!')
 
@@ -509,7 +509,7 @@ class GenerateMachines():
 
         return self.orbcorr.get_orbit(), self.orbcorr.get_kicks(), corr_status
 
-    def _correct_orbit_iter(self, orb0, mach):
+    def _correct_orbit_iter(self, orb0, mach, init_minsingval):
         """Correct orbit iteratively
 
         Args:
@@ -520,7 +520,6 @@ class GenerateMachines():
             1D numpy array, 1D numpy array: Returns corrected orbit and kicks.
         """
         kicks_before = self.orbcorr.get_kicks()
-        init_minsingval = _copy.copy(self.orbcorr_params.minsingval)
 
         orb_temp, kicks_temp, corr_status = self._correct_orbit_once(
                                                                 orb0, mach)
@@ -529,13 +528,10 @@ class GenerateMachines():
             self.orbcorr.set_kicks(kicks_before)
             self.orbcorr_params.minsingval += 0.05
             if self.orbcorr_params.minsingval > 1.0:
-                print('Correcting optics...')
-                res = self._correct_optics(mach)
-                res = True if res == 1 else False
-                print('Optics correction tolerance achieved: ', res)
-                print()
                 self.orbcorr_params.minsingval = init_minsingval
-            print('min singval: ', self.orbcorr_params.minsingval)
+                return False
+            print('Minimum singular value: {:.2f}'.format(
+                    self.orbcorr_params.minsingval))
             orb_temp, kicks_temp, corr_status = self._correct_orbit_once(
                 orb0, mach)
             cod_peak = _np.max(1e6*(orb_temp-orb0))
@@ -782,47 +778,74 @@ class GenerateMachines():
         self._create_models()
 
         data = dict()
+        original_minsingval = _copy.copy(self.orbcorr_params.minsingval)
         for mach in range(self.nr_mach):
             print('Machine ', mach)
 
-            step_data = dict()
-            for step in range(nr_steps):
-                print('Step ', step+1)
-
-                self._apply_errors(nr_steps, mach)
-
-                # Save sextupoles values and set then to zero
-                if step == 0:
-                    index = self.famdata['SN']['index']
-                    values = _pyaccel.lattice.get_attribute(
+            # Save sextupoles values and set then to zero
+            index = self.famdata['SN']['index']
+            values = _pyaccel.lattice.get_attribute(
                         self.models[mach], 'SL', index)
+            zeros = _np.zeros(len(index))
+            _pyaccel.lattice.set_attribute(
+                self.models[mach], 'SL', index, zeros)
 
-                    zeros = _np.zeros(len(index))
+            step_data = dict()
+            corr_sucess = False
+            init_minsingval = original_minsingval
+            while corr_sucess is not True:
+                print('Initial singular value: {:.2f}'.format(init_minsingval))
+                original_kicks = self.orbcorr.get_kicks()
+                for step in range(nr_steps):
+                    print('Step ', step+1)
+
+                    self._apply_errors(nr_steps, mach)
+
+                    # Orbit setted by BBA or setted to zero
+                    if self.do_bba:
+                        orb0_ = self._simulate_bba(nr_steps, step+1, mach)
+                    else:
+                        orb0_ = _np.zeros(2*len(self.bba_quad_idcs))
+
+                    # Correct orbit
+                    res = self._correct_orbit_iter(orb0_, mach,
+                                                   init_minsingval)
+                    if res is not False:
+                        corr_sucess = True
+                        orbf_, kicks_, corr_status = res
+                    else:
+                        self._restore_error(step+1, nr_steps, mach)
+                        self.orbcorr.set_kicks(original_kicks)
+                        _pyaccel.lattice.set_attribute(
+                            self.models[mach], 'SL', index, zeros)
+                        init_minsingval += 0.05
+                        corr_sucess = False
+                        break
+
+                    step_dict = dict()
+                    step_dict['orbcorr_status'] = corr_status
+                    step_dict['ref_orb'] = orb0_
+                    step_dict['orbit'] = orbf_
+                    step_dict['corr_kicks'] = kicks_
+                    step_data['step_' + str(step + 1)] = step_dict
+
                     _pyaccel.lattice.set_attribute(
-                        self.models[mach], 'SL', index, zeros)
+                        self.models[mach], 'SL', index,
+                        (step + 1)*values/nr_steps)
 
-                # Orbit setted by BBA or setted to zero
-                if self.do_bba:
-                    orb0_ = self._simulate_bba(nr_steps, step+1, mach)
+                # Perform one last orbit correction after turning ON sextupoles
+                res = self._correct_orbit_iter(orb0_, mach,
+                                               init_minsingval)
+                if res is not False:
+                    corr_sucess = True
+                    orbf_, kicks_, corr_status = res
                 else:
-                    orb0_ = _np.zeros(2*len(self.bba_quad_idcs))
-
-                # Correct orbit
-                orbf_, kicks_, corr_status = self._correct_orbit_iter(
-                                                            orb0_, mach)
-
-                step_dict = dict()
-                step_dict['orbcorr_status'] = corr_status
-                step_dict['ref_orb'] = orb0_
-                step_dict['orbit'] = orbf_
-                step_dict['corr_kicks'] = kicks_
-                step_data['step_' + str(step + 1)] = step_dict
-
-                _pyaccel.lattice.set_attribute(
-                    self.models[mach], 'SL', index, (step + 1)*values/nr_steps)
-
-            # Perform one last orbit correction after turning ON sextupoles
-            orbf_, kicks_, corr_status = self._correct_orbit_iter(orb0_, mach)
+                    self._restore_error(nr_steps, nr_steps, mach)
+                    self.orbcorr.set_kicks(original_kicks)
+                    _pyaccel.lattice.set_attribute(
+                            self.models[mach], 'SL', index, zeros)
+                    init_minsingval += 0.05
+                    corr_sucess = False
 
             # Save last orbit corr data
             step_dict = dict()
