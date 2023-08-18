@@ -525,7 +525,7 @@ class GenerateMachines():
         while corr_status == 2 or cod_peak >= 100:
             self.orbcorr.set_kicks(kicks_before)
             self.orbcorr_params.minsingval += 0.05
-            if init_minsingval > 0.65:
+            if init_minsingval > 0.6:
                 print('Correcting optics...')
                 res = self._correct_optics(mach)
                 res = True if res == 1 else False
@@ -842,7 +842,16 @@ class GenerateMachines():
                     corr_sucess = True
                     orbf_, kicks_, corr_status, init_minsingval = res
                 else:
-                    self._restore_errors(step, nr_steps, mach)
+                    # self._restore_errors(step, nr_steps, mach)
+                    if self.ramp_with_ids:
+                        ids = self.ids
+                    else:
+                        ids = None
+                    self.models[mach] = _pymodels.si.create_accelerator(ids=ids)
+                    self.models[mach].cavity_on = False
+                    self.models[mach].radiation_on = 0
+                    self.models[mach].vchamber_on = False
+                    self.orbcorr.respm.model = self.models[mach]
                     self.orbcorr.set_kicks(original_kicks)
                     _pyaccel.lattice.set_attribute(
                             self.models[mach], 'SL', index, zeros)
