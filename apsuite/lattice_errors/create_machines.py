@@ -360,12 +360,10 @@ class GenerateMachines():
 
         print('Done!')
 
-    def _restore_error(self, step, nr_steps, mach):
-        """Restore one step fraction of the errors.
+    def _restore_errors(self, step, nr_steps, mach):
+        """Restore machine.
 
         Args:
-            nr_steps (int): Number of steps the ramp of errors and sextupoles
-                will be done.
             mach (int): Index of the machine.
         """
         print('Restoring machine...', end='')
@@ -378,7 +376,7 @@ class GenerateMachines():
                     errors = family[error_type]
                     self._functions[error_type](
                         self.models[mach], inds,
-                        -step*errors[mach]/nr_steps)
+                        -1*(step+1)*errors[mach]/nr_steps)
 
         print('Done!')
 
@@ -527,7 +525,7 @@ class GenerateMachines():
         while corr_status == 2 or cod_peak >= 100:
             self.orbcorr.set_kicks(kicks_before)
             self.orbcorr_params.minsingval += 0.05
-            if init_minsingval > 0.7:
+            if init_minsingval > 0.65:
                 print('Correcting optics...')
                 res = self._correct_optics(mach)
                 res = True if res == 1 else False
@@ -535,7 +533,7 @@ class GenerateMachines():
                 print()
                 init_minsingval = self.original_minsingval
                 self.orbcorr_params.minsingval = init_minsingval
-            if self.orbcorr_params.minsingval > 0.8:
+            if self.orbcorr_params.minsingval > 0.7:
                 self.orbcorr_params.minsingval = init_minsingval
                 return False
             print('Minimum singular value: {:.2f}'.format(
@@ -822,11 +820,6 @@ class GenerateMachines():
                         corr_sucess = True
                         orbf_, kicks_, corr_status, init_minsingval = res
                     else:
-                        self._restore_error(step+1, nr_steps, mach)
-                        self.orbcorr.set_kicks(original_kicks)
-                        _pyaccel.lattice.set_attribute(
-                            self.models[mach], 'SL', index, zeros)
-                        init_minsingval += 0.05
                         corr_sucess = False
                         break
 
@@ -841,14 +834,15 @@ class GenerateMachines():
                         self.models[mach], 'SL', index,
                         (step + 1)*values/nr_steps)
 
-                # Perform one last orbit correction after turning ON sextupoles
-                res = self._correct_orbit_iter(orb0_, mach,
-                                               init_minsingval)
+                if corr_sucess is True:
+                    # Perform one last orbit correction after turning ON sextupoles
+                    res = self._correct_orbit_iter(orb0_, mach,
+                                                   init_minsingval)
                 if res is not False:
                     corr_sucess = True
                     orbf_, kicks_, corr_status, init_minsingval = res
                 else:
-                    self._restore_error(step+1, nr_steps, mach)
+                    self._restore_errors(step, nr_steps, mach)
                     self.orbcorr.set_kicks(original_kicks)
                     _pyaccel.lattice.set_attribute(
                             self.models[mach], 'SL', index, zeros)
