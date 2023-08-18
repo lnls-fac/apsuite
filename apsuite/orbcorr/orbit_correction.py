@@ -125,7 +125,7 @@ class OrbitCorr:
 
         for _ in range(self.params.maxnriters):
             dkicks = -1*_np.dot(ismat, dorb)
-            kicks, flag_null_space = self._process_kicks(dkicks)
+            kicks, saturation_flag = self._process_kicks(dkicks)
             self.set_kicks(kicks)
             orb = self.get_orbit()
             dorb = orb - goal_orbit
@@ -133,7 +133,7 @@ class OrbitCorr:
             diff_figm = _np.abs(bestfigm - figm)
             if figm < bestfigm:
                 bestfigm = figm
-            if flag_null_space:
+            if saturation_flag:
                 return OrbitCorr.CORR_STATUS.Convergence_fail
             if diff_figm < self.params.tolerance:
                 break
@@ -235,8 +235,5 @@ class OrbitCorr:
         kicks[:nch] += dkickch
         kicks[nch:nch+ncv] += dkickcv
         kicks[-1] += dkickrf
-        if min_coef == 0:
-            flag_null_space = True
-        else:
-            flag_null_space = False
-        return kicks, flag_null_space
+        saturation_flag = min_coef == 0
+        return kicks, saturation_flag
