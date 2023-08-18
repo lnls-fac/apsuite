@@ -35,12 +35,14 @@ class OrbitCorr:
     CORR_STATUS = _get_namedtuple('CorrStatus',
                                   ['Tolerance_fail',
                                    'Sucess',
-                                   'Convergence_fail'])
+                                   'Saturation_fail'])
 
-    def __init__(self, model, acc, dim='6d', params=None, corr_system='SOFB'):
+    def __init__(self, model, acc, dim='6d', params=None, corr_system='SOFB',
+                 use_min_coef=False):
         """."""
         self.acc = acc
         self.dim = dim
+        self.use_min_coef = use_min_coef
         self.params = params or CorrParams()
         self.respm = OrbRespmat(
             model=model, acc=self.acc, dim=self.dim, corr_system=corr_system)
@@ -126,6 +128,8 @@ class OrbitCorr:
         for _ in range(self.params.maxnriters):
             dkicks = -1*_np.dot(ismat, dorb)
             kicks, saturation_flag = self._process_kicks(dkicks)
+            if saturation_flag:
+                return OrbitCorr.CORR_STATUS.Saturation_fail
             self.set_kicks(kicks)
             orb = self.get_orbit()
             dorb = orb - goal_orbit
@@ -133,13 +137,9 @@ class OrbitCorr:
             diff_figm = _np.abs(bestfigm - figm)
             if figm < bestfigm:
                 bestfigm = figm
-            if saturation_flag:
-                return OrbitCorr.CORR_STATUS.Convergence_fail
             if diff_figm < self.params.tolerance:
-                break
-        else:
-            return OrbitCorr.CORR_STATUS.Tolerance_fail
-        return OrbitCorr.CORR_STATUS.Sucess
+                return OrbitCorr.CORR_STATUS.Sucess
+        return OrbitCorr.CORR_STATUS.Tolerance_fail
 
     def get_orbit(self):
         """."""
@@ -228,12 +228,18 @@ class OrbitCorr:
 
         min_coef = min(coef_ch, coef_cv, coef_rf)
 
-        dkickch *= min_coef
-        dkickcv *= min_coef
-        dkickrf *= min_coef
+        if self.use_min_coef:
+            dkickch *= min_coef
+            dkickcv *= min_coef
+            dkickrf *= min_coef
+            saturation_flag = min_coef == 0
+        else:
+            dkickch *= coef_ch
+            dkickcv *= coef_cv
+            dkickrf *= coef_rf
+            saturation_flag = False
 
         kicks[:nch] += dkickch
         kicks[nch:nch+ncv] += dkickcv
         kicks[-1] += dkickrf
-        saturation_flag = min_coef == 0
         return kicks, saturation_flag
