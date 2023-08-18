@@ -524,7 +524,8 @@ class GenerateMachines():
 
         orb_temp, kicks_temp, corr_status = self._correct_orbit_once(
                                                                 orb0, mach)
-        while corr_status == 2:
+        cod_peak = _np.max(1e6*(orb_temp-orb0))
+        while corr_status == 2 or cod_peak >= 100:
             self.orbcorr.set_kicks(kicks_before)
             self.orbcorr_params.minsingval += 0.05
             if self.orbcorr_params.minsingval > 1.0:
@@ -537,6 +538,7 @@ class GenerateMachines():
             print('min singval: ', self.orbcorr_params.minsingval)
             orb_temp, kicks_temp, corr_status = self._correct_orbit_once(
                 orb0, mach)
+            cod_peak = _np.max(1e6*(orb_temp-orb0))
 
         self.orbf_, self.kicks_ = orb_temp, kicks_temp
         self.orbcorr_params.minsingval = init_minsingval
