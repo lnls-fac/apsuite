@@ -233,12 +233,11 @@ class OrbitCorr:
             dkickch *= min_coef
             dkickcv *= min_coef
             dkickrf *= min_coef
-            saturation_flag = min_coef == 0
         else:
             dkickch *= coef_ch
             dkickcv *= coef_cv
             dkickrf *= coef_rf
-            saturation_flag = False
+        saturation_flag = _np.isclose(min_coef, 0)
 
         kicks[:nch] += dkickch
         kicks[nch:nch+ncv] += dkickcv
