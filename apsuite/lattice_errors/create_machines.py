@@ -525,7 +525,7 @@ class GenerateMachines():
         while corr_status == 2 or cod_peak >= 100:
             self.orbcorr.set_kicks(kicks_before)
             self.orbcorr_params.minsingval += 0.05
-            if init_minsingval > 0.6:
+            if init_minsingval > 0.5:
                 print('Correcting optics...')
                 res = self._correct_optics(mach)
                 res = True if res == 1 else False
@@ -533,7 +533,7 @@ class GenerateMachines():
                 print()
                 init_minsingval = self.original_minsingval
                 self.orbcorr_params.minsingval = init_minsingval
-            if self.orbcorr_params.minsingval > 0.7:
+            if self.orbcorr_params.minsingval > 0.75:
                 self.orbcorr_params.minsingval = init_minsingval
                 return False
             print('Minimum singular value: {:.2f}'.format(
@@ -801,7 +801,6 @@ class GenerateMachines():
             init_minsingval = self.original_minsingval
             while corr_sucess is not True:
                 print('Initial singular value: {:.2f}'.format(init_minsingval))
-                original_kicks = self.orbcorr.get_kicks()
                 for step in range(nr_steps):
                     print('Step ', step+1)
 
@@ -852,7 +851,6 @@ class GenerateMachines():
                     self.models[mach].radiation_on = 0
                     self.models[mach].vchamber_on = False
                     self.orbcorr.respm.model = self.models[mach]
-                    self.orbcorr.set_kicks(original_kicks)
                     _pyaccel.lattice.set_attribute(
                             self.models[mach], 'SL', index, zeros)
                     init_minsingval += 0.05

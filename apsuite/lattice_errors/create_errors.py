@@ -691,4 +691,4 @@ class GenerateErrors():
             self.fam_errors_dict[fam_name] = err_types
         if save_errors:
             self._save_error_file()
-        return self.fam_errors_dict
+        return
