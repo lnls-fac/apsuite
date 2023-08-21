@@ -204,20 +204,39 @@ def select_idx(list_, param1, param2):
     
     return n_arr
 
-def f_function_arg_mod(kappa, kappam, b1_, b2_):
-    tau = (_np.tan(kappa)**2)[:, None]
-    taum = (_np.tan(kappam)**2)
-    beta = _beam_rigidity(energy=3)[2]
-    ratio = tau/taum/(1+tau)
-    arg = (2*tau+1)**2 * (ratio - 1)/tau
-    arg += tau - _np.sqrt(tau*taum*(1+tau))
-    arg -= (2+1/(2*tau))*_np.log(ratio)
-    arg *= _np.sqrt(1+tau)
-#     arg *= beta* _np.cos(kappa)[:, None]**2
-    arg *= 1/(2*_np.sqrt(tau)) * 1/(1+tau)
-    arg *= 2* beta* _np.sqrt(tau)
+def f_function_arg_mod(kappa, kappam, b1_, b2_, norm):
 
-    bessel = _np.exp(-(b1_-b2_)*tau)*_special.i0e(b2_*tau)
+    if norm:
+        tau = (_np.tan(kappa)**2)[:, None]
+        taum = (_np.tan(kappam)**2)
+        beta = _beam_rigidity(energy=3)[2]
+        ratio = tau/taum/(1+tau)
+        arg = (2*tau+1)**2 * (ratio - 1)/tau
+        arg += tau - _np.sqrt(tau*taum*(1+tau))
+        arg -= (2+1/(2*tau))*_np.log(ratio)
+        arg *= _np.sqrt(1+tau)
+    #     arg *= beta* _np.cos(kappa)[:, None]**2
+        arg *= 1/(2*_np.sqrt(tau)) * 1/(1+tau)
+        arg *= 2* beta* _np.sqrt(tau)
+
+        bessel = _np.exp(-(b1_-b2_)*tau)*_special.i0e(b2_*tau)
+
+    else:
+        tau = (_np.tan(kappa)**2)[:, None]
+        taum = (_np.tan(kappam)**2)
+        beta = _beam_rigidity(energy=3)[2]
+        ratio = tau/taum/(1+tau)
+        arg = (2*tau+1)**2 * (ratio - 1)/tau
+        arg += tau - _np.sqrt(tau*taum*(1+tau))
+        arg -= (2+1/(2*tau))*_np.log(ratio)
+        arg *= _np.sqrt(1+tau)
+    #     arg *= beta* _np.cos(kappa)[:, None]**2
+        arg *= 1/(2*_np.sqrt(tau)) * 1/(1+tau)
+        arg *= 2* beta* _np.sqrt(tau)
+        arg *= 2*_np.sqrt(_np.pi*(b1_**2-b2_**2))*taum
+
+        bessel = _np.exp(-(b1_-b2_)*tau)*_special.i0e(b2_*tau)
+        
     return arg * bessel
 
 def f_integral_simps_l_mod(taum, b1_, b2_):
@@ -286,8 +305,8 @@ def get_dis(lsps, _npt, accep, norm):
             kappan = _np.linspace(kappam_n0, _np.pi/2, _npt)
             deltan = 1/beta * _np.tan(kappan)
 
-            y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx])
-            y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx])
+            y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx], norm=norm)
+            y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm)
             y_p = y_p.squeeze()
             y_n = y_n.squeeze()
 
@@ -311,8 +330,8 @@ def get_dis(lsps, _npt, accep, norm):
             kappan = _np.linspace(kappam_n0, _np.pi/2, _npt)
             deltan = 1/beta * _np.tan(kappan)
 
-            y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx])
-            y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx])
+            y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx], norm=norm)
+            y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm)
             y_p = y_p.squeeze()
             y_n = y_n.squeeze()
             
