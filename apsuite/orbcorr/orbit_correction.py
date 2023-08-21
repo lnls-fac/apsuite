@@ -220,6 +220,7 @@ class OrbitCorr:
         que = _np.max(que, axis=0)
         coef_cv = min(_np.min(que), 1.0)
 
+        coef_rf = 1.0
         if self.params.enblrf and dkickrf != 0:
             que = [(-par.maxkickrf - kickrf) / dkickrf, ]
             que.append((par.maxkickrf - kickrf) / dkickrf)
