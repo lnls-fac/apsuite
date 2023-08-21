@@ -515,6 +515,7 @@ class GenerateErrors():
         self._famdata = None
         self._error_configs = []
         self._cutoff = 1
+        self.fam_errors_dict = dict()
 
     @property
     def nr_mach(self):
@@ -653,39 +654,31 @@ class GenerateErrors():
                     saved. Defaults to False.
 
         Returns:
-            dictionary: dictionary with all errors
+            dict: dictionary with all errors.
+
         """
-        fam_errors_dict = dict()
-        for config in self.error_configs:
-            for fam_name in config.fam_names:
-                idcs = _np.array(self.famdata[fam_name]['index'],
-                                 dtype="object")
-                error_type_dict = dict()
-                for error_type, sigma in config.sigmas_dict.items():
-                    if error_type == 'multipoles':
-                        error = dict()
-                        multipole_dict_n = dict()
-                        multipole_dict_s = dict()
-                        for order, mp_value in sigma['normal'].items():
-                            error_ = self._generate_normal_dist(
-                                        sigma=mp_value, dim=(self.nr_mach,
-                                                             len(idcs)))
-                            multipole_dict_n[order] = error_
-                        for order, mp_value in sigma['skew'].items():
-                            error_ = self._generate_normal_dist(
-                                        sigma=mp_value, dim=(self.nr_mach,
-                                                             len(idcs)))
-                            multipole_dict_s[order] = error_
-                        error['normal'] = multipole_dict_n
-                        error['skew'] = multipole_dict_s
-                        error['r0'] = sigma['r0']
-                    else:
-                        error = self._generate_normal_dist(
-                            sigma=sigma, dim=(self.nr_mach, len(idcs)))
-                    error_type_dict[error_type] = error
-                error_type_dict['index'] = idcs
-                fam_errors_dict[fam_name] = error_type_dict
-        self.fam_errors_dict = fam_errors_dict
+        confs = [(c, f) for c in self.error_configs for f in c.fam_names]
+        for config, fam_name in confs:
+            idcs = _np.array(
+                self.famdata[fam_name]['index'], dtype="object")
+            err_types = {'index': idcs}
+            for e_type, sigma in config.sigmas_dict.items():
+                if e_type != 'multipoles':
+                    err_types[e_type] = self._generate_normal_dist(
+                        sigma=sigma, dim=(self.nr_mach, len(idcs)))
+                    continue
+                mpole_dict_n = dict()
+                mpole_dict_s = dict()
+                for order, mp_value in sigma['normal'].items():
+                    mpole_dict_n[order] = self._generate_normal_dist(
+                        sigma=mp_value, dim=(self.nr_mach, len(idcs)))
+                for order, mp_value in sigma['skew'].items():
+                    mpole_dict_s[order] = self._generate_normal_dist(
+                        sigma=mp_value, dim=(self.nr_mach, len(idcs)))
+                err_types[e_type] = {
+                    'normal': mpole_dict_n, 'skew': mpole_dict_s,
+                    'r0': sigma['r0']}
+            self.fam_errors_dict[fam_name] = err_types
         if save_errors:
             self._save_error_file()
-        return fam_errors_dict
+        return self.fam_errors_dict
