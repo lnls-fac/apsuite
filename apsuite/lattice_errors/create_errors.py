@@ -178,6 +178,7 @@ class MultipolesErrors(ConfigErrors):
 
         Returns:
             float: [%]
+
         """
         return self._sigma_excit
 
@@ -187,16 +188,17 @@ class MultipolesErrors(ConfigErrors):
 
         Args:
             value (float): Must be in [%]
+
         """
         self._sigma_excit = value * self._percent
 
     @property
     def r0(self):
-        """ Transverse horizontal position where
-            the multipoles are normalized.
+        """Transverse horizontal position where the multipoles are normalized.
 
         Returns:
             float: [meter]
+
         """
         return self._r0
 
@@ -212,11 +214,11 @@ class MultipolesErrors(ConfigErrors):
 
     @property
     def normal_multipoles_order(self):
-        """List with multipoles order in which the error are going to be
-             applied.
+        """List of multipoles order for the application of the errors.
 
         Returns:
             list of integers: no unit
+
         """
         return self._normal_multipoles_order
 
@@ -226,11 +228,11 @@ class MultipolesErrors(ConfigErrors):
 
     @property
     def skew_multipoles_order(self):
-        """List with multipoles order in which the error are going to be
-             applied.
+        """List of multipoles order for the application of the errors.
 
         Returns:
             list of integers: no unit
+
         """
         return self._skew_multipoles_order
 
@@ -257,6 +259,7 @@ class MultipolesErrors(ConfigErrors):
 
         Returns:
             list of floats: no unit
+
         """
         return self._sigma_multipoles_s
 
@@ -272,6 +275,7 @@ class MultipolesErrors(ConfigErrors):
         Returns:
             dictionary: example: multipoles_dict['normal][3] will return the
                 std of the normalized normal sextupolar error.
+
         """
         return self._multipoles_dict
 
@@ -358,8 +362,11 @@ class QuadsErrors(MultipolesErrors):
 
     def _set_default_quad_config(self):
         """Create a default configuration for quadrupole errors."""
-        self.fam_names = ['QFA', 'QDA', 'Q1', 'Q2', 'Q3', 'Q4', 'QDB1',
-                          'QFB',  'QDB2', 'QDP1', 'QFP', 'QDP2']
+        self.fam_names = [
+            'Q1', 'Q2', 'Q3', 'Q4',
+            'QFA', 'QDA',
+            'QFB', 'QDB1', 'QDB2',
+            'QFP', 'QDP1', 'QDP2']
         self.sigma_x = 40  # [um]
         self.sigma_y = 40  # [um]
         self.sigma_roll = 0.30  # [mrad]
@@ -427,10 +434,10 @@ class SextsErrors(MultipolesErrors):
 
     def _set_default_sext_config(self):
         """Create a default configuration for sextupole errors."""
-        self.fam_names = ['SFA0', 'SDA0', 'SDA1', 'SFA1', 'SDA2', 'SDA3',
-                          'SFA2', 'SFB2', 'SDB3', 'SDB2', 'SFB1', 'SDB1',
-                          'SDB0', 'SFB0', 'SFP2', 'SDP3', 'SDP2', 'SFP1',
-                          'SDP1', 'SDP0', 'SFP0']
+        self.fam_names = [
+            'SFA0', 'SDA0', 'SFA1', 'SDA1', 'SFA2', 'SDA2', 'SDA3',
+            'SFB0', 'SDB0', 'SFB1', 'SDB1', 'SFB2', 'SDB2', 'SDB3',
+            'SDP0', 'SFP0', 'SFP1', 'SDP1', 'SFP2', 'SDP2', 'SDP3']
         self.sigma_x = 40  # [um]
         self.sigma_y = 40  # [um]
         self.sigma_roll = 0.17  # [mrad]
@@ -507,6 +514,7 @@ class BPMErrors(ConfigErrors):
 
 
 class GenerateErrors():
+    """Class to generate errors."""
 
     def __init__(self):
         """Class attributes."""
@@ -588,6 +596,7 @@ class GenerateErrors():
         self._error_configs = value
 
     def reset_seed(self):
+        """Reset random state to seed value."""
         _np.random.seed(seed=self._seed)
 
     def generate_new_seed(self):
@@ -609,10 +618,11 @@ class GenerateErrors():
         """Load the dicionary error file.
 
         Args:
-            filename (string): Filename
+            filename (str): Filename
 
         Returns:
-            dictionary: dictionary with all errors
+            dict: dictionary with all errors
+
         """
         fam_errors_dict = load_pickle(filename)
         fams = list(fam_errors_dict.keys())
