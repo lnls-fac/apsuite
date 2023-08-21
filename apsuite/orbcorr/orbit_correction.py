@@ -102,7 +102,8 @@ class OrbitCorr:
         else:
             return ismat
 
-    def correct_orbit(self, jacobian_matrix=None, goal_orbit=None):
+    def correct_orbit(self, jacobian_matrix=None, goal_orbit=None,
+                      update_jac=False):
         """Orbit correction.
 
         Calculates the pseudo-inverse of orbit correction matrix via SVD
@@ -139,6 +140,9 @@ class OrbitCorr:
                 bestfigm = figm
             if diff_figm < self.params.tolerance:
                 return OrbitCorr.CORR_STATUS.Sucess
+            if update_jac:
+                jmat = self.get_jacobian_matrix()
+                ismat = self.get_inverse_matrix(jmat)
         return OrbitCorr.CORR_STATUS.Tolerance_fail
 
     def get_orbit(self):
