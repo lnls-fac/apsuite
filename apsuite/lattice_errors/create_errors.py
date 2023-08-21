@@ -619,29 +619,30 @@ class GenerateErrors():
         self.nr_mach = int(nr_mach)
         return fam_errors_dict
 
-    def _generate_normal_dist(self, sigma, dim, mean=0):
-        """_summary_
+    def _generate_normal_dist(self, sigma, dim, mean=0.0):
+        """Generate errors following a truncated normal distribution.
 
         Args:
             sigma (float): standart deviation of the errors.
-            dim (int): dimension of the error distribution, usually with
-                    will  be a tuple in which the first element is the number
-                    of machines and the second is the number of elements where
-                    the error will be applied.
-            mean (int, optional): mean value of the errors. Defaults to 0.
+            dim (tuple, list): Tuple with the sizes of each dimension of the
+                error distribution. Usually with will  be a tuple in which the
+                first element is the number of machines and the second is the
+                number of elements where the errors will be applied.
+            mean (float, optional): mean value of the errors. Defaults to 0.0.
 
         Returns:
-            numpy array: array with error distribution - same dimension as dim.
+            numpy.ndarray : array with error distribution with the dimension
+                defined by dim.
+
         """
-        dist = _np.random.normal(loc=mean, scale=sigma, size=dim)
-        while _np.any(_np.abs(dist) > self.cutoff*sigma):
-            idx = _np.argwhere(_np.abs(dist) > self.cutoff*sigma)
-            for i in idx:
-                mach = i[0]
-                element = i[1]
-                dist[mach][element] = _np.random.normal(
-                    loc=mean, scale=sigma, size=1)
-        return dist
+        idx = _np.arange(_np.prod(dim))
+        dist = _np.zeros(idx.size, dtype=float)
+        while idx.size:
+            dist[idx] = _np.random.randn(idx.size)
+            idx = (_np.abs(dist) > self.cutoff).nonzero()[0]
+        dist *= sigma
+        dist += mean
+        return dist.reshape(*dim)
 
     def generate_errors(self, save_errors=False):
         """Generate a dictionary with all errors separated by machine and
