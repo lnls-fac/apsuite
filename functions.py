@@ -206,38 +206,29 @@ def select_idx(list_, param1, param2):
 
 def f_function_arg_mod(kappa, kappam, b1_, b2_, norm):
 
-    if norm:
-        tau = (_np.tan(kappa)**2)[:, None]
-        taum = (_np.tan(kappam)**2)
-        beta = _beam_rigidity(energy=3)[2]
-        ratio = tau/taum/(1+tau)
-        arg = (2*tau+1)**2 * (ratio - 1)/tau
-        arg += tau - _np.sqrt(tau*taum*(1+tau))
-        arg -= (2+1/(2*tau))*_np.log(ratio)
-        arg *= _np.sqrt(1+tau)
-    #     arg *= beta* _np.cos(kappa)[:, None]**2
-        arg *= 1/(2*_np.sqrt(tau)) * 1/(1+tau)
-        arg *= 2* beta* _np.sqrt(tau)
+    tau = (_np.tan(kappa)**2)[:, None]
+    taum = (_np.tan(kappam)**2)
+    beta = _beam_rigidity(energy=3)[2]
+    ratio = tau/taum/(1+tau)
+    arg = (2*tau+1)**2 * (ratio - 1)/tau
+    arg += tau - _np.sqrt(tau*taum*(1+tau))
+    arg -= (2+1/(2*tau))*_np.log(ratio)
+    arg *= _np.sqrt(1+tau)
+#     arg *= beta* _np.cos(kappa)[:, None]**2
+    arg *= 1/(2*_np.sqrt(tau)) * 1/(1+tau)
+    arg *= 2* beta* _np.sqrt(tau)
 
-        bessel = _np.exp(-(b1_-b2_)*tau)*_special.i0e(b2_*tau)
+    bessel = _np.exp(-(b1_-b2_)*tau)*_special.i0e(b2_*tau)
+
+    if norm:
+        pass
 
     else:
-        tau = (_np.tan(kappa)**2)[:, None]
-        taum = (_np.tan(kappam)**2)
-        beta = _beam_rigidity(energy=3)[2]
-        ratio = tau/taum/(1+tau)
-        arg = (2*tau+1)**2 * (ratio - 1)/tau
-        arg += tau - _np.sqrt(tau*taum*(1+tau))
-        arg -= (2+1/(2*tau))*_np.log(ratio)
-        arg *= _np.sqrt(1+tau)
-    #     arg *= beta* _np.cos(kappa)[:, None]**2
-        arg *= 1/(2*_np.sqrt(tau)) * 1/(1+tau)
-        arg *= 2* beta* _np.sqrt(tau)
         arg *= 2*_np.sqrt(_np.pi*(b1_**2-b2_**2))*taum
-
         bessel = _np.exp(-(b1_-b2_)*tau)*_special.i0e(b2_*tau)
-        
+
     return arg * bessel
+        
 
 def f_integral_simps_l_mod(taum, b1_, b2_):
     kappam = _np.arctan(_np.sqrt(taum))
@@ -258,39 +249,33 @@ def f_integral_simps_l_mod(taum, b1_, b2_):
     f_int *= 2*_np.sqrt(_np.pi*(b1_**2-b2_**2))*taum
     return f_int
 
-def get_dis(lsps, _npt, accep, norm):
-    model = _pymodels.si.create_accelerator()
-    model = _pymodels.si.fitted_models.vertical_dispersion_and_coupling(model)
-    
-    spos = _pyaccel.lattice.find_spos(model, indices='closed')
+def norm_d(acc, lsps, _npt, accep, norm=True):
+
+    spos = _pyaccel.lattice.find_spos(acc, indices='closed')
     _npoints = int((spos[-1]-spos[0])/0.1)
     scalc= _np.linspace(spos[0],spos[-1], _npoints)
-    
-    daccp = _np.interp(scalc, spos, accep[1])
-    daccn = _np.interp(scalc, spos, accep[0])
-
     beta = _beam_rigidity(energy=3)[2]
-    taum_p = (beta*daccp)**2
-    taum_n = (beta*daccn)**2
 
-    kappam_p = _np.arctan(_np.sqrt(taum_p))
-    kappam_n = _np.arctan(_np.sqrt(taum_n))
+    # daccp = _np.interp(scalc, spos, accep[1])
+    # daccn = _np.interp(scalc, spos, accep[0])
+    # taum_p = (beta*daccp)**2
+    # taum_n = (beta*daccn)**2
+    # kappam_p = _np.arctan(_np.sqrt(taum_p))
+    # kappam_n = _np.arctan(_np.sqrt(taum_n))
     
-    ltime = _pyaccel.lifetime.Lifetime(model)
+    ltime = _pyaccel.lifetime.Lifetime(acc)
     b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
 
     calc_dp, calc_dn = [], []
     deltasp, deltasn = [], []
     indices, indices_model= [], []
 
-    for indx, s in enumerate(lsps):
+    for _, s in enumerate(lsps):
         
-        dif = _np.abs(scalc - s)
-        idx = _np.argmin(dif)
+        idx = _np.argmin(_np.abs(scalc - s))
         indices.append(idx)
-        
-        dif1 = _np.abs(spos - s)
-        idx_model = _np.argmin(dif1)
+        idx_model = _np.argmin(_np.abs(spos - s))
+        indices_model.append(idx_model)
 
 #         kappam_p0 = kappam_p[idx]
 #         kappam_n0 = kappam_n[idx]
@@ -298,49 +283,26 @@ def get_dis(lsps, _npt, accep, norm):
         kappam_p0 = 0.00001 # teste sugerido pelo ximenes
         kappam_n0 = 0.00001
 
-        
-        if norm:
-            kappap = _np.linspace(kappam_p0, _np.pi/2, _npt)
-            deltap = 1/beta * _np.tan(kappap)
-            kappan = _np.linspace(kappam_n0, _np.pi/2, _npt)
-            deltan = 1/beta * _np.tan(kappan)
+        kappap = _np.linspace(kappam_p0, _np.pi/2, _npt)
+        deltap = 1/beta * _np.tan(kappap)
+        kappan = _np.linspace(kappam_n0, _np.pi/2, _npt)
+        deltan = 1/beta * _np.tan(kappan)
 
-            y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx], norm=norm)
-            y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm)
-            y_p = y_p.squeeze()
-            y_n = y_n.squeeze()
+        y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
+        y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
 
-            norm_facp = _scyint.trapz(y_p, deltap)
-            norm_facn = _scyint.trapz(y_n, deltan)
+        norm_facp = _scyint.trapz(y_p, deltap)
+        norm_facn = _scyint.trapz(y_n, deltan)
 
-    #         Normalizing the probability density function
+#         Normalizing to obtain the probability density function
 
-            y_p /= (norm_facp)
-            y_n /= (norm_facn)
+        y_p /= (norm_facp)
+        y_n /= (norm_facn)
 
-            calc_dp.append(y_p)
-            calc_dn.append(y_n)
-            deltasp.append(deltap)
-            deltasn.append(deltan)
-            indices_model.append(idx_model)
-        
-        else:
-            kappap = _np.linspace(kappam_p0, _np.pi/2, _npt)
-            deltap = 1/beta * _np.tan(kappap)
-            kappan = _np.linspace(kappam_n0, _np.pi/2, _npt)
-            deltan = 1/beta * _np.tan(kappan)
-
-            y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx], norm=norm)
-            y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm)
-            y_p = y_p.squeeze()
-            y_n = y_n.squeeze()
-            
-            calc_dp.append(y_p)
-            calc_dn.append(y_n)
-            deltasp.append(deltap)
-            deltasn.append(deltan)
-            indices_model.append(idx_model)
-            
+        calc_dp.append(y_p)
+        calc_dn.append(y_n)
+        deltasp.append(deltap)
+        deltasn.append(deltan)
         
     calc_dp = _np.array(calc_dp)
     calc_dn = _np.array(calc_dn)
@@ -348,7 +310,6 @@ def get_dis(lsps, _npt, accep, norm):
     deltasn = _np.array(deltasn)
     indices = _np.array(indices)
     indices_model = _np.array(indices_model)
-
 
     return calc_dp, calc_dn, deltasp, deltasn, indices, indices_model
 
