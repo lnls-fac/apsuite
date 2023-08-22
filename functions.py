@@ -313,6 +313,64 @@ def norm_d(acc, lsps, _npt, accep, norm=True):
 
     return calc_dp, calc_dn, deltasp, deltasn, indices, indices_model
 
+def n_norm_d(acc, lsps, _npt, accep, norm=False):
+
+    spos = _pyaccel.lattice.find_spos(acc, indices='closed')
+    _npoints = int((spos[-1]-spos[0])/0.1)
+    scalc= _np.linspace(spos[0],spos[-1], _npoints)
+    beta = _beam_rigidity(energy=3)[2]
+
+    daccp = _np.interp(scalc, spos, accep[1])
+    daccn = _np.interp(scalc, spos, accep[0])
+    taum_p = (beta*daccp)**2
+    taum_n = (beta*daccn)**2
+    kappam_p = _np.arctan(_np.sqrt(taum_p))
+    kappam_n = _np.arctan(_np.sqrt(taum_n))
+    
+    ltime = _pyaccel.lifetime.Lifetime(acc)
+    b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
+
+    calc_dp, calc_dn = [], []
+    deltasp, deltasn = [], []
+    indices, indices_model= [], []
+
+    for _, s in enumerate(lsps):
+        
+        idx = _np.argmin(_np.abs(scalc - s))
+        indices.append(idx)
+        idx_model = _np.argmin(_np.abs(spos - s))
+        indices_model.append(idx_model)
+
+        kappam_p0 = kappam_p[idx]
+        kappam_n0 = kappam_n[idx]
+        
+        kappam_p0x = 0.00001 # teste sugerido pelo ximenes
+        kappam_n0x = 0.00001
+
+        kappap = _np.linspace(kappam_p0x, _np.pi/2, _npt)
+        deltap = 1/beta * _np.tan(kappap)
+        kappan = _np.linspace(kappam_n0x, _np.pi/2, _npt)
+        deltan = 1/beta * _np.tan(kappan)
+
+        y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0x,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
+        y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0x,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
+
+        calc_dp.append(y_p)
+        calc_dn.append(y_n)
+        deltasp.append(deltap)
+        deltasn.append(deltan)
+
+        if s == lsps[-1]:
+
+            calc_dp = _np.array(calc_dp)
+            calc_dn = _np.array(calc_dn)
+            deltasp = _np.array(deltasp)
+            deltasn = _np.array(deltasn)
+            indices = _np.array(indices)
+            indices_model = _np.array(indices_model)
+
+    return calc_dp, calc_dn, deltasp, deltasn, indices, indices_model
+
 
 def plot_hdis(acc, l_index, deltp, f_densp, deltn, f_densn, hp, hn):
     
