@@ -355,7 +355,7 @@ def n_norm_d(acc, lsps, _npt, getsacp, norm=False):
     deltasp = _np.array(deltasp, dtype=object)
     deltasn = _np.array(deltasn, dtype=object)
 
-    return calc_dp, calc_dn, deltasp, deltasn, indices
+    return calc_dp, calc_dn, deltasp, deltasn
 
 
 def plot_hdis(acc, l_index, deltp, f_densp, deltn, f_densn, hp, hn):
