@@ -354,7 +354,6 @@ def n_norm_d(acc, lsps, _npt, getsacp, norm=False):
     calc_dn = _np.array(calc_dn, dtype=object)
     deltasp = _np.array(deltasp, dtype=object)
     deltasn = _np.array(deltasn, dtype=object)
-    indices = _np.array(indices, dtype=object)
 
     return calc_dp, calc_dn, deltasp, deltasn, indices
 
