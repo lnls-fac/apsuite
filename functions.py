@@ -328,7 +328,6 @@ def n_norm_d(acc, lsps, _npt, getsacp, norm=False):
     for _, s in enumerate(lsps):
         
         idx = _np.argmin(_np.abs(scalc - s))
-        indices.append(idx)
 
         kappam_p0 = kappam_p[idx]
         kappam_n0 = kappam_n[idx]
