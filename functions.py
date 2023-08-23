@@ -309,7 +309,7 @@ def get_scaccep(acc, accep):
 
     return scalc, daccpp, daccpn
     
-def n_norm_d(acc, lsps, _npt, accep, getsacp, norm=False):
+def n_norm_d(acc, lsps, _npt, getsacp, norm=False):
 
     scalc, daccpp, daccpn = getsacp
     beta = _beam_rigidity(energy=3)[2]
