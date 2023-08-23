@@ -5,6 +5,7 @@ import numpy as _np
 import scipy.integrate as _scyint
 import scipy.special as _special
 from mathphys.beam_optics import beam_rigidity as _beam_rigidity
+from mathphys.functions import save_pickle, load_pickle
 
 
 def calc_amp(acc,energy_offsets, hmax, hmin):
@@ -298,17 +299,23 @@ def norm_d(acc, lsps, scalc,_npt, norm=True):
 
     return calc_dp, calc_dn, deltasp, deltasn, indices, indices_model
 
-def n_norm_d(acc, lsps, _npt, accep, norm=False):
-
+def get_scaccep(acc, accep):
     spos = _pyaccel.lattice.find_spos(acc, indices='closed')
-    _npoints = int((spos[-1]-spos[0])/0.1)
-    scalc= _np.linspace(spos[0],spos[-1], _npoints)
+
+    npt = int((spos[-1]-spos[0])/0.1)
+    scalc = _np.linspace(spos[0],spos[-1], npt)
+    daccpp = _np.interp(scalc, spos, accep[1])
+    daccpn = _np.interp(scalc, spos, accep[0])
+
+    return scalc, daccpp, daccpn
+    
+def n_norm_d(acc, lsps, _npt, accep, getsacp, norm=False):
+
+    scalc, daccpp, daccpn = getsacp
     beta = _beam_rigidity(energy=3)[2]
 
-    daccp = _np.interp(scalc, spos, accep[1])
-    daccn = _np.interp(scalc, spos, accep[0])
-    taum_p = (beta*daccp)**2
-    taum_n = (beta*daccn)**2
+    taum_p = (beta*daccpp)**2
+    taum_n = (beta*daccpn)**2
     kappam_p = _np.arctan(_np.sqrt(taum_p))
     kappam_n = _np.arctan(_np.sqrt(taum_n))
     
