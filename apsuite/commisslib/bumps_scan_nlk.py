@@ -16,24 +16,29 @@ class BumpNLKParams(_ParamsBaseClass):
     def __init__(self):
         """."""
         _ParamsBaseClass().__init__()
-        self.posx_min = 0  # [um]
-        self.posx_max = 0  # [um]
-        self.nr_stepsx = 1
-        self.posy_min = 0  # [um]
-        self.posy_max = 0  # [um]
-        self.nr_stepsy = 1
-        self.acq_nrsamples_pre = 0
-        self.acq_nrsamples_post = 100
-        self.buffer_sloworb = 50
-        self.buffer_multiturn = 1
-        self.wait_meas = 7  # [s]
+        self.posx_min = -700  # [um]
+        self.posx_max = 300  # [um]
+        self.nr_stepsx = 11
+        self.posy_min = -400  # [um]
+        self.posy_max = 200  # [um]
+        self.nr_stepsy = 7
+        self.acq_nrsamples_pre = 50
+        self.acq_nrsamples_post = 450
+        self.buffer_sloworb = 20
+        self.buffer_multiturn = 20
+        self.wait_meas = 2  # [s]
         self.orbcorr_nr_iters = 5
-        self.orbcorr_residue = 10  # [um]
+        self.orbcorr_residue = 5  # [um]
+        enbl_bump = _np.ones(160, dtype=int)
+        enbl_bump[1:7] = 0
+        enbl_bump[-7:-1] = 0
+        self.orbcorr_bpm_enbl = enbl_bump
 
     def __str__(self):
         """."""
         dtmp = '{0:20s} = {1:9d}\n'.format
         ftmp = '{0:20s} = {1:9.4f}  {2:s}\n'.format
+        stmp = '{0:20s} = {1:9s}  {2:s}\n'.format
         stg = ftmp('posx_min', self.posx_min, '[um]')
         stg += ftmp('posx_max', self.posx_max, '[um]')
         stg += dtmp('nr_stepsx', self.nr_stepsx)
@@ -47,6 +52,7 @@ class BumpNLKParams(_ParamsBaseClass):
         stg += ftmp('wait_meas', self.wait_meas, '[s]')
         stg += dtmp('orbcorr_nr_iters', self.orbcorr_nr_iters)
         stg += ftmp('orbcorr_residue', self.orbcorr_residue, '[um]')
+        stg += stmp('orbcorr_bpm_enbl', '\n'+str(self.orbcorr_bpm_enbl), '')
         return stg
 
 
@@ -85,7 +91,9 @@ class BumpNLK(_BaseClass):
         sofb.trigsamplepost = self.params.acq_nrsamples_post
         sofb.cmd_change_opmode_to_multiturn()
         sofb.cmd_reset()
-        sofb.wait_buffer()
+        # NOTE: the factor of 8 is because the current version of SOFB is too
+        # slow to update multi-turn orbits.
+        sofb.wait_buffer(timeout=sofb.nr_points*0.5*8)
 
     def config_sofb_sloworb(self):
         """."""
@@ -93,7 +101,9 @@ class BumpNLK(_BaseClass):
         sofb.nr_points = self.params.buffer_sloworb
         sofb.cmd_change_opmode_to_sloworb()
         sofb.cmd_reset()
-        sofb.wait_buffer()
+        # NOTE: the factor of 8 is because the current version of SOFB is too
+        # slow to update multi-turn orbits.
+        sofb.wait_buffer(timeout=sofb.nr_points*0.5*8)
 
     def get_measurement_data(self):
         """."""
@@ -119,18 +129,29 @@ class BumpNLK(_BaseClass):
         return data
 
     def implement_bump(
-            self, refx0=None, refy0=None, agx=0, agy=0, psx=0, psy=0):
+            self, refx0=None, refy0=None, agx=0, agy=0, psx=0, psy=0,
+            sec=None):
         """."""
         sofb = self.devices['sofb']
         refx0 = refx0 or self.reforbx
         refy0 = refy0 or self.reforby
-        nr_iters = self.params.orbcorr_nr_iter
+        nr_iters = self.params.orbcorr_nr_iters
         residue = self.params.orbcorr_residue
+        sec = sec if sec is None else BumpNLK.DEFAULT_SS
+
         nrefx, nrefy = sofb.si_calculate_bumps(
-                refx0, refy0, BumpNLK.DEFAULT_SS,
-                agx=agx, agy=agy, psx=psx, psy=psy)
-        sofb.refx, sofb.refy = nrefx, nrefy
+            refx0, refy0, sec, agx=agx, agy=agy, psx=psx, psy=psy)
+
+        sofb.refx = nrefx
+        sofb.refy = nrefy
+        enblx0 = sofb.bpmxenbl
+        enbly0 = sofb.bpmyenbl
+        sofb.bpmxenbl = self.params.orbcorr_bpm_enbl
+        sofb.bpmyenbl = self.params.orbcorr_bpm_enbl
+        _time.sleep(0.5)  # NOTE: For some reason We have to wait here.
         sofb.correct_orbit_manually(nr_iters=nr_iters, residue=residue)
+        sofb.bpmxenbl = enblx0
+        sofb.bpmyenbl = enbly0
 
     def update_reforb(self):
         """."""
@@ -146,6 +167,9 @@ class BumpNLK(_BaseClass):
         return posx_span, posy_span
 
     def _do_measure(self):
+        print(
+            'NOTE:\n' +
+            'Remember to turn off the septa and their orbit feedforward.\n')
         prms = self.params
         posx_span, posy_span = self.calc_bump_span()
 
@@ -178,7 +202,11 @@ class BumpNLK(_BaseClass):
         # return to initial reference orbit
         self.config_sofb_sloworb()
         print('Returning to ref_orb...')
-        self.implement_bump(psx=0, psy=0)
+        self.devices['sofb'].refx = self.reforbx
+        self.devices['sofb'].refy = self.reforby
+        self.devices['sofb'].correct_orbit_manually(
+            nr_iters=self.params.orbcorr_nr_iters,
+            residue=self.params.orbcorr_residue)
         print('Finished!')
 
     def process_data(self):
@@ -235,7 +263,7 @@ class BumpNLK(_BaseClass):
         cbar = fig.colorbar(pcm, ax=ax1)
         cbar.set_label(plane + ' BbB Mag')
         ax1.set_title('')
-        _mplt.tight_layout(True)
+        fig.tight_layout()
         return fig, ax1
 
     def plot_tbt_traj(self, plane='HV', shading='auto', cmap='jet'):
@@ -262,7 +290,7 @@ class BumpNLK(_BaseClass):
         cbar = fig.colorbar(pcm, ax=ax1)
         cbar.set_label(plane + r'. TbT std distortion [$\mu$m]')
         ax1.set_title('')
-        _mplt.tight_layout(True)
+        fig.tight_layout()
         return fig, ax1
 
     @staticmethod
