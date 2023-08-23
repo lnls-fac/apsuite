@@ -309,7 +309,7 @@ def get_scaccep(acc, accep):
 
     return scalc, daccpp, daccpn
     
-def n_norm_d(acc, lsps, _npt, getsacp, norm=False):
+def n_norm_d(acc, lsps, _npt, getsacp, cutoff, norm=False):
 
     scalc, daccpp, daccpn = getsacp
     beta = _beam_rigidity(energy=3)[2]
@@ -332,8 +332,8 @@ def n_norm_d(acc, lsps, _npt, getsacp, norm=False):
         kappam_p0 = kappam_p[idx]
         kappam_n0 = kappam_n[idx]
         
-        kappam_p0x = 0.00001 # teste sugerido pelo ximenes
-        kappam_n0x = 0.00001
+        kappam_p0x = cutoff # teste sugerido pelo Ximenes
+        kappam_n0x = cutoff
 
         kappap = _np.linspace(kappam_p0x, _np.pi/2, _npt)
         deltap = 1/beta * _np.tan(kappap)
