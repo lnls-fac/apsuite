@@ -262,7 +262,7 @@ class GenerateMachines:
             Boolean: If true optics will be corrected.
 
         """
-        return self.params.do_opt_corr
+        return self.params.do_optics_corr
 
     @property
     def do_bba(self):
@@ -284,7 +284,6 @@ class GenerateMachines:
 
         """
         return self.params.do_multipoles_corr
-
 
     @property
     def do_coupling_corr(self):
@@ -769,7 +768,7 @@ class GenerateMachines:
                     self.apply_errors(nr_steps, mach)
 
                     # Orbit set by BBA or set to zero
-                    orb0 = _np.zeros(2*len(self.bba_quad_idcs))
+                    orb0 = _np.zeros(2*len(bba_quad_idcs))
                     if self.do_bba:
                         orb0 = self.simulate_bba(
                             bba_quad_idcs, nr_steps, step+1, mach)

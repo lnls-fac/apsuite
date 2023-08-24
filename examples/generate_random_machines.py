@@ -71,7 +71,7 @@ if __name__ == '__main__':
     machineparams.coupcorr_params.weight_dispy = 1e5
 
     # Create GenerateMachines object
-    random_machines = lattice_errors.GenerateMachines()
+    random_machines = lattice_errors.GenerateMachines(machineparams)
 
     # Define number of machines
     random_machines.nr_mach = nr_mach
