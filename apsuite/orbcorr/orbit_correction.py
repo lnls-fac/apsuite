@@ -22,30 +22,37 @@ class CorrParams:
         self.maxdeltakickcv = 300e-6  # rad
         self.maxdeltakickrf = 1000  # Hz
         self.maxnriters = 10
-        self.tolerance = 0.5e-6  # m
+        self.conv_tolerance = 0.5e-6  # m  Define the convergence criteria
+        self.rms_tolerance = 1e-6  # m  Goal rms of the corrected orbit
+        self.CH_corr_gain = 1.0
+        self.CV_corr_gain = 1.0
+        self.use_6d_orb = False
         self.enblrf = True
         self.enbllistbpm = None
         self.enbllistch = None
         self.enbllistcv = None
 
+        self.use_global_coef = False  # If true delta kicks will be rescaled
+        #  by the same value in process kicks.
+
+        self.update_jacobian = False  # If true a new jacobian will be
+        #  calculated in each correction loop.
+
 
 class OrbitCorr:
     """."""
 
-    CORR_STATUS = _get_namedtuple('CorrStatus',
-                                  ['Tolerance_fail',
-                                   'Sucess',
-                                   'Saturation_fail'])
+    CORR_STATUS = _get_namedtuple(
+        'CorrStatus',
+        ['Sucess', 'RmsWarning', 'ConvergenceFail', 'SaturationFail'])
 
-    def __init__(self, model, acc, dim='6d', params=None, corr_system='SOFB',
-                 use_min_coef=False):
+    def __init__(self, model, acc, params=None, corr_system='SOFB'):
         """."""
         self.acc = acc
-        self.dim = dim
-        self.use_min_coef = use_min_coef
         self.params = params or CorrParams()
+        dim = '6d' if self.params.use_6d_orb else '4d'
         self.respm = OrbRespmat(
-            model=model, acc=self.acc, dim=self.dim, corr_system=corr_system)
+            model=model, acc=self.acc, dim=dim, corr_system=corr_system)
         self.respm.model.cavity_on = True
         self.params.enbllistbpm = _np.ones(
             self.respm.bpm_idx.size*2, dtype=bool)
@@ -102,8 +109,7 @@ class OrbitCorr:
         else:
             return ismat
 
-    def correct_orbit(self, jacobian_matrix=None, goal_orbit=None,
-                      update_jac=False, factor=1):
+    def correct_orbit(self, jacobian_matrix=None, goal_orbit=None):
         """Orbit correction.
 
         Calculates the pseudo-inverse of orbit correction matrix via SVD
@@ -123,14 +129,14 @@ class OrbitCorr:
         orb = self.get_orbit()
         dorb = orb - goal_orbit
         bestfigm = OrbitCorr.get_figm(dorb)
-        if bestfigm < self.params.tolerance:
+        if bestfigm < self.params.conv_tolerance:
             return OrbitCorr.CORR_STATUS.Sucess
 
         for _ in range(self.params.maxnriters):
-            dkicks = -factor*_np.dot(ismat, dorb)
+            dkicks = -1*_np.dot(ismat, dorb)
             kicks, saturation_flag = self._process_kicks(dkicks)
             if saturation_flag:
-                return OrbitCorr.CORR_STATUS.Saturation_fail
+                return OrbitCorr.CORR_STATUS.SaturationFail
             self.set_kicks(kicks)
             orb = self.get_orbit()
             dorb = orb - goal_orbit
@@ -138,16 +144,19 @@ class OrbitCorr:
             diff_figm = _np.abs(bestfigm - figm)
             if figm < bestfigm:
                 bestfigm = figm
-            if diff_figm < self.params.tolerance:
-                return OrbitCorr.CORR_STATUS.Sucess
-            if update_jac:
+            if diff_figm < self.params.conv_tolerance:
+                if bestfigm <= self.params.rms_tolerance:
+                    return OrbitCorr.CORR_STATUS.Sucess
+                else:
+                    return OrbitCorr.CORR_STATUS.RmsWarning
+            if self.params.update_jacobian:
                 jmat = self.get_jacobian_matrix()
                 ismat = self.get_inverse_matrix(jmat)
-        return OrbitCorr.CORR_STATUS.Tolerance_fail
+        return OrbitCorr.CORR_STATUS.ToleranceFail
 
     def get_orbit(self):
         """."""
-        if self.dim == '6d':
+        if self.params.use_6d_orb:
             cod = pyaccel.tracking.find_orbit6(
                 self.respm.model, indices='open')
         else:
@@ -217,12 +226,12 @@ class OrbitCorr:
         que = [(-par.maxkickch - kickch) / dkickch, ]
         que.append((par.maxkickch - kickch) / dkickch)
         que = _np.max(que, axis=0)
-        coef_ch = min(_np.min(que), 1.0)
+        coef_ch = min(_np.min(que), self.params.CH_corr_gain)
 
         que = [(-par.maxkickcv - kickcv) / dkickcv, ]
         que.append((par.maxkickcv - kickcv) / dkickcv)
         que = _np.max(que, axis=0)
-        coef_cv = min(_np.min(que), 1.0)
+        coef_cv = min(_np.min(que), self.params.CV_corr_gain)
 
         coef_rf = 1.0
         if self.params.enblrf and dkickrf != 0:
@@ -233,7 +242,7 @@ class OrbitCorr:
 
         min_coef = min(coef_ch, coef_cv, coef_rf)
 
-        if self.use_min_coef:
+        if self.params.use_global_coef:
             dkickch *= min_coef
             dkickcv *= min_coef
             dkickrf *= min_coef
