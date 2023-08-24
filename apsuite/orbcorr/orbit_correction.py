@@ -103,7 +103,7 @@ class OrbitCorr:
             return ismat
 
     def correct_orbit(self, jacobian_matrix=None, goal_orbit=None,
-                      update_jac=False):
+                      update_jac=False, factor=1):
         """Orbit correction.
 
         Calculates the pseudo-inverse of orbit correction matrix via SVD
@@ -127,7 +127,7 @@ class OrbitCorr:
             return OrbitCorr.CORR_STATUS.Sucess
 
         for _ in range(self.params.maxnriters):
-            dkicks = -1*_np.dot(ismat, dorb)
+            dkicks = -factor*_np.dot(ismat, dorb)
             kicks, saturation_flag = self._process_kicks(dkicks)
             if saturation_flag:
                 return OrbitCorr.CORR_STATUS.Saturation_fail
