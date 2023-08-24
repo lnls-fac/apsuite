@@ -14,19 +14,49 @@ from mathphys.functions import save_pickle, load_pickle
 from mathphys import units
 
 
-class GenerateMachines():
-    """Class to generate errors and create random machines with them."""
+class MachinesParams:
+
+    class CoupCorrParams:
+
+        def __init__(self):
+            self.nr_singval = 80
+            self.weight_dispy = 1e5
+            self.tolerance = 1e-8
+
+    class OptCorrParams:
+
+        def __init__(self):
+            self.nr_singval = 150
+            self.tolerance = 1e-6
 
     def __init__(self):
+
+        self.orbcorr_params = CorrParams()  # Orbit corr params
+        self.optcorr_params = self.OptCorrParams()  # Optics corr params
+        self.coupcorr_params = self.CoupCorrParams()  # Coupling corr params
+        self.ramp_with_ids = False
+        self.do_bba = True
+        self.do_singval_ramp = True
+        self.do_multipoles_corr = True
+        self.do_optics_corr = True
+        self.do_coupling_corr = True
+        self.save_jacobians = False
+        self.load_jacobians = True
+
+
+class GenerateMachines:
+    """Class to generate errors and create random machines with them."""
+
+    def __init__(self, params):
         """Class attributes."""
         self._machines_data = None
-        self._ids = None
+        self._nominal_model = None
+        self._famdata = None
         self._nr_mach = 20
         self._seed = 140699
-        self._famdata = None
+        self._ids = None
         self._fam_errors_dict = None
-        self._bba_quad_idcs = None
-        self._nominal_model = None
+        self._orbcorr = None
         self._models = []
         self._functions = {
             'posx': _pyaccel.lattice.add_error_misalignment_x,
@@ -36,13 +66,14 @@ class GenerateMachines():
             'yaw': _pyaccel.lattice.add_error_rotation_yaw,
             'excit': _pyaccel.lattice.add_error_excitation_main,
             'kdip': _pyaccel.lattice.add_error_excitation_kdip}
-        self._orbcorr_params = CorrParams()
-        self._orbcorr = None
+        self.params = params
         self._save_jacobians = False
         self._load_jacobians = True
-        self._do_bba = True
+        self._orbcorr_params = CorrParams()
         self._ramp_with_ids = False
+        self._do_bba = True
         self._do_opt_corr = True
+        self._do_singval_ramp = True
         self._corr_multipoles = True
         self._do_coupling_corr = True
 
@@ -132,20 +163,6 @@ class GenerateMachines():
         self._fam_errors_dict = value
 
     @property
-    def bba_quad_idcs(self):
-        """Quadrupoles indices where the bba will be performed.
-
-        Returns:
-            numpy array: array whose elements are the bba indices.
-
-        """
-        return self._bba_quad_idcs
-
-    @bba_quad_idcs.setter
-    def bba_quad_idcs(self, value):
-        self._bba_quad_idcs = value
-
-    @property
     def models(self):
         """List if lattice models with errors.
 
@@ -183,13 +200,6 @@ class GenerateMachines():
         """
         return self._save_jacobians
 
-    @save_jacobians.setter
-    def save_jacobians(self, value):
-        if type(value) != bool:
-            raise ValueError('Save jacobian must be bool type')
-        else:
-            self._save_jacobians = value
-
     @property
     def load_jacobians(self):
         """Option to load jacobians.
@@ -198,14 +208,7 @@ class GenerateMachines():
             Boolean: If True the jacobians will be loaded.
 
         """
-        return self._load_jacobians
-
-    @load_jacobians.setter
-    def load_jacobians(self, value):
-        if type(value) != bool:
-            raise ValueError('Load jacobian must be bool type')
-        else:
-            self._load_jacobians = value
+        return self.params.load_jacobians
 
     @property
     def orbcorr(self):
@@ -229,11 +232,17 @@ class GenerateMachines():
             CorrParams object: Parameters used in orbit correction.
 
         """
-        return self._orbcorr_params
+        return self.params.orbcorr_params
 
-    @orbcorr_params.setter
-    def orbcorr_params(self, value):
-        self._orbcorr_params = value
+    @property
+    def optcorr_params(self):
+
+        return self.params.optcorr_params
+
+    @property
+    def coupcorr_params(self):
+
+        return self.params.coupcorr_params
 
     @property
     def ramp_with_ids(self):
@@ -243,14 +252,7 @@ class GenerateMachines():
             Boolean: If true all ids will be inseted in the random machines.
 
         """
-        return self._ramp_with_ids
-
-    @ramp_with_ids.setter
-    def ramp_with_ids(self, value):
-        if type(value) != bool:
-            raise ValueError('ramp_with_ids must be bool type')
-        else:
-            self._ramp_with_ids = value
+        return self.params.ramp_with_ids
 
     @property
     def do_opt_corr(self):
@@ -260,14 +262,7 @@ class GenerateMachines():
             Boolean: If true optics will be corrected.
 
         """
-        return self._do_opt_corr
-
-    @do_opt_corr.setter
-    def do_opt_corr(self, value):
-        if type(value) != bool:
-            raise ValueError('do_opt_corr must be bool type')
-        else:
-            self._do_opt_corr = value
+        return self.params.do_opt_corr
 
     @property
     def do_bba(self):
@@ -277,14 +272,7 @@ class GenerateMachines():
             Boolean: If true bba will be executed.
 
         """
-        return self._do_bba
-
-    @do_bba.setter
-    def do_bba(self, value):
-        if type(value) != bool:
-            raise ValueError('do_bba must be bool type')
-        else:
-            self._do_bba = value
+        return self.params.do_bba
 
     @property
     def corr_multipoles(self):
@@ -295,14 +283,8 @@ class GenerateMachines():
                 be done.
 
         """
-        return self._corr_multipoles
+        return self.params.do_multipoles_corr
 
-    @corr_multipoles.setter
-    def corr_multipoles(self, value):
-        if type(value) != bool:
-            raise ValueError('corr_multipoles must be bool type')
-        else:
-            self._corr_multipoles = value
 
     @property
     def do_coupling_corr(self):
@@ -312,30 +294,23 @@ class GenerateMachines():
             bool: If true coupling corrections will be done.
 
         """
-        return self._do_coupling_corr
+        return self.params.do_coupling_corr
 
-    @do_coupling_corr.setter
-    def do_coupling_corr(self, value):
-        if type(value) != bool:
-            raise ValueError('do_coupling_corr must be bool type')
-        else:
-            self._do_coupling_corr = value
-
-    def _create_models(self):
+    def _create_models(self, nr_mach):
         """Create the models in which the errors will be applied."""
         models_ = list()
         ids = None
         if self.ramp_with_ids:
             ids = self.ids
-        for _ in range(self.nr_mach):
+        for _ in range(nr_mach):
             model = _pymodels.si.create_accelerator(ids=ids)
             model.cavity_on = False
             model.radiation_on = 0
             model.vchamber_on = False
             models_.append(model)
-        self.models = models_
+        return models_
 
-    def _get_bba_quad_idcs(self):
+    def get_bba_quad_idcs(self):
         """Get the indices of the quadrupoles where the bba will be done."""
         quaddevnames = list(BBAParams.QUADNAMES)
         quads = [q for q in self.famdata.keys() if q[0] == 'Q' and q[1] != 'N']
@@ -345,9 +320,10 @@ class GenerateMachines():
             for idx, devname in zip(qfam['index'], qfam['devnames']):
                 if devname in quaddevnames:
                     quads_idcs.append(idx)
-        self.bba_quad_idcs = _np.sort(_np.array(quads_idcs).ravel())
+        bba_quad_idcs = _np.sort(_np.array(quads_idcs).ravel())
+        return bba_quad_idcs
 
-    def _apply_errors(self, nr_steps, mach):
+    def apply_errors(self, nr_steps, mach):
         """Apply errors from file to the models (except for multipole errors).
 
         Args:
@@ -368,26 +344,7 @@ class GenerateMachines():
                     self.models[mach], inds, errors[mach]/nr_steps)
         print('Done!')
 
-    def _restore_errors(self, step, nr_steps, mach):
-        """Restore machine.
-
-        Args:
-            mach (int): Index of the machine.
-
-        """
-        print('Restoring machine...', end='')
-        for family in self.fam_errors_dict.values():
-            inds = family['index']
-            error_types = [err for err in family if err != 'index']
-            for error_type in error_types:
-                if error_type == 'multipoles':
-                    continue
-                errors = family[error_type]
-                self._functions[error_type](
-                    self.models[mach], inds, -1*(step+1)*errors[mach]/nr_steps)
-        print('Done!')
-
-    def _apply_multipoles_errors(self, nr_steps, mach):
+    def apply_multipoles_errors(self, nr_steps, mach):
         """Apply multipole errors.
 
         Args:
@@ -441,7 +398,7 @@ class GenerateMachines():
                 gir_erry.append(fam_girs['posy'][mach][i])
         return _np.array(gir_errx + gir_erry).ravel() * (step/nr_steps)
 
-    def _simulate_bba(self, nr_steps, step, mach):
+    def simulate_bba(self, bba_quad_idcs, nr_steps, step, mach):
         """Simulate the bba method.
 
         Args:
@@ -457,11 +414,11 @@ class GenerateMachines():
         orb_len = len(bpms)
         orb0 = _np.zeros(2*orb_len)
         orb0[:orb_len] += _pyaccel.lattice.get_error_misalignment_x(
-                self.models[mach], self.bba_quad_idcs).ravel()
+                self.models[mach], bba_quad_idcs).ravel()
         orb0[:orb_len] += _pyaccel.lattice.get_error_misalignment_x(
                 self.models[mach], bpms).ravel()
         orb0[orb_len:] += _pyaccel.lattice.get_error_misalignment_y(
-                self.models[mach], self.bba_quad_idcs).ravel()
+                self.models[mach], bba_quad_idcs).ravel()
         orb0[orb_len:] += _pyaccel.lattice.get_error_misalignment_y(
                 self.models[mach], bpms).ravel()
 
@@ -482,7 +439,7 @@ class GenerateMachines():
             2D numpy array: Orbit response matrix.
         """
         self.orbcorr = OrbitCorr(
-            self.nominal_model, 'SI', '4d', params=self.orbcorr_params)
+            self.nominal_model, 'SI', params=self.orbcorr_params)
         if jac is None:
             jac = self.orbcorr.get_jacobian_matrix()
         self.orbmat = jac
@@ -596,9 +553,9 @@ class GenerateMachines():
             float: minimum tune separation [no unit]
 
         """
-        ed_tang, *_ = _pyaccel.optics.calc_edwards_teng(self.models[mach])
+        ed_teng, *_ = _pyaccel.optics.calc_edwards_teng(self.models[mach])
         min_tunesep, ratio =\
-            _pyaccel.optics.estimate_coupling_parameters(ed_tang)
+            _pyaccel.optics.estimate_coupling_parameters(ed_teng)
 
         return min_tunesep
 
@@ -622,8 +579,9 @@ class GenerateMachines():
                 idcs.append(idx)
         self.coup_corr = CouplingCorr(self.nominal_model, 'SI', skew_list=idcs)
         if jac is None:
+            weight_dispy = self.coupcorr_params.weight_dispy
             self.coupmat = self.coup_corr.calc_jacobian_matrix(
-                model=self.nominal_model, weight_dispy=1e5)
+                model=self.nominal_model, weight_dispy=weight_dispy)
         self.coupmat = jac
         return jac
 
@@ -635,9 +593,12 @@ class GenerateMachines():
 
         """
         self.coup_corr.model = self.models[mach]
+        weight_dispy = self.coupcorr_params.weight_dispy
+        nsv = self.coupcorr_params.nr_singval
+        tol = self.coupcorr_params.tolerance
         self.coup_corr.coupling_correction(
-            jacobian_matrix=self.coupmat, nr_max=10, nsv=80, tol=1e-8,
-            weight_dispy=1e5)
+            jacobian_matrix=self.coupmat, nsv=nsv, tol=tol,
+            weight_dispy=weight_dispy)
 
     def _config_optics_corr(self, jac=None):
         """Config OpticsCorr object.
@@ -666,9 +627,11 @@ class GenerateMachines():
 
         """
         self.opt_corr.model = self.models[mach]
+        nsv = self.optcorr_params.nr_singval
+        tol = self.optcorr_params.tolerance
         return self.opt_corr.optics_corr_loco(
-            goal_model=self.nominal_model, nr_max=10, nsv=150,
-            jacobian_matrix=self.optmat)
+            goal_model=self.nominal_model, nsv=nsv,
+            jacobian_matrix=self.optmat, tol=tol)
 
     def _do_all_opt_corrections(self, mach):
         """Do all optics corrections - beta, tunes and coupling.
@@ -697,7 +660,6 @@ class GenerateMachines():
         print()
 
         if self.do_coupling_corr:
-            # Correct coupling
             print('Correcting coupling:')
             mintune = self._calc_coupling(mach)
             print(f'Minimum tune separation before corr: {100*mintune:.3f} %')
@@ -706,10 +668,7 @@ class GenerateMachines():
             print(f'Minimum tune separation after corr: {100*mintune:.3f} %')
             print()
 
-        ed_tang, *_ = _pyaccel.optics.calc_edwards_teng(self.models[mach])
-        twiss, *_ = _pyaccel.optics.calc_twiss(self.models[mach])
-        twiss0, *_ = _pyaccel.optics.calc_twiss(self.nominal_model)
-        return twiss, ed_tang, twiss0
+        return
 
     def configure_corrections(self):
         """Configure all corrections - orbit and optics."""
@@ -784,10 +743,10 @@ class GenerateMachines():
 
         """
         # Get quadrupoles near BPMs indices
-        self._get_bba_quad_idcs()
+        bba_quad_idcs = self.get_bba_quad_idcs()
 
         # Create SI models
-        self._create_models()
+        self.models = self._create_models(self.nr_mach)
 
         data = dict()
         self.original_minsingval = _copy.copy(self.orbcorr_params.minsingval)
@@ -807,12 +766,13 @@ class GenerateMachines():
                 print('Initial singular value: {:.2f}'.format(init_minsingval))
                 for step in range(nr_steps):
                     print(f'Errors Ramping Step {step+1:d}/{nr_steps:d}')
-                    self._apply_errors(nr_steps, mach)
+                    self.apply_errors(nr_steps, mach)
 
                     # Orbit set by BBA or set to zero
                     orb0 = _np.zeros(2*len(self.bba_quad_idcs))
                     if self.do_bba:
-                        orb0 = self._simulate_bba(nr_steps, step+1, mach)
+                        orb0 = self.simulate_bba(
+                            bba_quad_idcs, nr_steps, step+1, mach)
 
                     # Correct orbit
                     res = self._correct_orbit_iter(orb0, mach, init_minsingval)
@@ -840,16 +800,8 @@ class GenerateMachines():
                     corr_sucess = True
                     orbf, kicks_, corr_status, init_minsingval = res
                 else:
-                    # self._restore_errors(step, nr_steps, mach)
-                    ids = None
-                    if self.ramp_with_ids:
-                        ids = self.ids
-                    mod = _pymodels.si.create_accelerator(ids=ids)
-                    mod.cavity_on = False
-                    mod.radiation_on = 0
-                    mod.vchamber_on = False
+                    mod = self._create_models(1)[0]
                     self.orbcorr.respm.model = mod
-                    self.orbcorr.set_kicks(original_kicks)
                     _pyaccel.lattice.set_attribute(mod, 'SL', sx_idx, 0.0)
                     self.models[mach] = mod
                     init_minsingval += 0.05
@@ -866,12 +818,21 @@ class GenerateMachines():
             # Do optics corrections:
             step_dict = step_data['step_' + str(step + 2)]
             if self.do_opt_corr:
-                twiss, edtang, twiss0 = self._do_all_opt_corrections(mach)
+                self._do_all_opt_corrections(mach)
 
             # Apply multipoles errors
-            self._apply_multipoles_errors(1, mach)
+            self.apply_multipoles_errors(1, mach)
+
+            # Correct multipoles errors
             if self.corr_multipoles:
-                twiss, edtang, twiss0 = self._do_all_opt_corrections(mach)
+                self._correct_orbit_once(orb0, mach)
+
+                if self.do_opt_corr:
+                    self._do_all_opt_corrections(mach)
+
+            edteng, *_ = _pyaccel.optics.calc_edwards_teng(self.models[mach])
+            twiss, *_ = _pyaccel.optics.calc_twiss(self.models[mach])
+            twiss0, *_ = _pyaccel.optics.calc_twiss(self.nominal_model)
 
             dbetax = (twiss.betax - twiss0.betax)/twiss0.betax
             dbetay = (twiss.betay - twiss0.betay)/twiss0.betay
@@ -880,7 +841,7 @@ class GenerateMachines():
             step_dict['orbit'] = orbf
             step_dict['corr_kicks'] = kicks_
             step_dict['twiss'] = twiss
-            step_dict['edtang'] = edtang
+            step_dict['edteng'] = edteng
             step_dict['betabeatingx'] = dbetax
             step_dict['betabeatingy'] = dbetay
             step_data['step_final'] = step_dict
