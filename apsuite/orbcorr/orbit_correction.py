@@ -22,10 +22,10 @@ class CorrParams:
         self.maxdeltakickcv = 300e-6  # rad
         self.maxdeltakickrf = 1000  # Hz
         self.maxnriters = 10
-        self.conv_tolerance = 0.5e-6  # m  Define the convergence criteria
-        self.rms_tolerance = 1e-6  # m  Goal rms of the corrected orbit
-        self.CH_corr_gain = 1.0
-        self.CV_corr_gain = 1.0
+        self.tolerance = 0.5e-6  # m  Define the convergence criteria
+        self.rms_goal = 1e-6  # m  Goal rms of the corrected orbit
+        self.ch_corr_gain = 1.0
+        self.cv_corr_gain = 1.0
         self.use_6d_orb = False
         self.enblrf = True
         self.enbllistbpm = None
@@ -129,7 +129,7 @@ class OrbitCorr:
         orb = self.get_orbit()
         dorb = orb - goal_orbit
         bestfigm = OrbitCorr.get_figm(dorb)
-        if bestfigm < self.params.conv_tolerance:
+        if bestfigm < self.params.tolerance:
             return OrbitCorr.CORR_STATUS.Sucess
 
         for _ in range(self.params.maxnriters):
@@ -144,8 +144,8 @@ class OrbitCorr:
             diff_figm = _np.abs(bestfigm - figm)
             if figm < bestfigm:
                 bestfigm = figm
-            if diff_figm < self.params.conv_tolerance:
-                if bestfigm <= self.params.rms_tolerance:
+            if diff_figm < self.params.tolerance:
+                if bestfigm <= self.params.rms_goal:
                     return OrbitCorr.CORR_STATUS.Sucess
                 else:
                     return OrbitCorr.CORR_STATUS.RmsWarning
