@@ -226,12 +226,12 @@ class OrbitCorr:
         que = [(-par.maxkickch - kickch) / dkickch, ]
         que.append((par.maxkickch - kickch) / dkickch)
         que = _np.max(que, axis=0)
-        coef_ch = min(_np.min(que), self.params.CH_corr_gain)
+        coef_ch = min(_np.min(que), self.params.ch_corr_gain)
 
         que = [(-par.maxkickcv - kickcv) / dkickcv, ]
         que.append((par.maxkickcv - kickcv) / dkickcv)
         que = _np.max(que, axis=0)
-        coef_cv = min(_np.min(que), self.params.CV_corr_gain)
+        coef_cv = min(_np.min(que), self.params.cv_corr_gain)
 
         coef_rf = 1.0
         if self.params.enblrf and dkickrf != 0:
