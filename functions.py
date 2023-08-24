@@ -76,7 +76,7 @@ def trackm_elec(acc,deltas, n_turn, lspos):
     
     for k, iten in enumerate(lspos):
         
-        el_idx = _np.argmin(_np.abs(spos-iten)) # selecting the index to calculate the lost positions
+        el_idx = _np.argmin(_np.abs(spos-iten)) # selecting the index to shift the tracking simulation
         turnl = track_eletrons(deltas, n_turn, el_idx, acc, pos_x=1e-5, pos_y=3e-6)
         results.append(turnl) # 
         ind.append(el_idx)
@@ -349,6 +349,59 @@ def n_norm_d(acc, lsps, _npt, getsacp, cutoff, norm=False):
         calc_dn.append(y_n[indn:])
         deltasp.append(deltap[indp:])
         deltasn.append(deltan[indn:])
+
+    calc_dp = _np.array(calc_dp, dtype=object)
+    calc_dn = _np.array(calc_dn, dtype=object)
+    deltasp = _np.array(deltasp, dtype=object)
+    deltasn = _np.array(deltasn, dtype=object)
+
+    return calc_dp, calc_dn, deltasp, deltasn
+
+# Como discutido no dia 23.08.2023 a primeira abordagem para a realizaçao da pesagem vai 
+# vai ser feita definindo o corte como sendo a aceitancia de energia, isso foi deinido com base
+# no cálculo já implementados para o tempo de vida touschek que é coerente com o tempo do SIRIUS
+# futuramente isso pode ser alterado e redefinido
+
+def nnorm_cutacp(acc, lsps, _npt, getsacp, norm=False):
+
+    scalc, daccpp, daccpn = getsacp
+    beta = _beam_rigidity(energy=3)[2]
+
+    taum_p = (beta*daccpp)**2
+    taum_n = (beta*daccpn)**2
+    kappam_p = _np.arctan(_np.sqrt(taum_p))
+    kappam_n = _np.arctan(_np.sqrt(taum_n))
+    
+    ltime = _pyaccel.lifetime.Lifetime(acc)
+    b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
+
+    calc_dp, calc_dn = [], []
+    deltasp, deltasn = [], []
+
+    for _, s in enumerate(lsps):
+        
+        idx = _np.argmin(_np.abs(scalc - s))
+        kappam_p0 = kappam_p[idx]
+        kappam_n0 = kappam_n[idx]
+
+        kappap = _np.linspace(kappam_p0, _np.pi/2, _npt)
+        deltap = 1/beta * _np.tan(kappap)
+        kappan = _np.linspace(kappam_n0, _np.pi/2, _npt)
+        deltan = 1/beta * _np.tan(kappan)
+
+        y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
+        y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
+        
+        # eliminating the negative values from array
+        indp = _np.where(y_p<0)
+        indn = _np.where(y_n<0)
+        y_p[indp] == 0
+        y_n[indn] == 0
+        
+        calc_dp.append(y_p)
+        calc_dn.append(y_n)
+        deltasp.append(deltap)
+        deltasn.append(deltan)
 
     calc_dp = _np.array(calc_dp, dtype=object)
     calc_dn = _np.array(calc_dn, dtype=object)
