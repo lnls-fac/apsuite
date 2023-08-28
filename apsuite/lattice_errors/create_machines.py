@@ -37,6 +37,7 @@ class MachinesParams:
         self.coupcorr_params = self.CoupCorrParams()  # Coupling corr params
         self.ramp_with_ids = False
         self.do_bba = True
+        self.sing_val_step = 10
         self.force_orb_correction = True
         self.do_multipoles_corr = True
         self.do_optics_corr = True
@@ -305,7 +306,7 @@ class GenerateMachines:
             if self.params.acc == 'SI':
                 model = accelerators[self.params.acc](ids=ids)
             else:
-                model = accelerators[self.params.acc]
+                model = accelerators[self.params.acc]()
             model.cavity_on = False
             model.radiation_on = 0
             model.vchamber_on = False
@@ -495,7 +496,7 @@ class GenerateMachines:
         i = 1
         while corr_stts == 1 or corr_stts == 3:
             self.orbcorr.set_kicks(kicks_before)
-            self.orbcorr_params.numsingval -= 10
+            self.orbcorr_params.numsingval -= self.params.sing_val_step
             if i > nriter:
                 self.orbcorr_params.numsingval = numsingval
                 return False
@@ -754,8 +755,9 @@ class GenerateMachines:
                 self.apply_errors(nr_steps, mach)
 
                 # Orbit set by BBA or set to zero
-                orb0 = _np.zeros(2*len(bba_quad_idcs))
+                orb0 = _np.zeros(2*len(self.famdata['BPM']['index']))
                 if self.do_bba:
+                    orb0 = _np.zeros(2*len(bba_quad_idcs))
                     orb0 = self.simulate_bba(
                         bba_quad_idcs, nr_steps, step+1, mach)
 
@@ -799,7 +801,7 @@ class GenerateMachines:
                 self.orbcorr.respm.model = mod
                 _pyaccel.lattice.set_attribute(mod, 'SL', sx_idx, 0.0)
                 self.models[mach] = mod
-                init_numsingval -= 10
+                init_numsingval -= self.params.sing_val_step
                 corr_sucess = False
                 j += 1
         return step_data, orbf, orb0, kicks_, corr_status
@@ -819,8 +821,9 @@ class GenerateMachines:
             self.apply_errors(nr_steps, mach)
 
             # Orbit set by BBA or set to zero
-            orb0 = _np.zeros(2*len(bba_quad_idcs))
+            orb0 = _np.zeros(2*len(self.famdata['BPM']['index']))
             if self.do_bba:
+                orb0 = _np.zeros(2*len(bba_quad_idcs))
                 orb0 = self.simulate_bba(
                     bba_quad_idcs, nr_steps, step+1, mach)
 

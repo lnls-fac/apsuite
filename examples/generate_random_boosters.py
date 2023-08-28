@@ -1,6 +1,7 @@
 #!/usr/bin/env python-sirius
 
 import pymodels
+import pyaccel
 from apsuite import lattice_errors
 
 if __name__ == '__main__':
@@ -12,23 +13,29 @@ if __name__ == '__main__':
     sexts_error = lattice_errors.SextsErrors()
     girder_error = lattice_errors.GirderErrors()
     bpms_error = lattice_errors.BPMErrors()
-    error_configs = [dips_error, quads_error, quads_skew_error,
-                     sexts_error, bpms_error, girder_error]
 
-    nr_mach = 20
+    dips_error.fam_names = ['B']
+    quads_skew_error.fam_names = ['QS']
+    quads_error.fam_names = ['QF', 'QD']
+    sexts_error.fam_names = ['SF', 'SD']
+
+    error_configs = [dips_error, quads_error, quads_skew_error,
+                     sexts_error, bpms_error]
+
+    nr_mach = 5
 
     # Create nominal model and get family data
-    model = pymodels.si.create_accelerator()
+    model = pymodels.bo.create_accelerator()
     model.cavity_on = False
     model.radiation_on = 0
     model.vchamber_on = False
-    famdata = pymodels.si.families.get_family_data(model)
+    famdata = pymodels.bo.families.get_family_data(model)
 
     # Create GenerateErrors object
     generate_errors = lattice_errors.GenerateErrors()
     generate_errors.nr_mach = nr_mach
     generate_errors.generate_new_seed()
-    # generate_errors.seed = 204800
+    # generate_errors.seed = 313600
     generate_errors.reset_seed()
     print(generate_errors.seed)
     generate_errors.famdata = famdata
@@ -38,10 +45,13 @@ if __name__ == '__main__':
 
     # Configure parameters:
     machineparams = lattice_errors.MachinesParams()
+    machineparams.acc = 'BO'
 
     # If running for the first time there will be no jacobian to load
-    machineparams.load_jacobians = True
+    machineparams.load_jacobians = False
     machineparams.save_jacobians = False
+
+    machineparams.do_bba = False
 
     # Do corrections after application of multipole errors
     machineparams.do_multipoles_corr = True
@@ -52,29 +62,31 @@ if __name__ == '__main__':
     # Do coupling correction
     machineparams.do_coupling_corr = True
 
-    # Force correction
+    # Do singular value ramp
+    machineparams.sing_val_step = 4
     machineparams.force_orb_correction = False
 
     # Configure parameters for orbit correction
     machineparams.orbcorr_params.minsingval = 0
-    machineparams.orbcorr_params.tikhonovregconst = 1
-    machineparams.orbcorr_params.orbrmswarnthres = 20e-6  # rad
-    machineparams.orbcorr_params.numsingval = 250
+    machineparams.orbcorr_params.tikhonovregconst = 5
+    machineparams.orbcorr_params.orbrmswarnthres = 30e-6  # rad
+    machineparams.orbcorr_params.numsingval = 45
     machineparams.orbcorr_params.maxnriters = 15
     machineparams.orbcorr_params.convergencetol = 1e-9
     machineparams.orbcorr_params.maxdeltakickch = 50e-6
     machineparams.orbcorr_params.maxdeltakickcv = 50e-6
     machineparams.orbcorr_params.maxkickch = 300e-6  # rad
     machineparams.orbcorr_params.maxkickcv = 300e-6  # rad
+    machineparams.orbcorr_params.respmatrflinemult = 1e6
 
     # Configure parameters for optics correction
-    machineparams.optcorr_params.nr_singval = 80
-    machineparams.optcorr_params.tolerance = 1e-8
+    machineparams.optcorr_params.nr_singval = 40
+    machineparams.optcorr_params.tolerance = 1e-7
 
     # Configure parameters for coupling correction
-    machineparams.coupcorr_params.nr_singval = 80
-    machineparams.coupcorr_params.tolerance = 1e-8
-    machineparams.coupcorr_params.weight_dispy = 1e5
+    machineparams.coupcorr_params.nr_singval = 1
+    machineparams.coupcorr_params.tolerance = 1e-7
+    machineparams.coupcorr_params.weight_dispy = 1e2
 
     # Create GenerateMachines object
     random_machines = lattice_errors.GenerateMachines(machineparams)
