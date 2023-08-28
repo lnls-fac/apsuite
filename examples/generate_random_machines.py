@@ -28,7 +28,7 @@ if __name__ == '__main__':
     generate_errors = lattice_errors.GenerateErrors()
     generate_errors.nr_mach = nr_mach
     generate_errors.generate_new_seed()
-    generate_errors.seed = 614080
+    generate_errors.seed = 230272
     generate_errors.reset_seed()
     print(generate_errors.seed)
     generate_errors.famdata = famdata
@@ -59,7 +59,7 @@ if __name__ == '__main__':
     machineparams.orbcorr_params.minsingval = 0
     machineparams.orbcorr_params.tikhonovregconst = 1
     machineparams.orbcorr_params.orbrmswarnthres = 20e-6  # rad
-    machineparams.orbcorr_params.numsingval = 281
+    machineparams.orbcorr_params.numsingval = 250
     machineparams.orbcorr_params.maxnriters = 15
     machineparams.orbcorr_params.convergencetol = 1e-9
     machineparams.orbcorr_params.maxdeltakickch = 50e-6
@@ -97,5 +97,5 @@ if __name__ == '__main__':
     random_machines.configure_corrections()
 
     # Apply errors in all machines
-    nr_steps = 3
+    nr_steps = 5
     data_mach = random_machines.generate_machines(nr_steps=nr_steps)

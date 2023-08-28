@@ -31,6 +31,7 @@ class MachinesParams:
 
     def __init__(self):
 
+        self.acc = 'SI'
         self.orbcorr_params = CorrParams()  # Orbit corr params
         self.optcorr_params = self.OptCorrParams()  # Optics corr params
         self.coupcorr_params = self.CoupCorrParams()  # Coupling corr params
@@ -297,12 +298,23 @@ class GenerateMachines:
 
     def _create_models(self, nr_mach):
         """Create the models in which the errors will be applied."""
+
+        accelerators = {
+            'SI': _pymodels.si.create_accelerator,
+            'BO': _pymodels.bo.create_accelerator,
+            'TS': _pymodels.ts.create_accelerator,
+            'TB': _pymodels.tb.create_accelerator,
+            'LI': _pymodels.li.create_accelerator,
+        }
         models_ = list()
         ids = None
         if self.ramp_with_ids:
             ids = self.ids
         for _ in range(nr_mach):
-            model = _pymodels.si.create_accelerator(ids=ids)
+            if self.params.acc == 'SI':
+                model = accelerators[self.params.acc](ids=ids)
+            else:
+                model = accelerators[self.params.acc]
             model.cavity_on = False
             model.radiation_on = 0
             model.vchamber_on = False
@@ -438,7 +450,7 @@ class GenerateMachines:
             2D numpy array: Orbit response matrix.
         """
         self.orbcorr = OrbitCorr(
-            self.nominal_model, 'SI', params=self.orbcorr_params)
+            self.nominal_model, self.params.acc, params=self.orbcorr_params)
         if jac is None:
             jac = self.orbcorr.get_jacobian_matrix()
         self.orbmat = jac
@@ -519,7 +531,7 @@ class GenerateMachines:
 
         """
         self.tunecorr = TuneCorr(
-            self.nominal_model, 'SI', method='Proportional',
+            self.nominal_model, self.params.acc, method='Proportional',
             grouping='TwoKnobs')
         if jac is None:
             self.tunemat = self.tunecorr.calc_jacobian_matrix()
@@ -573,7 +585,8 @@ class GenerateMachines:
         for idx, sub in zip(qs_fam['index'], qs_fam['subsection']):
             if 'C2' not in sub:
                 idcs.append(idx)
-        self.coup_corr = CouplingCorr(self.nominal_model, 'SI', skew_list=idcs)
+        self.coup_corr = CouplingCorr(self.nominal_model,
+                                      self.params.acc, skew_list=idcs)
         if jac is None:
             weight_dispy = self.coupcorr_params.weight_dispy
             self.coupmat = self.coup_corr.calc_jacobian_matrix(
@@ -609,7 +622,7 @@ class GenerateMachines:
             2D numpy array: Optics response matrix.
 
         """
-        self.opt_corr = OpticsCorr(self.nominal_model, 'SI')
+        self.opt_corr = OpticsCorr(self.nominal_model, self.params.acc)
         if jac is None:
             self.optmat = self.opt_corr.calc_jacobian_matrix()
         self.optmat = jac
@@ -708,7 +721,8 @@ class GenerateMachines:
                 Defaults to None.
 
         """
-        filename = str(self.nr_mach) + '_machines_seed_' + str(self.seed)
+        filename = self.params.acc + '_' + str(self.nr_mach)
+        filename += '_machines_seed_' + str(self.seed)
         if self.ramp_with_ids:
             filename += '_' + self.ids[0].fam_name
         if sufix is not None:
@@ -722,7 +736,8 @@ class GenerateMachines:
             Dictionary: Contains all random machines and its data.
 
         """
-        filename = str(self.nr_mach) + '_machines_seed_' + str(self.seed)
+        filename = self.params.acc + '_' + str(self.nr_mach)
+        filename += '_machines_seed_' + str(self.seed)
         data = load_pickle(filename)
         print('loading ' + filename)
         return data
@@ -849,14 +864,13 @@ class GenerateMachines:
         # Get quadrupoles near BPMs indices
         bba_quad_idcs = self.get_bba_quad_idcs()
 
-        # Create SI models
+        # Create models
         self.models = self._create_models(self.nr_mach)
 
         data = dict()
         self.original_numsingval = _copy.copy(self.orbcorr_params.numsingval)
         for mach in range(self.nr_mach):
             print('Machine ', mach)
-
             step_data = dict()
             if self.params.do_singval_ramp:
                 res = self._corr_machines_ramping_sv(
