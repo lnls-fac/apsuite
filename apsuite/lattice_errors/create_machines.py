@@ -68,15 +68,6 @@ class GenerateMachines:
             'excit': _pyaccel.lattice.add_error_excitation_main,
             'kdip': _pyaccel.lattice.add_error_excitation_kdip}
         self.params = params
-        self._save_jacobians = False
-        self._load_jacobians = True
-        self._orbcorr_params = CorrParams()
-        self._ramp_with_ids = False
-        self._do_bba = True
-        self._do_opt_corr = True
-        self._do_singval_ramp = True
-        self._corr_multipoles = True
-        self._do_coupling_corr = True
 
     @property
     def machines_data(self):
@@ -872,7 +863,7 @@ class GenerateMachines:
         for mach in range(self.nr_mach):
             print('Machine ', mach)
             step_data = dict()
-            if self.params.do_singval_ramp:
+            if self.params.force_orb_correction:
                 res = self._corr_machines_ramping_sv(
                     mach, nr_steps, bba_quad_idcs, step_data)
             else:
