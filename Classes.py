@@ -1,6 +1,6 @@
 from pyaccel.lifetime import Lifetime
 from pyaccel.lattice import get_attribute
-import functions as tousfunc
+import touschek_pack.functions as tousfunc
 import pymodels
 import pyaccel.optics as py_op
 import numpy as _np
@@ -74,7 +74,7 @@ class Tous_analysis():
         
         self._sc_accps = None # check
         self._accep = None # check        
-        off_array = _np.linspace(0,0.46, 460) 
+        off_array = _np.linspace(0,0.046, 460) 
         self._ener_off = off_array # interval of energy deviation for calculating the amplitudes and idx_limitants from linear model
         self._nturns = None # check
         self._deltas = None  # check 
@@ -174,6 +174,19 @@ class Tous_analysis():
         
         return res, ind
     
+    def get_weighting_tous(self, s_position):
+        
+        lspos = [s_position]
+        getacp = tousfunc.get_scaccep
+
+        get_dis = tousfunc.nnorm_cutacp(self.acc, lspos, 5000, getacp)
+        
+        # this function will return the weighting factors in the scalc position convertion 
+        return get_dis
+
+
+
+
     #this function must pass the s_position for the calculation and the weighting the energy deviations
     # and this function will use the functions that I'm defining in this class to get 
     # the tracked energy deviations already weighted by the touschek scattering piwinski
@@ -182,8 +195,20 @@ class Tous_analysis():
     #for example:
     #    fast_aquisition(s_position, par) will use return_tracked
 
-    def fast_aquisition(self):
-        pass
+    def fast_aquisition(self, s_position, par):
+
+        res, ind = Tous_analysis.return_tracked(s_position, par)
+        turn_lost, element_idx, deltas = res
+
+        fdensp, fdensn, deltp, deltn = Tous_analysis.get_weighting_tous(s_position)
+
+        Ddeltas = _np.diff(self.deltas)
+
+
+
+        return res
+
+
 
 
     
