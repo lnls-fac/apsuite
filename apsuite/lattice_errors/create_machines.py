@@ -190,7 +190,7 @@ class GenerateMachines:
             Boolean: If True the jacobians will be saved.
 
         """
-        return self._save_jacobians
+        return self.params.save_jacobians
 
     @property
     def load_jacobians(self):
