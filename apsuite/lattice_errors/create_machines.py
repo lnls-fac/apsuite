@@ -37,7 +37,7 @@ class MachinesParams:
         self.coupcorr_params = self.CoupCorrParams()  # Coupling corr params
         self.ramp_with_ids = False
         self.do_bba = True
-        self.do_singval_ramp = True
+        self.force_orb_correction = True
         self.do_multipoles_corr = True
         self.do_optics_corr = True
         self.do_coupling_corr = True
