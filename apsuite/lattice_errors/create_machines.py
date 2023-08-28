@@ -460,14 +460,17 @@ class GenerateMachines:
         corr_status = self.orbcorr.correct_orbit(
             jacobian_matrix=self.orbmat, goal_orbit=orb0)
         if corr_status == 0:
-            print('Could not achieve tolerance!\n')
+            print('Done\n')
+        elif corr_status == 1:
+            print('Correction could not achieve RMS tolerance!\n')
         elif corr_status == 2:
             print('Correction could not converge!\n')
         else:
-            print('Done!\n')
+            print('Correctors are saturated!\n')
+
         return self.orbcorr.get_orbit(), self.orbcorr.get_kicks(), corr_status
 
-    def _correct_orbit_iter(self, orb0, mach, init_minsingval):
+    def _correct_orbit_iter(self, orb0, mach, numsingval, nriter=10):
         """Correct orbit iteratively.
 
         Args:
@@ -483,30 +486,24 @@ class GenerateMachines:
         """
         kicks_before = self.orbcorr.get_kicks()
 
-        self.orbcorr_params.minsingval = init_minsingval
+        self.orbcorr_params.numsingval = numsingval
         orb_t, kicks_t, corr_stts = self._correct_orbit_once(orb0, mach)
-        cod_peak = _np.max(1e6*(orb_t-orb0))
-        while corr_stts == 2 or cod_peak >= 100:
+
+        i = 1
+        while corr_stts == 1 or corr_stts == 3:
             self.orbcorr.set_kicks(kicks_before)
-            self.orbcorr_params.minsingval += 0.05
-            if init_minsingval > 0.5:
-                print('Correcting optics...')
-                res = self._correct_optics(mach) == 1
-                print('Optics correction tolerance achieved: ', res)
-                print()
-                init_minsingval = self.original_minsingval
-                self.orbcorr_params.minsingval = init_minsingval
-            if self.orbcorr_params.minsingval > 0.75:
-                self.orbcorr_params.minsingval = init_minsingval
+            self.orbcorr_params.numsingval -= 10
+            if i > nriter:
+                self.orbcorr_params.numsingval = numsingval
                 return False
-            print('Minimum singular value: {:.2f}'.format(
-                    self.orbcorr_params.minsingval))
+            print('Number of singular values: {:.0f}'.format(
+                    self.orbcorr_params.numsingval))
             orb_t, kicks_t, corr_stts = self._correct_orbit_once(orb0, mach)
-            cod_peak = _np.max(1e6*(orb_t-orb0))
+            i += 1
 
         self.orbf_, self.kicks_ = orb_t, kicks_t
-        self.orbcorr_params.minsingval = init_minsingval
-        return self.orbf_, self.kicks_, corr_stts, init_minsingval
+        self.orbcorr_params.numsingval = numsingval
+        return self.orbf_, self.kicks_, corr_stts
 
     def _config_tune_corr(self, jac=None):
         """Configure TuneCorr object.
@@ -730,6 +727,114 @@ class GenerateMachines:
         print('loading ' + filename)
         return data
 
+    def _corr_machines_ramping_sv(
+            self, mach, nr_steps, bba_quad_idcs,
+            step_data):
+
+        mod = self.models[mach]
+        # Save sextupoles values and set then to zero
+        sx_idx = self.famdata['SN']['index']
+        sx_stren = _pyaccel.lattice.get_attribute(mod, 'SL', sx_idx)
+        _pyaccel.lattice.set_attribute(mod, 'SL', sx_idx, 0.0)
+
+        corr_sucess = False
+        init_numsingval = self.original_numsingval
+        j = 1
+        while not corr_sucess:
+            print('Initial nr of singular values: {:.0f}'.format(
+                init_numsingval))
+            for step in range(nr_steps):
+                print(f'Errors Ramping Step {step+1:d}/{nr_steps:d}')
+                self.apply_errors(nr_steps, mach)
+
+                # Orbit set by BBA or set to zero
+                orb0 = _np.zeros(2*len(bba_quad_idcs))
+                if self.do_bba:
+                    orb0 = self.simulate_bba(
+                        bba_quad_idcs, nr_steps, step+1, mach)
+
+                if j > 10:
+                    orb_t, kicks_t, corr_stts = self._correct_orbit_once(
+                        orb0, mach)
+                    print('Correcting optics...')
+                    res = self._correct_optics(mach) == 1
+                    print('Optics correction tolerance achieved: ', res)
+                    print()
+                    numsingval = self.original_numsingval
+                    self.orbcorr_params.numsingval = numsingval
+
+                # Correct orbit
+                res = self._correct_orbit_iter(orb0, mach, init_numsingval)
+                corr_sucess = True
+                if res:
+                    orbf, kicks_, corr_status = res
+                else:
+                    corr_sucess = False
+                    break
+
+                step_dict = dict()
+                step_dict['orbcorr_status'] = corr_status
+                step_dict['ref_orb'] = orb0
+                step_dict['orbit'] = orbf
+                step_dict['corr_kicks'] = kicks_
+                step_data['step_' + str(step + 1)] = step_dict
+
+                _pyaccel.lattice.set_attribute(
+                    mod, 'SL', sx_idx, (step + 1)*sx_stren/nr_steps)
+
+            if corr_sucess:
+                # Perform one orbit correction after turning ON sextupoles
+                res = self._correct_orbit_iter(orb0, mach, init_numsingval)
+            if res:
+                corr_sucess = True
+                orbf, kicks_, corr_status = res
+            else:
+                mod = self._create_models(1)[0]
+                self.orbcorr.respm.model = mod
+                _pyaccel.lattice.set_attribute(mod, 'SL', sx_idx, 0.0)
+                self.models[mach] = mod
+                init_numsingval -= 10
+                corr_sucess = False
+                j += 1
+        return step_data, orbf, orb0, kicks_, corr_status
+
+    def _corr_machines_fix_sv(
+            self, mach, nr_steps, bba_quad_idcs,
+            step_data):
+
+        mod = self.models[mach]
+        # Save sextupoles values and set then to zero
+        sx_idx = self.famdata['SN']['index']
+        sx_stren = _pyaccel.lattice.get_attribute(mod, 'SL', sx_idx)
+        _pyaccel.lattice.set_attribute(mod, 'SL', sx_idx, 0.0)
+
+        for step in range(nr_steps):
+            print(f'Errors Ramping Step {step+1:d}/{nr_steps:d}')
+            self.apply_errors(nr_steps, mach)
+
+            # Orbit set by BBA or set to zero
+            orb0 = _np.zeros(2*len(bba_quad_idcs))
+            if self.do_bba:
+                orb0 = self.simulate_bba(
+                    bba_quad_idcs, nr_steps, step+1, mach)
+
+            orbf, kicks, corr_stts = self._correct_orbit_once(orb0, mach)
+
+            step_dict = dict()
+            step_dict['orbcorr_status'] = corr_stts
+            step_dict['ref_orb'] = orb0
+            step_dict['orbit'] = orbf
+            step_dict['corr_kicks'] = kicks
+            step_data['step_' + str(step + 1)] = step_dict
+
+            _pyaccel.lattice.set_attribute(
+                mod, 'SL', sx_idx, (step + 1)*sx_stren/nr_steps)
+
+        # Perform one orbit correction after turning ON sextupoles
+        orbf, kicks, corr_stts = self._correct_orbit_once(orb0, mach)
+
+        return step_data, orbf, orb0, kicks, corr_stts
+
     def generate_machines(self, nr_steps=5):
         """Generate all random machines.
 
@@ -748,63 +853,18 @@ class GenerateMachines:
         self.models = self._create_models(self.nr_mach)
 
         data = dict()
-        self.original_minsingval = _copy.copy(self.orbcorr_params.minsingval)
+        self.original_numsingval = _copy.copy(self.orbcorr_params.numsingval)
         for mach in range(self.nr_mach):
             print('Machine ', mach)
-            mod = self.models[mach]
-
-            # Save sextupoles values and set then to zero
-            sx_idx = self.famdata['SN']['index']
-            sx_stren = _pyaccel.lattice.get_attribute(mod, 'SL', sx_idx)
-            _pyaccel.lattice.set_attribute(mod, 'SL', sx_idx, 0.0)
 
             step_data = dict()
-            corr_sucess = False
-            init_minsingval = self.original_minsingval
-            while not corr_sucess:
-                print('Initial singular value: {:.2f}'.format(init_minsingval))
-                for step in range(nr_steps):
-                    print(f'Errors Ramping Step {step+1:d}/{nr_steps:d}')
-                    self.apply_errors(nr_steps, mach)
-
-                    # Orbit set by BBA or set to zero
-                    orb0 = _np.zeros(2*len(bba_quad_idcs))
-                    if self.do_bba:
-                        orb0 = self.simulate_bba(
-                            bba_quad_idcs, nr_steps, step+1, mach)
-
-                    # Correct orbit
-                    res = self._correct_orbit_iter(orb0, mach, init_minsingval)
-                    corr_sucess = True
-                    if res:
-                        orbf, kicks_, corr_status, init_minsingval = res
-                    else:
-                        corr_sucess = False
-                        break
-
-                    step_dict = dict()
-                    step_dict['orbcorr_status'] = corr_status
-                    step_dict['ref_orb'] = orb0
-                    step_dict['orbit'] = orbf
-                    step_dict['corr_kicks'] = kicks_
-                    step_data['step_' + str(step + 1)] = step_dict
-
-                    _pyaccel.lattice.set_attribute(
-                        mod, 'SL', sx_idx, (step + 1)*sx_stren/nr_steps)
-
-                if corr_sucess:
-                    # Perform one orbit correction after turning ON sextupoles
-                    res = self._correct_orbit_iter(orb0, mach, init_minsingval)
-                if res:
-                    corr_sucess = True
-                    orbf, kicks_, corr_status, init_minsingval = res
-                else:
-                    mod = self._create_models(1)[0]
-                    self.orbcorr.respm.model = mod
-                    _pyaccel.lattice.set_attribute(mod, 'SL', sx_idx, 0.0)
-                    self.models[mach] = mod
-                    init_minsingval += 0.05
-                    corr_sucess = False
+            if self.params.do_singval_ramp:
+                res = self._corr_machines_ramping_sv(
+                    mach, nr_steps, bba_quad_idcs, step_data)
+            else:
+                res = self._corr_machines_fix_sv(
+                    mach, nr_steps, bba_quad_idcs, step_data)
+            step_data, orbf, orb0, kicks_, corr_status = res
 
             # Save last orbit corr data
             step_dict = dict()
@@ -812,10 +872,10 @@ class GenerateMachines:
             step_dict['ref_orb'] = orb0
             step_dict['orbit'] = orbf
             step_dict['corr_kicks'] = kicks_
-            step_data['step_' + str(step + 2)] = step_dict
+            step_data['step_' + str(nr_steps + 2)] = step_dict
 
             # Do optics corrections:
-            step_dict = step_data['step_' + str(step + 2)]
+            step_dict = step_data['step_' + str(nr_steps + 2)]
             if self.do_opt_corr:
                 self._do_all_opt_corrections(mach)
 

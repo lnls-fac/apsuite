@@ -52,10 +52,16 @@ if __name__ == '__main__':
     # Do coupling correction
     machineparams.do_coupling_corr = True
 
+    # Do singular value ramp
+    machineparams.do_singval_ramp = True
+
     # Configure parameters for orbit correction
-    machineparams.orbcorr_params.minsingval = 0.2
+    machineparams.orbcorr_params.minsingval = 0
+    machineparams.orbcorr_params.tikhonovregconst = 1
+    machineparams.orbcorr_params.orbrmswarnthres = 20e-6  # rad
+    machineparams.orbcorr_params.numsingval = 281
     machineparams.orbcorr_params.maxnriters = 15
-    machineparams.orbcorr_params.tolerance = 1e-9
+    machineparams.orbcorr_params.convergencetol = 1e-9
     machineparams.orbcorr_params.maxdeltakickch = 50e-6
     machineparams.orbcorr_params.maxdeltakickcv = 50e-6
     machineparams.orbcorr_params.maxkickch = 300e-6  # rad
