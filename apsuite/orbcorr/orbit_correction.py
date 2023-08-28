@@ -238,7 +238,7 @@ class OrbitCorr:
             if self.params.updatejacobian:
                 jmat = self.get_jacobian_matrix()
                 ismat = self.get_inverse_matrix(jmat)
-        return OrbitCorr.CORR_STATUS.ToleranceFail
+        return OrbitCorr.CORR_STATUS.ConvergenceFail
 
     def get_orbit(self):
         """."""
