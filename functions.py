@@ -72,7 +72,7 @@ def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
 def trackm_elec(acc,deltas, n_turn, lspos):
     results = []
     ind = []
-    spos = _pyaccel.lattice.find_spos(acc)
+    spos = _pyaccel.lattice.find_spos(acc, indices='closed')
     
     for k, iten in enumerate(lspos):
         

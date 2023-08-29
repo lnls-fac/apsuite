@@ -5,6 +5,7 @@ import pymodels
 import pyaccel.optics as py_op
 import numpy as _np
 import matplotlib.pyplot as _plt
+from mathphys.beam_optics import beam_rigidity
 
 
 class Tous_analysis():
@@ -65,9 +66,10 @@ class Tous_analysis():
 
     def __init__(self,accelerator):
         self._acc = accelerator
+        self._beta = beam_rigidity(energy=3)[2] # defining beta to tranformate the energy deviation
         self.h_pos = get_attribute(self._acc, 'hmax', indices='closed') # getting the vchamber's height
         self.h_neg = get_attribute(self._acc, 'hmin', indices='closed')
-        self.ltime = Lifetime(self._acc)
+        self._ltime = Lifetime(self._acc)
         fam = pymodels.si.get_family_data(self._acc) # Geting the name of the element we desire to study
         self.lname = list(fam.keys()) # geting  
         self.index = tousfunc.el_idx_collector(self._acc, self.lname) # this calculation is relativily fast to execute, 
@@ -77,7 +79,7 @@ class Tous_analysis():
         off_array = _np.linspace(0,0.046, 460) 
         self._ener_off = off_array # interval of energy deviation for calculating the amplitudes and idx_limitants from linear model
         self._nturns = None # check
-        self._deltas = None  # check 
+        self._deltas = None  # check
 
         self._lamppn_idx = None # this parameter defines 4 analysis' elements calculated by the linear model 
 
@@ -167,25 +169,37 @@ class Tous_analysis():
     # 
     
     def return_tracked(self,s_position, par):
+        lspos = _np.array(s_position, dtype=object)
         if 'pos' in par:
-            res, ind = tousfunc.trackm_elec(self._acc,self._deltas,self._nturns,s_position)
+            res, ind = tousfunc.trackm_elec(self._acc,self._deltas,self._nturns,lspos)
         elif 'neg' in par:
-            res, ind = tousfunc.trackm_elec(self._acc,-self._deltas,self._nturns,s_position)
+            res, ind = tousfunc.trackm_elec(self._acc,-self._deltas,self._nturns,lspos)
         
         return res, ind
     
-    def get_weighting_tous(self, s_position):
+    def get_weighting_tous(self, s_position, npt=5000):
         
-        lspos = [s_position]
-        getacp = tousfunc.get_scaccep
+        scalc, daccp, daccn  = tousfunc.get_scaccep(self._acc, self._accep)
+        bf = self._beta
+        ltime = self._ltime
+        b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
+        
+        taup, taun = (bf* daccp)**2, (bf*daccn)**2
+        idx = _np.argmin(_np.abs(scalc-s_position))
+        taup_0, taun_0 = taup[idx], taun[idx]
+        kappap_0 =  _np.arctan(_np.sqrt(taup_0))
+        kappan_0 =  _np.arctan(_np.sqrt(taun_0))
 
-        get_dis = tousfunc.nnorm_cutacp(self.acc, lspos, 5000, getacp)
-        
+        kappa_pos = _np.linspace(kappap_0, _np.pi/2, npt)
+        kappa_neg = _np.linspace(kappan_0, _np.pi/2, npt)
+
+        deltp = _np.tan(kappa_pos)/bf
+        deltn = _np.tan(kappa_neg)/bf
+        getdp = tousfunc.f_function_arg_mod(kappa_pos, kappap_0, b1[idx], b2[idx],norm=False)
+        getdn = tousfunc.f_function_arg_mod(kappa_neg, kappan_0, b1[idx], b2[idx],norm=False)
         # this function will return the weighting factors in the scalc position convertion 
-        return get_dis
-
-
-
+        
+        return getdp, getdn, deltp, deltn
 
     #this function must pass the s_position for the calculation and the weighting the energy deviations
     # and this function will use the functions that I'm defining in this class to get 
