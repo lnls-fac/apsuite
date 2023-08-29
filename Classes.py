@@ -129,21 +129,22 @@ class Tous_analysis():
 
         res, ind = Tous_analysis.return_tracked(s_position, par)
         
-        turn_lost = _np.zeros(len(res))
-        delta = _np.zeros(len(res))
+        turn_lost, elem_lost, delta = _np.zeros(len(res)), _np.zeros(len(res)), _np.zeros(len(res))
         for idx, iten in enumerate(res):
-
             turn_lost[idx] = iten[0]
+            elem_lost[idx] = iten[1]
             delta[idx] = iten[2]
 
-
         fdensp, fdensn, deltp, deltn = Tous_analysis.get_weighting_tous(s_position)
-
         Ddeltas = _np.diff(delta)
-        size = Ddeltas.size
 
-        # for i, iten in enumerate(deltp):
+        for i, iten in enumerate(delta):
+            indp = _np.where(delta[i] < deltp < delta[i+1])
+            fdensp[indp] = fdensp * Ddeltas[i]
+            
 
+            indn = _np.where(delta[i] < deltn < delta[i+1])
+            fdensn[indn] = fdensn * Ddeltas[i]
 
         return res
 
