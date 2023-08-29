@@ -137,16 +137,21 @@ class Tous_analysis():
 
         fdensp, fdensn, deltp, deltn = Tous_analysis.get_weighting_tous(s_position)
         Ddeltas = _np.diff(delta)
-
+        
+        # here the multiplication by the variation of the energy deviation
         for i, iten in enumerate(delta):
+            # this condition is necessary for eliminate boundary errors
+            if i == delta.size:
+                break
+            # this version is an attempt to turn this code completly generic 
+            # and appliable to another codes 
             indp = _np.where(delta[i] < deltp < delta[i+1])
-            fdensp[indp] = fdensp * Ddeltas[i]
-            
+            fdensp[indp] = fdensp[indp] * Ddeltas[i]
 
             indn = _np.where(delta[i] < deltn < delta[i+1])
-            fdensn[indn] = fdensn * Ddeltas[i]
+            fdensn[indn] = fdensn[indn] * Ddeltas[i]
 
-        return res
+        return fdensp, fdensn, deltp, deltn
 
     
     # tudo bem que desenvolver um código que obtenha diversos trackings para todos os pontos do anel é de fato uma coisa legal
