@@ -83,6 +83,24 @@ def trackm_elec(acc,deltas, n_turn, lspos):
         
     return results, ind
 
+# this function will sellect the index by the array containing the names of the elements along the ring that people desire to study
+# please let's try to run away from the repetitive structures that
+
+# certo eu vou ter todos os indices referentes ao elementos que eu preciso e quero analisar, mas qual eu devo escolher,
+# devo tentar selecionar o trecho em que o beta é mínimo para obter 
+
+# sabendo que a função beta é a envoltória do feixe e, portanto, os pontos onde o feixe se encontra em posições de menor beta são as posições onde podem
+# ocorrer com maior probabilidade os espalhamentos touschek, lembrando que a envoltória é quem rege o quanto de espaço estes elétrons possuem para oscilar
+# Dessa forma, menor a envoltória menor também será o espaço que os elétrons podem realizar suas oscilações betatron aumentando a densidade do feixe em regiões 
+# de baixo beta
+
+# so the lname passed to the function must be an array 
+
+def index_getter(acc, par, lname):
+
+    lname
+    
+
 
 # function returns the desired element index of dipoles, quadrupoles, sextupoles and any other 
 # element that is desired, the only thing that is needed is to pass a string 

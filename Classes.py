@@ -165,13 +165,25 @@ class Tous_analysis():
         # (isso é bastante util para analisar o tracking e e verificar os fatores de peso para cada desvio de energia)
 
 
-        # eu estou pensando conforme eu havia proposto, que esta classe também forneça as pesagens para elementos  
+        # eu estou pensando, conforme eu havia proposto, em fazer esta classe também fornecer as pesagens para elementos  
         # específicos do anel, para isso alguma função da classe ou até mesmo a classe poderia receber os nomes dos elementos em 
-        # que se deseja realizar a análise do espalhamento
+        # que se deseja realizar a análise do espalhamento como por exemplo ('BC', 'B1',...) 
         # 
         # mas se a classe receber diretamente o nome do elemento que eu desejo realizar a análise eu preciso me perguntar 
         # se isso pode prejudicar a função que calcula a aquisição rápida das distribuições de espalhamento eu preciso repensar essa abordagem
         # porém se eu definir funções independetes acredito que isso não afetará 
+
+        # para não prejudicar nenhuma funcionalidade da classe o que eu posso fazer é criar uma espécie de verificador onde eu defino um determinado atributo que receba um
+        # numero indeterminado de nomes dos elementos para que a ánálise seja realizada e por meio deste atributo em específico 
+        # vai ter uma função especifica 
+
+        # o problema dessa análise é que a função que eu implementei não é genérica e além disso possuo o problema de essa mesma função não conseguir 
+        # selecionar elementos que estejam em markers de trechos retos ou em trechos de baixo beta
+
+        # Agora eu to pensando aqui comigo que como sempre eu sou inutil mesmo e que ja existe uma função implementada no pyaccel que seleciona os indices
+        # a função find_indices e get_atributte encontram qualquer coisa que vc precisa então tenho pensado que eu raelmente deva 
+        # considerar como irrelevantes as funções que eu mesmo implementei porque estas funções com certeza já estão devidamente otimizadas
+        
 
         # eu também deveria fazer a pesagem também por meio da simulação monte carlo que foi implementada há algum tempo
         # 
