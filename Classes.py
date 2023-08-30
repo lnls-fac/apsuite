@@ -5,14 +5,14 @@ import pymodels
 import pyaccel.optics as py_op
 import numpy as _np
 import matplotlib.pyplot as _plt
-from mathphys.beam_optics import beam_rigidity
+from mathphys.beam_optics import beam_rigidity as _beam_rigidity
 
 
 class Tous_analysis():
 
     def __init__(self,accelerator):
         self._acc = accelerator
-        self._beta = beam_rigidity(energy=3)[2] # defining beta to tranformate the energy deviation
+        self._beta = _beam_rigidity(energy=3)[2] # defining beta to tranformate the energy deviation
         self.h_pos = get_attribute(self._acc, 'hmax', indices='closed') # getting the vchamber's height
         self.h_neg = get_attribute(self._acc, 'hmin', indices='closed')
         self._ltime = Lifetime(self._acc)
@@ -80,19 +80,22 @@ class Tous_analysis():
             model = pymodels.si.create_accelerator()
             model.cavity_on = False
             model.radiation_on = False
-            self.lmd_amp_pos, self.idx_lim_pos = Tous_analysis.calc_amp(model, self.ener_off, self.h_pos, self.h_neg)
-            self.lmd_amp_neg, self.idx_lim_neg = Tous_analysis.calc_amp(model, -self.ener_off, self.h_pos, self.h_neg)
+            self.lmd_amp_pos, self.idx_lim_pos = tousfunc.calc_amp(model, self.ener_off, self.h_pos, self.h_neg)
+            self.lmd_amp_neg, self.idx_lim_neg = tousfunc.calc_amp(model, -self.ener_off, self.h_pos, self.h_neg)
         
         return self.lmd_amp_pos, self.idx_lim_pos, self.lmd_amp_neg, self.idx_lim_neg
     
     def return_tracked(self,s_position, par):
-        lspos = _np.array(s_position, dtype=object)
+        model = pymodels.si.create_accelerator()
+        model.cavity_on = True
+        model.radiation_on = True
+        lspos = [s_position]
         if 'pos' in par:
-            res, ind = tousfunc.trackm_elec(self._acc,self._deltas,self._nturns,lspos)
+            res, ind = tousfunc.trackm_elec(model,self._deltas,self._nturns,lspos)
         elif 'neg' in par:
-            res, ind = tousfunc.trackm_elec(self._acc,-self._deltas,self._nturns,lspos)
+            res, ind = tousfunc.trackm_elec(model,-self._deltas,self._nturns,lspos)
         
-        return res, ind
+        return res[0]
     
     def get_weighting_tous(self, s_position, npt=5000):
         
@@ -112,54 +115,46 @@ class Tous_analysis():
 
         deltp = _np.tan(kappa_pos)/bf
         deltn = _np.tan(kappa_neg)/bf
-        getdp = tousfunc.f_function_arg_mod(kappa_pos, kappap_0, b1[idx], b2[idx],norm=False)
-        getdn = tousfunc.f_function_arg_mod(kappa_neg, kappan_0, b1[idx], b2[idx],norm=False)
+        getdp = tousfunc.f_function_arg_mod(kappa_pos, kappap_0, b1[idx], b2[idx],norm=False).squeeze()
+        getdn = tousfunc.f_function_arg_mod(kappa_neg, kappan_0, b1[idx], b2[idx],norm=False).squeeze()
 
         # eliminating negative values
         indp = _np.where(getdp<0)
         indn = _np.where(getdn<0)
+        indp = indp[0]
+        indn = indn[0]
         getdp[indp] == 0
         getdn[indn] == 0
 
-        # this function will return the weighting factors in the scalc position convertion 
+        # this function will return the weighting factors in the scalc position convertion
         
         return getdp, getdn, deltp, deltn
+    
+    # In general, this function is usefull when we desire to calculate the touschek scattering weighting function for one specific point along the ring
 
     def fast_aquisition(self, s_position, par):
 
-        res, ind = Tous_analysis.return_tracked(s_position, par)
-        
+        res = self.return_tracked(s_position, par)
         turn_lost, elem_lost, delta = _np.zeros(len(res)), _np.zeros(len(res)), _np.zeros(len(res))
-        for idx, iten in enumerate(res):
-            turn_lost[idx] = iten[0]
-            elem_lost[idx] = iten[1]
-            delta[idx] = iten[2]
-
-        fdensp, fdensn, deltp, deltn = Tous_analysis.get_weighting_tous(s_position)
-        Ddeltas = _np.diff(delta)
         
-        # here the multiplication by the variation of the energy deviation
-        for i, iten in enumerate(delta):
-            # this condition is necessary for eliminate boundary errors
-            if i == delta.size:
-                break
-            # this version is an attempt to turn this code completly generic 
-            # and appliable to another codes 
-            indp = _np.where(delta[i] < deltp < delta[i+1])
-            fdensp[indp] = fdensp[indp] * Ddeltas[i]
+        for idx, iten in enumerate(res):
+            tlost, elmnlost, delt = iten
+            turn_lost[idx] = tlost
+            elem_lost[idx] = elmnlost
+            delta[idx] = delt
 
-            indn = _np.where(delta[i] < deltn < delta[i+1])
-            fdensn[indn] = fdensn[indn] * Ddeltas[i]
+        Ddeltas = _np.diff(delta)[0]
+        fdensp, fdensn, deltp, deltn = self.get_weighting_tous(s_position)
+        
+        fp = fdensp.squeeze()
+        fn = fdensn.squeeze()
 
-        return fdensp, fdensn, deltp, deltn
+        fp *= Ddeltas
+        fn *= Ddeltas
+        deltp *= 1e2
+        deltn *= 1e2
+        
+        return fp, fn, deltp, deltn
 
     
-    # tudo bem que desenvolver um código que obtenha diversos trackings para todos os pontos do anel é de fato uma coisa legal
-    # mas para fazer isso é necessário empregar muito tempo de simulação
-    # dessa forma, é possível definir funções que serão implementadas para realizar simulações rápidas 
-    # e é possível definir funções que vão realizar simulações mais demoradas (provavelmente neste caso será realizada uma sondagem ao longo
-    # de todo anel de armazenamento)
-
-    # tenho de pensar em como realizar essas simulações rápidas, uma vez que eu já possuo as funções e como 
-    # e como podemos saber em quais pontos específicos é bom realizar esta análise
 
