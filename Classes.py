@@ -156,5 +156,12 @@ class Tous_analysis():
         
         return fp, fn, deltp, deltn
 
+        # As mensagens deixadas aqui são referentes a modificações que eu preciso realizar nesta classe com novas funcionalidades
+        
+        # Uma nova funcionalidade que eu preciso inserir é o plot dos gráficos referentes ao mapa de onde as particulas se perdem 
+        # para determinados desvios de energia 
+
+        # Eu posso retornar o gráfico para as distribuições de espalhamento touschek sozinhas 
+        # Eu posso também plotar os gráficos juntos 
     
 
