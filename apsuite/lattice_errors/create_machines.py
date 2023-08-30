@@ -227,6 +227,10 @@ class GenerateMachines:
         """
         return self.params.orbcorr_params
 
+    @orbcorr_params.setter
+    def orbcorr_params(self, value):
+        self._orbcorr_params = value
+
     @property
     def optcorr_params(self):
 
@@ -978,22 +982,26 @@ class GenerateMachines:
             # get ref_orb
             ref_orb = data_mach[mach]['data']['step_final']['ref_orb']
             # correct orbit
-            orbf_, kicks_ = self._correct_orbit_once(ref_orb, mach=mach)
+            orbf, kicks, corr_stts = self._correct_orbit_once(
+                                            ref_orb, mach=mach)
             # do all optics corretions
             for i in range(1):
-                twiss, edtang, twiss0 = self._do_all_opt_corrections(
-                    mach)
+                self._do_all_opt_corrections(mach)
+
+            edteng, *_ = _pyaccel.optics.calc_edwards_teng(self.models[mach])
+            twiss, *_ = _pyaccel.optics.calc_twiss(self.models[mach])
+            twiss0, *_ = _pyaccel.optics.calc_twiss(self.nominal_model)
 
             dbetax = (twiss.betax - twiss0.betax)/twiss0.betax
             dbetay = (twiss.betay - twiss0.betay)/twiss0.betay
             step_dict = dict()
             step_dict['twiss'] = twiss
-            step_dict['edtang'] = edtang
+            step_dict['edtang'] = edteng
             step_dict['betabeatingx'] = dbetax
             step_dict['betabeatingy'] = dbetay
             step_dict['ref_orb'] = ref_orb
-            step_dict['orbit'] = orbf_
-            step_dict['corr_kicks'] = kicks_
+            step_dict['orbit'] = orbf
+            step_dict['corr_kicks'] = kicks
             step_data['step_final'] = step_dict
 
             model_dict = dict()

@@ -53,13 +53,13 @@ if __name__ == '__main__':
     machineparams.do_coupling_corr = True
 
     # Force correction
-    machineparams.force_orb_correction = False
+    machineparams.force_orb_correction = True
 
     # Configure parameters for orbit correction
     machineparams.orbcorr_params.minsingval = 0
     machineparams.orbcorr_params.tikhonovregconst = 1
     machineparams.orbcorr_params.orbrmswarnthres = 20e-6  # rad
-    machineparams.orbcorr_params.numsingval = 250
+    machineparams.orbcorr_params.numsingval = 281
     machineparams.orbcorr_params.maxnriters = 15
     machineparams.orbcorr_params.convergencetol = 1e-9
     machineparams.orbcorr_params.maxdeltakickch = 50e-6
