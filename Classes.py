@@ -157,11 +157,29 @@ class Tous_analysis():
         return fp, fn, deltp, deltn
 
         # As mensagens deixadas aqui são referentes a modificações que eu preciso realizar nesta classe com novas funcionalidades
-        
-        # Uma nova funcionalidade que eu preciso inserir é o plot dos gráficos referentes ao mapa de onde as particulas se perdem 
-        # para determinados desvios de energia 
 
-        # Eu posso retornar o gráfico para as distribuições de espalhamento touschek sozinhas 
-        # Eu posso também plotar os gráficos juntos 
+        # Eu posso retornar o gráfico para as distribuições de espalhamento touschek sozinhas (apenas as distribuições de espalhamento touschek)
+        # Eu quero que esta classe também seja capaz de plotar o gráfico de tracking juntamente com 
+        # as voltas em que esses elétrons foram perdidos e juntamente com as distribuições de espalhamento touschek
+
+        # (isso é bastante util para analisar o tracking e e verificar os fatores de peso para cada desvio de energia)
+
+
+        # eu estou pensando conforme eu havia proposto, que esta classe também forneça as pesagens para elementos  
+        # específicos do anel, para isso alguma função da classe ou até mesmo a classe poderia receber os nomes dos elementos em 
+        # que se deseja realizar a análise do espalhamento
+        # 
+        # mas se a classe receber diretamente o nome do elemento que eu desejo realizar a análise eu preciso me perguntar 
+        # se isso pode prejudicar a função que calcula a aquisição rápida das distribuições de espalhamento eu preciso repensar essa abordagem
+        # porém se eu definir funções independetes acredito que isso não afetará 
+
+        # eu também deveria fazer a pesagem também por meio da simulação monte carlo que foi implementada há algum tempo
+        # 
+        # 
+        # 
+        # 
+        # 
+        # 
+        #  
     
 
