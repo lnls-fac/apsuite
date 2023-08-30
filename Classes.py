@@ -183,7 +183,9 @@ class Tous_analysis():
         # Agora eu to pensando aqui comigo que como sempre eu sou inutil mesmo e que ja existe uma função implementada no pyaccel que seleciona os indices
         # a função find_indices e get_atributte encontram qualquer coisa que vc precisa então tenho pensado que eu raelmente deva 
         # considerar como irrelevantes as funções que eu mesmo implementei porque estas funções com certeza já estão devidamente otimizadas
-        
+
+        # tornando as coisas mais claras: a find_indices necessita find_indices(acc, 'fam_name', 'nome_do_elemento')
+        # o segundo elemento passado para a função é literalmente 
 
         # eu também deveria fazer a pesagem também por meio da simulação monte carlo que foi implementada há algum tempo
         # 
