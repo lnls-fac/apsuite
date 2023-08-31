@@ -168,6 +168,8 @@ class Tous_analysis():
         
         return fp, fn, deltp, deltn
     
+    # vale mencionar que a fast aquisition da forma como esta definida já está funcional
+    
     def comp_aq(self, lspos, par):
 
             # remember that ind is the index that represents the initial position where tracking begins
