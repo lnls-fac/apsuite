@@ -398,8 +398,8 @@ def nnorm_cutacp(acc, lsps, _npt, getsacp, norm=False):
         y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
         
         # eliminating the negative values from array
-        indp = _np.where(y_p<0)
-        indn = _np.where(y_n<0)
+        indp = _np.where(y_p<0)[0]
+        indn = _np.where(y_n<0)[0]
         y_p[indp] == 0
         y_n[indn] == 0
         

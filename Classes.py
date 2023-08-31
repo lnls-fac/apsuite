@@ -96,13 +96,15 @@ class Tous_analysis():
         model = pymodels.si.create_accelerator()
         model.cavity_on = True
         model.radiation_on = True
-        lspos = [s_position]
+        model.vchamber = True
+        lspos = list(s_position)
+        
         if 'pos' in par:
             res, ind = tousfunc.trackm_elec(model,self._deltas,self._nturns,lspos)
         elif 'neg' in par:
             res, ind = tousfunc.trackm_elec(model,-self._deltas,self._nturns,lspos)
         
-        return res[0]
+        return res, ind
     
     def get_weighting_tous(self, s_position, npt=5000):
         
@@ -140,10 +142,14 @@ class Tous_analysis():
     # In general, this function is usefull when we desire to calculate the touschek scattering weighting function for one specific point along the ring
 
     def fast_aquisition(self, s_position, par):
+        # this raise blocks to runing the program if the list of s position has more than 1 element
+        if len(list(s_position)) != 1:
+            raise Exception('This function suports only one s position')
 
-        res = self.return_tracked(s_position, par)
+        res, ind = self.return_tracked(s_position, par)
+        res = res[0]
         turn_lost, elem_lost, delta = _np.zeros(len(res)), _np.zeros(len(res)), _np.zeros(len(res))
-        
+
         for idx, iten in enumerate(res):
             tlost, elmnlost, delt = iten
             turn_lost[idx] = tlost
@@ -162,6 +168,14 @@ class Tous_analysis():
         deltn *= 1e2
         
         return fp, fn, deltp, deltn
+    
+    def comp_aq(self, lspos, par):
+
+            # remember that ind is the index that represents the initial position where tracking begins
+        res, ind = self.return_tracked(lspos, par)
+
+
+
     
     # e se eu fizesse a função dessa classe já pensando na possibilidade do calculo ser realizado para apenas um ponto do anel ou para varios ?
     # caso eu seja questionado sobre isso, posso justificar que para apenas um ponto do anel os cálculos são executados mais rapidamente.
