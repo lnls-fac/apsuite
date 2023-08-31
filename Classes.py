@@ -1,5 +1,5 @@
 from pyaccel.lifetime import Lifetime
-from pyaccel.lattice import get_attribute
+from pyaccel.lattice import get_attribute, find_indices
 import touschek_pack.functions as tousfunc
 import pymodels
 import pyaccel.optics as py_op
@@ -16,9 +16,7 @@ class Tous_analysis():
         self.h_pos = get_attribute(self._acc, 'hmax', indices='closed') # getting the vchamber's height
         self.h_neg = get_attribute(self._acc, 'hmin', indices='closed')
         self._ltime = Lifetime(self._acc)
-        fam = pymodels.si.get_family_data(self._acc) # Geting the name of the element we desire to study
-        self.lname = list(fam.keys()) # geting  
-        self.index = tousfunc.el_idx_collector(self._acc, self.lname) # this calculation is relativily fast to execute, 
+        self._lname = ['BC', 'Q1', 'SDA0'] # names defined by default. it can be modified as the users desires
         
         self._sc_accps = None # check
         self._accep = None # check        
@@ -28,6 +26,12 @@ class Tous_analysis():
         self._deltas = None  # check
 
         self._lamppn_idx = None # this parameter defines 4 analysis' elements calculated by the linear model 
+        
+
+        # eu tenho que pensar em como eu vou passar esses indices para realizar as analises
+
+
+        self.index = find_indices(self._acc, 'fam_name', )
 
 
     # Defining the energy acceptance. This method also needs a setter to change the value of the acceptance by a different inserted model
@@ -73,6 +77,15 @@ class Tous_analysis():
     def deltas(self, new_deltas):
         self._deltas = new_deltas
         return self._deltas
+    
+    @property
+    def lname(self):
+        return self._lname
+    
+    @lname.setter
+    def lname(self, call_lname):
+        self._lname = call_lname
+        return self._lname
 
     @property
     def lamppn_idx(self):
@@ -184,8 +197,8 @@ class Tous_analysis():
         # a função find_indices e get_atributte encontram qualquer coisa que vc precisa então tenho pensado que eu raelmente deva 
         # considerar como irrelevantes as funções que eu mesmo implementei porque estas funções com certeza já estão devidamente otimizadas
 
-        # tornando as coisas mais claras: a find_indices necessita find_indices(acc, 'fam_name', 'nome_do_elemento')
-        # o segundo elemento passado para a função é literalmente 
+        # Tornando as coisas mais claras: a find_indices necessita find_indices(acc, 'fam_name', 'nome_do_elemento')
+        # O segundo elemento passado para a função é literalmente 
 
         # eu também deveria fazer a pesagem também por meio da simulação monte carlo que foi implementada há algum tempo
         # 

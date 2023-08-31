@@ -96,20 +96,29 @@ def trackm_elec(acc,deltas, n_turn, lspos):
 
 # so the lname passed to the function must be an array 
 
-def index_getter(acc, par, lname):
-
-    lname
+# lname deve ser a lista de elementos que será passada para a função ['BC','B1','B2'] por exemplo
     
-
 
 # function returns the desired element index of dipoles, quadrupoles, sextupoles and any other 
 # element that is desired, the only thing that is needed is to pass a string 
 
+# eu preciso pensar se vale a pena colocar todos os indices que eu estou pensando em colocar ou se o pymodels da conta do recado
+# eu tenho que me perguntar se é interessante obter os indices de elementos como lkkp por exemplo
+
 def el_idx_collector(acc, lname):
+
     all_index = []
+
+    if 'mia' in lname:
+        all_index.append(_pyaccel.optics.find_indices(acc, 'fam_name', 'mia'))
+    elif'mib' in lname:
+        all_index.append(_pyaccel.optics.find_indices(acc, 'fam_name', 'mib'))
+    elif 'mip' in lname:
+        all_index.append(_pyaccel.optics.find_indices(acc, 'fam_name', 'mip'))
+
     fam_data = _pymodels.si.get_family_data(acc)
 
-    for string in lname:
+    for string in list(lname):
         element_index = []
         array_idx = _np.array(fam_data[string]['index'], dtype=object)
 
