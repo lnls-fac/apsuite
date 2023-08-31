@@ -106,7 +106,6 @@ def trackm_elec(acc,deltas, n_turn, lspos):
 # eu tenho que me perguntar se é interessante obter os indices de elementos como lkkp por exemplo
 
 def el_idx_collector(acc, lname):
-
     all_index = []
 
     if 'mia' in lname:
@@ -143,13 +142,9 @@ def el_idx_collector(acc, lname):
     return all_index
 
 
-def plot_track(lista_resul, lista_idx, lista_off, param, element_idx, accep):
+def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep):
     # ----------------
     
-    acc= _pymodels.si.create_accelerator()
-    acc.cavity_on = False
-    acc.radiation_on= False
-    acc.vchamber_on = False
     twi0,*_ = _pyaccel.optics.calc_twiss(acc,indices='open')
     betax = twi0.betax
     betax = betax*(1/5)
@@ -181,12 +176,7 @@ def plot_track(lista_resul, lista_idx, lista_off, param, element_idx, accep):
 
     a2.set_title(r'tracking ', fontsize=16)
 
-    # Tracking graphics
-    # ----------------
-    
-#     defining the acceptance given a point s of the ring
-
-    acp_s = accep[element_idx]
+    acp_s = accep[element_idx] #     defining the acceptance given the begining tracking point
     ind = _np.argmin(_np.abs(lista_off-acp_s))
     a2.plot(spos[lista_idx][:ind], lista_off[:ind]*1e2,'b.', label=r'accep. limit', alpha=0.25)
     
@@ -199,27 +189,15 @@ def plot_track(lista_resul, lista_idx, lista_off, param, element_idx, accep):
         a2.plot(spos[int(lista_resul[1][-1])], -lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
         for item in lista_resul:
             a2.plot(spos[int(item[1])], -item[2]*1e2, 'r.')
-            
-#     plotting acceptances with _plt.hlines
     
-    _plt.hlines(1e2*acp_s, spos[0], spos[-1], color='black', linestyles='dashed', alpha=0.5)
-    
-    # linear model graphic
-    # ----------------     
-    
-    # plotting beta function 
-    a2.plot(spos, _np.sqrt(betax),color='orange', label=r'$ \sqrt{\beta_x}  $')
-        
-    # plotting magnetic lattice
-    _pyaccel.graphics.draw_lattice(acc, offset=-0.5, height=0.5, gca=True)
-
-    # initial position that tracking begins
+    _plt.hlines(1e2*acp_s, spos[0], spos[-1], color='black', linestyles='dashed', alpha=0.5) # acceptance cutoff
+    a2.plot(spos, _np.sqrt(betax),color='orange', label=r'$ \sqrt{\beta_x}  $') # beta function
+    _pyaccel.graphics.draw_lattice(acc, offset=-0.5, height=0.5, gca=True) #magnetic lattice
     
     a2.plot(spos[element_idx], 0, 'ko', label='{}, ({} m)'.format(
-        acc[element_idx].fam_name, "%.2f" % spos[element_idx]))
+        acc[element_idx].fam_name, "%.2f" % spos[element_idx])) # initial position that tracking begins
     
-    # setting configurations of the graphic
-    a2.set_xlabel(r'$s$ [m]', fontsize=14)
+    a2.set_xlabel(r'$s$ [m]', fontsize=14) # setting configurations of the graphic
     a2.legend(loc='best', ncol=2)
 
     fig.tight_layout()
