@@ -18,20 +18,14 @@ class Tous_analysis():
         self._ltime = Lifetime(self._acc)
         self._lname = ['BC', 'Q1', 'SDA0'] # names defined by default. it can be modified as the users desires
         
-        self._sc_accps = None # check
-        self._accep = None # check        
+        self._sc_accps = None 
+        self._accep = None         
         off_array = _np.linspace(0,0.046, 460) 
         self._ener_off = off_array # interval of energy deviation for calculating the amplitudes and idx_limitants from linear model
-        self._nturns = None # check
-        self._deltas = None  # check
+        self._nturns = None
+        self._deltas = None
 
-        self._lamppn_idx = None # this parameter defines 4 analysis' elements calculated by the linear model 
-        
-
-        # eu tenho que pensar em como eu vou passar esses indices para realizar as analises
-
-
-        self.index = find_indices(self._acc, 'fam_name', )
+        self._lamppn_idx = None # this parameter defines 4 analysis' elements calculated by the linear model
 
 
     # Defining the energy acceptance. This method also needs a setter to change the value of the acceptance by a different inserted model
@@ -83,7 +77,7 @@ class Tous_analysis():
         return self._lname
     
     @lname.setter
-    def lname(self, call_lname):
+    def lname(self, call_lname): # call_name is the list of element names (passed by the user) that someone desires to know the distribution
         self._lname = call_lname
         return self._lname
 
@@ -168,6 +162,11 @@ class Tous_analysis():
         deltn *= 1e2
         
         return fp, fn, deltp, deltn
+    
+    # e se eu fizesse a função dessa classe já pensando na possibilidade do calculo ser realizado para apenas um ponto do anel ou para varios ?
+    # caso eu seja questionado sobre isso, posso justificar que para apenas um ponto do anel os cálculos são executados mais rapidamente.
+
+        # caso seja necessário pegar algum indice que esteja fora do get_family_data eu preciso usar o find_indices do pyaccel 
 
         # As mensagens deixadas aqui são referentes a modificações que eu preciso realizar nesta classe com novas funcionalidades
 
