@@ -210,6 +210,13 @@ def select_idx(list_, param1, param2):
     
     return n_arr
 
+def t_list(elmnt):
+    if type(elmnt) == float or type(elmnt) ==  int:
+        return [elmnt]
+    else:
+        return list(elmnt)
+        
+
 def f_function_arg_mod(kappa, kappam, b1_, b2_, norm):
 
     tau = (_np.tan(kappa)**2)[:, None]

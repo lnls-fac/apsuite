@@ -96,8 +96,7 @@ class Tous_analysis():
         model = pymodels.si.create_accelerator()
         model.cavity_on = True
         model.radiation_on = True
-        model.vchamber = True
-        lspos = list(s_position)
+        lspos = tousfunc.t_list(s_position)
         
         if 'pos' in par:
             res, ind = tousfunc.trackm_elec(model,self._deltas,self._nturns,lspos)
@@ -143,7 +142,7 @@ class Tous_analysis():
 
     def fast_aquisition(self, s_position, par):
         # this raise blocks to runing the program if the list of s position has more than 1 element
-        if len(list(s_position)) != 1:
+        if len(tousfunc.t_list(s_position)) != 1:
             raise Exception('This function suports only one s position')
 
         res, ind = self.return_tracked(s_position, par)
