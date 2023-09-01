@@ -76,7 +76,7 @@ def trackm_elec(acc,deltas, n_turn, lspos):
     for k, iten in enumerate(lspos):
         
         el_idx = _np.argmin(_np.abs(spos-iten)) # selecting the index to shift the tracking simulation
-        turnl = track_eletrons(deltas, n_turn, el_idx, acc, pos_x=1e-5, pos_y=3e-6)
+        turnl = track_eletrons(deltas, n_turn, el_idx, acc)
         results.append(turnl) # 
         
     return results

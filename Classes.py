@@ -22,7 +22,7 @@ class Tous_analysis():
         self._accep = None         
         off_array = _np.linspace(0,0.046, 460) 
         self._ener_off = off_array # interval of energy deviation for calculating the amplitudes and idx_limitants from linear model
-        self._nturns = None
+        self._nturns = 7 # defined like this by the standard
         self._deltas = None
         self._spos = find_spos(self._acc, indices='open')
 
@@ -53,15 +53,14 @@ class Tous_analysis():
     def ener_off(self, new):
         self._ener_off = new
         return self._ener_off
-    
-    # Defining the number of turns to realize the tracking simulation
+
     @property
     def nturns(self):
         return self._nturns
     
     @nturns.setter
     def nturns(self, new_turns):
-        self._nturns = new_turns
+        self._nturns = new_turns # changes in the nturns to simulate with tracking
         return self._nturns
 
     @property
@@ -70,7 +69,7 @@ class Tous_analysis():
     
     @deltas.setter
     def deltas(self, new_deltas):
-        self._deltas = new_deltas
+        self._deltas = new_deltas # if the user desires to make a change in the quantity of energ. dev.
         return self._deltas
     
     @property
@@ -87,8 +86,9 @@ class Tous_analysis():
         return self._spos
     
     @spos.setter
-    def spos(self, s):
-        return
+    def spos(self, s): # if the user desires to make a change in the indices in the s position array
+        self._spos = s
+        return self._spos
 
     @property
     def lamppn_idx(self):
@@ -100,6 +100,7 @@ class Tous_analysis():
             self.lmd_amp_neg, self.idx_lim_neg = tousfunc.calc_amp(model, -self.ener_off, self.h_pos, self.h_neg)
         
         return self.lmd_amp_pos, self.idx_lim_pos, self.lmd_amp_neg, self.idx_lim_neg
+    
     
     def return_sinpos_track(self,s_position, par):
         model = pymodels.si.create_accelerator()
@@ -119,21 +120,20 @@ class Tous_analysis():
         
         return res
     
+
     def return_compos_track(self, lspos, par):
         model = pymodels.si.create_accelerator()
         model.cavity_on = True
         model.radiation_on = True
 
-
         if 'pos' in par:
-            res = tousfunc.trackm_elec(self._acc, self._deltas,
+            res = tousfunc.trackm_elec(model, self._deltas,
                                             self._nturns, lspos)
         elif 'neg' in par:
-            res = tousfunc.trackm_elec(self._acc, -self._deltas,
+            res = tousfunc.trackm_elec(model, -self._deltas,
                                             self._nturns, lspos)
         return res
         
-
     
     def get_weighting_tous(self, s_position, npt=5000):
         
@@ -211,30 +211,39 @@ class Tous_analysis():
 # eu poderia fazer um função para vincular o nome do elemento as posições s ao longo do anel
 # isso parece ser bem util caso alguem deseje estudar um elemento em um ponto ja especificado
 
-    def comp_aq(self, lname_or_spos, par):
+    def complete_aquisition(self, lname_or_spos, par):
         param = tousfunc.char_check(lname_or_spos)
+        getsacp = tousfunc.get_scaccep(self._acc, self._accep)
+        spos = self._spos
 
-        if param is str:
+        if issubclass(param, str): # if user pass a list of element names
             
-            spos = find_spos(self._acc, indices='open')
             all_indices = tousfunc.el_idx_collector(self._acc, lname_or_spos)
             all_indices = _np.array(all_indices, dtype=object)
-            for idx, indices in enumerate(all_indices):
-                
-                res, ind = self.return_tracked(indices, par)
-                calc_dp, calc_dn, delta_p, delta_n = tousfunc.nnorm_cutacp(self._acc, indices, 
-                                                                        npt=5000, getsacp=getsacp)
+            ress = []
+            scatsdis = []
 
-            # chama a função tousfunc.el_idx_collector para selecionar os indices dos elementos em que se 
-            # deseja realizar as análises 
-            # indices esses que serão os pontos iniciais para a realização do tracking
-        elif param is float:
-            pass
-            # se o usuário desejar obter o estudo ao longo de todo o anel ele simplesmente 
-            # pode colocar como input todas as posições s que vem do modelo nominal
+            for indices in all_indices:
+                
+                res = self.return_compos_track(spos[indices], par)
+                scat_dis = tousfunc.nnorm_cutacp(self._acc, spos[indices],
+                                                 npt=5000, getsacp=getsacp)
+                ress.append(res)
+                scatsdis.append(scat_dis)
+
+        # if user pass a list of positions (it can be all s posistions if the user desires)
+        elif issubclass(param, float):
+            ress = self.return_compos_track(lname_or_spos, par)
+            scat_dis = tousfunc.nnorm_cutacp(self._acc, spos[indices],
+                                             npt=5000, getsacp=getsacp)
+            
+        return ress, scat_dis
+    
+    #if the user desires to know all the scattering events along the ring, 
+    #only its necessary to do is to pass the 
 
     # remember that ind is the index that represents the initial position where tracking begins
-        getsacp = tousfunc.get_scaccep(self._acc, self._accep)
+        
 
         
         
