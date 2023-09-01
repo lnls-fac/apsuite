@@ -141,6 +141,15 @@ def el_idx_collector(acc, lname):
     
     return all_index
 
+# this function recieves a list and search all elements checking if there are strings into the list
+   
+def char_check(elmnt):
+    for char in elmnt:
+        returnval = type(char)
+        if returnval is str:
+            return str
+        elif returnval is float or returnval is int:
+            return float
 
 def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep):
     # ----------------

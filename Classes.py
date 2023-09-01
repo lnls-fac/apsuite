@@ -1,5 +1,5 @@
 from pyaccel.lifetime import Lifetime
-from pyaccel.lattice import get_attribute, find_indices
+from pyaccel.lattice import get_attribute, find_indices, find_spos
 import touschek_pack.functions as tousfunc
 import pymodels
 import pyaccel.optics as py_op
@@ -92,16 +92,17 @@ class Tous_analysis():
         
         return self.lmd_amp_pos, self.idx_lim_pos, self.lmd_amp_neg, self.idx_lim_neg
     
-    def return_tracked(self,s_position, par):
+    def return_single_tracked(self,s_position, par):
         model = pymodels.si.create_accelerator()
         model.cavity_on = True
         model.radiation_on = True
-        lspos = tousfunc.t_list(s_position)
         
+        # alterar depois a função que é utilizada nesta função para realizar o tracking.
+
         if 'pos' in par:
-            res, ind = tousfunc.trackm_elec(model,self._deltas,self._nturns,lspos)
+            res, ind = tousfunc.trackm_elec(model,self._deltas,self._nturns,s_position)
         elif 'neg' in par:
-            res, ind = tousfunc.trackm_elec(model,-self._deltas,self._nturns,lspos)
+            res, ind = tousfunc.trackm_elec(model,-self._deltas,self._nturns,s_position)
         
         return res, ind
     
@@ -123,8 +124,8 @@ class Tous_analysis():
 
         deltp = _np.tan(kappa_pos)/bf
         deltn = _np.tan(kappa_neg)/bf
-        getdp = tousfunc.f_function_arg_mod(kappa_pos, kappap_0, b1[idx], b2[idx],norm=False).squeeze()
-        getdn = tousfunc.f_function_arg_mod(kappa_neg, kappan_0, b1[idx], b2[idx],norm=False).squeeze()
+        getdp = tousfunc.f_function_arg_mod(kappa_pos, kappap_0, b1[idx], b2[idx],norm=False)
+        getdn = tousfunc.f_function_arg_mod(kappa_neg, kappan_0, b1[idx], b2[idx],norm=False)
 
         # eliminating negative values
         indp = _np.where(getdp<0)
@@ -144,8 +145,9 @@ class Tous_analysis():
         # this raise blocks to runing the program if the list of s position has more than 1 element
         if len(tousfunc.t_list(s_position)) != 1:
             raise Exception('This function suports only one s position')
-
-        res, ind = self.return_tracked(s_position, par)
+        
+        lspos = tousfunc.t_list(s_position)
+        res, ind = self.return_tracked(lspos, par)
         res = res[0]
         turn_lost, elem_lost, delta = _np.zeros(len(res)), _np.zeros(len(res)), _np.zeros(len(res))
 
@@ -170,57 +172,64 @@ class Tous_analysis():
     
     # vale mencionar que a fast aquisition da forma como esta definida já está funcional
     
-    def comp_aq(self, lspos, par):
 
-            # remember that ind is the index that represents the initial position where tracking begins
-        res, ind = self.return_tracked(lspos, par)
+#    a função complete aquisition poderia receber uma lista com os nomes dos elementos que se 
+#    deseja estudar, mas poderia também passar uma lista de elementos quaisquer
+#    como fazer para a função calcular uma hora um uma hora outro ?
+
+# uma coisa é certa é melhor definir estas condições antes do programa realizar os calculos
+
+# eu poderia fazer um função para vincular o nome do elemento as posições s ao longo do anel
+# isso parece ser bem util caso alguem deseje estudar um elemento em um ponto ja especificado
+
+    def comp_aq(self, lname_or_spos, par):
+        
+        param = tousfunc.char_check(lname_or_spos)
+
+        if param is str:
+            
+            indices = tousfunc.el_idx_collector(self._acc, lname_or_spos)
+            spos = find_spos(self._acc, indices='closed')
+            res, ind = self.return_tracked(lspos, par)
+
+            calc_dp, calc_dn, delta_p, delta_n = tousfunc.nnorm_cutacp(self._acc, lspos, 
+                                                                    npt=5000, getsacp=getsacp)
+
+            # chama a função tousfunc.el_idx_collector para selecionar os indices dos elementos em que se 
+            # deseja realizar as análises 
+            # indices esses que serão os pontos iniciais para a realização do tracking
+            pass
+        elif param is float:
+            pass
+            # se o usuário desejar obter o estudo ao longo de todo o anel ele simplesmente 
+            # pode colocar como input todas as posições s que vem do modelo nominal
+
+    # remember that ind is the index that represents the initial position where tracking begins
+        getsacp = tousfunc.get_scaccep(self._acc, self._accep)
+
+        
+        
+
+        
 
 
 
+    #o resultado para este res será uma lista com diversas tuplas então agora eu tenho que me perguntar como
+    #eu vou organizar isso 
+    
     
     # e se eu fizesse a função dessa classe já pensando na possibilidade do calculo ser realizado para apenas um ponto do anel ou para varios ?
     # caso eu seja questionado sobre isso, posso justificar que para apenas um ponto do anel os cálculos são executados mais rapidamente.
 
-        # caso seja necessário pegar algum indice que esteja fora do get_family_data eu preciso usar o find_indices do pyaccel 
 
         # As mensagens deixadas aqui são referentes a modificações que eu preciso realizar nesta classe com novas funcionalidades
 
-        # Eu posso retornar o gráfico para as distribuições de espalhamento touschek sozinhas (apenas as distribuições de espalhamento touschek)
-        # Eu quero que esta classe também seja capaz de plotar o gráfico de tracking juntamente com 
-        # as voltas em que esses elétrons foram perdidos e juntamente com as distribuições de espalhamento touschek
-
-        # (isso é bastante util para analisar o tracking e e verificar os fatores de peso para cada desvio de energia)
-
-
-        # eu estou pensando, conforme eu havia proposto, em fazer esta classe também fornecer as pesagens para elementos  
-        # específicos do anel, para isso alguma função da classe ou até mesmo a classe poderia receber os nomes dos elementos em 
-        # que se deseja realizar a análise do espalhamento como por exemplo ('BC', 'B1',...) 
-        # 
-        # mas se a classe receber diretamente o nome do elemento que eu desejo realizar a análise eu preciso me perguntar 
-        # se isso pode prejudicar a função que calcula a aquisição rápida das distribuições de espalhamento eu preciso repensar essa abordagem
-        # porém se eu definir funções independetes acredito que isso não afetará 
-
-        # para não prejudicar nenhuma funcionalidade da classe o que eu posso fazer é criar uma espécie de verificador onde eu defino um determinado atributo que receba um
-        # numero indeterminado de nomes dos elementos para que a ánálise seja realizada e por meio deste atributo em específico 
-        # vai ter uma função especifica 
-
-        # o problema dessa análise é que a função que eu implementei não é genérica e além disso possuo o problema de essa mesma função não conseguir 
-        # selecionar elementos que estejam em markers de trechos retos ou em trechos de baixo beta
-
-        # Agora eu to pensando aqui comigo que como sempre eu sou inutil mesmo e que ja existe uma função implementada no pyaccel que seleciona os indices
-        # a função find_indices e get_atributte encontram qualquer coisa que vc precisa então tenho pensado que eu raelmente deva 
-        # considerar como irrelevantes as funções que eu mesmo implementei porque estas funções com certeza já estão devidamente otimizadas
-
-        # Tornando as coisas mais claras: a find_indices necessita find_indices(acc, 'fam_name', 'nome_do_elemento')
-        # O segundo elemento passado para a função é literalmente 
-
+        # Proximos passos
+        #  preciso implementar o gráfico da distribuição junto com o gráfico do tracking
+        # esses gráficos podem ser mostrados juntamente com o tracking o separados  
+        #  preciso implementar o complete aquisition
+        #  e ainda preciso pensar em como será o input dessa função
+        # se ela vai usar o get_family_data ou find_indices (saber quando cada um será usado)
         # eu também deveria fazer a pesagem também por meio da simulação monte carlo que foi implementada há algum tempo
-        # 
-        # 
-        # 
-        # 
-        # 
-        # 
-        #  
     
 
