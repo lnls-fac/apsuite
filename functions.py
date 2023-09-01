@@ -71,17 +71,15 @@ def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
 
 def trackm_elec(acc,deltas, n_turn, lspos):
     results = []
-    ind = []
-    spos = _pyaccel.lattice.find_spos(acc, indices='closed')
+    spos = _pyaccel.lattice.find_spos(acc, indices='open')
     
     for k, iten in enumerate(lspos):
         
         el_idx = _np.argmin(_np.abs(spos-iten)) # selecting the index to shift the tracking simulation
         turnl = track_eletrons(deltas, n_turn, el_idx, acc, pos_x=1e-5, pos_y=3e-6)
         results.append(turnl) # 
-        ind.append(el_idx)
         
-    return results, ind
+    return results
 
 # this function will sellect the index by the array containing the names of the elements along the ring that people desire to study
 # please let's try to run away from the repetitive structures that
@@ -220,6 +218,9 @@ def select_idx(list_, param1, param2):
     return n_arr
 
 def t_list(elmnt):
+    #this condition significates that if the input is only a number, then 
+    #the fucntion transforms it into a list to avoid errors. Actually, I will delete this function,
+    # so just forget this bulshit 
     if type(elmnt) == float or type(elmnt) ==  int:
         return [elmnt]
     else:

@@ -24,6 +24,7 @@ class Tous_analysis():
         self._ener_off = off_array # interval of energy deviation for calculating the amplitudes and idx_limitants from linear model
         self._nturns = None
         self._deltas = None
+        self._spos = find_spos(self._acc, indices='open')
 
         self._lamppn_idx = None # this parameter defines 4 analysis' elements calculated by the linear model
 
@@ -80,6 +81,14 @@ class Tous_analysis():
     def lname(self, call_lname): # call_name is the list of element names (passed by the user) that someone desires to know the distribution
         self._lname = call_lname
         return self._lname
+    
+    @property
+    def spos(self):
+        return self._spos
+    
+    @spos.setter
+    def spos(self, s):
+        return
 
     @property
     def lamppn_idx(self):
@@ -92,19 +101,39 @@ class Tous_analysis():
         
         return self.lmd_amp_pos, self.idx_lim_pos, self.lmd_amp_neg, self.idx_lim_neg
     
-    def return_single_tracked(self,s_position, par):
+    def return_sinpos_track(self,s_position, par):
         model = pymodels.si.create_accelerator()
         model.cavity_on = True
         model.radiation_on = True
-        
+        spos = self._spos
+
         # alterar depois a função que é utilizada nesta função para realizar o tracking.
+        
+        index = _np.argmin(_np.abs(spos-s_position))
+        if 'pos' in par:
+            res = tousfunc.track_eletrons(self.deltas,self._nturns,
+                                               index, self._acc, pos_x=1e-5, pos_y=3e-6)
+        elif 'neg' in par:
+            res = tousfunc.track_eletrons(-self.deltas,self._nturns,
+                                               index, self._acc, pos_x=1e-5, pos_y=3e-6)
+        
+        return res
+    
+    def return_compos_track(self, lspos, par):
+        model = pymodels.si.create_accelerator()
+        model.cavity_on = True
+        model.radiation_on = True
+
 
         if 'pos' in par:
-            res, ind = tousfunc.trackm_elec(model,self._deltas,self._nturns,s_position)
+            res = tousfunc.trackm_elec(self._acc, self._deltas,
+                                            self._nturns, lspos)
         elif 'neg' in par:
-            res, ind = tousfunc.trackm_elec(model,-self._deltas,self._nturns,s_position)
+            res = tousfunc.trackm_elec(self._acc, -self._deltas,
+                                            self._nturns, lspos)
+        return res
         
-        return res, ind
+
     
     def get_weighting_tous(self, s_position, npt=5000):
         
@@ -147,7 +176,7 @@ class Tous_analysis():
             raise Exception('This function suports only one s position')
         
         lspos = tousfunc.t_list(s_position)
-        res, ind = self.return_tracked(lspos, par)
+        res = self.return_sinpos_track(lspos, par)
         res = res[0]
         turn_lost, elem_lost, delta = _np.zeros(len(res)), _np.zeros(len(res)), _np.zeros(len(res))
 
@@ -163,12 +192,12 @@ class Tous_analysis():
         fp = fdensp.squeeze()
         fn = fdensn.squeeze()
 
-        fp *= Ddeltas
-        fn *= Ddeltas
-        deltp *= 1e2
-        deltn *= 1e2
-        
-        return fp, fn, deltp, deltn
+        if 'pos' in par:
+            return fp*Ddeltas, deltp *1e2
+        elif 'neg' in par:
+            return fn*Ddeltas, deltn*1e2
+        else:
+            return fp*Ddeltas, fn*Ddeltas, deltp*1e2, deltn*1e2
     
     # vale mencionar que a fast aquisition da forma como esta definida já está funcional
     
@@ -183,22 +212,22 @@ class Tous_analysis():
 # isso parece ser bem util caso alguem deseje estudar um elemento em um ponto ja especificado
 
     def comp_aq(self, lname_or_spos, par):
-        
         param = tousfunc.char_check(lname_or_spos)
 
         if param is str:
             
-            indices = tousfunc.el_idx_collector(self._acc, lname_or_spos)
-            spos = find_spos(self._acc, indices='closed')
-            res, ind = self.return_tracked(lspos, par)
-
-            calc_dp, calc_dn, delta_p, delta_n = tousfunc.nnorm_cutacp(self._acc, lspos, 
-                                                                    npt=5000, getsacp=getsacp)
+            spos = find_spos(self._acc, indices='open')
+            all_indices = tousfunc.el_idx_collector(self._acc, lname_or_spos)
+            all_indices = _np.array(all_indices, dtype=object)
+            for idx, indices in enumerate(all_indices):
+                
+                res, ind = self.return_tracked(indices, par)
+                calc_dp, calc_dn, delta_p, delta_n = tousfunc.nnorm_cutacp(self._acc, indices, 
+                                                                        npt=5000, getsacp=getsacp)
 
             # chama a função tousfunc.el_idx_collector para selecionar os indices dos elementos em que se 
             # deseja realizar as análises 
             # indices esses que serão os pontos iniciais para a realização do tracking
-            pass
         elif param is float:
             pass
             # se o usuário desejar obter o estudo ao longo de todo o anel ele simplesmente 
