@@ -12,13 +12,15 @@ class Tous_analysis():
 
     def __init__(self, accelerator, energies_off=None, beam_energy=None, n_turns=7):
         if energies_off is None:
-            energy_off = _np.linspace(0,0.046, 460)
-            deltas = _np.linspace(0,0.1,400)
+            energy_off = _np.linspace(0,0.046, 460) # used when calculating physical limitants by the linear model
+            deltas = _np.linspace(0,0.1,400) # used in tracking simulation
 
         if beam_energy is None: # beam_energy is associated to the beta factor of the electrons of the storage ring 
             beta = _beam_rigidity(energy=3)[2]  # defining by default the energy of the beam
 
-        self._acc = accelerator
+        self._model_fit = accelerator
+        self._model = pymodels.si.create_accelerator() # No necessity to change this model, because it's an internal tool for calculations.
+        self._amp_and_limidx = None
         self._sc_accps = None
         self._accep = None      
         self._inds_pos = None
@@ -27,22 +29,22 @@ class Tous_analysis():
         self._amps_neg = None
 
         self._beta = beta # beta is a constant necessary to the calculations
-        self.h_pos = get_attribute(self._acc, 'hmax', indices='closed') # getting the vchamber's height
-        self.h_neg = get_attribute(self._acc, 'hmin', indices='closed')
-        self._ltime = Lifetime(self._acc)
+        self.h_pos = get_attribute(self._model_fit, 'hmax', indices='closed') # getting the vchamber's height
+        self.h_neg = get_attribute(self._model_fit, 'hmin', indices='closed')
+        self._ltime = Lifetime(self._model_fit)
         # self._lname = ['BC', 'Q1', 'SDA0'] # names defined by default. it can be modified as the users desires
         
         self._off_energy = energy_off # interval of energy deviation for calculating the amplitudes and idx_limitants from linear model
         self._nturns = n_turns # defined like this by the standard
         self._deltas = deltas # defined by the standard 
-        self._spos = find_spos(self._acc, indices='open')
+        self._spos = find_spos(self._model_fit, indices='open')
 
 
     # Defining the energy acceptance. This method also needs a setter to change the value of the acceptance by a different inserted model
     @property
     def accep(self):
         if self._accep is None:
-            self._accep = py_op.calc_touschek_energy_acceptance(self._acc)
+            self._accep = py_op.calc_touschek_energy_acceptance(self._model_fit)
         return self._accep
 
     # Defining the s position, positive and negative accptances along the ring at each 10 meters.
@@ -50,20 +52,17 @@ class Tous_analysis():
     @property
     def scalc(self):
         if self._sc_accps is None:
-            self._sc_accps = tousfunc.get_scaccep(self._acc, self._accep)
+            self._sc_accps = tousfunc.get_scaccep(self._model_fit, self._accep)
         return self._sc_accps
     
     # This property calculates the physical limitants by the prediction of the linear model
-    # Eu poderia colocar algum parâmetro ele retornasse também as amplitudes caso alguém deseje ver como elas se comportam de acordo com o desvio de energia
-    # mas como passar esse parâmetro da melhor forma possivel
     @property
     def amp_and_limidx(self):
         if self._amp_and_limidx is None:
-            model = pymodels.si.create_accelerator()
-            model.cavity_on = False
-            model.radiation_on = False
-            self._amps_pos, self._inds_pos = tousfunc.calc_amp(model, self.ener_off, self.h_pos, self.h_neg)
-            self._amps_neg, self._inds_neg = tousfunc.calc_amp(model, -self.ener_off, self.h_pos, self.h_neg)
+            self._model.cavity_on = False # this step is necessary to define if the 
+            self._model.radiation_on = False
+            self._amps_pos, self._inds_pos = tousfunc.calc_amp(self._model, self.ener_off, self.h_pos, self.h_neg)
+            self._amps_neg, self._inds_neg = tousfunc.calc_amp(self._model, -self.ener_off, self.h_pos, self.h_neg)
             self._amp_and_limidx =  True
 
         return self._amp_and_limidx
@@ -72,21 +71,36 @@ class Tous_analysis():
     
     @property
     def accelerator(self):
-        return self._acc
+        return self._model_fit
     
     @accelerator.setter
     def accelerator(self, new_model): #This line defines a new accelerator if the user desires
-        self._acc = new_model
+        self._model_fit = new_model
     
     @property
     def beam_energy(self):
         return self._beta
     
     @beam_energy.setter
-    def beam_energy(self, new_beam_energy):
-        energy = new_beam_energy
+    def beam_energy(self, new_beam_energy): # the user could change the energy of the beam if it is necessary
         self._beta = _beam_rigidity(energy=new_beam_energy)[2]
+
+    @property
+    def pos_vchamber(self):
+        return self.h_pos
     
+    @pos_vchamber.setter
+    def pos_vchamber(self, indices): # here indices must be a string, closed or open, the user could define if it is necessary
+        self.h_pos = find_spos(self._model_fit, indices=indices)
+
+    @property
+    def neg_vchamber(self):
+        return self.h_neg
+    
+    @neg_vchamber.setter
+    def neg_vchamber(self, indices):
+        self.h_neg = find_spos(self._model_fit, indices=indices)
+
     @property
     def off_energy(self):
         return self._off_energy
@@ -94,7 +108,6 @@ class Tous_analysis():
     @off_energy.setter
     def off_energy(self, new):
         self._off_energy = new
-        return self._off_energy
 
     @property
     def nturns(self):
@@ -103,7 +116,6 @@ class Tous_analysis():
     @nturns.setter
     def nturns(self, new_turns):
         self._nturns = new_turns # changes in the nturns to simulate with tracking
-        return self._nturns
 
     @property
     def deltas(self):
@@ -112,7 +124,6 @@ class Tous_analysis():
     @deltas.setter
     def deltas(self, new_deltas):
         self._deltas = new_deltas # if the user desires to make a change in the quantity of energ. dev. in tracking simulation
-        return self._deltas
     
     @property
     def lname(self):
@@ -121,16 +132,14 @@ class Tous_analysis():
     @lname.setter
     def lname(self, call_lname): # call_name is the list of element names (passed by the user) that someone desires to know the distribution
         self._lname = call_lname
-        return self._lname
     
     @property
     def spos(self):
         return self._spos
     
     @spos.setter
-    def spos(self, s): # if the user desires to make a change in the indices in the s position array
-        self._spos = s
-        return self._spos
+    def spos(self, indices): # if the user desires to make a change in the indices in the s position array
+        self._spos = find_spos(self._model_fit, indices=indices)
     
     # define aceitancia de energia, define também o fator de conversão que é sempre necessário das posições s do modelo nominal para scalc, e além disso calcula
     # as amplitudes e os indices limitantes
@@ -144,51 +153,49 @@ class Tous_analysis():
     def get_accep(self):
         return self.accep()
 
-    def get_amps_idxs(self):
-        return self.accep #, self.scalc
+    def get_amps_idxs(self): # this step calls 3 disctinct getters
+        return self.amp_and_limidx, self.accep, self.scalc
 
-    def return_sinpos_track(self,s_position, par):
-        model = pymodels.si.create_accelerator()
-        model.cavity_on = True
-        model.radiation_on = True
+    def return_sinpos_track(self,single_spos, par):
+        self._model.cavity_on = True
+        self._model.radiation_on = True
         spos = self._spos
 
         # alterar depois a função que é utilizada nesta função para realizar o tracking.
         
-        index = _np.argmin(_np.abs(spos-s_position))
+        index = _np.argmin(_np.abs(spos-single_spos))
         if 'pos' in par:
             res = tousfunc.track_eletrons(self.deltas,self._nturns,
-                                               index, self._acc, pos_x=1e-5, pos_y=3e-6)
+                                               index, self._model, pos_x=1e-5, pos_y=3e-6)
         elif 'neg' in par:
             res = tousfunc.track_eletrons(-self.deltas,self._nturns,
-                                               index, self._acc, pos_x=1e-5, pos_y=3e-6)
+                                               index, self._model, pos_x=1e-5, pos_y=3e-6)
         
         return res
     
 
     def return_compos_track(self, lspos, par):
-        model = pymodels.si.create_accelerator()
-        model.cavity_on = True
-        model.radiation_on = True
+        self._model.cavity_on = True
+        self._model.radiation_on = True
 
         if 'pos' in par:
-            res = tousfunc.trackm_elec(model, self._deltas,
+            res = tousfunc.trackm_elec(self._model, self._deltas,
                                             self._nturns, lspos)
         elif 'neg' in par:
-            res = tousfunc.trackm_elec(model, -self._deltas,
+            res = tousfunc.trackm_elec(self._model, -self._deltas,
                                             self._nturns, lspos)
         return res
         
     
-    def get_weighting_tous(self, s_position, npt=5000):
+    def get_weighting_tous(self, single_spos, npt=5000):
         
-        scalc, daccp, daccn  = tousfunc.get_scaccep(self._acc, self._accep)
+        scalc, daccp, daccn  = tousfunc.get_scaccep(self._model_fit, self._accep)
         bf = self._beta
         ltime = self._ltime
         b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
         
         taup, taun = (bf* daccp)**2, (bf*daccn)**2
-        idx = _np.argmin(_np.abs(scalc-s_position))
+        idx = _np.argmin(_np.abs(scalc-single_spos))
         taup_0, taun_0 = taup[idx], taun[idx]
         kappap_0 =  _np.arctan(_np.sqrt(taup_0))
         kappan_0 =  _np.arctan(_np.sqrt(taun_0))
@@ -215,12 +222,12 @@ class Tous_analysis():
     
     # In general, this function is usefull when we desire to calculate the touschek scattering weighting function for one specific point along the ring
 
-    def fast_aquisition(self, s_position, par):
+    def fast_aquisition(self, single_spos, par):
         # this raise blocks to runing the program if the list of s position has more than 1 element
-        if len(tousfunc.t_list(s_position)) != 1:
+        if len(tousfunc.t_list(single_spos)) != 1:
             raise Exception('This function suports only one s position')
         
-        res = self.return_sinpos_track(s_position, par)
+        res = self.return_sinpos_track(single_spos, par)
         res = res[0]
         turn_lost, elem_lost, delta = _np.zeros(len(res)), _np.zeros(len(res)), _np.zeros(len(res))
 
@@ -231,7 +238,7 @@ class Tous_analysis():
             delta[idx] = delt
 
         Ddeltas = _np.diff(delta)[0]
-        fdensp, fdensn, deltp, deltn = self.get_weighting_tous(s_position)
+        fdensp, fdensn, deltp, deltn = self.get_weighting_tous(single_spos)
         
         fp = fdensp.squeeze()
         fn = fdensn.squeeze()
@@ -257,12 +264,12 @@ class Tous_analysis():
 
     def complete_aquisition(self, lname_or_spos, par):
         param = tousfunc.char_check(lname_or_spos)
-        getsacp = tousfunc.get_scaccep(self._acc, self._accep)
+        getsacp = tousfunc.get_scaccep(self._model_fit, self._accep)
         spos = self._spos
 
         if issubclass(param, str): # if user pass a list of element names
             
-            all_indices = tousfunc.el_idx_collector(self._acc, lname_or_spos)
+            all_indices = tousfunc.el_idx_collector(self._model_fit, lname_or_spos)
             all_indices = _np.array(all_indices, dtype=object)
             ress = []
             scatsdis = []
@@ -270,7 +277,7 @@ class Tous_analysis():
             for indices in all_indices:
                 
                 res = self.return_compos_track(spos[indices], par)
-                scat_dis = tousfunc.nnorm_cutacp(self._acc, spos[indices],
+                scat_dis = tousfunc.nnorm_cutacp(self._model_fit, spos[indices],
                                                  npt=5000, getsacp=getsacp)
                 ress.append(res)
                 scatsdis.append(scat_dis)
@@ -278,7 +285,7 @@ class Tous_analysis():
         # if user pass a list of positions (it can be all s posistions if the user desires)
         elif issubclass(param, float):
             ress = self.return_compos_track(lname_or_spos, par)
-            scat_dis = tousfunc.nnorm_cutacp(self._acc, spos[indices],
+            scat_dis = tousfunc.nnorm_cutacp(self._model_fit, spos[indices],
                                              npt=5000, getsacp=getsacp)
             
         return ress, scat_dis
@@ -296,7 +303,7 @@ class Tous_analysis():
 
         res, fp, dp = self.fast_aquisition(spos, par)
 
-        tousfunc.plot_track(self._acc,res, )
+        tousfunc.plot_track(self._model_fit,res, )
         
 
 
