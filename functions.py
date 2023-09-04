@@ -168,14 +168,12 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     a1.xaxis.grid(False)
 
     a1.set_title(r'$\delta \times$ lost turn', fontsize=16)
-    if 'pos' in param:
-        for item in lista_resul:
-            a1.plot(item[0], item[2]*1e2, 'k.', label = '')
+
+    for iten in lista_resul:
+        a1.plot(iten[0], iten[2]*1e2, 'k.', label = '')
+        if 'pos' in param:
             a1.set_ylabel(r'positive $\delta$ [%]', fontsize=14)
-    
-    elif 'neg' in param:
-        for item in lista_resul:
-            a1.plot(item[0], -item[2]*1e2, 'k.', label = '')
+        elif 'neg' in param:
             a1.set_ylabel(r'negative $\delta$ [%]', fontsize=14)
             
     a1.set_xlabel(r'n de voltas', fontsize=14)
@@ -202,7 +200,7 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     _pyaccel.graphics.draw_lattice(acc, offset=-0.5, height=0.5, gca=True) #magnetic lattice
     
     a2.plot(spos[element_idx], 0, 'ko', label='{}, ({} m)'.format(
-        acc[element_idx].fam_name, "%.2f" % spos[element_idx])) # initial position that tracking begins
+        acc[element_idx].fam_name, "%.2f" % spos[element_idx])) # initial position where tracking begins
     
     a2.set_xlabel(r'$s$ [m]', fontsize=14) # setting configurations of the graphic
     a2.legend(loc='best', ncol=2)

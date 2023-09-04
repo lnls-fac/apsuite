@@ -10,23 +10,32 @@ from mathphys.beam_optics import beam_rigidity as _beam_rigidity
 
 class Tous_analysis():
 
-    def __init__(self,accelerator):
+    def __init__(self, accelerator, energies_off=None, beam_energy=None, n_turns=7):
+        if energies_off is None:
+            energy_off = _np.linspace(0,0.046, 460)
+            deltas = _np.linspace(0,0.1,400)
+
+        if beam_energy is None: # beam_energy is associated to the beta factor of the electrons of the storage ring 
+            beta = _beam_rigidity(energy=3)[2]  # defining by default the energy of the beam
+
         self._acc = accelerator
-        self._beta = _beam_rigidity(energy=3)[2] # defining beta to tranformate the energy deviation
+        self._sc_accps = None
+        self._accep = None      
+        self._inds_pos = None
+        self._inds_neg = None
+        self._amps_pos = None
+        self._amps_neg = None
+
+        self._beta = beta # beta is a constant necessary to the calculations
         self.h_pos = get_attribute(self._acc, 'hmax', indices='closed') # getting the vchamber's height
         self.h_neg = get_attribute(self._acc, 'hmin', indices='closed')
         self._ltime = Lifetime(self._acc)
-        self._lname = ['BC', 'Q1', 'SDA0'] # names defined by default. it can be modified as the users desires
+        # self._lname = ['BC', 'Q1', 'SDA0'] # names defined by default. it can be modified as the users desires
         
-        self._sc_accps = None 
-        self._accep = None         
-        off_array = _np.linspace(0,0.046, 460) 
-        self._ener_off = off_array # interval of energy deviation for calculating the amplitudes and idx_limitants from linear model
-        self._nturns = 7 # defined like this by the standard
-        self._deltas = None
+        self._off_energy = energy_off # interval of energy deviation for calculating the amplitudes and idx_limitants from linear model
+        self._nturns = n_turns # defined like this by the standard
+        self._deltas = deltas # defined by the standard 
         self._spos = find_spos(self._acc, indices='open')
-
-        self._lamppn_idx = None # this parameter defines 4 analysis' elements calculated by the linear model
 
 
     # Defining the energy acceptance. This method also needs a setter to change the value of the acceptance by a different inserted model
@@ -43,16 +52,49 @@ class Tous_analysis():
         if self._sc_accps is None:
             self._sc_accps = tousfunc.get_scaccep(self._acc, self._accep)
         return self._sc_accps
+    
+    # This property calculates the physical limitants by the prediction of the linear model
+    # Eu poderia colocar algum parâmetro ele retornasse também as amplitudes caso alguém deseje ver como elas se comportam de acordo com o desvio de energia
+    # mas como passar esse parâmetro da melhor forma possivel
+    @property
+    def amp_and_limidx(self):
+        if self._amp_and_limidx is None:
+            model = pymodels.si.create_accelerator()
+            model.cavity_on = False
+            model.radiation_on = False
+            self._amps_pos, self._inds_pos = tousfunc.calc_amp(model, self.ener_off, self.h_pos, self.h_neg)
+            self._amps_neg, self._inds_neg = tousfunc.calc_amp(model, -self.ener_off, self.h_pos, self.h_neg)
+            self._amp_and_limidx =  True
+
+        return self._amp_and_limidx
 
     # Defining the energy array to get the maximum amplitudes and the limitant indices by the linear model
-    @property
-    def ener_off(self):
-        return self._ener_off
     
-    @ener_off.setter
-    def ener_off(self, new):
-        self._ener_off = new
-        return self._ener_off
+    @property
+    def accelerator(self):
+        return self._acc
+    
+    @accelerator.setter
+    def accelerator(self, new_model): #This line defines a new accelerator if the user desires
+        self._acc = new_model
+    
+    @property
+    def beam_energy(self):
+        return self._beta
+    
+    @beam_energy.setter
+    def beam_energy(self, new_beam_energy):
+        energy = new_beam_energy
+        self._beta = _beam_rigidity(energy=new_beam_energy)[2]
+    
+    @property
+    def off_energy(self):
+        return self._off_energy
+    
+    @off_energy.setter
+    def off_energy(self, new):
+        self._off_energy = new
+        return self._off_energy
 
     @property
     def nturns(self):
@@ -69,7 +111,7 @@ class Tous_analysis():
     
     @deltas.setter
     def deltas(self, new_deltas):
-        self._deltas = new_deltas # if the user desires to make a change in the quantity of energ. dev.
+        self._deltas = new_deltas # if the user desires to make a change in the quantity of energ. dev. in tracking simulation
         return self._deltas
     
     @property
@@ -89,19 +131,22 @@ class Tous_analysis():
     def spos(self, s): # if the user desires to make a change in the indices in the s position array
         self._spos = s
         return self._spos
+    
+    # define aceitancia de energia, define também o fator de conversão que é sempre necessário das posições s do modelo nominal para scalc, e além disso calcula
+    # as amplitudes e os indices limitantes
 
-    @property
-    def lamppn_idx(self):
-        if self._lamppn_idx is None:
-            model = pymodels.si.create_accelerator()
-            model.cavity_on = False
-            model.radiation_on = False
-            self.lmd_amp_pos, self.idx_lim_pos = tousfunc.calc_amp(model, self.ener_off, self.h_pos, self.h_neg)
-            self.lmd_amp_neg, self.idx_lim_neg = tousfunc.calc_amp(model, -self.ener_off, self.h_pos, self.h_neg)
-        
-        return self.lmd_amp_pos, self.idx_lim_pos, self.lmd_amp_neg, self.idx_lim_neg
-    
-    
+    # vai ser melhor retornar todos os parametros que eu preciso de uma vez, 
+    # esses parametros são utilizados em momentos diferentes mas todos eles são necessários para a realização das análises tanto rapida quanto a completa
+    # mas inicialmente não tem como o usuário saber que ele precisa definir estes parâmetros para visualização e análise dos gráficos entao
+    # eu ainda preciso pensar em como tornar esta biblioteca mais simples de ser utilizada por alguem que nao conhece a fundo o código
+    # isso significa que ao longo do codigo eu vou chamar as funções como se esses parametros ja tivessem sido definidos, mas na verdade eles so são 
+    # definidos pelo usuário quando a classe é instanciada e a função abaixo é chamada definido estes 3 parametros ao mesmo tempo
+    def get_accep(self):
+        return self.accep()
+
+    def get_amps_idxs(self):
+        return self.accep #, self.scalc
+
     def return_sinpos_track(self,s_position, par):
         model = pymodels.si.create_accelerator()
         model.cavity_on = True
@@ -175,8 +220,7 @@ class Tous_analysis():
         if len(tousfunc.t_list(s_position)) != 1:
             raise Exception('This function suports only one s position')
         
-        lspos = tousfunc.t_list(s_position)
-        res = self.return_sinpos_track(lspos, par)
+        res = self.return_sinpos_track(s_position, par)
         res = res[0]
         turn_lost, elem_lost, delta = _np.zeros(len(res)), _np.zeros(len(res)), _np.zeros(len(res))
 
@@ -193,11 +237,11 @@ class Tous_analysis():
         fn = fdensn.squeeze()
 
         if 'pos' in par:
-            return fp*Ddeltas, deltp *1e2
+            return res, fp*Ddeltas, deltp *1e2
         elif 'neg' in par:
-            return fn*Ddeltas, deltn*1e2
+            return res, fn*Ddeltas, deltn*1e2
         else:
-            return fp*Ddeltas, fn*Ddeltas, deltp*1e2, deltn*1e2
+            return res, fp*Ddeltas, fn*Ddeltas, deltp*1e2, deltn*1e2
     
     # vale mencionar que a fast aquisition da forma como esta definida já está funcional
     
@@ -239,17 +283,30 @@ class Tous_analysis():
             
         return ress, scat_dis
     
+    # this function plot the graphic of tracking and the touschek scattering distribution for one single position
+    def plot_analysi_at_position(self, spos, par, amp_on):
+        # defining some params top plot the tracking and the scattering distribution
+        # In a first approach I dont have to be concerned in this decision structure because all variables necessary for the calculation will be defined
+        # I will may let this part of the code if I know a best method or decide to make a change here
+
+        # if self._amp_and_limidx is None:
+        #     amps_and_idxs = self.amp_and_limidx
+        # else:
+        #     amps_and_idxs = self._amp_and_limidx
+
+        res, fp, dp = self.fast_aquisition(spos, par)
+
+        tousfunc.plot_track(self._acc,res, )
+        
+
+
+
+    
     #if the user desires to know all the scattering events along the ring, 
     #only its necessary to do is to pass the 
 
     # remember that ind is the index that represents the initial position where tracking begins
         
-
-        
-        
-
-        
-
 
 
     #o resultado para este res será uma lista com diversas tuplas então agora eu tenho que me perguntar como
@@ -269,5 +326,8 @@ class Tous_analysis():
         #  e ainda preciso pensar em como será o input dessa função
         # se ela vai usar o get_family_data ou find_indices (saber quando cada um será usado)
         # eu também deveria fazer a pesagem também por meio da simulação monte carlo que foi implementada há algum tempo
+
+        # eu vou definir alguns parametros de uma forma que talvez não seja ideal 
+        # o que eu vou fazer vai ser definir todos os parametros que eu preciso de uma vez que eu preciso por meio de uma função
     
 
