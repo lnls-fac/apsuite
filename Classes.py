@@ -50,7 +50,7 @@ class Tous_analysis():
     # Defining the s position, positive and negative accptances along the ring at each 10 meters.
     # the description above is actually the returns of the function
     @property
-    def scalc(self):
+    def s_calc(self):
         if self._sc_accps is None:
             self._sc_accps = tousfunc.get_scaccep(self._model_fit, self._accep)
         return self._sc_accps
@@ -150,10 +150,14 @@ class Tous_analysis():
     # eu ainda preciso pensar em como tornar esta biblioteca mais simples de ser utilizada por alguem que nao conhece a fundo o código
     # isso significa que ao longo do codigo eu vou chamar as funções como se esses parametros ja tivessem sido definidos, mas na verdade eles so são 
     # definidos pelo usuário quando a classe é instanciada e a função abaixo é chamada definido estes 3 parametros ao mesmo tempo
-    def get_accep(self):
-        return self.accep()
+    
+    # def get_scaccep(self):
+    #     return self.accep
+    
+    # def get_scalc(self):
+    #     return self.s_calc let this code here to remind me how I may call a function in a class
 
-    def get_amps_idxs(self): # this step calls 3 disctinct getters
+    def get_amps_idxs(self): # this step calls and defines 3 disctinct getters
         return self.amp_and_limidx, self.accep, self.scalc
 
     def return_sinpos_track(self,single_spos, par):
