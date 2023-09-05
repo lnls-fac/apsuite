@@ -37,6 +37,24 @@ class TbTData(DataBaseClass):
             self.data = {key: data[key] for key in is_data}
             self.params = {key: data[key] for key in is_params}
 
+    @staticmethod
+    def _process_data(data, get_dft=True):
+        """."""
+        try:
+            trajx, trajy = data['trajx']*1e-3, data['trajy']*1e-3
+            trajx -= trajx.mean(axis=0)
+            trajy -= trajy.mean(axis=0)
+        except KeyError:
+            trajx = data['sofb_tbt']['x']*1e-3
+            trajy = data['sofb_tbt']['y']*1e-3
+            trajx -= trajx.mean(axis=0)
+            trajy -= trajy.mean(axis=0)
+        if get_dft:
+            dftx = TbTData._calculate_dft(trajx)
+            dfty = TbTData._calculate_dft(trajy)
+            return trajx, trajy, dftx, dfty
+        return trajx, trajy
+
     def process_data(self, get_dft=True):
         """Get mean-subtracted trajctories in [mm] and calculate the DFT.
 
@@ -47,19 +65,10 @@ class TbTData(DataBaseClass):
             get_dft (bool, optional): Whether to calculate the Discrete
              Fourier Transform (DFT). Defaults to True.
         """
-        try:
-            trajx, trajy = self.data['trajx']*1e-3, self.data['trajy']*1e-3
-            trajx -= trajx.mean(axis=0)
-            trajy -= trajy.mean(axis=0)
-        except KeyError:
-            trajx = self.data['sofb_tbt']['x']*1e-3
-            trajy = self.data['sofb_tbt']['y']*1e-3
-            trajx -= trajx.mean(axis=0)
-            trajy -= trajy.mean(axis=0)
-        self.data['trajx'], self.data['trajy'] = trajx, trajy
+        data = TbTData._process_data(self.data, get_dft=get_dft)
+        self.data['trajx'], self.data['trajy'] = data[0], data[1]
         if get_dft:
-            self.data['dftx'] = self._calculate_dft(trajx)
-            self.data['dfty'] = self._calculate_dft(trajy)
+            self.data['dftx'], self.data['dfty'] = data[2], data[3]
 
     def fit_hist_mat(self, model=None):
         """."""
@@ -194,4 +203,57 @@ class TbTData(DataBaseClass):
         return amplitude * _np.sin(2 * _np.pi * tune * n + phase)
 
     def plot_spectrum(self, traj='trajx', bpm_idx=None):
+        """."""
         raise NotImplementedError
+
+
+class ADTSAnalysis():
+    """."""
+
+    def __init__(self, dir=None):
+        """."""
+        if dir is not None:
+            self.dir = dir
+            self.get_files()
+
+    def get_files(self, dir: str):
+        """."""
+        self.dir = dir
+        self.scan_files()
+
+    def scan_files(self):
+        """Scan the working directory and update the `files` property.
+
+        `files` property is a dict with the kicks as keys and the TbT data
+         of that kick as value.
+        """
+        files = sorted(os.listdir(path=self.dir))
+        file_dict = {}
+        for i, file in enumerate(files):
+            slc = slice(file.find('=') + 1, file.find('=') + 4)
+            kick = file[slc]
+            file_dict[kick] = file
+        self.files = file_dict
+
+    def remove_file(self, kick):
+        """Remove a file from the list of files to be analyzed.
+
+        Args:
+            kick (str or int): file with this kick file is removed
+        """
+        del self.files[str(kick)]
+
+    def add_file(self, kick):
+        """."""
+        raise NotImplementedError
+
+    def process_data(self, get_dft=True):
+        """."""
+        self.data = dict()
+        for kick_key, file in self.files.items():
+            processesd_data = TbTData._process_data(data=file, get_dft=get_dft)
+            self.data[kick_key]['trajx'] = processesd_data[0]
+            self.data[kick_key]['trajy'] = processesd_data[1]
+            if get_dft:
+                self.data[kick_key]['dftx'] = processesd_data[2]
+                self.data[kick_key]['dfty'] = processesd_data[3]
