@@ -72,12 +72,21 @@ class TbTData(DataBaseClass):
 
     def fit_hist_mat(self, model=None):
         """."""
-        hist_mat = self.data['trajx']
+        self.data['J'], self.data['tunes'] = TbTData._fit_hist_mat(
+            data=self.data, model=model)
+
+    @staticmethod
+    def _fit_hist_mat(data, model=None):
+        """."""
+        hist_mat = data['trajx']
+        dft = data['dftx']
+        tune_guesses = TbTData._get_dft_peaks_tunes(dft, nturns=hist_mat.shape[0])
+        hist_mat = hist_mat[:15, :]
         nturns = hist_mat.shape[0]
         nbpms = hist_mat.shape[-1]
-        dft = self.data['dftx']
-        tune_guesses = self._get_dft_peaks_tunes(dft, nturns)
-        projections = self._calc_projections_hist_mat(hist_mat, tune_guesses)
+
+        projections = TbTData._calc_projections_hist_mat(
+            hist_mat, tune_guesses)
         amplitude_guesses = _np.linalg.norm(projections, axis=1)
         phase_guesses = _np.arctan2(projections[:, 0], projections[:, -1])
 
@@ -89,7 +98,7 @@ class TbTData(DataBaseClass):
         n = _np.arange(nturns)
 
         for i, param_guess in enumerate(p0):
-            params[i, :], _ = curve_fit(self._TbT_model,
+            params[i, :], _ = curve_fit(TbTData._TbT_model,
                                         xdata=n,
                                         ydata=hist_mat[:nturns, i],
                                         p0=param_guess)
@@ -110,11 +119,10 @@ class TbTData(DataBaseClass):
         # J is calculated as in eq. (9) of the reference X.R. Resende and M.B. Alves and L. Liu and F.H. de Sá. Equilibrium and Nonlinear Beam Dynamics Parameters From Sirius Turn-by-Turn BPM Data. In Proc. IPAC'21. DOI: 10.18429/JACoW-IPAC2021-TUPAB219
 
         string = f'avg tune {fitted_tunes.mean():.3f}'
-        string += f'+- {fitted_tunes.std():.3f} (std)'
+        string += f'+- {fitted_tunes.std():.4f} (std)'
         print(string)
 
-        self.data['J'] = fitted_J
-        self.data['tunes'] = fitted_tunes
+        return fitted_J, fitted_tunes
 
     @staticmethod
     def _calculate_dft(traj, nturns=None):
@@ -151,7 +159,8 @@ class TbTData(DataBaseClass):
         tune_guesses = _np.array([tunes[idc] for idc in idcs], dtype=float)
         return tune_guesses
 
-    def _calc_projections_hist_mat(self, data, tune_guesses):
+    @staticmethod
+    def _calc_projections_hist_mat(data, tune_guesses):
         """Calculate each BPM time-series sine and cosine components.
 
         Calculates the cosine and and amplitudes for each BPM time series by
@@ -169,11 +178,12 @@ class TbTData(DataBaseClass):
         """
         data_projections = _np.zeros((data.shape[-1], 2))
         for i, bpm_data in enumerate(data.T):
-            data_projections[i, :] = self._calc_projections(
+            data_projections[i, :] = TbTData._calc_projections(
                 bpm_data, tune_guesses[i])
         return data_projections
 
-    def _calc_projections(self, data, tune):
+    @staticmethod
+    def _calc_projections(data, tune):
         """Calculate BPM raw data sine and cosine components.
 
         Calculates the cosine and sine and amplitudes by projecting data into
@@ -188,19 +198,21 @@ class TbTData(DataBaseClass):
         """
         N = data.shape[0]
         n = _np.arange(N)
-        cos, sin = self._get_cos_and_sin_arrays(tune, n)
+        cos, sin = TbTData._get_cos_and_sin_arrays(tune, n)
         cos_proj = data[None, :] @ cos[:, None]
         sin_proj = data[None, :] @ sin[:, None]
         norm = 2/N
         return cos_proj.item() * norm, sin_proj.item() * norm
 
-    def _get_cos_and_sin_arrays(self, tune, n):
+    @staticmethod
+    def _get_cos_and_sin_arrays(tune, n):
         """."""
         cos = _np.cos(2 * _np.pi * tune * n)
         sin = _np.sin(2 * _np.pi * tune * n)
         return cos, sin
 
-    def _TbT_model(self, n, amplitude, tune, phase):
+    @staticmethod
+    def _TbT_model(n, amplitude, tune, phase):
         """."""
         return amplitude * _np.sin(2 * _np.pi * tune * n + phase)
 
@@ -261,3 +273,14 @@ class ADTSAnalysis():
             if get_dft:
                 self.data[kick_key]['dftx'] = proc_data[2]
                 self.data[kick_key]['dfty'] = proc_data[3]
+
+    def fit_data(self, model=None):
+        """."""
+        for kick_key in self.files.keys():
+            print(f'Fitting {kick_key} urad file')
+            data = self.data[kick_key]
+            self.data[kick_key]['Jx'], self.data[kick_key]['tunesx'] = \
+                TbTData()._fit_hist_mat(data=data, model=model)
+
+
+# TO-DO: deal with the appropriate windowing of the data to be fit.
