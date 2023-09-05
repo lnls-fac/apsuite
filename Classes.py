@@ -61,8 +61,8 @@ class Tous_analysis():
         if self._amp_and_limidx is None:
             self._model.cavity_on = False # this step is necessary to define if the 
             self._model.radiation_on = False
-            self._amps_pos, self._inds_pos = tousfunc.calc_amp(self._model, self.ener_off, self.h_pos, self.h_neg)
-            self._amps_neg, self._inds_neg = tousfunc.calc_amp(self._model, -self.ener_off, self.h_pos, self.h_neg)
+            self._amps_pos, self._inds_pos = tousfunc.calc_amp(self._model, self._off_energy, self.h_pos, self.h_neg)
+            self._amps_neg, self._inds_neg = tousfunc.calc_amp(self._model, -self._off_energy, self.h_pos, self.h_neg)
             self._amp_and_limidx =  True
 
         return self._amp_and_limidx
@@ -158,7 +158,7 @@ class Tous_analysis():
     #     return self.s_calc let this code here to remind me how I may call a function in a class
 
     def get_amps_idxs(self): # this step calls and defines 3 disctinct getters
-        return self.amp_and_limidx, self.accep, self.scalc
+        return self.amp_and_limidx, self.accep, self.s_calc
 
     def return_sinpos_track(self,single_spos, par):
         self._model.cavity_on = True
@@ -232,14 +232,13 @@ class Tous_analysis():
             raise Exception('This function suports only one s position')
         
         res = self.return_sinpos_track(single_spos, par)
-        res = res[0]
-        turn_lost, elem_lost, delta = _np.zeros(len(res)), _np.zeros(len(res)), _np.zeros(len(res))
+        turn_lost, elmnt_lost, delta = _np.zeros(len(res)),_np.zeros(len(res)),_np.zeros(len(res))
 
-        for idx, iten in enumerate(res):
-            tlost, elmnlost, delt = iten
-            turn_lost[idx] = tlost
-            elem_lost[idx] = elmnlost
-            delta[idx] = delt
+        for index, iten in enumerate(res):
+            tlost, ellost, delt = iten
+            turn_lost[index] = tlost
+            elmnt_lost[index] = ellost
+            delta[index] = delt
 
         Ddeltas = _np.diff(delta)[0]
         fdensp, fdensn, deltp, deltn = self.get_weighting_tous(single_spos)
