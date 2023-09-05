@@ -68,7 +68,7 @@ class TbTData(DataBaseClass):
         data = TbTData._process_data(self.data, get_dft=get_dft)
         self.data['trajx'], self.data['trajy'] = data[0], data[1]
         if get_dft:
-            self.data['dftx'], self.data['dfty'] = data[2], data[3]
+            saelf.data['dftx'], self.data['dfty'] = data[2], data[3]
 
     def fit_hist_mat(self, model=None):
         """."""
@@ -116,7 +116,8 @@ class TbTData(DataBaseClass):
         self.data['J'] = fitted_J
         self.data['tunes'] = fitted_tunes
 
-    def _calculate_dft(self, traj, nturns=None):
+    @staticmethod
+    def _calculate_dft(traj, nturns=None):
         """Calculate the Discrete Fourier Transform (DFT) history matrix.
 
         Args:
@@ -132,7 +133,8 @@ class TbTData(DataBaseClass):
             nturns = traj.shape[0]
         return _np.fft.rfft(a=traj[:nturns], axis=0)
 
-    def _get_dft_peaks_tunes(self, dft, nturns):
+    @staticmethod
+    def _get_dft_peaks_tunes(dft, nturns):
         """Identify the tunes at which the DFT amplitudes peaks.
 
         Args:
@@ -214,7 +216,7 @@ class ADTSAnalysis():
         """."""
         if dir is not None:
             self.dir = dir
-            self.get_files()
+            self.get_files(dir=dir)
 
     def get_files(self, dir: str):
         """."""
@@ -251,9 +253,11 @@ class ADTSAnalysis():
         """."""
         self.data = dict()
         for kick_key, file in self.files.items():
-            processesd_data = TbTData._process_data(data=file, get_dft=get_dft)
-            self.data[kick_key]['trajx'] = processesd_data[0]
-            self.data[kick_key]['trajy'] = processesd_data[1]
+            self.data[kick_key] = dict()
+            raw_data = load_pickle(self.dir+file)
+            proc_data = TbTData._process_data(data=raw_data, get_dft=get_dft)
+            self.data[kick_key]['trajx'] = proc_data[0]
+            self.data[kick_key]['trajy'] = proc_data[1]
             if get_dft:
-                self.data[kick_key]['dftx'] = processesd_data[2]
-                self.data[kick_key]['dfty'] = processesd_data[3]
+                self.data[kick_key]['dftx'] = proc_data[2]
+                self.data[kick_key]['dfty'] = proc_data[3]
