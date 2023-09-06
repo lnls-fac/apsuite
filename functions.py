@@ -339,7 +339,7 @@ def norm_d(acc, lsps, scalc,_npt, norm=True):
 def get_scaccep(acc, accep):
     spos = _pyaccel.lattice.find_spos(acc, indices='closed')
 
-    npt = int((spos[-1]-spos[0])/0.01)
+    npt = int((spos[-1]-spos[0])/0.1)
     scalc = _np.linspace(spos[0],spos[-1], npt)
     daccpp = _np.interp(scalc, spos, accep[1])
     daccpn = _np.interp(scalc, spos, accep[0])
