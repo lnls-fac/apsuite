@@ -173,17 +173,30 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     a1.xaxis.grid(False)
     a2.xaxis.grid(False)
     a3.xaxis.grid(False)
+    
+    ind = _np.int0(_np.where(f_dens>1e-17)[0])
 
-    
-    a1.set_title(r'taxa de espalhamento touschek') # setting the title of the first graphic
-    
     if 'pos' in param: # defining the y and x label of the first graphic
-        a1.set_ylabel(r'positive energy deviation')
+        a1.set_ylabel(r'positive energy deviation', fontsize=14)
+        a2.set_ylabel(r'positive $\delta$ [%]', fontsize=14)
+        a3.plot(spos[int(lista_resul[1][-1])], lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
+        acp_s = accep[1][element_idx] # defining the acceptance given the begining tracking point, this will be necessary to define until where the graphic will be plotted
+        indx = _np.argmin(_np.abs(lista_off-acp_s))
+        for item in lista_resul:
+            a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
     elif'neg' in param:
-        a1.set_ylabel(r'negative positive energy deviation')
-    a1.set_xlabel(r'Scattering touschek rate')
+        a1.set_ylabel(r'negative positive energy deviation', fontsize=14)
+        a2.set_ylabel(r'negative $\delta$ [%]', fontsize=14)
+        a3.plot(spos[int(lista_resul[1][-1])], -lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
+        acp_s = accep[0][element_idx] # defining the acceptance given the begining tracking point, this will be necessary to define until where the graphic will be plotted
+        indx = _np.argmin(_np.abs(lista_off-acp_s))
+        for item in lista_resul:
+            a3.plot(spos[int(item[1])], -item[2]*1e2, 'r.')
+            
+    a1.set_title(r'taxa de espalhamento touschek', fontsize=14) # setting the title of the first graphic
+    a1.set_xlabel(r'Scattering touschek rate', fontsize=14)
 
-    a1.plot(f_dens, delt, label='Scattering touschek rate', color='black')
+    a1.plot(f_dens[ind], delt[ind], label='Scattering touschek rate', color='black')
 
     # LEMBRAR DE DEFINIR CORRETAMENTE OS INTERVALOS PARA PLOTAR OS DESVIOS DE ENERGIA. PERCEBA QUE OS DESVIOS DE ENERGIA PROVENIENTES DESTA FUNÇÃO
     # VÃO ATÉ INFINITO BASICAMENTE. EU POSSO SIMPLESMENTE FAZER UM SLICE E DEFINIR ATÉ ONDE EU QUERO QUE O ARRAY SEJA PLOTADO PRA NÃO TER QUE 
@@ -191,32 +204,13 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     
 
     a2.set_title(r'$\delta \times$ lost turn', fontsize=16) # setting the tilte of the second graphic
-    
-    if 'pos' in param: # defining the y and x label of the second graphic
-        a2.set_ylabel(r'positive $\delta$ [%]', fontsize=14)
-    elif 'neg' in param:
-        a2.set_ylabel(r'negative $\delta$ [%]', fontsize=14)
-    
     a2.set_xlabel(r'n de voltas', fontsize=14)
     for iten in lista_resul:
         a2.plot(iten[0], iten[2]*1e2, 'k.', label = '')
 
     
     a3.set_title(r'tracking ', fontsize=16) # setting the title of the third graphic
-
-    acp_s = accep[element_idx] # defining the acceptance given the begining tracking point, this will be necessary to define until where the graphic will be plotted
-    ind = _np.argmin(_np.abs(lista_off-acp_s))
-    a3.plot(spos[lista_idx][:ind], lista_off[:ind]*1e2,'b.', label=r'accep. limit', alpha=0.25)
-    
-    if 'pos' in param:
-        a3.plot(spos[int(lista_resul[1][-1])], lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
-        for item in lista_resul:
-            a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
-            
-    elif 'neg' in param:
-        a3.plot(spos[int(lista_resul[1][-1])], -lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
-        for item in lista_resul:
-            a3.plot(spos[int(item[1])], -item[2]*1e2, 'r.')
+    a3.plot(spos[lista_idx][:indx], lista_off[:indx]*1e2,'b.', label=r'accep. limit', alpha=0.25)
     
     _plt.hlines(1e2*acp_s, spos[0], spos[-1], color='black', linestyles='dashed', alpha=0.5) # acceptance cutoff
     a3.plot(spos, _np.sqrt(betax),color='orange', label=r'$ \sqrt{\beta_x}  $') # beta function
@@ -438,8 +432,8 @@ def nnorm_cutacp(acc, lsps, _npt, getsacp, norm=False):
         # eliminating the negative values from array
         indp = _np.where(y_p<0)[0]
         indn = _np.where(y_n<0)[0]
-        y_p[indp] == 0
-        y_n[indn] == 0
+        y_p[indp] = 0
+        y_n[indn] = 0
         
         calc_dp.append(y_p)
         calc_dn.append(y_n)

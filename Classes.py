@@ -161,6 +161,7 @@ class Tous_analysis():
         return self.amp_and_limidx, self.accep, self.s_calc
 
     def return_sinpos_track(self,single_spos, par):
+
         self._model.cavity_on = True
         self._model.radiation_on = True
         spos = self._spos
@@ -217,8 +218,8 @@ class Tous_analysis():
         indn = _np.where(getdn<0)
         indp = indp[0]
         indn = indn[0]
-        getdp[indp] == 0
-        getdn[indn] == 0
+        getdp[indp] = 0
+        getdn[indn] = 0
 
         # this function will return the weighting factors in the scalc position convertion
         
