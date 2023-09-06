@@ -214,10 +214,8 @@ class Tous_analysis():
         getdn = tousfunc.f_function_arg_mod(kappa_neg, kappan_0, b1[idx], b2[idx],norm=False)
 
         # eliminating negative values
-        indp = _np.where(getdp<0)
-        indn = _np.where(getdn<0)
-        indp = indp[0]
-        indn = indn[0]
+        indp = _np.where(getdp<0)[0]
+        indn = _np.where(getdn<0)[0]
         getdp[indp] = 0
         getdn[indn] = 0
 
