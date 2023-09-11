@@ -106,8 +106,8 @@ class Tous_analysis():
         return self._off_energy
     
     @off_energy.setter
-    def off_energy(self, new):
-        self._off_energy = new
+    def off_energy(self, accep_limit, steps=460):
+        self._off_energy = _np.linspace(0, accep_limit, steps)
 
     @property
     def nturns(self):
@@ -122,8 +122,9 @@ class Tous_analysis():
         return self._deltas
     
     @deltas.setter
-    def deltas(self, new_deltas):
-        self._deltas = new_deltas # if the user desires to make a change in the quantity of energ. dev. in tracking simulation
+    def deltas(self, dev_percent,steps=400):
+        dev = dev_percent/100
+        self._deltas = _np.linspace(0,dev, steps) # if the user desires to make a change in the quantity of energ. dev. in tracking simulation
     
     @property
     def lname(self):
@@ -138,8 +139,17 @@ class Tous_analysis():
         return self._spos
     
     @spos.setter
-    def spos(self, indices): # if the user desires to make a change in the indices in the s position array
+    def spos(self, indices): # if the user desires to make a change in the indices in the s position array / the variable indices must be a string 'closed' or 'open'
         self._spos = find_spos(self._model_fit, indices=indices)
+
+    # this indices are obtained from the linear approach for the physical limitants
+    @property
+    def inds_pos(self):
+        return self._inds_pos
+    
+    @property
+    def inds_neg(self):
+        return self._inds_neg
     
     # define aceitancia de energia, define também o fator de conversão que é sempre necessário das posições s do modelo nominal para scalc, e além disso calcula
     # as amplitudes e os indices limitantes
@@ -162,19 +172,21 @@ class Tous_analysis():
 
     def return_sinpos_track(self,single_spos, par):
 
-        self._model.cavity_on = True
-        self._model.radiation_on = True
-        spos = self._spos
+        model = pymodels.si.create_accelerator()
+        model.cavity_on = True
+        model.radiation_on = True
+        model.vchamber_on = False
+        spos = self.spos
 
         # alterar depois a função que é utilizada nesta função para realizar o tracking.
         
         index = _np.argmin(_np.abs(spos-single_spos))
         if 'pos' in par:
-            res = tousfunc.track_eletrons(self.deltas,self._nturns,
-                                               index, self._model, pos_x=1e-5, pos_y=3e-6)
+            res = tousfunc.track_eletrons(self.deltas,self.nturns,
+                                               index, model, pos_x=1e-5, pos_y=3e-6)
         elif 'neg' in par:
             res = tousfunc.track_eletrons(-self.deltas,self._nturns,
-                                               index, self._model, pos_x=1e-5, pos_y=3e-6)
+                                               index, model, pos_x=1e-5, pos_y=3e-6)
         
         return res
     
@@ -219,6 +231,17 @@ class Tous_analysis():
         getdp[indp] = 0
         getdn[indn] = 0
 
+        ind = _np.int0(_np.where(getdp>1e-2)[0])
+        getdp = getdp[ind]
+        deltp = deltp[ind]
+        ind = _np.int0(_np.where(getdn>1e-2)[0])
+        getdn = getdn[ind]
+        deltn = deltn[ind]
+
+        # defining the energy deviation limit until tracking will be performed
+
+        self.deltas = deltp[-1]*1e2
+
         # this function will return the weighting factors in the scalc position convertion
         
         return getdp, getdn, deltp, deltn
@@ -229,21 +252,23 @@ class Tous_analysis():
         # this raise blocks to runing the program if the list of s position has more than 1 element
         if len(tousfunc.t_list(single_spos)) != 1:
             raise Exception('This function suports only one s position')
+
+        
+        fdensp, fdensn, deltp, deltn = self.get_weighting_tous(single_spos)
+        
+        fp = fdensp.squeeze()
+        fn = fdensn.squeeze()
         
         res = self.return_sinpos_track(single_spos, par)
         turn_lost, elmnt_lost, delta = _np.zeros(len(res)),_np.zeros(len(res)),_np.zeros(len(res))
+
+        Ddeltas = _np.diff(delta)[0]
 
         for index, iten in enumerate(res):
             tlost, ellost, delt = iten
             turn_lost[index] = tlost
             elmnt_lost[index] = ellost
             delta[index] = delt
-
-        Ddeltas = _np.diff(delta)[0]
-        fdensp, fdensn, deltp, deltn = self.get_weighting_tous(single_spos)
-        
-        fp = fdensp.squeeze()
-        fn = fdensn.squeeze()
 
         if 'pos' in par:
             return res, fp*Ddeltas, deltp *1e2
@@ -293,7 +318,7 @@ class Tous_analysis():
         return ress, scat_dis
     
     # this function plot the graphic of tracking and the touschek scattering distribution for one single position
-    def plot_analysi_at_position(self, spos, par, amp_on):
+    def plot_analysis_at_position(self, single_spos, par):
         # defining some params top plot the tracking and the scattering distribution
         # In a first approach I dont have to be concerned in this decision structure because all variables necessary for the calculation will be defined
         # I will may let this part of the code if I know a best method or decide to make a change here
@@ -303,9 +328,12 @@ class Tous_analysis():
         # else:
         #     amps_and_idxs = self._amp_and_limidx
 
-        res, fp, dp = self.fast_aquisition(spos, par)
-
-        tousfunc.plot_track(self._model_fit,res, )
+        res, fp, dp = self.fast_aquisition(single_spos, par)
+        spos = self.spos
+        index = _np.argmin(_np.abs(spos-single_spos))
+        accep = self.accep
+        inds_lim = _np.int0(self.inds_pos)
+        tousfunc.plot_track(self.accelerator, res, inds_lim, self.off_energy, par, index, accep, dp, fp)
         
 
 

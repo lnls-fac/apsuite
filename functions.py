@@ -174,7 +174,6 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     a2.xaxis.grid(False)
     a3.xaxis.grid(False)
     
-    ind = _np.int0(_np.where(f_dens>1e-17)[0])
 
     if 'pos' in param: # defining the y and x label of the first graphic
         a1.set_ylabel(r'positive energy deviation', fontsize=14)
@@ -196,7 +195,7 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     a1.set_title(r'taxa de espalhamento touschek', fontsize=14) # setting the title of the first graphic
     a1.set_xlabel(r'Scattering touschek rate', fontsize=14)
 
-    a1.plot(f_dens[ind], delt[ind], label='Scattering touschek rate', color='black')
+    a1.plot(f_dens, delt, label='Scattering touschek rate', color='black')
 
     # LEMBRAR DE DEFINIR CORRETAMENTE OS INTERVALOS PARA PLOTAR OS DESVIOS DE ENERGIA. PERCEBA QUE OS DESVIOS DE ENERGIA PROVENIENTES DESTA FUNÇÃO
     # VÃO ATÉ INFINITO BASICAMENTE. EU POSSO SIMPLESMENTE FAZER UM SLICE E DEFINIR ATÉ ONDE EU QUERO QUE O ARRAY SEJA PLOTADO PRA NÃO TER QUE 
