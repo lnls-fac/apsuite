@@ -68,18 +68,22 @@ class TbTData(DataBaseClass):
         data = TbTData._process_data(self.data, get_dft=get_dft)
         self.data['trajx'], self.data['trajy'] = data[0], data[1]
         if get_dft:
-            saelf.data['dftx'], self.data['dfty'] = data[2], data[3]
+            self.data['dftx'], self.data['dfty'] = data[2], data[3]
 
-    def fit_hist_mat(self, from_turn=0, to_turn=15, model=None):
+    def fit_hist_mat(self, traj='xy', from_turn=0, to_turn=15, model=None):
         """."""
-        self.data['J'], self.data['tunes'] = TbTData._fit_hist_mat(
-            data=self.data, from_turn=from_turn, to_turn=to_turn, model=model)
+        for axis in traj:
+            self.data['J'+axis], self.data['tunes'+axis] = \
+                TbTData._fit_hist_mat(data=self.data, traj=axis,
+                                      from_turn=from_turn, to_turn=to_turn,
+                                      model=model)
 
     @staticmethod
-    def _fit_hist_mat(data, from_turn=0, to_turn=15, model=None):
+    def _fit_hist_mat(data, traj='x', from_turn=0, to_turn=15, model=None):
         """."""
-        hist_mat = data['trajx']
-        dft = data['dftx']
+        hist_mat = data['traj'+traj]
+        dft = data['dft'+traj]
+
         tune_guesses = TbTData._get_dft_peaks_tunes(dft,
                                                     nturns=hist_mat.shape[0])
         hist_mat = hist_mat[from_turn:to_turn + 1, :]
@@ -276,12 +280,15 @@ class ADTSAnalysis():
                 self.data[kick_key]['dftx'] = proc_data[2]
                 self.data[kick_key]['dfty'] = proc_data[3]
 
-    def fit_data(self, from_turn=0, to_turn=15, model=None):
+    def fit_data(self, traj='xy', from_turn=0, to_turn=15, model=None):
         """."""
-        for kick_key in self.files.keys():
-            print(f'Fitting {kick_key} urad file')
-            data = self.data[kick_key]
-            self.data[kick_key]['Jx'], self.data[kick_key]['tunesx'] = \
-                TbTData()._fit_hist_mat(data=data,
-                                        from_turn=from_turn, to_turn=to_turn,
-                                        model=model)
+        for axis in traj:
+            for kick in self.files.keys():
+                print(f'Fitting {kick} urad file')
+                data = self.data[kick]
+                self.data[kick]['J'+axis],  self.data[kick]['tunes'+axis] = \
+                    TbTData()._fit_hist_mat(data=data,
+                                            traj=axis,
+                                            from_turn=from_turn,
+                                            to_turn=to_turn,
+                                            model=model)
