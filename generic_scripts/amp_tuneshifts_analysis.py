@@ -70,18 +70,19 @@ class TbTData(DataBaseClass):
         if get_dft:
             saelf.data['dftx'], self.data['dfty'] = data[2], data[3]
 
-    def fit_hist_mat(self, model=None):
+    def fit_hist_mat(self, from_turn=0, to_turn=15, model=None):
         """."""
         self.data['J'], self.data['tunes'] = TbTData._fit_hist_mat(
-            data=self.data, model=model)
+            data=self.data, from_turn=from_turn, to_turn=to_turn, model=model)
 
     @staticmethod
-    def _fit_hist_mat(data, model=None):
+    def _fit_hist_mat(data, from_turn=0, to_turn=15, model=None):
         """."""
         hist_mat = data['trajx']
         dft = data['dftx']
-        tune_guesses = TbTData._get_dft_peaks_tunes(dft, nturns=hist_mat.shape[0])
-        hist_mat = hist_mat[:15, :]
+        tune_guesses = TbTData._get_dft_peaks_tunes(dft,
+                                                    nturns=hist_mat.shape[0])
+        hist_mat = hist_mat[from_turn:to_turn + 1, :]
         nturns = hist_mat.shape[0]
         nbpms = hist_mat.shape[-1]
 
@@ -118,8 +119,9 @@ class TbTData(DataBaseClass):
         fitted_J = (params[:, 0]**4).sum() / (betax * params[:, 0]**2).sum()
         # J is calculated as in eq. (9) of the reference X.R. Resende and M.B. Alves and L. Liu and F.H. de Sá. Equilibrium and Nonlinear Beam Dynamics Parameters From Sirius Turn-by-Turn BPM Data. In Proc. IPAC'21. DOI: 10.18429/JACoW-IPAC2021-TUPAB219
 
-        string = f'avg tune {fitted_tunes.mean():.3f}'
-        string += f'+- {fitted_tunes.std():.4f} (std)'
+        string = f'avg tune {fitted_tunes.mean():.4f}'
+        string += f' +- {fitted_tunes.std():.4f} (std)'
+        # TODO: add function to evaluate quality of the fit against BPMs data
         print(string)
 
         return fitted_J, fitted_tunes
@@ -274,13 +276,12 @@ class ADTSAnalysis():
                 self.data[kick_key]['dftx'] = proc_data[2]
                 self.data[kick_key]['dfty'] = proc_data[3]
 
-    def fit_data(self, model=None):
+    def fit_data(self, from_turn=0, to_turn=15, model=None):
         """."""
         for kick_key in self.files.keys():
             print(f'Fitting {kick_key} urad file')
             data = self.data[kick_key]
             self.data[kick_key]['Jx'], self.data[kick_key]['tunesx'] = \
-                TbTData()._fit_hist_mat(data=data, model=model)
-
-
-# TO-DO: deal with the appropriate windowing of the data to be fit.
+                TbTData()._fit_hist_mat(data=data,
+                                        from_turn=from_turn, to_turn=to_turn,
+                                        model=model)
