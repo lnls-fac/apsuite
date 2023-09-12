@@ -5,10 +5,8 @@ from scipy.optimize import curve_fit
 
 import pyaccel as _pa
 from pymodels import si as _si
-from apsuite.optics_analysis.tune_correction import TuneCorr
-from apsuite.optics_analysis.chromaticity_correction import ChromCorr
 from apsuite.utils import DataBaseClass
-from mathphys.functions import load_pickle, save_pickle
+from mathphys.functions import load_pickle
 
 import os
 
@@ -41,7 +39,8 @@ class TbTData(DataBaseClass):
     def _process_data(data, get_dft=True):
         """."""
         try:
-            trajx, trajy = data['trajx']*1e-3, data['trajy']*1e-3
+            # trajx, trajy = data['trajx']*1e-3, data['trajy']*1e-3
+            trajx, trajy = data['trajx'][0]*1e-3, data['trajy'][0]*1e-3
             trajx -= trajx.mean(axis=0)
             trajy -= trajy.mean(axis=0)
         except KeyError:
@@ -121,7 +120,10 @@ class TbTData(DataBaseClass):
 
         fitted_tunes = params[:, 1]
         fitted_J = (params[:, 0]**4).sum() / (betax * params[:, 0]**2).sum()
-        # J is calculated as in eq. (9) of the reference X.R. Resende and M.B. Alves and L. Liu and F.H. de Sá. Equilibrium and Nonlinear Beam Dynamics Parameters From Sirius Turn-by-Turn BPM Data. In Proc. IPAC'21. DOI: 10.18429/JACoW-IPAC2021-TUPAB219
+        # J is calculated as in eq. (9) of the reference X.R. Resende and M.B.
+        # Alves and L. Liu and F.H. de Sá. Equilibrium and Nonlinear Beam
+        # Dynamics Parameters From Sirius Turn-by-Turn BPM Data. In Proc.
+        # IPAC'21. DOI: 10.18429/JACoW-IPAC2021-TUPAB219
 
         string = f'avg tune {fitted_tunes.mean():.4f}'
         string += f' +- {fitted_tunes.std():.4f} (std)'
@@ -250,7 +252,8 @@ class ADTSAnalysis():
         files = sorted(os.listdir(path=self.dir))
         file_dict = {}
         for i, file in enumerate(files):
-            slc = slice(file.find('=') + 1, file.find('=') + 4)
+            slc = slice(file.find('urad')-3, file.find('urad'))
+            # slc = slice(file.find('=') + 1, file.find('=') + 4)
             kick = file[slc]
             file_dict[kick] = file
         self.files = file_dict
@@ -270,23 +273,26 @@ class ADTSAnalysis():
     def process_data(self, get_dft=True):
         """."""
         self.data = dict()
+        self.data['x'] = dict()
+        self.data['y'] = dict()
         for kick_key, file in self.files.items():
-            self.data[kick_key] = dict()
+            self.data['x'][kick_key] = dict()
+            self.data['y'][kick_key] = dict()
             raw_data = load_pickle(self.dir+file)
             proc_data = TbTData._process_data(data=raw_data, get_dft=get_dft)
-            self.data[kick_key]['trajx'] = proc_data[0]
-            self.data[kick_key]['trajy'] = proc_data[1]
+            self.data['x'][kick_key]['trajx'] = proc_data[0]
+            self.data['y'][kick_key]['trajy'] = proc_data[1]
             if get_dft:
-                self.data[kick_key]['dftx'] = proc_data[2]
-                self.data[kick_key]['dfty'] = proc_data[3]
+                self.data['x'][kick_key]['dftx'] = proc_data[2]
+                self.data['y'][kick_key]['dfty'] = proc_data[3]
 
     def fit_data(self, traj='xy', from_turn=0, to_turn=15, model=None):
         """."""
         for axis in traj:
             for kick in self.files.keys():
                 print(f'Fitting {kick} urad file')
-                data = self.data[kick]
-                self.data[kick]['J'+axis],  self.data[kick]['tunes'+axis] = \
+                data = self.data[axis][kick]
+                self.data[axis][kick]['J'],  self.data[axis][kick]['tunes'] = \
                     TbTData()._fit_hist_mat(data=data,
                                             traj=axis,
                                             from_turn=from_turn,
