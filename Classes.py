@@ -206,8 +206,8 @@ class Tous_analysis():
     
     def get_weighting_tous(self, single_spos, npt=5000):
         
-        scalc, daccp, daccn  = tousfunc.get_scaccep(self._model_fit, self._accep)
-        bf = self._beta
+        scalc, daccp, daccn  = tousfunc.get_scaccep(self.accelerator, self.accep)
+        bf = self.beam_energy
         ltime = self._ltime
         b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
         
@@ -231,16 +231,16 @@ class Tous_analysis():
         getdp[indp] = 0
         getdn[indn] = 0
 
-        ind = _np.int0(_np.where(getdp>1e-2)[0])
-        getdp = getdp[ind]
-        deltp = deltp[ind]
-        ind = _np.int0(_np.where(getdn>1e-2)[0])
-        getdn = getdn[ind]
-        deltn = deltn[ind]
+        # ind = _np.int0(_np.where(getdp>1e-2)[0])
+        # getdp = getdp[ind]
+        # deltp = deltp[ind]
+        # ind = _np.int0(_np.where(getdn>1e-2)[0])
+        # getdn = getdn[ind]
+        # deltn = deltn[ind]
 
         # defining the energy deviation limit until tracking will be performed
 
-        self.deltas = deltp[-1]*1e2
+        # self.deltas = deltp[-1]*1e2
 
         # this function will return the weighting factors in the scalc position convertion
         
@@ -262,7 +262,7 @@ class Tous_analysis():
         res = self.return_sinpos_track(single_spos, par)
         turn_lost, elmnt_lost, delta = _np.zeros(len(res)),_np.zeros(len(res)),_np.zeros(len(res))
 
-        Ddeltas = _np.diff(delta)[0]
+        
 
         for index, iten in enumerate(res):
             tlost, ellost, delt = iten
@@ -270,6 +270,8 @@ class Tous_analysis():
             elmnt_lost[index] = ellost
             delta[index] = delt
 
+        Ddeltas = _np.diff(delta)[0]
+        
         if 'pos' in par:
             return res, fp*Ddeltas, deltp *1e2
         elif 'neg' in par:
