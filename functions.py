@@ -196,10 +196,6 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     a1.set_xlabel(r'Scattering touschek rate', fontsize=14)
 
     a1.plot(f_dens, delt, label='Scattering touschek rate', color='black')
-
-    # LEMBRAR DE DEFINIR CORRETAMENTE OS INTERVALOS PARA PLOTAR OS DESVIOS DE ENERGIA. PERCEBA QUE OS DESVIOS DE ENERGIA PROVENIENTES DESTA FUNÇÃO
-    # VÃO ATÉ INFINITO BASICAMENTE. EU POSSO SIMPLESMENTE FAZER UM SLICE E DEFINIR ATÉ ONDE EU QUERO QUE O ARRAY SEJA PLOTADO PRA NÃO TER QUE 
-    # ME PREOCUPAR COM CONSERTAR LIMITES DE PLOT DE GRÁFICOS
     
 
     a2.set_title(r'$\delta \times$ lost turn', fontsize=16) # setting the tilte of the second graphic
