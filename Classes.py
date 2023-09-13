@@ -1,6 +1,6 @@
 from pyaccel.lifetime import Lifetime
 from pyaccel.lattice import get_attribute, find_indices, find_spos
-import nova_pasta.functions as tousfunc
+import touschek_pack.functions as tousfunc
 import pymodels
 import pyaccel.optics as py_op
 import numpy as _np

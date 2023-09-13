@@ -6,6 +6,7 @@ import scipy.integrate as _scyint
 import scipy.special as _special
 from mathphys.beam_optics import beam_rigidity as _beam_rigidity
 from mathphys.functions import save_pickle, load_pickle
+import pandas as pd
 
 
 def calc_amp(acc,energy_offsets, hmax, hmin):
@@ -176,16 +177,15 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     
 
     if 'pos' in param: # defining the y and x label of the first graphic
-        a1.set_ylabel(r'positive energy deviation', fontsize=14)
-        a2.set_ylabel(r'positive $\delta$ [%]', fontsize=14)
+        a1.set_ylabel(r'positive $\delta$ [%]', fontsize=14)
+        
         a3.plot(spos[int(lista_resul[1][-1])], lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[1][element_idx] # defining the acceptance given the begining tracking point, this will be necessary to define until where the graphic will be plotted
         indx = _np.argmin(_np.abs(lista_off-acp_s))
         for item in lista_resul:
             a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
     elif'neg' in param:
-        a1.set_ylabel(r'negative positive energy deviation', fontsize=14)
-        a2.set_ylabel(r'negative $\delta$ [%]', fontsize=14)
+        a1.set_ylabel(r'negative $\delta$ [%]', fontsize=14)
         a3.plot(spos[int(lista_resul[1][-1])], -lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[0][element_idx] # defining the acceptance given the begining tracking point, this will be necessary to define until where the graphic will be plotted
         indx = _np.argmin(_np.abs(lista_off-acp_s))
@@ -663,3 +663,7 @@ def histgms(acc,l_spos,num_part, accep, de_min):
     indices=_np.array(indices)
     
     return histsp1, histsp2, indices
+
+def defining_tables():
+
+    return None
