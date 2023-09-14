@@ -9,8 +9,8 @@ from . import fitting
 #from . import std_si_data
 #from . import last_complete_pynel as completePynel
 
-import os as _os
-with open(_os.path.join(__path__[0], 'VERSION'), 'r') as _f:
-    __version__ = _f.read().strip()
+# import os as _os
+# with open(_os.path.join(__path__[0], 'VERSION'), 'r') as _f:
+#     __version__ = _f.read().strip()
 
 __all__ = ['Base', 'Button', 'functions', 'fitting', 'std_si_data']
