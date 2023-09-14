@@ -180,9 +180,26 @@ class Button:
         return '('+str(self.sect)+','+str(self.dtype)+','+str(self.fantasy_name)+')'
 
     def __eq__(self, other):
-        if isinstance(other, Button):
-            return self.bname == other.bname and self.dtype == other.dtype and self.sect == other.sect and self.indices == other.indices and self.fantasy_name == other.fantasy_name
-        return False
+        if (str(type(other)).rsplit('.')[-1] == "Button'>"):
+            if (self.dtype == other.dtype):
+                if (self.indices == other.indices):
+                    if (self.fantasy_name == other.fantasy_name):
+                        return True, 0
+                    return False, 1
+                return False, 2
+            return False, 3
+        return False, 4
+    
+    def compare(self, other):
+        if (str(type(other)).rsplit('.')[-1] == "Button'>"):
+            if (self.dtype == other.dtype):
+                if (self.indices == other.indices):
+                    if (self.fantasy_name == other.fantasy_name):
+                        return True, 0
+                    return False, 1
+                return False, 2
+            return False, 3
+        return False, 4
 
     def check_isvalid(self):
         validify = [False, False, False]
