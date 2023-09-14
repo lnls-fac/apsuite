@@ -6,6 +6,7 @@ from pyaccel.lattice import find_spos as _find_spos, find_indices as _find_indic
 import os as _os
 from copy import deepcopy as _deepcopy
 from mathphys.functions import load_pickle as _load_pickle
+from pyaccel import lattice as _latt
 
 _path_model = _os.path.join(_os.path.dirname(__file__), "model_SI_V25_04_v1.17.0.pickle")
 if _pymodels.__version__ == '1.17.0':
@@ -141,3 +142,6 @@ def STD_ERROR_DELTAS():
 __full_buttons = _load_pickle(_os.path.join(_os.path.dirname(__file__), "full_buttons_04_09_23.pickle"))
 def COMPLETE_BUTTONS_VERTICAL_DISPERSION():
     return _deepcopy(__full_buttons)
+
+def ELEMS_ALL_INDICES():
+    return dict((fam, _np.array(_latt.find_indices(__model, 'fam_name', fam))) for fam in STD_ELEMS())

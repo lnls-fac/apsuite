@@ -3,12 +3,11 @@
 from .std_si_data import MODEL_BASE, SI_SPOS, SI_SECT_SPOS, \
     STD_SECTS, STD_TYPES, STD_ELEMS_HALB, STD_ELEMS_LBLP, \
     SI_SECTOR_TYPES, STD_ERROR_DELTAS, STD_ELEMS, \
-    STD_ORBCORR_JACOBIAN, SI_SECT_INDICES
+    STD_ORBCORR_JACOBIAN, SI_SECT_INDICES, ELEMS_ALL_INDICES
 from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 import numpy as _np
 from copy import deepcopy as _deepcopy
 from .misc_functions import calc_vdisp as _calc_vdisp, _FUNCS, rmk_correct_orbit
-from pyaccel import lattice as _latt
 
 _SI_SPOS          = SI_SPOS()
 _SI_SECT_SPOS     = SI_SECT_SPOS()
@@ -27,6 +26,7 @@ _JAC = STD_ORBCORR_JACOBIAN()
 _STD_SECT_TYPES = SI_SECTOR_TYPES()
 _SI_SECT_INDICES = SI_SECT_INDICES()
 _DELTAS = STD_ERROR_DELTAS()
+_FAMS_INDICES = ELEMS_ALL_INDICES()
 
 class Button:
     """Button object for storing a magnet (bname), it's sector (sect), it's indices 
@@ -180,26 +180,12 @@ class Button:
         return '('+str(self.sect)+','+str(self.dtype)+','+str(self.fantasy_name)+')'
 
     def __eq__(self, other):
-        if (str(type(other)).rsplit('.')[-1] == "Button'>"):
-            if (self.dtype == other.dtype):
-                if (self.indices == other.indices):
-                    if (self.fantasy_name == other.fantasy_name):
-                        return True, 0
-                    return False, 1
-                return False, 2
-            return False, 3
-        return False, 4
-    
-    def compare(self, other):
-        if (str(type(other)).rsplit('.')[-1] == "Button'>"):
-            if (self.dtype == other.dtype):
-                if (self.indices == other.indices):
-                    if (self.fantasy_name == other.fantasy_name):
-                        return True, 0
-                    return False, 1
-                return False, 2
-            return False, 3
-        return False, 4
+        try:
+            if (self.dtype == other.dtype) and (self.indices == other.indices) and (self.fantasy_name == other.fantasy_name):
+                return True
+            return False
+        except:
+            return False
 
     def check_isvalid(self):
         validify = [False, False, False]
@@ -250,7 +236,7 @@ class Button:
             print('(%d, %s, %s) ---> completely invalid' % (self.sect, self.dtype, self.bname))
 
     def __find_indices(self):
-        famidx = _np.array(_latt.find_indices(_OC_MODEL, 'fam_name', self.bname))
+        famidx = _FAMS_INDICES[self.bname]
         idx = _np.where((famidx > _SI_SECT_INDICES[self.sect-1]) & (famidx < _SI_SECT_INDICES[self.sect]))
         idx = list(famidx[idx])
         if '_' in self.fantasy_name:

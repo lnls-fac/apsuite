@@ -68,7 +68,6 @@ class Base:
             self.refine_base(update_buttons=True, flatten=True, return_removed=False, show_invalids=False)
 
         if self.rebuild == False and self.__init_flag == 'by_default':
-            print('checkpoint')
             temp_buttons = []
             for button in self.__buttons_list:
                 for buttonV in _FULL_VERTC_BUTTONS:
@@ -168,7 +167,6 @@ class Base:
         return dict(sectypes)
 
     def __generate_buttons(self, exclude=None, stdfunc='vertical_disp', default_valids=['std', 'std', 'std']):
-        print('entered gen - std=', default_valids)
         to_exclude = []
         if exclude == None:
             exclude = set()
@@ -209,7 +207,6 @@ class Base:
                         if (sect, dtype, elem) not in exparams:
                             temp_Button = _Button(name=elem, dtype=dtype, sect=sect, default_valids=default_valids, func='testfunc')
                             all_buttons.append(temp_Button)
-        print(len(all_buttons))
         return all_buttons
 
     def __exclude_buttons(self, par1, par2=None, par3=None):
