@@ -224,9 +224,32 @@ class TbTData(DataBaseClass):
         """."""
         return amplitude * _np.sin(2 * _np.pi * tune * n + phase)
 
-    def plot_spectrum(self, traj='trajx', bpm_idx=None):
+    def plot_spectrum(self, bpm_idx=None):
         """."""
-        raise NotImplementedError
+        fig, ax = _mplt.subplots(1, 2, sharey=True)
+        for i, plane in enumerate(['x', 'y']):
+            abs_dft = _np.abs(self.data['dft'+plane])[:, bpm_idx]
+            tunes = _np.fft.rfftfreq(n=self.data['traj'+plane].shape[0])
+            ax[i].plot(tunes, abs_dft)
+            ax[i].set_xlabel(f'{plane} tunes')
+            peak_tune = tunes[abs_dft.argmax()]
+            ax[i].axvline(x=peak_tune, color='r', linestyle='--', alpha=0.6,
+                          label=f'peak @ {peak_tune:.3f}')
+            ax[i].legend()
+        fig.supylabel(f'abs(DFT) [mm]')
+        fig.tight_layout()
+        _mplt.show()
+
+    def plot_trajctories(self, bpm_idx=None, from_turn=0, to_turn=20):
+        """."""
+        fig, ax = _mplt.subplots(1, 2, sharey=False)
+        for i, plane in enumerate(['x', 'y']):
+            ax[i].plot(self.data['traj'+plane][from_turn:to_turn+1, bpm_idx])
+            ax[i].set_title(f'{plane} trajectory')
+        fig.supylabel(f'trajctory [mm]')
+        fig.supxlabel(f'turns')
+        fig.tight_layout()
+        _mplt.show()
 
 
 class ADTSAnalysis():
