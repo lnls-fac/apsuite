@@ -79,6 +79,10 @@ class BumpNLK(_BaseClass):
     def get_trajectory_sofb(self):
         """."""
         sofb = self.devices['sofb']
+        sofb.cmd_reset()
+        # NOTE: the factor of 8 is because the current version of SOFB is too
+        # slow to update multi-turn orbits.
+        sofb.wait_buffer(timeout=sofb.nr_points*0.5*8)
         trajx = sofb.mt_trajx.reshape((-1, sofb.data.nr_bpms))
         trajy = sofb.mt_trajy.reshape((-1, sofb.data.nr_bpms))
         return trajx, trajy
@@ -112,6 +116,8 @@ class BumpNLK(_BaseClass):
         data = {
             'timestamp': _time.time(),
             'stored_current': bbbh.dcct.current,
+            'rf_frequency': bbbh.rfcav.dev_rfgen.frequency,
+
             'spech_mag': bbbh.sram.spec_mag,
             'spech_freq': bbbh.sram.spec_freq,
             'bbbh_data_mean': bbbh.sram.data_mean,
@@ -119,8 +125,8 @@ class BumpNLK(_BaseClass):
             'spech_mk1_tune': bbbh.sram.spec_marker1_tune,
             'trajx': trajx,
 
-            'specv_magv': bbbv.sram.spec_mag,
-            'specv_freqv': bbbv.sram.spec_freq,
+            'specv_mag': bbbv.sram.spec_mag,
+            'specv_freq': bbbv.sram.spec_freq,
             'bbbv_data_mean': bbbv.sram.data_mean,
             'specv_mk1_mag': bbbv.sram.spec_marker1_mag,
             'specv_mk1_tune': bbbv.sram.spec_marker1_tune,
