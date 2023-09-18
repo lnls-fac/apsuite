@@ -766,8 +766,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         return fambpms.mturn_config_acquisition(
             nr_points_after=prms.orbit_nrpoints_after,
             nr_points_before=prms.orbit_nrpoints_before,
-            acq_rate=prms.orbit_acq_rate,
-            repeat=prms.orbit_acq_repeat)
+            acq_rate=prms.orbit_acq_rate, repeat=prms.orbit_acq_repeat)
 
     def acquire_data(self, get_sum=False):
         """."""
@@ -779,14 +778,11 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         elif ret > 0:
             print(tag + ' is not ready for acquisition.')
 
-        fambpms.mturn_reset_flags_and_update_initial_timestamps(
-            consider_sum=get_sum)
-
+        fambpms.mturn_reset_flags_and_update_initial_timestamps()
         self.trigger_timing_signal()
 
         time0 = _time.time()
-        ret = fambpms.mturn_wait_update(
-            timeout=self.params.orbit_timeout, consider_sum=get_sum)
+        ret = fambpms.mturn_wait_update(timeout=self.params.orbit_timeout)
         print(f'it took {_time.time()-time0:02f}s to update bpms')
         if ret != 0:
             print(f'There was a problem with acquisition')
@@ -801,7 +797,7 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
     def get_data(self, get_sum=False):
         """Get Orbit and auxiliary data."""
         fambpms = self.devices['fambpms']
-        mturn_orbit = fambpms.get_mturn_orbit(return_sum=get_sum)
+        mturn_orbit = fambpms.get_mturn_signals()
 
         data = dict()
         data['ispost_mortem'] = self._ispost_mortem
@@ -829,8 +825,8 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         return data
 
     def process_data_energy(
-            self, central_freq=24*64, window=5, inverse=True,
-            orm_name='', use_eta_meas=True):
+            self, central_freq=24*64, window=5, inverse=True, orm_name='',
+            use_eta_meas=True):
         """Energy Stability Analysis."""
         self.subtract_average_orb()
         self.get_appropriate_orm_data(orm_name)
