@@ -99,7 +99,7 @@ class MeasACORM(_ThreadBaseClass):
         params = ACORMParams() if params is None else params
         super().__init__(
             params=params, target=self._do_measure, isonline=isonline)
-        self.bpms = dict()
+        self.bpms = None
 
         self.sofb_data = SOFBFactory.create('SI')
         self.configdb = _ConfigDBClient(config_type='si_orbcorr_respm')
@@ -925,9 +925,8 @@ class MeasACORM(_ThreadBaseClass):
 
     def _config_bpms(self, nr_points):
         return self.bpms.mturn_config_acquisition(
-            acq_rate=self.params.acq_rate,
-            nr_points_before=0, nr_points_after=nr_points,
-            repeat=False, external=True)
+            acq_rate=self.params.acq_rate, nr_points_before=0,
+            nr_points_after=nr_points, repeat=False, external=True)
 
     # ----------------- Timing related methods -----------------------
 
