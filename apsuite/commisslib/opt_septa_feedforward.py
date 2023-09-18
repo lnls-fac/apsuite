@@ -11,7 +11,7 @@ import pywt as _pywt
 
 from mathphys.functions import load_pickle
 from pymodels import si as _si
-from siriuspy.devices import PowerSupply, SOFB, FamBPMs, Trigger
+from siriuspy.devices import PowerSupply, SOFB, Trigger
 from siriuspy.clientconfigdb import ConfigDBClient as _CDBClient
 from siriuspy.magnet.factory import NormalizerFactory as _Normalizer
 
@@ -506,7 +506,6 @@ class OptSeptaFF(_RCDS):
         self.devices['ps_m1cv'] = PowerSupply('SI-01M1:PS-FFCV')
 
         # Create objects to interact with BPMs
-        # self.devices['fambpms'] = FamBPMs()
         self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
 
 
