@@ -180,7 +180,7 @@ class Button:
         return '('+str(self.sect)+','+str(self.dtype)+','+str(self.fantasy_name)+')'
 
     def __eq__(self, other):
-        try:
+        try: # cant use "isinstance" because "full_buttons" pickle was generated with package "pynel", not "apsuite.pynel" ! 
             if (self.dtype == other.dtype) and (self.indices == other.indices) and (self.fantasy_name == other.fantasy_name):
                 return True
             return False

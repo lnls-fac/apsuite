@@ -65,3 +65,5 @@ examples/.*
 test/flatfile2.txt
 
 .vscode/
+
+apsuite/pynel/gen_buttons.ipynb

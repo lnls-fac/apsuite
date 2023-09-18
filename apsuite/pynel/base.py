@@ -71,8 +71,9 @@ class Base:
             temp_buttons = []
             for button in self.__buttons_list:
                 for buttonV in _FULL_VERTC_BUTTONS:
-                    if button == buttonV:
-                        temp_buttons.append(buttonV)
+                    if (button.indices == buttonV.indices) and (button.dtype == buttonV.dtype) and (button.fantasy_name == buttonV.fantasy_name):
+                        button.signature = _dpcopy(buttonV.signature)
+                        temp_buttons.append(button)
 
             self.__buttons_list = temp_buttons
 
