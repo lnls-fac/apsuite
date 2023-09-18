@@ -17,11 +17,14 @@ class RFCalibrationParams(_ParamsBaseClass):
         super().__init__()
         self.voltage_timeout = 120  # [s]
         self.voltage_wait = 5  # [s]
-        self.voltage_min = 1.0  # [MV]
-        self.voltage_max = 2.0  # [MV]
+        self.initial_voltage = 1.0  # [MV]
+        self.final_voltage = 2.0  # [MV]
         self.voltage_nrpoints = 15
         self.voltage_incrate = self.VoltIncRates.vel_0p5
+        self.cbmode2drive = 200
+        self.cbmode_drive_freq_offset = -0.08  # [kHz]
         self.conv_physics2hardware = 506/1.75  # [mV/MV]
+        self.restore_initial_state = True
 
     def __str__(self):
         """."""
@@ -30,15 +33,20 @@ class RFCalibrationParams(_ParamsBaseClass):
         stmp = '{0:25s} = {1:9s}  {2:s}\n'.format
         stg = ftmp('voltage_timeout', self.voltage_timeout, '[s]')
         stg += ftmp('voltage_wait', self.voltage_wait, '[s]')
-        stg += ftmp('voltage_min', self.voltage_min, '[MV]')
-        stg += ftmp('voltage_max', self.voltage_max, '[MV]')
+        stg += ftmp('initial_voltage', self.initial_voltage, '[MV]')
+        stg += ftmp('final_voltage', self.final_voltage, '[MV]')
         stg += dtmp('voltage_nrpoints', self.voltage_nrpoints)
+        stg += dtmp('cbmode2drive', self.cbmode2drive)
+        stg += ftmp(
+            'cbmode_drive_freq_offset', self.cbmode_drive_freq_offset, '[kHz]')
         incrate_str = self.VoltIncRates._fields[self.voltage_incrate] \
             if isinstance(self.voltage_incrate, int) else self.voltage_incrate
         stg += stmp(
             'voltage_incrate', incrate_str, '[mV/s]')
         stg += ftmp(
             'conv_physics2hardware', self.conv_physics2hardware, '[mV/MV]')
+        stg += dtmp(
+            'restore_initial_state', self.restore_initial_state)
         return stg
 
 
@@ -52,24 +60,35 @@ class RFCalibration(_ThreadedMeasBaseClass):
         if self.isonline:
             self.devices['bbbl'] = BunchbyBunch(
                 BunchbyBunch.DEVICES.L, props2init=[])
-            self.devices['rfcav'] = RFCav(props2init=[])
+            self.devices['rfcav'] = RFCav(RFCav.DEVICES.SI, props2init=[])
             self.devices['currinfo'] = CurrInfoSI(props2init=['Current-Mon'])
 
     def calc_voltage_span(self):
         """."""
         prms = self.params
         voltage_span = _np.linspace(
-            prms.voltage_min, prms.voltage_max, prms.voltage_nrpoints)
+            prms.initial_voltage, prms.final_voltage, prms.voltage_nrpoints)
         return voltage_span
 
-    def configure_bbb_drive_pattern(self, cbmode):
+    # def configure_bbb_drive_pattern(self, cbmode):
+    #     """."""
+    #     harm_nr = 864
+    #     bunches = _np.arange(harm_nr)
+    #     bbbl = self.devices['bbbl']
+    #     bbbl.drive0.mask = _np.cos(2*_np.pi*bunches*cbmode/harm_nr) > 0
+    #     # drive at synchrotron frequency
+    #     bbbl.drive0.frequency = bbbl.sram.modal_marker_freq
+
+    def set_bbb_drive_frequency(self, sync_freq):
         """."""
         harm_nr = 864
-        bunches = _np.arange(harm_nr)
-        bbbl = self.devices['bbbl']
-        bbbl.drive0.mask = _np.cos(2*_np.pi*bunches*cbmode/harm_nr) > 0
-        # drive at synchrotron frequency
-        bbbl.drive0.frequency = bbbl.sram.modal_marker_freq
+        rf_freq = self.devices['rfcav'].dev_rfgen.frequency
+        rev_freq = rf_freq/harm_nr * 1e-3  # [Hz -> kHz]
+        drive_freq = self.params.cbmode2drive * rev_freq
+        drive_freq += sync_freq
+        drive_freq += self.params.cbmode_drive_freq_offset
+        self.devices['bbbl'].drive0.frequency = drive_freq
+        self.devices['bbbl'].sram.modal_sideband_freq = sync_freq
 
     def _meas_func(self):
         data = dict()
@@ -79,7 +98,7 @@ class RFCalibration(_ThreadedMeasBaseClass):
         for key in data_keys:
             data[key] = []
 
-        llrf, bbbl = self.devices['rf_cav'].dev_llrf, self.devices['bbbl']
+        llrf, bbbl = self.devices['rfcav'].dev_llrf, self.devices['bbbl']
 
         amp0 = llrf.voltage
         prms = self.params
@@ -95,6 +114,9 @@ class RFCalibration(_ThreadedMeasBaseClass):
 
         # set first value of voltage
         llrf.set_voltage(rfamp_span[0], timeout=prms.voltage_timeout)
+
+        sync_freq0 = bbbl.sram.modal_marker_freq
+        self.set_bbb_drive_frequency(sync_freq=sync_freq0)
         for amp in rfamp_span:
             if self._stopevt.is_set():
                 print('Stopping...')
@@ -106,8 +128,8 @@ class RFCalibration(_ThreadedMeasBaseClass):
             sync_tune = bbbl.sram.modal_marker_tune
             rffreq = self.devices['rfcav'].dev_rfgen.frequency
             scurr = self.devices['currinfo'].current
-            gap_volt = self.devices['rf_cav'].dev_cavmon.gap_voltage
-            amp_volt = llrf.dev_llrf.voltage
+            gap_volt = self.devices['rfcav'].dev_cavmon.gap_voltage
+            amp_volt = llrf.voltage
 
             data['timestamp'].append(_time.time())
             data['sync_freq'].append(sync_freq)
@@ -121,16 +143,18 @@ class RFCalibration(_ThreadedMeasBaseClass):
                 f'Sync. Freq. {sync_freq:.3f} kHz')
 
             # set drive frequency to excite closer to actual sync. freq.
-            bbbl.drive0.frequency = data['sync_freq'][-1]
+            self.set_bbb_drive_frequency(sync_freq=data['sync_freq'][-1])
+            self.data = data
 
         for key in data_keys:
             data[key] = _np.array(data[key])
 
-        print('Restoring initial RF voltage...')
-        llrf.set_voltage(amp0, timeout=prms.voltage_timeout)
+        if prms.restore_initial_state:
+            print('Restoring initial RF voltage...')
+            llrf.set_voltage(amp0, timeout=2*prms.voltage_timeout)
 
-        print('Restoring initial RF voltage increase rate...')
-        llrf.voltage_incrate = inc_rate0
+            print('Restoring initial RF voltage increase rate...')
+            llrf.voltage_incrate = inc_rate0
 
         print('Finished!')
         self.data = data
