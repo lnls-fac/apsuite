@@ -699,7 +699,8 @@ class OrbitAcquisition(OrbitAnalysis, _BaseClass):
         """."""
         self.devices['currinfo'] = CurrInfoSI()
         self.devices['fambpms'] = FamBPMs(
-            FamBPMs.DEVICES.SI, ispost_mortem=self._ispost_mortem)
+            FamBPMs.DEVICES.SI, ispost_mortem=self._ispost_mortem,
+            props2init='acq')
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         trigname = self.BPM_TRIGGER
         if self._ispost_mortem:
