@@ -69,6 +69,19 @@ class TbTData(DataBaseClass):
         if get_dft:
             self.data['dftx'], self.data['dfty'] = data[2], data[3]
 
+    def filter_data(self, traj='y', tune=0.08, band=0.03):
+        dft = self.data['dft'+traj]
+        tunes = _np.fft.rfftfreq(n=self.data['traj'+traj].shape[0])
+        freq_center = tunes[_np.argmin(tunes - tune)]
+        upper_freq = freq_center + band
+        lower_freq = freq_center - band
+        lower_idx = _np.argmin(tunes - lower_freq)
+        upper_idx = _np.argmin(tunes - upper_freq)
+        dft[lower_idx:upper_idx] = 0
+        self.data['traj'+traj] = _np.fft.irfft(dft, axis=0)
+        self.data['dft'+traj] = dft
+
+
     def fit_hist_mat(self, traj='xy', from_turn=0, to_turn=15, model=None):
         """."""
         for axis in traj:
