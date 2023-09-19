@@ -167,6 +167,9 @@ class RFCalibration(_ThreadedMeasBaseClass):
                 break
             self.set_bbb_drive_frequency(
                 sync_freq=bbbl.sram.modal_marker_freq)
+            if self._stopevt.is_set():
+                print('Stopping...')
+                break
 
         self.set_bbb_drive_frequency(
             sync_freq=bbbl.sram.modal_marker_freq)
