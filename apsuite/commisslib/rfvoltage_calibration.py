@@ -111,18 +111,18 @@ class RFCalibration(_ThreadedMeasBaseClass):
 
         inc_rate0 = llrf.voltage_incrate
         llrf.voltage_incrate = prms.voltage_incrate
+        timeout = prms.voltage_timeout
 
         # set first value of voltage
-        llrf.set_voltage(rfamp_span[0], timeout=prms.voltage_timeout)
+        if not self.set_voltage_and_track_tune(rfamp_span[0], timeout=timeout):
+            print('Voltage timeout.')
 
-        sync_freq0 = bbbl.sram.modal_marker_freq
-        self.set_bbb_drive_frequency(sync_freq=sync_freq0)
         for amp in rfamp_span:
             if self._stopevt.is_set():
                 print('Stopping...')
                 break
-
-            llrf.set_voltage(amp, timeout=prms.voltage_timeout)
+            if not self.set_voltage_and_track_tune(amp, timeout=timeout):
+                print('Voltage timeout!')
             _time.sleep(prms.voltage_wait)
             sync_freq = bbbl.sram.modal_marker_freq
             sync_tune = bbbl.sram.modal_marker_tune
@@ -142,8 +142,6 @@ class RFCalibration(_ThreadedMeasBaseClass):
                 f'Amp. {amp:.2f} mV, Volt. {gap_volt/1e6:.3f} MV, '
                 f'Sync. Freq. {sync_freq:.3f} kHz')
 
-            # set drive frequency to excite closer to actual sync. freq.
-            self.set_bbb_drive_frequency(sync_freq=data['sync_freq'][-1])
             self.data = data
 
         for key in data_keys:
@@ -158,6 +156,21 @@ class RFCalibration(_ThreadedMeasBaseClass):
 
         print('Finished!')
         self.data = data
+
+    def set_voltage_and_track_tune(self, voltage, timeout=100):
+        "Set cavity voltage and change drive and mode frequency to match tune."
+        llrf, bbbl = self.devices['rfcav'].dev_llrf, self.devices['bbbl']
+        success = False
+        for _ in range(int(timeout)):
+            if llrf.set_voltage(voltage, timeout=1):
+                success = True
+                break
+            self.set_bbb_drive_frequency(
+                sync_freq=bbbl.sram.modal_marker_freq)
+
+        self.set_bbb_drive_frequency(
+            sync_freq=bbbl.sram.modal_marker_freq)
+        return success
 
     @staticmethod
     def calc_synchrotron_frequency(vgap, E0, U0, frf, alpha, h):
