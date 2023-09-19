@@ -81,13 +81,18 @@ class TbTData(DataBaseClass):
         self.data['traj'+traj] = _np.fft.irfft(dft, axis=0)
         self.data['dft'+traj] = dft
 
-
-    def fit_hist_mat(self, traj='xy', from_turn=0, to_turn=15, model=None):
+    def fit_hist_mat(self, traj='xy',
+                     from_turn=None, to_turn=None, model=None):
         """."""
-        for axis in traj:
+        is_tuple = isinstance(from_turn, tuple) and isinstance(to_turn, tuple)
+        if len(traj) == 2 and not is_tuple:
+            raise TypeError(
+                'Both from_turn and to_turn must be tuples for len(traj)>1')
+        for i, axis in enumerate(traj):
             self.data['J'+axis], self.data['tunes'+axis] = \
                 TbTData._fit_hist_mat(data=self.data, traj=axis,
-                                      from_turn=from_turn, to_turn=to_turn,
+                                      from_turn=from_turn[i],
+                                      to_turn=to_turn[i],
                                       model=model)
 
     @staticmethod
@@ -253,12 +258,16 @@ class TbTData(DataBaseClass):
         fig.tight_layout()
         _mplt.show()
 
-    def plot_trajctories(self, bpm_idx=None, from_turn=0, to_turn=20):
+    def plot_trajctories(self, bpm_idx=None, from_turn=None, to_turn=None):
         """."""
         fig, ax = _mplt.subplots(1, 2, sharey=False)
         for i, plane in enumerate(['x', 'y']):
-            ax[i].plot(self.data['traj'+plane][from_turn:to_turn+1, bpm_idx])
+            ax[i].plot(self.data['traj'+plane][:, bpm_idx])
             ax[i].set_title(f'{plane} trajectory')
+            from_t, to_t = from_turn[i], to_turn[i]
+            ax[i].set_xlim(from_t, to_t+1)
+            x_ticks = _np.arange(from_t, to_t+1, step=(to_t-from_t)//5)
+            ax[i].set_xticks(x_ticks)
         fig.supylabel(f'trajctory [mm]')
         fig.supxlabel(f'turns')
         fig.tight_layout()
