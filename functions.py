@@ -66,6 +66,9 @@ def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
     
     return turnl_element
 
+def f_mchn_stdy():
+    pass
+
 # This function will calculate where the electrons are lost using tracking
 
 # The function recives an array containing all the s positions along the ring 
