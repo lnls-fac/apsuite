@@ -75,7 +75,7 @@ class AcqBPMsSignals(_BaseClass):
         """."""
         ret = super().load_and_apply(fname)
         data = dict()
-        for key, val in self.data:
+        for key, val in self.data.items():
             if key.startswith('bpms_'):  # compatibility with old data
                 key = key.replace('bpms_', '')
             data[key] = val
