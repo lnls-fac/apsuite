@@ -127,7 +127,10 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
     def load_orb(self):
         """Load files in old format."""
-        self.load_and_apply(self.fname)
+        keys = self.load_and_apply(self.fname)
+        if keys:
+            print('The following keys were not used:')
+            print('    ', str(keys))
         data = self.data
         timestamp = _datetime.datetime.fromtimestamp(data['timestamp'])
         gtmp = '{0:<20s} = {1:}  {2:}\n'.format
