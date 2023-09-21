@@ -80,6 +80,7 @@ class AcqBPMsSignals(_BaseClass):
                 key = key.replace('bpms_', '')
             data[key] = val
         self.data = data
+        return ret
 
     def create_devices(self):
         """."""
