@@ -127,7 +127,8 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
     def load_orb(self):
         """Load files in old format."""
-        data = load_pickle(self.fname)
+        self.load_and_apply(self.fname)
+        data = self.data
         timestamp = _datetime.datetime.fromtimestamp(data['timestamp'])
         gtmp = '{0:<20s} = {1:}  {2:}\n'.format
         ftmp = '{0:<20s} = {1:9.5f}  {2:}\n'.format
@@ -145,11 +146,10 @@ class OrbitAnalysis(_AcqBPMsSignals):
             'switching_frequency', data['switching_frequency'], '')
         stg += gtmp('nrsamples_pre', data['nrsamples_pre'], '')
         stg += gtmp('nrsamples_post', data['nrsamples_post'], '')
-        orbx, orby = data['orbx'], data['orby']
+        orbx, orby = data['orbx'].copy(), data['orby'].copy()
         # zero mean in samples dimension
         orbx -= orbx.mean(axis=0)[None, :]
         orby -= orby.mean(axis=0)[None, :]
-        self.data = data
         self.orbx, self.orby = orbx, orby
         self.rf_freq = data['rf_frequency']
         self._get_sampling_freq()
