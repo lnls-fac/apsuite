@@ -54,7 +54,7 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
             if key.startswith('orbit_'):  # compatibility with old data
                 key = key.replace('orbit_', '')
             dic[key] = val
-        return super().from_dict(params_dict)
+        return super().from_dict(dic)
 
 
 class AcqBPMsSignals(_BaseClass):

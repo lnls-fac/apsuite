@@ -161,10 +161,11 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
     def load_and_apply(self, fname, orm_name=''):
         """."""
-        super().load_and_apply(fname)
+        keys = super().load_and_apply(fname)
         self.get_appropriate_orm_data(orm_name)
         self._get_sampling_freq()
         self._get_switching_freq()
+        return keys
 
     def get_appropriate_orm_data(self, orm_name=''):
         """Find Orbit Response Matrix measured close to data acquisition."""
@@ -295,7 +296,7 @@ class OrbitAnalysis(_AcqBPMsSignals):
             data by filtering around a center frequency with a window.
 
         Args:
-            central_freq (float, optional): harmonic of interested to be
+            central_freq (float, optional): harmonic of interest to be
                 analyzed in [Hz]. Defaults to 60Hz. Units [Hz].
             window (int, optional): frequency window to filter the data.
                 Units [Hz].
