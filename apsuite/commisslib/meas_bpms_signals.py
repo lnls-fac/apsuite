@@ -72,7 +72,15 @@ class AcqBPMsSignals(_BaseClass):
             self.create_devices()
 
     def load_and_apply(self, fname: str):
-        """."""
+        """Load and apply `data` and `params` from pickle or HDF5 file.
+
+        Args:
+            fname (str): name of the pickle file. If extension is not provided,
+                '.pickle' will be added and a pickle file will be assumed.
+                If provided, must be '.pickle' for pickle files or
+                {'.h5', '.hdf5', '.hdf', '.hd5'} for HDF5 files.
+
+        """
         ret = super().load_and_apply(fname)
         data = dict()
         for key, val in self.data.items():
