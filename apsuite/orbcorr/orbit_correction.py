@@ -53,10 +53,9 @@ class OrbitCorr:
         'CorrStatus',
         ['Sucess', 'OrbRMSWarning', 'ConvergenceFail', 'SaturationFail'])
 
-    def __init__(self, model, acc, dim='6d', params=None, corr_system='SOFB'):
+    def __init__(self, model, acc, params=None, corr_system='SOFB'):
         """."""
         self.acc = acc
-        self.dim = dim
         self.params = params or CorrParams()
         dim = '6d' if self.params.use6dorb else '4d'
         self.respm = OrbRespmat(
