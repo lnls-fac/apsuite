@@ -160,7 +160,15 @@ class OrbitAnalysis(_AcqBPMsSignals):
         return stg
 
     def load_and_apply(self, fname, orm_name=''):
-        """."""
+        """Load and apply `data` and `params` from pickle or HDF5 file.
+
+        Args:
+            fname (str): name of the pickle file. If extension is not provided,
+                '.pickle' will be added and a pickle file will be assumed.
+                If provided, must be '.pickle' for pickle files or
+                {'.h5', '.hdf5', '.hdf', '.hd5'} for HDF5 files.
+
+        """
         keys = super().load_and_apply(fname)
         self.get_appropriate_orm_data(orm_name)
         self._get_sampling_freq()
