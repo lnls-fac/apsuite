@@ -19,6 +19,7 @@ class CorrectVerticalDispersionParams(_ParamsBaseClass):
         self.nr_points_sofb = 20  # [Hz]
         self.nr_iters_corr = 1
         self.nr_svals = 100  # all qs
+        self.factor2apply = 1
         self.qs2use_idx = _np.arange(0, 100)
 
     def __str__(self):
@@ -30,6 +31,7 @@ class CorrectVerticalDispersionParams(_ParamsBaseClass):
         stg += dtmp('nr_points_sofb', self.nr_points_sofb)
         stg += dtmp('nr_iters_corr', self.nr_iters_corr)
         stg += dtmp('nr_svals', self.nr_svals)
+        stg += ftmp('factor2apply', self.factor2apply, '')
         stg += '{0:25s} = ['.format('qs2use_idx')
         stg += ','.join(f'{idx:3d}' for idx in self.qs2use_idx) + ']'
         return stg
@@ -100,6 +102,7 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
         orbminus = self.get_orb()
         dorb_dfreq = (orbplus - orbminus)/dfreq
         disp = - self.model_alpha * rf_freq0 * dorb_dfreq * 1e-6
+        rfgen.set_frequency(rf_freq0)
         return disp, rf_freq0
 
     def _meas_func(self):
@@ -107,17 +110,22 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
         data['timestamp'] = _time.time()
         data['dispersion_history'] = []
         data['dksl_history'] = []
+        data['ksl_history'] = []
         data['initial_ksl'] = self.get_skew_strengths()
         data['rf_frequency'] = []
         data['tunex'] = []
         data['tuney'] = []
 
-        all_qsidx_model = _np.array(self.fam_data['QS']['index']).ravel()
-        subset_qsidx = all_qsidx_model[self.qs2use_idx]
-        self.model_dispmat = self.calc_dispmat(
-            self.model, qsidx=subset_qsidx)[160:, :]
+        if self.model_dispmat is None:
+            all_qsidx_model = _np.array(self.fam_data['QS']['index']).ravel()
+            subset_qsidx = all_qsidx_model[self.params.qs2use_idx]
+            self.model_dispmat = self.calc_dispmat(
+                self.model, qsidx=subset_qsidx)[160:, :]
         idmat = self.invert_dispmat(self.model_dispmat, self.params.nr_svals)
         for idx in range(self.params.nr_iters_corr):
+            if self._stopevt.is_set():
+                print('Stop!')
+                break
             disp, rffreq = self.measure_dispersion()
             dispy = disp[160:]
             data['dispersion_history'].append(disp)
@@ -126,12 +134,14 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
             data['tuney'].append(self.devices['tune'].tuney)
             dstrens = self.calc_correction(dispy, idmat)
             stg = f'Iter. {idx+1:02d}/{self.params.nr_iters_corr:02d} | '
-            stg += f'dispy rms: {_np.std(dispy):.2f} [um], '
+            stg += f'dispy rms: {_np.std(dispy)*1e6:.2f} [um], '
             stg += f'dKsL rms: {_np.std(dstrens)*1e3:.4f} [1/km] \n'
             print(stg)
             print('-'*50)
             data['dksl_history'].append(dstrens)
-            self.apply_skew_delta_strengths(dstrens)
+            data['ksl_history'].append(self.get_skew_strengths())
+            self.apply_skew_delta_strengths(
+                dstrens, factor=self.params.factor2apply)
             self.devices['sofb'].correct_orbit_manually(nr_iters=10, residue=5)
 
         dispf, rffreq = self.measure_dispersion()
@@ -143,7 +153,7 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
         print('Correction result:')
         dispy0, dispyf = data['dispersion_history'][0][160:], dispf[160:]
         ksl0, kslf = data['initial_ksl'], data['final_ksl']
-        stg = f'dispy rms {_np.std(dispy0):.2f} [um] '
+        stg = f'dispy rms {_np.std(dispy0)*1e6:.2f} [um] '
         stg += f'--> {_np.std(dispyf)*1e6:.2f} [um] \n'
         stg += f"KsL rms: {_np.std(ksl0)*1e3:.4f} [1/km] "
         stg += f'--> {_np.std(kslf)*1e3:.4f} [1/km] \n'
@@ -152,31 +162,33 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
         print('Finished!')
         self.data = data
 
-    @staticmethod
-    def calc_model_dispersion(self, model):
+    def calc_model_dispersion(self, model=None):
         """."""
+        if model is None:
+            model = self.model
         self.orm.model = model
         respmat = self.orm.get_respm()
         rf_freq = self.orm.model[self.orm.rf_idx[0]].frequency
         alpha = pyaccel.optics.get_mcf(model)
         return - alpha * rf_freq * respmat[:, -1]
 
-    @classmethod
-    def calc_dispmat(cls, mod, qsidx=None, dksl=1e-6):
+    def calc_dispmat(self, qsidx=None, dksl=1e-6):
         """."""
         print('--- calculating dispersion/KsL matrix')
         if qsidx is None:
-            qsidx = _np.array(cls.fam_data['QS']['index']).ravel()
+            qsidx = _np.array(self.fam_data['QS']['index']).ravel()
         dispmat = []
-        for qs in qsidx:
-            modt = mod[:]
+        for idx, qs in enumerate(qsidx):
+            print(f'{idx+1:02d}/{qsidx.size:02d} ')
+            modt = self.model[:]
             modt[qs].KsL += dksl/2
-            dispp = cls.calc_model_dispersion(modt)
+            dispp = self.calc_model_dispersion(modt)
             modt[qs].KsL -= dksl
-            dispn = cls.calc_model_dispersion(modt)
+            dispn = self.calc_model_dispersion(modt)
             dispmat.append((dispp-dispn)/dksl)
             modt[qs].KsL += dksl
         dispmat = _np.array(dispmat).T
+        self.model_dispmat = dispmat
         return dispmat
 
     @staticmethod
