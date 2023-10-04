@@ -511,7 +511,8 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
     def plot_energy_spectrum(
             self, denergy=None,
-            title='', label='', figname='', fig=None, axs=None, color='C0'):
+            title='', label='', figname='', fig=None, axs=None, color='C0',
+            plot_rfjitter=True):
         """."""
         if denergy is None:
             energy_spec = self.analysis['energy_spectrum']
@@ -523,7 +524,8 @@ class OrbitAnalysis(_AcqBPMsSignals):
         if fig is None or axs is None:
             fig, axs = _plt.subplots(1, 1, figsize=(18, 6))
         axs.plot(freq, _np.abs(energy_spec)*100, label=label, color=color)
-        self._plot_ripple_rfjitter_harmonics(freq, axs)
+        if plot_rfjitter:
+            self._plot_ripple_rfjitter_harmonics(freq, axs)
         axs.set_xlabel('Frequency [Hz]')
         axs.set_ylabel(r'Amplitude for DFT of $\delta(t)$')
         axs.legend(
