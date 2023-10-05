@@ -273,6 +273,9 @@ class TbTData(DataBaseClass):
         fig.tight_layout()
         _mplt.show()
 
+    def evaluate_fit_quality(self, from_turn=None, to_turn=None):
+        raise NotImplementedError()
+
 
 class ADTSAnalysis():
     """."""
