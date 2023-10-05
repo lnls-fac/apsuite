@@ -570,6 +570,17 @@ class MeasACORM(_ThreadBaseClass):
         _time.sleep(exc_duration/2)
         rfgen.frequency = freq0
 
+    def _sweep_rf_phase(self, phase_amplitude, exc_duration):
+        rfgen = self.devices['rfgen']
+        phase0= rfgen.phase ?
+        rfgen.opmode ?
+        rfgen.amplitude = phase_amplitude
+        rfgen.
+        _time.sleep(exc_duration/2)
+        rfgen.opmode = # restore opmode
+        rfgen.phase = # restore phase0
+        raise NotImplementedError()
+
     def _do_measure_magnets(self):
         elt0 = _time.time()
         data_mags = []
@@ -772,6 +783,14 @@ class MeasACORM(_ThreadBaseClass):
         anly['mat_colx'] = (orbx_pos - orbx_neg) / rf_kick / 2
         anly['mat_coly'] = (orby_pos - orby_neg) / rf_kick / 2
         return anly
+
+    def _process_data_rf_phase(self):
+        # TODO: load std(eta)
+        # filtering and processing: harmonic selection
+        # fit Delta x amplitudes
+        # divide: - amplitudes / alhpa / f / std(Delta x) * std(eta)
+        raise NotImplementedError()
+
 
     def _process_data_bpms_noise(self, bpms_data):
         sofb = self.sofb_data
