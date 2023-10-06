@@ -18,6 +18,7 @@ import pyaccel as _pyaccel
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
 
+from apsuite.commisslib.meas_bpms_signals import _AcqBPMsSignals
 
 class ACORMParams(_ParamsBaseClass):
     """."""
@@ -784,12 +785,43 @@ class MeasACORM(_ThreadBaseClass):
         anly['mat_coly'] = (orby_pos - orby_neg) / rf_kick / 2
         return anly
 
-    def _process_data_rf_phase(self):
-        # TODO: load std(eta)
-        # filtering and processing: harmonic selection
-        # fit Delta x amplitudes
-        # divide: - amplitudes / alhpa / f / std(Delta x) * std(eta)
+    def _process_data_rf_phase(self, rf_data, central_freq=None, window=5):
+        anly = dict()
+
+        fsamp = self.data['bpms_sampling_frequency']
+        fsw = ?
+        sw_mode = ?
+        dtim = 1/fsamp
+        anly['fsamp'] = fsamp
+        anly['fsw'] = fsw
+
+        orbx = rf_data['orbx'].copy()
+        orby = rf_data['orby'].copy()
+        orbx -= orbx.mean(axis=0)
+        orby -= orby.mean(axis=0)
+        if fsamp / fsw > 1 and sw_mode == 'switching':
+            orbx = _AcqBPMsSignals.filter_switching_cycles(
+                orbx, fsamp, freq_switching=None)
+            orby = _AcqBPMsSignals.filter_switching_cycles(
+                orby, fsamp, freq_switching=None)
+        fmin = central_freq - window/2
+        fmax = central_freq + window/2
+        orbx = _AcqBPMsSignals.filter_orbit_frequencies(
+            orbx, fmin=fmin, fmax=fmax, fsampling=fsamp)
+        orby = _AcqBPMsSignals.filter_orbit_frequencies(
+            orby, fmin=fmin, fmax=fmax, fsampling=fsamp)
+        etax, etay = self.get_reference_dispersion()
+        eta_meas = _AcqBPMsSignals.calculate_eta_meas(orbx, orby, etax, etay)
+
+        alpha =
+        f =
+        anly['mat_colx'] = - eta_meas[:orbx.shape[-1]] / alpha / f
+        anly['mat_coly'] = - eta_meas[orbx.shape[-1]:] / alpha / f
+
         raise NotImplementedError()
+
+    def get_reference_dispersion(self):
+        raise NotImplementedError
 
 
     def _process_data_bpms_noise(self, bpms_data):
