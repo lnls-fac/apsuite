@@ -263,39 +263,43 @@ class OrbitAnalysis(_AcqBPMsSignals):
             orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
 
-        orbxy_fil = _np.hstack((orbx, orby))
-        _, _, vhmat = self.calc_svd(orbxy_fil)
-        etaxy = _np.hstack((self.etax, self.etay))
-        etaxy_nm = etaxy - _np.mean(etaxy)
-
-        correls = []
-        for mode in range(vhmat.shape[0]):
-            vech_nm = vhmat[mode] - _np.mean(vhmat[mode])
-            correls.append(abs(self._calc_correlation(vech_nm, etaxy_nm)))
-
-        maxcorr_idx = _np.argmax(correls)
-        vheta = vhmat[maxcorr_idx]
-        vheta_nm = vheta - _np.mean(vheta)
-
-        # Find scale factor via least-squares minimization
-        gamma = _np.dot(etaxy_nm, vheta_nm)/_np.dot(etaxy_nm, etaxy_nm)
-        eta_meas = vheta/gamma
+        if use_eta_meas:
+            eta2use = self.calculate_eta_meas(orbx, orby, self.etax, self.etay)
+        else:
+            eta2use = _np.hstack((self.etax, self.etay))
 
         orbxy = _np.hstack((orbx_ns, orby_ns))
-        eta2use = eta_meas if use_eta_meas else etaxy
         coef = _np.polynomial.polynomial.polyfit(eta2use, orbxy.T, deg=1)
         denergy = coef[1]
 
         energy_spec, freq = self.calc_spectrum(denergy, fs=self.sampling_freq)
         intpsd = self.calc_integrated_spectrum(energy_spec, inverse=inverse)
 
-        self.analysis['measured_dispersion'] = eta_meas
+        self.analysis['measured_dispersion'] = eta2use if use_eta_meas \
+            else None
         self.analysis['energy_freqmax'] = central_freq + window/2
         self.analysis['energy_freqmin'] = central_freq - window/2
         self.analysis['energy_deviation'] = denergy
         self.analysis['energy_spectrum'] = energy_spec
         self.analysis['energy_freq'] = freq
         self.analysis['energy_ipsd'] = intpsd
+
+    @staticmethod
+    def calculate_eta_meas(orbx, orby, etax, etay):
+        """Calculate the dispersion function from measured orbits."""
+        orbxy_fil = _np.hstack((orbx, orby))
+        _, _, vhmat = _AcqBPMsSignals.calc_svd(orbxy_fil)
+        etaxy = _np.hstack((etax, etay))
+        etaxy_nm = etaxy - _np.mean(etaxy)
+
+        vhmat_nm = vhmat - _np.mean(vhmat, axis=1)  # not sure about axis
+        correls = _np.dot(etaxy_nm, vhmat_nm)
+        vheta = vhmat[_np.argmax(correls)]
+        vheta_nm = vheta - _np.mean(vheta)
+
+        # Find scale factor via least-squares minimization
+        gamma = _np.dot(etaxy_nm, vheta_nm)/_np.dot(etaxy_nm, etaxy_nm)
+        return vheta/gamma
 
     def orbit_stability_analysis(
             self, central_freq=60, window=10, inverse=False, pca=True,
