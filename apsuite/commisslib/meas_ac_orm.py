@@ -18,7 +18,8 @@ import pyaccel as _pyaccel
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
 
-from apsuite.commisslib.meas_bpms_signals import _AcqBPMsSignals
+from apsuite.commisslib.meas_bpms_signals import AcqBPMsSignals as \
+    _AcqBPMsSignals
 
 class ACORMParams(_ParamsBaseClass):
     """."""
