@@ -825,23 +825,23 @@ class MeasACORM(_ThreadBaseClass):
             mom_compac = self.get_mom_compac(calculate_mcf=calculate_mcf)
         else:
             mom_compac = rf_data['mom_compac']
-        RFfreq = self.devices['rfgen'].frequency
+        rf_freq = self.devices['rfgen'].frequency
 
-        etax, etay = self.get_reference_dispersion(RFfreq, mom_compac)
+        etax, etay = self.get_reference_dispersion(
+            rf_freq, mom_compac, rf_data['timestamp'])
         eta_meas = _OrbitAnalysis.calculate_eta_meas(orbx, orby, etax, etay)
-        anly['mat_colx'] = - eta_meas[:orbx.shape[-1]] / mom_compac / RFfreq
-        anly['mat_coly'] = - eta_meas[orbx.shape[-1]:] / mom_compac / RFfreq
+        anly['mat_colx'] = - eta_meas[:orbx.shape[-1]] / mom_compac / rf_freq
+        anly['mat_coly'] = - eta_meas[orbx.shape[-1]:] / mom_compac / rf_freq
         raise NotImplementedError()
 
-    def get_reference_dispersion(self, RFfreq, mom_compac):
-        num_bpms = len(self.bpms)  # ?
+    def get_reference_dispersion(self, RFfreq, mom_compac, timestamp):
         orm = _OrbitAnalysis.find_latest_orm(
             orm_client=_ConfigDBClient(config_type='si_orbcorr_respm'),
-            timestamp=self.data['timestamp'],
-            num_bpms=num_bpms)  # best option for timestamp & bpms?
+            timestamp=timestamp)
         etaxy = orm[:, -1]
+        nrbpms = etaxy.size // 2
         etaxy *= (-mom_compac * RFfreq)  # units of [um]
-        etax, etay = etaxy[:num_bpms], etaxy[num_bpms:]
+        etax, etay = etaxy[:nrbpms], etaxy[nrbpms:]
         return etax, etay
 
     def get_mom_compac(self, rf_data, calculate_mcf):
