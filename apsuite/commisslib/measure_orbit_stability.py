@@ -284,23 +284,6 @@ class OrbitAnalysis(_AcqBPMsSignals):
         self.analysis['energy_freq'] = freq
         self.analysis['energy_ipsd'] = intpsd
 
-    @staticmethod
-    def calculate_eta_meas(orbx, orby, etax, etay):
-        """Calculate the dispersion function from measured orbits."""
-        orbxy_fil = _np.hstack((orbx, orby))
-        _, _, vhmat = _AcqBPMsSignals.calc_svd(orbxy_fil)
-        etaxy = _np.hstack((etax, etay))
-        etaxy_nm = etaxy - _np.mean(etaxy)
-
-        vhmat_nm = vhmat - _np.mean(vhmat, axis=1)  # not sure about axis
-        correls = _np.dot(etaxy_nm, vhmat_nm)
-        vheta = vhmat[_np.argmax(correls)]
-        vheta_nm = vheta - _np.mean(vheta)
-
-        # Find scale factor via least-squares minimization
-        gamma = _np.dot(etaxy_nm, vheta_nm)/_np.dot(etaxy_nm, etaxy_nm)
-        return vheta/gamma
-
     def orbit_stability_analysis(
             self, central_freq=60, window=10, inverse=False, pca=True,
             split_planes=True):
@@ -631,3 +614,20 @@ class OrbitAnalysis(_AcqBPMsSignals):
         for idx, jit in enumerate(rfjitt):
             lab = r'n $\times$ 64Hz' if not idx else ''
             ax.axvline(x=jit, ls='--', lw=2, label=lab, color='tab:red')
+
+    @staticmethod
+    def calculate_eta_meas(orbx, orby, etax, etay):
+        """Calculate the dispersion function from measured orbits."""
+        orbxy_fil = _np.hstack((orbx, orby))
+        _, _, vhmat = _AcqBPMsSignals.calc_svd(orbxy_fil)
+        etaxy = _np.hstack((etax, etay))
+        etaxy_nm = etaxy - _np.mean(etaxy)
+
+        vhmat_nm = vhmat - _np.mean(vhmat, axis=1)  # not sure about axis
+        correls = _np.dot(etaxy_nm, vhmat_nm)
+        vheta = vhmat[_np.argmax(correls)]
+        vheta_nm = vheta - _np.mean(vheta)
+
+        # Find scale factor via least-squares minimization
+        gamma = _np.dot(etaxy_nm, vheta_nm)/_np.dot(etaxy_nm, etaxy_nm)
+        return vheta/gamma
