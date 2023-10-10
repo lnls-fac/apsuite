@@ -18,8 +18,13 @@ import pyaccel as _pyaccel
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
 
-from apsuite.commisslib.meas_bpms_signals import AcqBPMsSignals as \
-    _AcqBPMsSignals
+from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals
+from .measure_orbit_stability import OrbitAnalysis as _OrbitAnalysis
+from pymodels import si as _si
+from . .optics_analysis.chromaticity_correction import ChromCorr as _ChromCorr
+from pyaccel.optics.miscellaneous import get_mcf as _get_mcf
+from .. import asparams as _asparams
+
 
 class ACORMParams(_ParamsBaseClass):
     """."""
@@ -786,7 +791,8 @@ class MeasACORM(_ThreadBaseClass):
         anly['mat_coly'] = (orby_pos - orby_neg) / rf_kick / 2
         return anly
 
-    def _process_data_rf_phase(self, rf_data, central_freq=None, window=5):
+    def _process_data_rf_phase(
+            self, rf_data, central_freq=None, window=5, calculate_mcf=True):
         anly = dict()
 
         fsamp = self.data['bpms_sampling_frequency']
@@ -802,28 +808,46 @@ class MeasACORM(_ThreadBaseClass):
         orby -= orby.mean(axis=0)
         if fsamp / fsw > 1 and sw_mode == 'switching':
             orbx = _AcqBPMsSignals.filter_switching_cycles(
-                orbx, fsamp, freq_switching=None)
+                orbx, fsamp, freq_switching=fsw)
             orby = _AcqBPMsSignals.filter_switching_cycles(
-                orby, fsamp, freq_switching=None)
+                orby, fsamp, freq_switching=fsw)
+
         fmin = central_freq - window/2
         fmax = central_freq + window/2
+
         orbx = _AcqBPMsSignals.filter_orbit_frequencies(
             orbx, fmin=fmin, fmax=fmax, fsampling=fsamp)
         orby = _AcqBPMsSignals.filter_orbit_frequencies(
             orby, fmin=fmin, fmax=fmax, fsampling=fsamp)
         etax, etay = self.get_reference_dispersion()
-        eta_meas = _AcqBPMsSignals.calculate_eta_meas(orbx, orby, etax, etay)
 
-        alpha =
-        f =
-        anly['mat_colx'] = - eta_meas[:orbx.shape[-1]] / alpha / f
-        anly['mat_coly'] = - eta_meas[orbx.shape[-1]:] / alpha / f
-
+        eta_meas = _OrbitAnalysis.calculate_eta_meas(orbx, orby, etax, etay)
+        if "mom_compac" not in rf_data:
+            mom_compac = self.get_mom_compac(calculate_mcf=calculate_mcf)
+        else:
+            mom_compac = rf_data['mom_compac']
+        RFfreq = self.devices['rfgen'].frequency
+        anly['mat_colx'] = - eta_meas[:orbx.shape[-1]] / mom_compac / RFfreq
+        anly['mat_coly'] = - eta_meas[orbx.shape[-1]:] / mom_compac / RFfreq
         raise NotImplementedError()
 
     def get_reference_dispersion(self):
+        # TODO: Get disp from model or previously measured ORM?
         raise NotImplementedError
 
+    def get_mom_compac(self, rf_data, calculate_mcf):
+        if calculate_mcf:
+            model = _si.create_accelerator()
+            chromcorr = _ChromCorr(model=model, acc='SI')
+            tune = self.devices['tune']
+            chromcorr.correct_parameters(
+                goal_parameters=(tune.tunex, tune.tuney))
+            mom_compac = _get_mcf(accelerator=model, order=1)
+            rf_data['mom_compac']
+        else:
+            mom_compac = _asparams.SI_MOM_COMPACT
+        rf_data['mom_compac'] = mom_compac
+        return mom_compac
 
     def _process_data_bpms_noise(self, bpms_data):
         sofb = self.sofb_data
