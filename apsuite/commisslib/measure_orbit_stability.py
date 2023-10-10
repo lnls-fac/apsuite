@@ -178,13 +178,9 @@ class OrbitAnalysis(_AcqBPMsSignals):
     def get_appropriate_orm_data(self, orm_name=''):
         """Find Orbit Response Matrix measured close to data acquisition."""
         if not orm_name:
-            configs = self.orm_client.find_configs()
-            delays = _np.array([cfg['created'] for cfg in configs])
-            delays -= self.data['timestamp']
-            orm_name = configs[_np.argmin(_np.abs(delays))]['name']
-        orm_meas = _np.array(
-            self.orm_client.get_config_value(name=orm_name))
-        orm_meas = _np.reshape(orm_meas, (2*self.NUM_BPMS, -1))
+            orm_meas = self.find_latest_orm(client=self.orm_client,
+                                            timestamp=self.data['timestamp'],
+                                            num_npms=self.NUM_BPMS)
         self.rf_freq = self.data['rf_frequency']
         etaxy = orm_meas[:, -1]
         etaxy *= (-self.MOM_COMPACT*self.rf_freq)  # units of [um]
@@ -631,3 +627,14 @@ class OrbitAnalysis(_AcqBPMsSignals):
         # Find scale factor via least-squares minimization
         gamma = _np.dot(etaxy_nm, vheta_nm)/_np.dot(etaxy_nm, etaxy_nm)
         return vheta/gamma
+
+    @staticmethod
+    def find_latest_orm(orm_client, timestamp, num_bpms):
+        """Find the newest measured ORM."""
+        configs = orm_client.find_configs()
+        delays = _np.array([cfg['created'] for cfg in configs])
+        delays -= timestamp
+        orm_name = configs[_np.argmin(_np.abs(delays))]['name']
+        orm_meas = _np.array(orm_client.get_config_value(name=orm_name))
+        orm_meas = _np.reshape(orm_meas, (2*num_bpms, -1))
+        return orm_meas
