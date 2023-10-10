@@ -617,24 +617,23 @@ class OrbitAnalysis(_AcqBPMsSignals):
         orbxy_fil = _np.hstack((orbx, orby))
         _, _, vhmat = _AcqBPMsSignals.calc_svd(orbxy_fil)
         etaxy = _np.hstack((etax, etay))
-        etaxy_nm = etaxy - _np.mean(etaxy)
+        etaxy -= _np.mean(etaxy)
 
-        vhmat_nm = vhmat - _np.mean(vhmat, axis=1)  # not sure about axis
-        correls = _np.dot(etaxy_nm, vhmat_nm)
-        vheta = vhmat[_np.argmax(correls)]
-        vheta_nm = vheta - _np.mean(vheta)
+        vhmat_ = vhmat - vhmat.mean(axis=1)[:, None]
+        correls = _np.dot(vhmat_, etaxy)
+        idx = _np.argmax(correls)
+        vheta = vhmat[idx]
+        vheta_ = vhmat_[idx]
 
         # Find scale factor via least-squares minimization
-        gamma = _np.dot(etaxy_nm, vheta_nm)/_np.dot(etaxy_nm, etaxy_nm)
+        gamma = _np.dot(etaxy, vheta_)/_np.dot(etaxy, etaxy)
         return vheta/gamma
 
     @staticmethod
-    def find_latest_orm(orm_client, timestamp, num_bpms):
+    def find_latest_orm(orm_client, timestamp):
         """Find the newest measured ORM."""
         configs = orm_client.find_configs()
         delays = _np.array([cfg['created'] for cfg in configs])
         delays -= timestamp
         orm_name = configs[_np.argmin(_np.abs(delays))]['name']
-        orm_meas = _np.array(orm_client.get_config_value(name=orm_name))
-        orm_meas = _np.reshape(orm_meas, (2*num_bpms, -1))
-        return orm_meas
+        return _np.array(orm_client.get_config_value(name=orm_name))
