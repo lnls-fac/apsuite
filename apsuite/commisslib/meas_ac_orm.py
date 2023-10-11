@@ -578,14 +578,14 @@ class MeasACORM(_ThreadBaseClass):
         rfgen.frequency = freq0
 
     def _sweep_rf_phase(self, phase_amplitude, exc_duration):
-        rfgen = self.devices['rfgen']
-        phase0= rfgen.phase ?
-        rfgen.opmode ?
-        rfgen.amplitude = phase_amplitude
-        rfgen.
-        _time.sleep(exc_duration/2)
-        rfgen.opmode = # restore opmode
-        rfgen.phase = # restore phase0
+        # rfgen = self.devices['rfgen']
+        # phase0= rfgen.phase ?
+        # rfgen.opmode ?
+        # rfgen.amplitude = phase_amplitude
+        # rfgen.
+        # _time.sleep(exc_duration/2)
+        # rfgen.opmode = # restore opmode
+        # rfgen.phase = # restore phase0
         raise NotImplementedError()
 
     def _do_measure_magnets(self):
@@ -793,25 +793,24 @@ class MeasACORM(_ThreadBaseClass):
 
     def _process_data_rf_phase(
             self, rf_data, central_freq=None, window=5, calculate_mcf=True):
-        # QUESTIONS: which frequency to filter? how to choose it?
         anly = dict()
 
         fsamp = self.data['bpms_sampling_frequency']
-        fsw = ?
-        sw_mode = ?
+        fswitch = self.data['bpms_switching_frequency']
+        sw_mode = self.data['bpms_switching_mode']
         dtim = 1/fsamp
         anly['fsamp'] = fsamp
-        anly['fsw'] = fsw
+        anly['fswitch'] = fswitch
 
         orbx = rf_data['orbx'].copy()
         orby = rf_data['orby'].copy()
         orbx -= orbx.mean(axis=0)
         orby -= orby.mean(axis=0)
-        if fsamp / fsw > 1 and sw_mode == 'switching':
+        if fsamp / fswitch > 1 and sw_mode == 'switching':
             orbx = _AcqBPMsSignals.filter_switching_cycles(
-                orbx, fsamp, freq_switching=fsw)
+                orbx, fsamp, freq_switching=fswitch)
             orby = _AcqBPMsSignals.filter_switching_cycles(
-                orby, fsamp, freq_switching=fsw)
+                orby, fsamp, freq_switching=fswitch)
 
         fmin = central_freq - window/2
         fmax = central_freq + window/2
