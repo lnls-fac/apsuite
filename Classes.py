@@ -428,8 +428,7 @@ def get_table(self,l_scattered_pos):
             deltas[idx] = delta # alguns elétrons possuem desvio de energia abaixo da aceitancia e acabam não sendo perdidos
 
         lostinds = _np.intp(lostinds)
-        lost_positions = spos[lostinds]
-        lost_positions = _np.round(lost_positions, 2)
+        lost_positions = _np.round(spos[lostinds], 2)
 
         step = int((deltas[0]+deltas[-1])/fact)
         itv_track = _np.linspace(deltas[0], deltas[-1], step) # method learned by fac repositories
@@ -458,8 +457,8 @@ def get_table(self,l_scattered_pos):
             # o percentual dos eletrons que possuem um determinado desvio de energia e se perdem em um intervalo de desvio de energia específico
             delta = deltas[idx]
             lps = []
-            for j, interval in enumerate(itv_delta):
-                if j == 0:
+            for i, interval in enumerate(itv_delta):
+                if i == 0:
                     if interval[0]<= delta <= interval[1]:
                         data.loc[lost_pos, '{:.2f} % < delta < {:.2f} %'.format(interval[0]*1e2, interval[1]*1e2)] += 1
                 else:
@@ -477,19 +476,28 @@ def get_table(self,l_scattered_pos):
         dic_res = {}
         lost_pos_df = []
         part_prob = []
-        for index, iten in data.iterrows():
+        for indx, iten in data.iterrows():
             t_prob = 0
             for idx, m in enumerate(iten):
                 t_prob += m
                 if idx == iten.count()-1:
                     part_prob.append(t_prob)
-                    lost_pos_df.append(index)
+                    lost_pos_df.append(indx)
 
         lost_pos_df = _np.array(lost_pos_df)
         part_prob = _np.array(part_prob)
 
-
         dic_res['lost_position'] = lost_pos_df
         dic_res['{}'.format(scattered_pos)] = part_prob * rate_nom_lattice[index]
 
-        _pd.DataFrame(dic_res).set_index('lost_position').transpose()
+        dataframe = _pd.DataFrame(dic_res)
+        
+        if j:
+            for k, iten in enumerate(lost_pos_df):
+                if not _np.isin(iten, _np.array(dataframe.index.tolist())):
+                    new_line = _pd.Series({'lost_position': iten})
+                    idx_new_line = len(dataframe)
+                    dataframe.loc[idx_new_line] = new_line
+
+    return dataframe
+
