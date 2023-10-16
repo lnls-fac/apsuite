@@ -178,9 +178,8 @@ class OrbitAnalysis(_AcqBPMsSignals):
     def get_appropriate_orm_data(self, orm_name=''):
         """Find Orbit Response Matrix measured close to data acquisition."""
         if not orm_name:
-            orm_meas = self.find_latest_orm(client=self.orm_client,
-                                            timestamp=self.data['timestamp'],
-                                            num_npms=self.NUM_BPMS)
+            orm_meas = self.find_latest_orm(orm_client=self.orm_client,
+                                            timestamp=self.data['timestamp'])
         self.rf_freq = self.data['rf_frequency']
         etaxy = orm_meas[:, -1]
         etaxy *= (-self.MOM_COMPACT*self.rf_freq)  # units of [um]
