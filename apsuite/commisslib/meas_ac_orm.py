@@ -284,10 +284,10 @@ class MeasACORM(_ThreadBaseClass):
         for anly in anls:
             mat[:sofb.nr_bpms, anly['mat_idcs']] = anly['mat_colsx']
             mat[sofb.nr_bpms:, anly['mat_idcs']] = anly['mat_colsy']
-
-        anl = self.analysis['rf']
-        mat[:sofb.nr_bpms, -1] = anl['mat_colx']
-        mat[sofb.nr_bpms:, -1] = anl['mat_coly']
+        if self.params.meas_rf_line:
+            anl = self.analysis['rf']
+            mat[:sofb.nr_bpms, -1] = anl['mat_colx']
+            mat[sofb.nr_bpms:, -1] = anl['mat_coly']
         return mat
 
     def process_data(
@@ -730,7 +730,7 @@ class MeasACORM(_ThreadBaseClass):
 
         anly = dict()
 
-        fsamp = self.data['bpms_sampling_frequency']
+        fsamp = rf_data['bpms_sampling_frequency']
         dtim = 1/fsamp
         anly['fsamp'] = fsamp
         anly['dtim'] = dtim
@@ -795,9 +795,9 @@ class MeasACORM(_ThreadBaseClass):
             self, rf_data, central_freq=None, window=5, calculate_mcf=True):
         anly = dict()
 
-        fsamp = self.data['bpms_sampling_frequency']
-        fswitch = self.data['bpms_switching_frequency']
-        sw_mode = self.data['bpms_switching_mode']
+        fsamp = rf_data['bpms_sampling_frequency']
+        fswitch = rf_data['bpms_switching_frequency']  # bug
+        sw_mode = rf_data['bpms_switching_mode']
         dtim = 1/fsamp
         anly['fsamp'] = fsamp
         anly['fswitch'] = fswitch
@@ -861,7 +861,7 @@ class MeasACORM(_ThreadBaseClass):
         sofb = self.sofb_data
         anly = dict()
 
-        fsamp = self.data['bpms_sampling_frequency']
+        fsamp = bpms_data['bpms_sampling_frequency']
         dtim = 1/fsamp
         freqs0 = _np.r_[self.params.ch_freqs, self.params.cv_freqs]
         anly['fsamp'] = fsamp
@@ -927,7 +927,7 @@ class MeasACORM(_ThreadBaseClass):
         analysis = []
         for data in magnets_data:
             anly = dict()
-            fsamp = self.data['bpms_sampling_frequency']
+            fsamp = data['bpms_sampling_frequency']
             dtim = 1/fsamp
             ch_freqs = _np.array(data['ch_frequency'])
             cv_freqs = _np.array(data['cv_frequency'])
@@ -1048,7 +1048,7 @@ class MeasACORM(_ThreadBaseClass):
         # Calculate delta_delay for correctors to be as close as possible to a
         # multiple of the the sampling period to ensure repeatability of
         # experiment along the sectors excited during single acquisition:
-        fsamp = FamBPMs.get_sampling_frequency(
+        fsamp = self.bpms.get_sampling_frequency(
             self.devices['rfgen'].frequency, self.params.acq_rate)
         secs_delta_dly = _np.arange(len(sectors), dtype=float)
         secs_delta_dly *= self.params.nr_points / fsamp
