@@ -217,10 +217,10 @@ class Tous_analysis():
 
     def return_sinpos_track(self,single_spos, par):
         
-        self.nom_model.cavity_on = True
-        self.nom_model.radiation_on = True
-        self.nom_model.vchamber_on = True
-        spos = self.spos
+        self._model.cavity_on = True
+        self._model.radiation_on = True
+        self._model.vchamber_on = True
+        spos = self._spos
         
         index = _np.argmin(_np.abs(spos-single_spos))
         if 'pos' in par:
@@ -404,100 +404,102 @@ class Tous_analysis():
         # o que eu vou fazer vai ser definir todos os parametros que eu preciso de uma vez que eu preciso por meio de uma função
     
 
-def get_table(self,l_scattered_pos):
-    
-    fact = 0.03
-    spos = self._spos
-
-    ltime = Lifetime(self._model_fit)
-    tous_rate = ltime.touschek_data['rate']
-    
-    self._model.radiation_on = True
-    self._model.cavity_on = True
-    self.vchamber_on = True
-
-    for j, scattered_pos in enumerate(l_scattered_pos):
-
-        index = _np.argmin(_np.abs(scattered_pos-spos))
-        res = tousfunc.track_eletrons(self._deltas, self._nturns, index, self._model)
-
-        lostinds, deltas = _np.zeros(len(res)), _np.zeros(len(res))
-        for idx,iten in enumerate(res):
-            _, ellost, delta = iten
-            lostinds[idx] = ellost
-            deltas[idx] = delta # alguns elétrons possuem desvio de energia abaixo da aceitancia e acabam não sendo perdidos
-
-        lostinds = _np.intp(lostinds)
-        lost_positions = _np.round(spos[lostinds], 2)
-
-        step = int((deltas[0]+deltas[-1])/fact)
-        itv_track = _np.linspace(deltas[0], deltas[-1], step) # method learned by fac repositories
-
-        data = _pd.DataFrame({'lost_pos_by_tracking': lost_positions}) # create the dataframe that is obtained by tracking
-        lost_pos_column = (data.groupby('lost_pos_by_tracking').groups).keys()
-        data = _pd.DataFrame({'lost_pos_by_tracking':lost_pos_column}) # this step agroups the lost_positions
-
-        # scat_lost_df = pd.DataFrame(f'{s}':) # dataframe will contain the scattered positions and the lost positions after scattering
-
-        itv_delta = []
-        for current, next_iten in zip(itv_track, itv_track[1:]):
-            data['{:.2f} % < delta < {:.2f} %'.format(current*1e2, next_iten*1e2)] = _np.zeros(len(list(lost_pos_column))) # this step creates new columns in the dataframe and fill with zeros
-            itv_delta.append((current, next_iten))
-            # Next step must calculate each matrix element from the dataframe
-
-        var = list(data.index) 
-        # quando as duas variáveis são iguais isso acab resultando em um erro então estou colocando essa condição.
-        if var == lost_pos_column:
-            pass
-        else:
-            data = data.set_index('lost_pos_by_tracking')
-
-
-        for idx, lost_pos in enumerate(lost_positions): # essas duas estruturas de repetição são responsáveis por calcular 
-            # o percentual dos eletrons que possuem um determinado desvio de energia e se perdem em um intervalo de desvio de energia específico
-            delta = deltas[idx]
-            lps = []
-            for i, interval in enumerate(itv_delta):
-                if i == 0:
-                    if interval[0]<= delta <= interval[1]:
-                        data.loc[lost_pos, '{:.2f} % < delta < {:.2f} %'.format(interval[0]*1e2, interval[1]*1e2)] += 1
-                else:
-                    if interval[0]< delta <= interval[1]:
-                        data.loc[lost_pos, '{:.2f} % < delta < {:.2f} %'.format(interval[0]*1e2, interval[1]*1e2)] += 1
-
-        data = data / len(deltas)
-
-        npt = int((spos[-1]-spos[0])/0.1)
-
-
-        scalc = _np.linspace(spos[0], spos[-1], npt)
-        rate_nom_lattice = _np.interp(spos, scalc, tous_rate)
-
-        dic_res = {}
-        lost_pos_df = []
-        part_prob = []
-        for indx, iten in data.iterrows():
-            t_prob = 0
-            for idx, m in enumerate(iten):
-                t_prob += m
-                if idx == iten.count()-1:
-                    part_prob.append(t_prob)
-                    lost_pos_df.append(indx)
-
-        lost_pos_df = _np.array(lost_pos_df)
-        part_prob = _np.array(part_prob)
-
-        dic_res['lost_position'] = lost_pos_df
-        dic_res['{}'.format(scattered_pos)] = part_prob * rate_nom_lattice[index]
-
-        dataframe = _pd.DataFrame(dic_res)
+    def get_table(self,l_scattered_pos):
         
-        if j:
-            for k, iten in enumerate(lost_pos_df):
-                if not _np.isin(iten, _np.array(dataframe.index.tolist())):
-                    new_line = _pd.Series({'lost_position': iten})
-                    idx_new_line = len(dataframe)
-                    dataframe.loc[idx_new_line] = new_line
+        fact = 0.03
+        spos = self._spos
 
-    return dataframe
+        ltime = Lifetime(self._model_fit)
+        tous_rate = ltime.touschek_data['rate']
+        
+        self._model.radiation_on = True
+        self._model.cavity_on = True
+        self._model.vchamber_on = True
+
+        for j, scattered_pos in enumerate(l_scattered_pos):
+
+            index = _np.argmin(_np.abs(scattered_pos-spos))
+            res = tousfunc.track_eletrons(self._deltas, self._nturns, index, self._model)
+
+            lostinds, deltas = _np.zeros(len(res)), _np.zeros(len(res))
+            for idx,iten in enumerate(res):
+                _, ellost, delta = iten
+                lostinds[idx] = ellost
+                deltas[idx] = delta # alguns elétrons possuem desvio de energia abaixo da aceitancia e acabam não sendo perdidos
+
+            lostinds = _np.intp(lostinds)
+            lost_positions = _np.round(spos[lostinds], 2)
+
+            step = int((deltas[0]+deltas[-1])/fact)
+            itv_track = _np.linspace(deltas[0], deltas[-1], step) # method learned by fac repositories
+
+            data = _pd.DataFrame({'lost_pos_by_tracking': lost_positions}) # create the dataframe that is obtained by tracking
+            lost_pos_column = (data.groupby('lost_pos_by_tracking').groups).keys()
+            data = _pd.DataFrame({'lost_pos_by_tracking':lost_pos_column}) # this step agroups the lost_positions
+
+            # scat_lost_df = pd.DataFrame(f'{s}':) # dataframe will contain the scattered positions and the lost positions after scattering
+
+            itv_delta = []
+            for current, next_iten in zip(itv_track, itv_track[1:]):
+                data['{:.2f} % < delta < {:.2f} %'.format(current*1e2, next_iten*1e2)] = _np.zeros(len(list(lost_pos_column))) # this step creates new columns in the dataframe and fill with zeros
+                itv_delta.append((current, next_iten))
+                # Next step must calculate each matrix element from the dataframe
+
+            var = list(data.index) 
+            # quando as duas variáveis são iguais isso acab resultando em um erro então estou colocando essa condição.
+            if var == lost_pos_column:
+                pass
+            else:
+                data = data.set_index('lost_pos_by_tracking')
+
+
+            for idx, lost_pos in enumerate(lost_positions): # essas duas estruturas de repetição são responsáveis por calcular 
+                # o percentual dos eletrons que possuem um determinado desvio de energia e se perdem em um intervalo de desvio de energia específico
+                delta = deltas[idx]
+                lps = []
+                for i, interval in enumerate(itv_delta):
+                    if i == 0:
+                        if interval[0]<= delta <= interval[1]:
+                            data.loc[lost_pos, '{:.2f} % < delta < {:.2f} %'.format(interval[0]*1e2, interval[1]*1e2)] += 1
+                    else:
+                        if interval[0]< delta <= interval[1]:
+                            data.loc[lost_pos, '{:.2f} % < delta < {:.2f} %'.format(interval[0]*1e2, interval[1]*1e2)] += 1
+
+            data = data / len(deltas)
+
+            npt = int((spos[-1]-spos[0])/0.1)
+
+
+            scalc = _np.linspace(spos[0], spos[-1], npt)
+            rate_nom_lattice = _np.interp(spos, scalc, tous_rate)
+
+            dic_res = {}
+            lost_pos_df = []
+            part_prob = []
+            for indx, iten in data.iterrows():
+                t_prob = 0
+                for idx, m in enumerate(iten):
+                    t_prob += m
+                    if idx == iten.count()-1:
+                        part_prob.append(t_prob)
+                        lost_pos_df.append(indx)
+
+            lost_pos_df = _np.array(lost_pos_df)
+            part_prob = _np.array(part_prob)
+
+            dic_res['lost_position'] = lost_pos_df
+            dic_res['{}'.format(scattered_pos)] = part_prob * rate_nom_lattice[index]
+
+            dataframe = _pd.DataFrame(dic_res)
+            print(j)
+            
+            if not j:
+                for k, iten in enumerate(lost_pos_df):
+                    if not _np.isin(iten, _np.array(dataframe.index.tolist())):
+                        new_line = _pd.Series({'lost_position': iten})
+                        idx_new_line = len(dataframe)
+                        dataframe.loc[idx_new_line] = new_line
+                        print(j)
+
+        return dataframe
 
