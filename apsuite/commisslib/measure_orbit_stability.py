@@ -180,6 +180,9 @@ class OrbitAnalysis(_AcqBPMsSignals):
         if not orm_name:
             orm_meas = self.find_latest_orm(orm_client=self.orm_client,
                                             timestamp=self.data['timestamp'])
+        else:
+            orm_meas = _np.array(
+                self.orm_client.get_config_value(name=orm_name))
         self.rf_freq = self.data['rf_frequency']
         etaxy = orm_meas[:, -1]
         etaxy *= (-self.MOM_COMPACT*self.rf_freq)  # units of [um]
