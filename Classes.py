@@ -404,25 +404,46 @@ class Tous_analysis():
         # o que eu vou fazer vai ser definir todos os parametros que eu preciso de uma vez que eu preciso por meio de uma função
     
 
-    def get_table(self,l_scattered_pos):
+    def get_track(self,l_scattered_pos):
         
-        fact = 0.03
+        all_track = []
+        indices = []
         spos = self._spos
-
-        ltime = Lifetime(self._model_fit)
-        tous_rate = ltime.touschek_data['rate']
         
         self._model.radiation_on = True
         self._model.cavity_on = True
         self._model.vchamber_on = True
 
-        for j, scattered_pos in enumerate(l_scattered_pos):
+        for _, scattered_pos in enumerate(l_scattered_pos):
 
             index = _np.argmin(_np.abs(scattered_pos-spos))
+            indices.append(index)
             res = tousfunc.track_eletrons(self._deltas, self._nturns, index, self._model)
+            all_track.append(res)
 
-            lostinds, deltas = _np.zeros(len(res)), _np.zeros(len(res))
-            for idx,iten in enumerate(res):
+        return all_track, indices
+    
+    def get_table(self, l_scattered_pos):
+        dic_res = {}
+
+        all_track, indices = self.get_track(l_scattered_pos)
+        spos = self._spos
+        
+        fact = 0.03
+        ltime = Lifetime(self._model_fit)
+        tous_rate = ltime.touschek_data['rate']
+        
+        prob = []
+        lostp = []
+        all_lostp = []
+
+        for j, iten in enumerate(all_track):
+
+            index = indices[j]
+            scattered_pos = l_scattered_pos[j]
+            
+            lostinds, deltas = _np.zeros(len(iten)), _np.zeros(len(iten))
+            for idx,iten in enumerate(iten):
                 _, ellost, delta = iten
                 lostinds[idx] = ellost
                 deltas[idx] = delta # alguns elétrons possuem desvio de energia abaixo da aceitancia e acabam não sendo perdidos
@@ -452,7 +473,6 @@ class Tous_analysis():
             else:
                 data = data.set_index('lost_pos_by_tracking')
 
-
             for idx, lost_pos in enumerate(lost_positions): # essas duas estruturas de repetição são responsáveis por calcular 
                 # o percentual dos eletrons que possuem um determinado desvio de energia e se perdem em um intervalo de desvio de energia específico
                 delta = deltas[idx]
@@ -469,11 +489,9 @@ class Tous_analysis():
 
             npt = int((spos[-1]-spos[0])/0.1)
 
-
             scalc = _np.linspace(spos[0], spos[-1], npt)
             rate_nom_lattice = _np.interp(spos, scalc, tous_rate)
 
-            dic_res = {}
             lost_pos_df = []
             part_prob = []
             for indx, iten in data.iterrows():
@@ -487,19 +505,44 @@ class Tous_analysis():
             lost_pos_df = _np.array(lost_pos_df)
             part_prob = _np.array(part_prob)
 
-            dic_res['lost_position'] = lost_pos_df
-            dic_res['{}'.format(scattered_pos)] = part_prob * rate_nom_lattice[index]
+            # dic_res['lost_position_{}'.format(j+1)] = lost_pos_df
 
-            dataframe = _pd.DataFrame(dic_res)
-            print(j)
-            
+            prob.append(part_prob * rate_nom_lattice[index])
+            lostp.append(lost_pos_df)
+
             if not j:
-                for k, iten in enumerate(lost_pos_df):
-                    if not _np.isin(iten, _np.array(dataframe.index.tolist())):
-                        new_line = _pd.Series({'lost_position': iten})
-                        idx_new_line = len(dataframe)
-                        dataframe.loc[idx_new_line] = new_line
-                        print(j)
+                all_lostp = lost_pos_df
+            else:
+                boolean_array = _np.isin(lost_pos_df, all_lostp)
+                for ind, boolean_indc in enumerate(boolean_array):
+                    if not boolean_indc:
+                        all_lostp = _np.append(all_lostp, lost_pos_df[ind])
 
-        return dataframe
+        return all_lostp
+            # dataframe = _pd.DataFrame(dic_res)
+
+            
+            # if j>0:
+            #     bool_array = _np.isin(lost_pos_df, _np.array(dataframe.index.tolist()))
+            #     for iten in bool_array:
+            #         if not iten:
+            #             new_line = _pd.Series({'lost_position': iten})
+            #             idx_new_line = len(dataframe)
+            #             dataframe.loc[idx_new_line] = new_line
+
+                # dic_res['lost_position'] = lost_pos_df
+                # dic_res['{}'.format(scattered_pos)] = part_prob * rate_nom_lattice[index]
+
+                # df = _pd.DataFrame(dic_res)
+                # print(j)
+                # bool_array = _np.isin(lost_pos_df, )
+                # b = lost_pos_df
+
+                # for k, iten in enumerate(lost_pos_df):
+                #     if not :
+                #         new_line = _pd.Series({'lost_position': iten})
+                #         idx_new_line = len(dataframe)
+                #         dataframe.loc[idx_new_line] = new_line
+                        
+        return 
 
