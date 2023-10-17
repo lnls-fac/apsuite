@@ -4,6 +4,8 @@ import numpy as _np
 from siriuspy.devices import RFGen, SOFB, PowerSupply, Tune
 from ..utils import ThreadedMeasBaseClass as _ThreadedMeasBaseClass, \
     ParamsBaseClass as _ParamsBaseClass
+from apsuite.commisslib.meas_bpms_signals import AcqBPMsSignals
+from apsuite.commisslib.measure_orbit_stability import OrbitAnalysis
 from pymodels import si
 import pyaccel
 from apsuite.orbcorr.calc_orbcorr_mat import OrbRespmat
@@ -74,14 +76,48 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
         self.dispmat = None
         self.orm = OrbRespmat(model=self.model, acc='SI', dim='6d')
         self.qs_names = None  # to avoid errors
+        self.orbanly = OrbitAnalysis(isonline=False)
         if self.isonline:
             self.devices['rfgen'] = RFGen(
                 props2init=['GeneralFreq-SP', 'GeneralFreq-RB'])
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
             self.devices['tune'] = Tune(Tune.DEVICES.SI)
+            self.orbacq = AcqBPMsSignals(isonline=True)
             if self.params.corr_method == \
                     CorrectVerticalDispersionParams.CORR_METHOD.QS:
                 self._create_skews()
+
+    def _configure_acq_params(self):
+        """."""
+        params = self.orbacq.params
+        params.signals2acq = 'XY'
+
+        params.acq_rate = 'FOFB'
+        params.timeout = 200
+
+        params.nrpoints_before = 0
+        params.nrpoints_after = 100_000
+        params.acq_repeat = 0
+        params.trigbpm_delay = 0
+        params.trigbpm_nrpulses = 1
+        params.event_mode = 'External'
+        params.do_pulse_evg = True
+        params.timing_event = 'Study'
+
+    def _get_trig_data(self):
+        init_state_orbacq = self.orbacq.get_timing_state()
+        self.orbacq.prepare_timing()
+        self.orbacq.acquire_data()
+        self.orbacq.recover_timing_state(init_state_orbacq)
+
+    def _process_dispersion(self):
+        self.orbanly.data = self.orbacq.data
+        self.orbanly.get_appropriate_orm_data('ref_respmat')
+        self.orbanly._get_sampling_freq()
+        self.orbanly._get_switching_freq()
+        self.orbanly.process_data_energy(
+            central_freq=32*64, window=15, use_eta_meas=False)
+        return self.orbanly.analysis['measured_dispersion']*1e-6
 
     def _create_skews(self):
         """."""
@@ -150,6 +186,13 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
         rfgen.set_frequency(rf_freq0)
         return disp, rf_freq0
 
+    def measure_dispersion_trigacq(self):
+        """."""
+        self._get_trig_data()
+        disp = self._process_dispersion()
+        rf_freq0 = self.devices['rfgen'].frequency
+        return disp, rf_freq0
+
     def correct_orbit_with_ch_rf(self, nr_iters=5):
         """."""
         sofb = self.devices['sofb']
@@ -165,6 +208,8 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
         prms = self.params
         qs_method = CorrectVerticalDispersionParams.CORR_METHOD.QS
         cv_method = CorrectVerticalDispersionParams.CORR_METHOD.CV
+
+        self._configure_acq_params()
 
         data = {}
         data['timestamp'] = _time.time()
@@ -198,6 +243,7 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
                 print('Stop!')
                 break
             disp, rffreq = self.measure_dispersion()
+            # disp, rffreq = self.measure_dispersion_trigacq()
             dispy = disp[160:]
             data['dispersion_history'].append(disp)
             data['rf_frequency'].append(rffreq)
@@ -227,6 +273,7 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
                 self.correct_orbit_with_ch_rf()
 
         dispf, rffreq = self.measure_dispersion()
+        # dispf, rffreq = self.measure_dispersion_trigacq()
         data['final_dispersion'] = dispf
         data['final_rf_frequency'] = rffreq
         if prms.corr_method == qs_method:
@@ -298,17 +345,44 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
         meas_ks_dispmat = []
         names = self.qs_names[self.params.qs2use_idx]
         print('Measuring respmat: dispersion/KsL skew')
+        sofb = self.devices['sofb']
         for name in names:
             print(f'{name:s}')
             qsmag = self.devices[name]
             stren0 = qsmag.strength
             qsmag.set_strength(stren0 + dksl/2)
+            sofb.correct_orbit_manually(nr_iters=10, residue=5)
             dispp, _ = self.measure_dispersion()
             qsmag.set_strength(stren0 - dksl/2)
+            sofb.correct_orbit_manually(nr_iters=10, residue=5)
             dispm, _ = self.measure_dispersion()
             meas_ks_dispmat.append((dispp-dispm)/dksl)
             qsmag.set_strength(stren0)
+            sofb.correct_orbit_manually(nr_iters=10, residue=5)
         meas_ks_dispmat = _np.array(meas_ks_dispmat).T
         print('Finished!')
         self.meas_ks_dispmat = meas_ks_dispmat
         return meas_ks_dispmat
+
+    def measure_kick_dispmat(self, dkick=20):
+        """."""
+        meas_dispmat = []
+        print('Measuring respmat: dispersion/KickCV')
+        dkicks = _np.zeros(160)
+        for idx in self.params.cv2use_idx:
+            dkicks[idx] = +dkick/2
+            self.apply_delta_strengths(dkicks)
+            self.correct_orbit_with_ch_rf(nr_iters=2)
+            dispp, _ = self.measure_dispersion()
+            dkicks[idx] = -dkick
+            self.apply_delta_strengths(dkicks)
+            self.correct_orbit_with_ch_rf(nr_iters=2)
+            dispm, _ = self.measure_dispersion()
+            meas_dispmat.append((dispp-dispm)/dkick)
+            dkicks[idx] = 0
+            self.apply_delta_strengths(dkicks)
+            self.correct_orbit_with_ch_rf(nr_iters=2)
+        meas_dispmat = _np.array(meas_dispmat).T
+        print('Finished!')
+        self.meas_dispmat = meas_dispmat
+        return meas_dispmat
