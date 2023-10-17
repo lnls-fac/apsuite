@@ -43,21 +43,23 @@ class CorrectVerticalDispersionParams(_ParamsBaseClass):
         else:
             pass # mod print string
         return stg
-    
+
     @property
     def corr_method(self):
+        """."""
         return self._corr_method
 
     @corr_method.setter
     def corr_method(self, method_str):
         if method_str == 'QS':
             self.params.corr_method =\
-                  CorrectVerticalDispersionParams.CORR_METHOD.QS 
+                  CorrectVerticalDispersionParams.CORR_METHOD.QS
         elif method_str == 'CV':
             self.params.corr_method =\
                   CorrectVerticalDispersionParams.CORR_METHOD.CV
         else:
             raise ValueError('The method should be "QS" or "CV"')
+
 
 class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
     """."""
@@ -90,7 +92,8 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
         for name in self.qs_names:
             self.devices[name] = PowerSupply(name)
 
-    def get_vertical_kicks(self): # return vertical kicks of sofb-CV
+    def get_vertical_kicks(self):
+        """Return vertical kicks of sofb-CV."""
         sofb = self.devices['sofb']
         return _np.array(sofb.kickcv).ravel()
 
@@ -234,12 +237,12 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
                     print('-'*50)
                     data['dvk_history'].append(dvk)
                     data['vk_history'].append(self.get_vertical_kicks())
-                    
+
                     self.devices['sofb'].deltakickcv = dvk # sofb setter to CV delta vkicks
 
                     # i dont know the limits of operating the sofb with manual SP of delta kicks
 
-                    ### to correct the horizontal orbit, 
+                    ### to correct the horizontal orbit,
                     ### must restrict the sofb manual correction to only CH:
 
                     #self.devices['sofb'].correct_orbit_manually(nr_iters=10, residue=5) # i didnt mod yet
@@ -256,7 +259,7 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
                 stg = f'dispy rms {_np.std(dispy0)*1e6:.2f} [um] '
                 stg += f'--> {_np.std(dispyf)*1e6:.2f} [um] \n'
                 stg += f"KsL rms: {_np.std(vk0)*1e3:.4f} [1/km] "
-                stg += f'--> {_np.std(vkf)*1e3:.4f} [1/km] \n' 
+                stg += f'--> {_np.std(vkf)*1e3:.4f} [1/km] \n'
                 print(stg)
                 print('='*50)
                 print('Finished!')
@@ -308,7 +311,7 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
             inv_dispmat = self.invert_dispmat(dispmat, nr_svals)
         dstren = - inv_dispmat @ dispy
         return dstren
-    
+
     def calc_cv_correction(self, dispy, inv_dispmat=None, nr_svals=None):
         """."""
         if inv_dispmat is None:
@@ -337,41 +340,37 @@ class CorrectVerticalDispersion(_ThreadedMeasBaseClass):
         self.meas_ks_dispmat = meas_ks_dispmat
         return meas_ks_dispmat
 
+    @staticmethod
+    def calc_disp_respmat(model, delta_energy=2e-6):
+        """Calculate model dispy x corrs respmat."""
+        def calc_vdisp(model, indices):
+            disp = calc_disp(model=model, indices=indices)
+            return disp[int(len(disp)/2):]
 
+        def calc_disp(model, indices, delta_energy):
+            orbp = pyaccel.tracking.find_orbit4(
+                model, indices=indices, energy_offset=+delta_energy/2)
+            orbn = pyaccel.tracking.find_orbit4(
+                model, indices=indices, energy_offset=-delta_energy/2)
+            dispx = (orbp[0, :] - orbn[0, :])/delta_energy
+            dispy = (orbp[2, :] - orbn[2, :])/delta_energy
+            return _np.hstack([dispx, dispy])
 
-# functions i used to obtain the DRM (with CV)
+        def getline(model, idx, delta_energy, bpmidx):
+            v0 = model[idx].vkick_polynom
+            model[idx].vkick_polynom = v0 + delta_energy/2
+            dispp = calc_vdisp(model, 'open')[bpmidx]
+            model[idx].vkick_polynom = v0 - delta_energy/2
+            dispn = calc_vdisp(model, 'open')[bpmidx]
+            model[idx].vkick_polynom = v0
+            disp = (dispp - dispn)/delta_energy
+            return disp
 
-# def calc_vdisp(model, indices):
-#     disp = calc_disp(model=model, indices=indices)
-#     return disp[int(len(disp)/2):]
-
-# def calc_hdisp(model, indices):
-#     disp = calc_disp(model=model, indices=indices)
-#     return disp[:int(len(disp)/2)]
-
-# def calc_disp(model, indices):
-#     orbp = pa.tracking.find_orbit4(model, indices=indices, energy_offset=+5e-6) 
-#     orbn = pa.tracking.find_orbit4(model, indices=indices, energy_offset=-5e-6)
-#     return np.hstack([(orbp[0,:] - orbn[0,:])/(2e-6), (orbp[2,:] - orbn[2,:])/(2e-6)])
-
-# def getline(model, idx, delta, bpmidx):
-#     deltak = delta/2 
-#     v0 = model[idx].vkick_polynom
-#     model[idx].vkick_polynom = v0 + (deltak)
-#     dispp = calc_vdisp(model,'open')[bpmidx]
-#     model[idx].vkick_polynom = v0 - (deltak)
-#     dispn = calc_vdisp(model,'open')[bpmidx]
-#     model[idx].vkick_polynom = v0
-#     disp = (dispp - dispn)/(2*deltak)
-#     return disp
-
-# def calc_disp_respmat(model, famdata, delta):
-#     cvidx = np.array(famdata['CV']['index']).ravel()
-#     bpmidx = np.array(famdata['BPM']['index']).ravel()
-#     lines=[]
-#     # for i in chidx:
-#     #     lines.append(getline(model, i, 'CH', delta))
-#     for i in cvidx:
-#         lines.append(getline(model, i, delta, bpmidx))
-#     lines = np.array(lines).T
-#     return lines
+        famdata = si.get_family_data(model)
+        cvidx = _np.array(famdata['CV']['index']).ravel()
+        bpmidx = _np.array(famdata['BPM']['index']).ravel()
+        lines = []
+        for i in cvidx:
+            lines.append(getline(model, i, delta_energy, bpmidx))
+        lines = _np.array(lines).T
+        return lines
