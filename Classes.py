@@ -436,6 +436,7 @@ class Tous_analysis():
         prob = []
         lostp = []
         all_lostp = []
+        bool_list = []
 
         for j, iten in enumerate(all_track):
 
@@ -505,10 +506,9 @@ class Tous_analysis():
             lost_pos_df = _np.array(lost_pos_df)
             part_prob = _np.array(part_prob)
 
-            # dic_res['lost_position_{}'.format(j+1)] = lost_pos_df
+            dic_res[tuple(lost_pos_df)] = part_prob * rate_nom_lattice[index]
 
-            prob.append(part_prob * rate_nom_lattice[index])
-            lostp.append(lost_pos_df)
+            # para acessar as chaves deste dicionario list(df.keys())[0]
 
             if not j:
                 all_lostp = lost_pos_df
@@ -518,7 +518,14 @@ class Tous_analysis():
                     if not boolean_indc:
                         all_lostp = _np.append(all_lostp, lost_pos_df[ind])
 
-        return all_lostp
+            if j == len(l_scattered_pos)-1:
+                for l_pos in lostp:
+                    bool_array = _np.isin(all_lostp, l_pos)
+                    bool_list.append(bool_array)
+
+            
+
+        return dic_res
             # dataframe = _pd.DataFrame(dic_res)
 
             
