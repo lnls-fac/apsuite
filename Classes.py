@@ -506,10 +506,10 @@ class Tous_analysis():
             lost_pos_df = _np.array(lost_pos_df)
             part_prob = _np.array(part_prob)
 
-            dic_res[tuple(lost_pos_df)] = part_prob * rate_nom_lattice[index]
+            prob.append(part_prob * rate_nom_lattice[index])
+            lostp.append(lost_pos_df)
 
             # para acessar as chaves deste dicionario list(df.keys())[0]
-
             if not j:
                 all_lostp = lost_pos_df
             else:
@@ -523,33 +523,21 @@ class Tous_analysis():
                     bool_array = _np.isin(all_lostp, l_pos)
                     bool_list.append(bool_array)
 
-            
-
-        return dic_res
+        return all_lostp, bool_list, prob, lostp
             # dataframe = _pd.DataFrame(dic_res)
+    
+    def get_finally(self,l_scattered_pos):
 
-            
-            # if j>0:
-            #     bool_array = _np.isin(lost_pos_df, _np.array(dataframe.index.tolist()))
-            #     for iten in bool_array:
-            #         if not iten:
-            #             new_line = _pd.Series({'lost_position': iten})
-            #             idx_new_line = len(dataframe)
-            #             dataframe.loc[idx_new_line] = new_line
+        all_lostp, bool_list, prob, lostp = self.get_table(l_scattered_pos)
 
-                # dic_res['lost_position'] = lost_pos_df
-                # dic_res['{}'.format(scattered_pos)] = part_prob * rate_nom_lattice[index]
+        for i,l_bool in enumerate(bool_list):
+            for j, boo in enumerate(l_bool):
+                if boo:
+                    var = all_lostp[i][j]
+                    print(_np.where(lostp[i]==var))
 
-                # df = _pd.DataFrame(dic_res)
-                # print(j)
-                # bool_array = _np.isin(lost_pos_df, )
-                # b = lost_pos_df
+        return None
 
-                # for k, iten in enumerate(lost_pos_df):
-                #     if not :
-                #         new_line = _pd.Series({'lost_position': iten})
-                #         idx_new_line = len(dataframe)
-                #         dataframe.loc[idx_new_line] = new_line
-                        
-        return 
+
+
 
