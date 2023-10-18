@@ -509,7 +509,6 @@ class Tous_analysis():
             prob.append(part_prob * rate_nom_lattice[index])
             lostp.append(lost_pos_df)
 
-            # para acessar as chaves deste dicionario list(df.keys())[0]
             if not j:
                 all_lostp = lost_pos_df
             else:
@@ -523,21 +522,32 @@ class Tous_analysis():
                     bool_array = _np.isin(all_lostp, l_pos)
                     bool_list.append(bool_array)
 
-        return all_lostp, bool_list, prob, lostp
+        return all_lostp, prob, lostp
             # dataframe = _pd.DataFrame(dic_res)
     
     def get_finally(self,l_scattered_pos):
 
-        all_lostp, bool_list, prob, lostp = self.get_table(l_scattered_pos)
+        all_lostp, prob, lostp = self.get_table(l_scattered_pos)
 
-        for i,l_bool in enumerate(bool_list):
-            for j, boo in enumerate(l_bool):
-                if boo:
-                    var = all_lostp[i][j]
-                    print(_np.where(lostp[i]==var))
+        shaper = []
+        
+        for idx, scattered_pos in enumerate(l_scattered_pos):
+            # for j, lpos in enumerate(all_lostp):
+            
+            future_df = []
+            bool_array = _np.isin(all_lostp, lostp[idx])
+            
+            for j, boolean in enumerate(bool_array):
+                if boolean:
+                    index = _np.intp(_np.where(lostp[idx] == all_lostp[j])[0][0])
+                    # print(index)
+                    future_df.append(prob[idx][index])
+                else:
+                    future_df.append(0)
+        
+            shaper.append(future_df)
 
-        return None
-
+        return shaper
 
 
 
