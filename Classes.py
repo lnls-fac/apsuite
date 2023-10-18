@@ -250,7 +250,7 @@ class Tous_analysis():
     def get_weighting_tous(self, single_spos, npt=5000):
         
         scalc, daccp, daccn  = tousfunc.get_scaccep(self.accelerator, self.accep)
-        bf = self.beam_energy
+        bf = self.beam_energy # bf is the beta factor
         ltime = self._ltime
         b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
         
@@ -381,29 +381,6 @@ class Tous_analysis():
     # remember that ind is the index that represents the initial position where tracking begins
         
 
-
-    #o resultado para este res será uma lista com diversas tuplas então agora eu tenho que me perguntar como
-    #eu vou organizar isso 
-    
-    
-    # e se eu fizesse a função dessa classe já pensando na possibilidade do calculo ser realizado para apenas um ponto do anel ou para varios ?
-    # caso eu seja questionado sobre isso, posso justificar que para apenas um ponto do anel os cálculos são executados mais rapidamente.
-
-
-        # As mensagens deixadas aqui são referentes a modificações que eu preciso realizar nesta classe com novas funcionalidades
-
-        # Proximos passos
-        #  preciso implementar o gráfico da distribuição junto com o gráfico do tracking
-        # esses gráficos podem ser mostrados juntamente com o tracking o separados  
-        #  preciso implementar o complete aquisition
-        #  e ainda preciso pensar em como será o input dessa função
-        # se ela vai usar o get_family_data ou find_indices (saber quando cada um será usado)
-        # eu também deveria fazer a pesagem também por meio da simulação monte carlo que foi implementada há algum tempo
-
-        # eu vou definir alguns parametros de uma forma que talvez não seja ideal 
-        # o que eu vou fazer vai ser definir todos os parametros que eu preciso de uma vez que eu preciso por meio de uma função
-    
-
     def get_track(self,l_scattered_pos):
         
         all_track = []
@@ -523,10 +500,7 @@ class Tous_analysis():
         dic_res = {}
         all_lostp, prob, lostp = self.find_data(l_scattered_pos)
 
-        all_scat = []
-        
         for idx, scattered_pos in enumerate(l_scattered_pos):
-            # for j, lpos in enumerate(all_lostp):
             
             scat_data = []
             bool_array = _np.isin(all_lostp, lostp[idx])
@@ -534,11 +508,9 @@ class Tous_analysis():
             for j, boolean in enumerate(bool_array):
                 if boolean:
                     index = _np.intp(_np.where(lostp[idx] == all_lostp[j])[0][0])
-                    # print(index)
                     scat_data.append(prob[idx][index])
                 else:
                     scat_data.append(0)
-            # all_scat.append(scat_data)
 
             if not idx:
                 dic_res['lost_positions'] = all_lostp
