@@ -423,8 +423,7 @@ class Tous_analysis():
 
         return all_track, indices
     
-    def get_table(self, l_scattered_pos):
-        dic_res = {}
+    def find_data(self, l_scattered_pos):
 
         all_track, indices = self.get_track(l_scattered_pos)
         spos = self._spos
@@ -436,7 +435,6 @@ class Tous_analysis():
         prob = []
         lostp = []
         all_lostp = []
-        bool_list = []
 
         for j, iten in enumerate(all_track):
 
@@ -517,37 +515,40 @@ class Tous_analysis():
                     if not boolean_indc:
                         all_lostp = _np.append(all_lostp, lost_pos_df[ind])
 
-            if j == len(l_scattered_pos)-1:
-                for l_pos in lostp:
-                    bool_array = _np.isin(all_lostp, l_pos)
-                    bool_list.append(bool_array)
-
         return all_lostp, prob, lostp
             # dataframe = _pd.DataFrame(dic_res)
     
-    def get_finally(self,l_scattered_pos):
+    def get_table(self,l_scattered_pos):
+        
+        dic_res = {}
+        all_lostp, prob, lostp = self.find_data(l_scattered_pos)
 
-        all_lostp, prob, lostp = self.get_table(l_scattered_pos)
-
-        shaper = []
+        all_scat = []
         
         for idx, scattered_pos in enumerate(l_scattered_pos):
             # for j, lpos in enumerate(all_lostp):
             
-            future_df = []
+            scat_data = []
             bool_array = _np.isin(all_lostp, lostp[idx])
             
             for j, boolean in enumerate(bool_array):
                 if boolean:
                     index = _np.intp(_np.where(lostp[idx] == all_lostp[j])[0][0])
                     # print(index)
-                    future_df.append(prob[idx][index])
+                    scat_data.append(prob[idx][index])
                 else:
-                    future_df.append(0)
-        
-            shaper.append(future_df)
+                    scat_data.append(0)
+            # all_scat.append(scat_data)
 
-        return shaper
+            if not idx:
+                dic_res['lost_positions'] = all_lostp
+                dic_res['{}'.format(scattered_pos)] = scat_data
+            else:
+                dic_res['{}'.format(scattered_pos)] = scat_data
+
+            # df = _pd.DataFrame(dic_res)
+
+        return dic_res
 
 
 
