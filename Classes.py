@@ -534,6 +534,60 @@ class Tous_analysis():
         new_dict = {chave: list(valores) for chave, valores in zip(dic.keys(), zip_ordered)}
 
         return new_dict
+    
+    def plot_scat_table(self, l_scattered_pos, n_r,n_c=1):
 
+        new_dic = self.get_reordered_dict(l_scattered_pos, 'lost_positions')
+
+        df = _pd.DataFrame(new_dic)
+        df = df.set_index('lost_positions')
+
+        fig, ax = _plt.subplots(n_c, n_r, figsize=(10, 6))
+        ax.set_title('Loss profile')
+
+        ax.set_xlabel('scattered positions [m]', fontsize=16)
+        ax.set_ylabel('lost positions [m]', fontsize=16)
+
+        heatmap = ax.pcolor(df, cmap='jet')  
+        _plt.colorbar(heatmap)
+
+        step1 = int(len(new_dic.keys())/5)
+        arr1 = df.columns.values[::step1]
+
+        _plt.xticks(_np.arange(df.shape[1])[::step1] + 0.5, arr1, fontsize=12)
+
+        step2 = int(len(new_dic['lost_positions'])/5)
+        arr2 = df.index.values[::step2]
+
+        _plt.yticks(_np.arange(df.shape[0])[::step2] + 0.5, arr2, fontsize=12)
+
+        fig.tight_layout()
+        
+        _plt.show()  
+
+
+# # This function will probably will be in my repositories
+# # I dont know if I will use it again, but it seems to me that it could be uselfull in some point
+
+# def extract_delt(groups, deltas):
+#     c = 0
+#     big_list = []
+#     for lists in groups:
+#         lil_list = []
+#         for _ in lists:
+#             lil_list.append(c)
+#             c+=1
+            
+#         big_list.append(lil_list)
+    
+#     sep_deltas = []
+#     comp_l = []
+
+#     for iten in big_list:
+#         sep_deltas.append(deltas[iten])
+#         comp_l.append(len(iten))
+
+
+#     return sep_deltas, comp_l
 
 
