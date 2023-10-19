@@ -499,9 +499,10 @@ class Tous_analysis():
         
         dic_res = {}
         all_lostp, prob, lostp = self.find_data(l_scattered_pos)
+        n_scat = _np.round(l_scattered_pos, 2)
 
-        for idx, scattered_pos in enumerate(l_scattered_pos):
-            
+        for idx, scattered_pos in enumerate(n_scat):
+
             scat_data = []
             bool_array = _np.isin(all_lostp, lostp[idx])
             
@@ -521,6 +522,18 @@ class Tous_analysis():
             # df = _pd.DataFrame(dic_res)
 
         return dic_res
+    
+    def reorder_dict(self, l_scattered_pos, reording_key): # chatgpt code to reorder the dictionary
+
+        dic = self.get_table(l_scattered_pos)
+
+        zip_tuples = zip(*[dic[chave] for chave in dic])
+        new_tuples = sorted(zip_tuples, key=lambda x: x[list(dic.keys()).index(reording_key)])
+        zip_ordered = zip(*new_tuples)
+
+        new_dict = {chave: list(valores) for chave, valores in zip(dic.keys(), zip_ordered)}
+
+        return new_dict
 
 
 
