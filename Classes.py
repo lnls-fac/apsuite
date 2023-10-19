@@ -523,7 +523,7 @@ class Tous_analysis():
 
         return dic_res
     
-    def reorder_dict(self, l_scattered_pos, reording_key): # chatgpt code to reorder the dictionary
+    def get_reordered_dict(self, l_scattered_pos, reording_key): # chatgpt code to reorder the dictionary
 
         dic = self.get_table(l_scattered_pos)
 
