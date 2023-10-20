@@ -1,5 +1,5 @@
 from pyaccel.lifetime import Lifetime
-from pyaccel.lattice import get_attribute, find_indices, find_spos
+from pyaccel.lattice import get_attribute, find_indices, find_spos, find_dict
 import touschek_pack.functions as tousfunc
 import pymodels
 import pyaccel.optics as py_op
@@ -536,14 +536,40 @@ class Tous_analysis():
         return new_dict
     
     def plot_scat_table(self, l_scattered_pos, n_r,n_c=1):
-
+        spos = self._spos
         new_dic = self.get_reordered_dict(l_scattered_pos, 'lost_positions')
+
+        if len(l_scattered_pos)%2 == 0:
+            array = _np.arange(l_scattered_pos.size)
+            j = _np.intp(_np.where(array == int((len(l_scattered_pos)/2 + 1)))[0])
+            array_j = l_scattered_pos[j]
+            index = _np.argmin(_np.abs(spos-array_j))
+
+            lists = list(find_dict(self._model_fit, 'fam_name').values())
+
+        else:
+            array = _np.arange(l_scattered_pos.size)
+            j = _np.where(array == int((len(l_scattered_pos)+1)/2))[0]
+            array_j = l_scattered_pos[j]
+            index = _np.argmin(_np.abs(spos-array_j))
+
+            lists = list(find_dict(self._model_fit, 'fam_name').values())
+
+        for i, l in enumerate(lists):
+            if _np.isin(index, l).item():
+                fam_name = list(find_dict(self._model_fit, 'fam_name').keys())[i]
 
         df = _pd.DataFrame(new_dic)
         df = df.set_index('lost_positions')
 
         fig, ax = _plt.subplots(n_c, n_r, figsize=(10, 6))
         ax.set_title('Loss profile')
+        
+        legend = ax.text(0.5, -0.1, '{}'.format(fam_name), size=12, color='black',
+                  ha='center', va='center', transform=_plt.gca().transAxes)
+
+        # Ajustando a legenda (posicionamento)
+        legend.set_bbox({'facecolor': 'white', 'alpha': 0.5, 'edgecolor': 'black'})
 
         ax.set_xlabel('scattered positions [m]', fontsize=16)
         ax.set_ylabel('lost positions [m]', fontsize=16)
