@@ -178,8 +178,8 @@ class OrbitAnalysis(_AcqBPMsSignals):
     def get_appropriate_orm_data(self, orm_name=''):
         """Find Orbit Response Matrix measured close to data acquisition."""
         if not orm_name:
-            orm_meas = self.find_latest_orm(orm_client=self.orm_client,
-                                            timestamp=self.data['timestamp'])
+            orm_meas = self.find_orm_with_closest_created_time(
+                orm_client=self.orm_client, timestamp=self.data['timestamp'])
         else:
             orm_meas = _np.array(
                 self.orm_client.get_config_value(name=orm_name))
@@ -220,9 +220,9 @@ class OrbitAnalysis(_AcqBPMsSignals):
         fmin = central_freq - window/2
         fmax = central_freq + window/2
         fs = self.sampling_freq
-        fil_orbx = self.filter_orbit_frequencies(
+        fil_orbx = self.filter_data_frequencies(
             orbx, fmin=fmin, fmax=fmax, fsampling=fs)
-        fil_orby = self.filter_orbit_frequencies(
+        fil_orby = self.filter_data_frequencies(
             orby, fmin=fmin, fmax=fmax, fsampling=fs)
         return fil_orbx, fil_orby
 
@@ -564,38 +564,6 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
     # static methods
     @staticmethod
-    def filter_orbit_frequencies(
-            orb, fmin, fmax, fsampling, keep_within_range=True):
-        """Filter acquisition matrix considering a frequency range.
-
-        Args:
-            matrix (numpy.array): 2d-array with timesamples along rows and
-            BPMs indices along columns.
-            fmin (float): minimum frequency in range.
-            fmax (float): maximum frequency in range.
-            fsampling (float): sampling frequency on matrix
-            keep_within_range (bool, optional): Defaults to True.
-
-        Returns:
-            filtered matrix (numpy.array): same structure as matrix.
-
-        """
-        dft = _sp_fft.rfft(orb, axis=0)
-        freq = _sp_fft.rfftfreq(orb.shape[0], d=1/fsampling)
-        if keep_within_range:
-            idcs = (freq < fmin) | (freq > fmax)
-            dft[idcs] = 0
-        else:
-            idcs = (freq > fmin) & (freq < fmax)
-            dft[idcs] = 0
-        return _sp_fft.irfft(dft, axis=0)
-
-    @staticmethod
-    def _calc_correlation(vec1, vec2):
-        """."""
-        return _np.corrcoef(vec1, vec2)[0, 1]
-
-    @staticmethod
     def _calc_ripple_rfjitter_harmonics(freq):
         rfreq = round(_np.max(freq)/60)
         ripple = _np.arange(0, rfreq) * 60
@@ -622,7 +590,7 @@ class OrbitAnalysis(_AcqBPMsSignals):
         etaxy -= _np.mean(etaxy)
 
         vhmat_ = vhmat - vhmat.mean(axis=1)[:, None]
-        correls = _np.dot(vhmat_, etaxy)
+        correls = _np.abs(_np.dot(vhmat_, etaxy))
         idx = _np.argmax(correls)
         vheta = vhmat[idx]
         vheta_ = vhmat_[idx]
@@ -632,8 +600,8 @@ class OrbitAnalysis(_AcqBPMsSignals):
         return vheta/gamma
 
     @staticmethod
-    def find_latest_orm(orm_client, timestamp):
-        """Find the newest measured ORM."""
+    def find_orm_with_closest_created_time(orm_client, timestamp):
+        """Find the measured ORM with created time closest to timestamp."""
         configs = orm_client.find_configs()
         delays = _np.array([cfg['created'] for cfg in configs])
         delays -= timestamp

@@ -230,6 +230,33 @@ class AcqBPMsSignals(_BaseClass):
         return data
 
     @staticmethod
+    def filter_data_frequencies(
+            orb, fmin, fmax, fsampling, keep_within_range=True):
+        """Filter acquisition matrix considering a frequency range.
+
+        Args:
+            matrix (numpy.array): 2d-array with timesamples along rows and
+            BPMs indices along columns.
+            fmin (float): minimum frequency in range.
+            fmax (float): maximum frequency in range.
+            fsampling (float): sampling frequency on matrix
+            keep_within_range (bool, optional): Defaults to True.
+
+        Returns:
+            filtered matrix (numpy.array): same structure as matrix.
+
+        """
+        dft = _sp_fft.rfft(orb, axis=0)
+        freq = _sp_fft.rfftfreq(orb.shape[0], d=1/fsampling)
+        if keep_within_range:
+            idcs = (freq < fmin) | (freq > fmax)
+            dft[idcs] = 0
+        else:
+            idcs = (freq > fmin) & (freq < fmax)
+            dft[idcs] = 0
+        return _sp_fft.irfft(dft, axis=0)
+
+    @staticmethod
     def filter_switching_cycles(orb, freq_sampling, freq_switching):
         """
         Filter out the switching frequency from the TbT data.
