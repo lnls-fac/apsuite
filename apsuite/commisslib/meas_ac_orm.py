@@ -1278,18 +1278,18 @@ class MeasACORM(_ThreadBaseClass):
 
     # ----------------- Correctors related methods -----------------------
 
-    def _config_correctors(self, corr_names, kick, freq_vector, excit_time):
+    def _config_correctors(self, corr_names, kicks, freqs, excit_time):
         """."""
         for i, cmn in enumerate(corr_names):
             cmo = self.devices[cmn]
             conv = self.devices[cmn+':StrengthConv'].conv_strength_2_current
             cmo.cycle_type = cmo.CYCLETYPE.Sine
-            cmo.cycle_freq = freq_vector[i]
-            cmo.cycle_ampl = conv(kick)
+            cmo.cycle_freq = freqs[i]
+            cmo.cycle_ampl = conv(kicks[i])
             cmo.cycle_offset = cmo.currentref_mon
             cmo.cycle_theta_begin = 0
             cmo.cycle_theta_end = 0
-            cmo.cycle_num_cycles = int(excit_time * freq_vector[i])
+            cmo.cycle_num_cycles = int(excit_time * freqs[i])
 
     def _change_corrs_opmode(self, mode, corr_names=None, timeout=10):
         """."""
