@@ -67,7 +67,7 @@ class ACORMParams(_ParamsBaseClass):
 
         stg = ''
         stg += ftmp('timeout_bpms', self.timeout_bpms, '[s]')
-        stf += stmp('ref_respmat_name', self.ref_respmat_name, '')
+        stg += stmp('ref_respmat_name', self.ref_respmat_name, '')
         stg += stmp('meas_bpms_noise', str(self.meas_bpms_noise), '')
         stg += stmp('meas_rf_line', str(self.meas_rf_line), '')
 
