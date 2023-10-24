@@ -665,15 +665,18 @@ def histgms(acc,l_spos,num_part, accep, de_min, cutaccep):
             check1 = acpp - part1_new[4]
             check2 = -(acpn - part2_new[4])
 
-            ind1 = _np.intp(_np.where(check1<0)[0]) 
-            ind2 = _np.intp(_np.where(check2<0)[0])
-        
+            ind1 = _np.intp(_np.where(check1<0)[0][0])
+            ind2 = _np.intp(_np.where(check2<0)[0][0])
+            
+            histsp1.append((part1_new[4][ind1:]))
+            histsp2.append((part2_new[4][ind2:]))
+
         else:        
             ind1 = _np.intp(_np.where(part1_new[4]>=0.001)) # teste sugerido pelo ximenes
             ind2 = _np.intp(_np.where(part2_new[4]<=-0.001))
-        
-        histsp1.append((part1_new[4][ind1]))
-        histsp2.append((part2_new[4][ind2]))
+
+            histsp1.append((part1_new[4][ind1]))
+            histsp2.append((part2_new[4][ind2]))
         
     # hist1=_np.array(histsp1, dtype='object')
     # hist2=_np.array(histsp2, dtype='object')
