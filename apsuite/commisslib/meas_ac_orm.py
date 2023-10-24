@@ -49,9 +49,9 @@ class ACORMParams(_ParamsBaseClass):
         self.corrs_cv_kick = 5  # [urad]
         self.corrs_dorb1ch = 20  # [um]
         self.corrs_dorb1cv = 20  # [um]
-        freqs = self.find_primes(16, start=3)
-        self.corrs_ch_freqs = freqs[1::2][:6]
-        self.corrs_cv_freqs = freqs[::2][:8]
+        freqs = self.find_primes(20, start=3)
+        self.corrs_ch_freqs = freqs[::2][:6]
+        self.corrs_cv_freqs = freqs[1::2][:8]
 
         self.rf_excit_time = 4  # [s]
         self._rf_mode = self.RFModes.Phase
@@ -273,7 +273,7 @@ class MeasACORM(_ThreadBaseClass):
         corr = (arr1 * arr2).sum(axis=0)
         corr /= _np.linalg.norm(arr1, axis=0)
         corr /= _np.linalg.norm(arr2, axis=0)
-        return _np.abs(corr)
+        return corr
 
     def save_loco_input_data(self, respmat_name: str, overwrite=False):
         """Save in `.pickle` format a dictionary with all LOCO input data.
@@ -288,6 +288,8 @@ class MeasACORM(_ThreadBaseClass):
         bpms_data = self.data['bpms_noise']
         bpms_anly = self.analysis['bpms_noise']
         data = dict()
+        data['method'] = 'AC'
+        data['info'] = str(self.params)
         data['timestamp'] = bpms_data['timestamp']
         data['rf_frequency'] = bpms_data['rf_frequency']
         data['tunex'] = bpms_data['tunex']
@@ -519,20 +521,21 @@ class MeasACORM(_ThreadBaseClass):
             self.data['bpms_noise'] = self._do_measure_bpms_noise()
 
         if self._stopevt.is_set():
-            print('Stopping...')
             self._set_timing_state(tim_state)
+            print('Stopped!')
             return
 
         if self.params.meas_rf_line:
             self.data['rf'] = self._do_measure_rf_line()
 
         if self._stopevt.is_set():
-            print('Stopping...')
             self._set_timing_state(tim_state)
+            print('Stopped!')
             return
 
         self.data['magnets'] = self._do_measure_magnets()
         self._set_timing_state(tim_state)
+        print(f'All measurements finished!!')
 
     def _do_measure_bpms_noise(self):
         elt = _time.time()
@@ -604,7 +607,7 @@ class MeasACORM(_ThreadBaseClass):
 
         if par.rf_mode == par.RFModes.Phase:
             t00 = _time.time()
-            print('    Turning RF Conditioning On...')
+            print('    Turning RF Conditioning On...', end='')
             self._turn_on_llrf_conditioning()
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -612,6 +615,7 @@ class MeasACORM(_ThreadBaseClass):
         print('    Sending Trigger signal...', end='')
         self.bpms.mturn_reset_flags_and_update_initial_timestamps()
         self.devices['evt_study'].cmd_external_trigger()
+        print(f'    Done! ET: {_time.time()-t00:.2f}s')
 
         if par.rf_mode == par.RFModes.Step:
             t00 = _time.time()
@@ -632,6 +636,7 @@ class MeasACORM(_ThreadBaseClass):
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         llrf = self.devices['llrf']
+        data = dict()
         data['llrf_cond_voltage_min'] = llrf.voltage_refmin_sp
         data['llrf_cond_phase_min'] = llrf.phase_refmin_sp
         data['llrf_cond_voltage'] = llrf.voltage_sp
@@ -641,12 +646,12 @@ class MeasACORM(_ThreadBaseClass):
 
         if par.rf_mode == par.RFModes.Phase:
             t00 = _time.time()
-            print('    Turning RF Conditioning Off...')
+            print('    Turning RF Conditioning Off...', end='')
             self._turn_off_llrf_conditioning()
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
-        data = self.get_general_data()
+        data.update(self.get_general_data())
         data.update(self.get_bpms_data())
         data['mode'] = par.rf_mode
         data['step_kick'] = par.rf_step_kick
@@ -714,11 +719,11 @@ class MeasACORM(_ThreadBaseClass):
         cv2meas = self.params.corrs_cv2meas
         if isinstance(ch2meas, str) and ch2meas.startswith('all'):
             ch2meas = chs_shifted
-        if isinstance(cv2meas, str) and ch2meas.startswith('all'):
+        if isinstance(cv2meas, str) and cv2meas.startswith('all'):
             cv2meas = cvs_shifted
 
         ch_kicks = _np.full(len(ch2meas), self.params.corrs_ch_kick)
-        cv_kicks = _np.full(len(ch2meas), self.params.corrs_cv_kick)
+        cv_kicks = _np.full(len(cv2meas), self.params.corrs_cv_kick)
         if self.params.corrs_norm_kicks:
             orm = _np.array(self.configdb.get_config_value(
                 self.params.ref_respmat_name))
@@ -741,14 +746,15 @@ class MeasACORM(_ThreadBaseClass):
         nacqs += bool(nruns % nr1acq)
         for itr in range(nacqs):
             elt = _time.time()
+            print(f'  Acquisition {itr+1:02d}/{nacqs:02d}')
 
             chs_slc, cvs_slc = [], []
             ch_kick, cv_kick = [], []
             freqhe, freqve = [], []
             off = itr*nr1acq
             for run in range(nr1acq):
-                slch = slice((off + run-1)*nfh, (off + run)*nfh)
-                slcv = slice((off + run-1)*nfv, (off + run)*nfv)
+                slch = slice((off + run)*nfh, (off + run+1)*nfh)
+                slcv = slice((off + run)*nfv, (off + run+1)*nfv)
                 chs = ch2meas[slch]
                 cvs = cv2meas[slcv]
                 if chs or cvs:
@@ -803,6 +809,7 @@ class MeasACORM(_ThreadBaseClass):
                     'Problem: timed out waiting BPMs update. '
                     f'Error code: {ret:d}')
                 break
+            _time.sleep(0.1)
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # get data for each sector separately:
@@ -830,7 +837,7 @@ class MeasACORM(_ThreadBaseClass):
 
             elt -= _time.time()
             elt *= -1
-            print(f'    Elapsed Time: {elt:.2f}s')
+            print(f'  Elapsed Time: {elt:.2f}s')
             if self._stopevt.is_set():
                 print('Stopping...')
                 break
@@ -964,12 +971,13 @@ class MeasACORM(_ThreadBaseClass):
             dfty = _np.abs(_np.fft.rfft(orby, axis=0))[idcs_min]
             amaxx = dftx.argmax(axis=0)
             amaxy = dfty.argmax(axis=0)
-            res = _scystat.mode(_np.r_[amaxx, amaxy], keepdims=False)
+            # res = _scystat.mode(_np.r_[amaxx, amaxy], keepdims=False)
+            res = _scystat.mode(_np.r_[amaxx, amaxy])
             # res = _scystat.mode(amaxy, keepdims=False)
-            central_freq = freqx[idcs_min][res.mode]
+            central_freq = freqx[idcs_min][res.mode[0]]
             print(
                 f'Filtering data around {central_freq:.2f}Hz '
-                f'({res.count:03d}).')
+                f'({res.count[0]:03d}).')
 
         central_freq = int(round(central_freq/f_cond)) * f_cond
         fmin = central_freq - window/2
@@ -1045,11 +1053,11 @@ class MeasACORM(_ThreadBaseClass):
         matcv[:sofb.nr_bpms] = ampx_cv
         matcv[sofb.nr_bpms:] = ampy_cv
 
-        match = _np.roll(_np.tile(match, 20), -1)
-        matcv = _np.roll(_np.tile(matcv, 20), -1)
+        match = _np.roll(_np.tile(match, (sofb.nr_ch//sch) + 1), -1)
+        matcv = _np.roll(_np.tile(matcv, (sofb.nr_cv//scv) + 1), -1)
         mat = _np.zeros((2*sofb.nr_bpms, sofb.nr_corrs))
-        mat[:, :sofb.nr_ch] = match
-        mat[:, sofb.nr_ch:sofb.nr_chcv] = matcv
+        mat[:, :sofb.nr_ch] = match[:, :sofb.nr_ch]
+        mat[:, sofb.nr_ch:sofb.nr_chcv] = matcv[:, :sofb.nr_cv]
 
         ampx_rf = orbx.std(axis=0)
         ampy_rf = orby.std(axis=0)
@@ -1204,7 +1212,7 @@ class MeasACORM(_ThreadBaseClass):
         _time.sleep(0.1)
         evg.cmd_update_events()
 
-    def _config_timing(self, cm_dly=None, chs=None, cvs=None, nr_points=None):
+    def _config_timing(self, cm_dly=0, chs=None, cvs=None, nr_points=None):
         """Configure timing.
 
         Args:
@@ -1248,7 +1256,7 @@ class MeasACORM(_ThreadBaseClass):
         # multiple of the the sampling period to ensure repeatability of
         # experiment along runs excited during single acquisition:
         fsamp = self.bpms.get_sampling_frequency(rf_freq, 'FAcq')
-        runs_delta_dly = _np.arange(len(nr_runs), dtype=float)
+        runs_delta_dly = _np.arange(nr_runs, dtype=float)
         runs_delta_dly *= nr_points / fsamp
         runs_delta_dlyr = _np.round(runs_delta_dly * ftim)
 
@@ -1256,8 +1264,11 @@ class MeasACORM(_ThreadBaseClass):
         # acquisition:
         ll_trigs = []
         for ch, cv in zip(chs, cvs):
-            ll_trigs.append(
-                {_LLTime.get_trigger_name(c+':BCKPLN') for c in ch+cv})
+            llt = set()
+            for c in ch+cv:
+                trig = _LLTime.get_trigger_name(c+':BCKPLN')
+                llt.add(trig)
+            ll_trigs.append(llt)
 
         # check if correctors controlled by the same trigger are requested to
         # be triggered in different times during the same acquisition
