@@ -379,11 +379,11 @@ class Tous_analysis():
         deltasn = dic['deltasn']
 
         fig, ax = _plt.subplots(figsize=(10,5))
-        ax.set_title('Densidade de probabilidade para cada elemento da rede magnética')
+        ax.set_title('Densidade de probabilidade para posições distintas da rede magnética')
         ax.grid(True, alpha=0.5, ls='--', color='k')
         ax.xaxis.grid(False)
-        ax.set_xlabel('s position [m]', fontsize=14)
-        ax.set_ylabel('Normalized density probability', fontsize=14)
+        ax.set_xlabel(r'$\delta$ [%]', fontsize=14)
+        ax.set_ylabel('PDF', fontsize=14)
         ax.tick_params(axis='both', labelsize=12)
         # ap_ind = []
 
@@ -403,21 +403,27 @@ class Tous_analysis():
                     pass
 
         for idx, s in enumerate(spos):
-            
+
             mod_ind = _np.argmin(_np.abs(spos_ring-s))
 
             fdenspi = fdensp[idx][:best_index]
             fdensni = fdensn[idx][:best_index]
-            deltaspi = deltasp[idx][:best_index]
-            deltasni = -deltasn[idx][:best_index]
+            deltaspi = deltasp[idx][:best_index]*1e2
+            deltasni = -deltasn[idx][:best_index]*1e2
 
             color = _plt.cm.gist_rainbow(idx/len(spos))
+            not_desired = ['calc_mom_accep',
+                           'mia', 'mib', 'mip',
+                           'mb1', 'mb2', 'mc']
+        
+            while model[mod_ind].fam_name in not_desired:
+                mod_ind += 1
 
-            ax.plot(deltaspi, fdenspi, label='{}'.format(model[mod_ind].fam_name), color=color)
+            ax.plot(deltaspi, fdenspi,label='{} em {} m'.format(model[mod_ind].fam_name, _np.round(spos_ring[mod_ind], 2)),color=color)
             ax.plot(deltasni, fdensni, color=color )
             # ap_ind.append(mod_ind)
 
-        ax.legend(loc='best', fontsize=13)
+        ax.legend(loc='best', fontsize=12)
 
 
     def get_track(self,l_scattered_pos):
