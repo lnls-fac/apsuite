@@ -155,10 +155,7 @@ class MeasACORM(_ThreadBaseClass):
 
         self.sofb_data = SOFBFactory.create('SI')
         self.configdb = _ConfigDBClient(config_type='si_orbcorr_respm')
-        ref_respmat_name = self.params.ref_respmat_name
-        if ref_respmat_name:
-            self.ref_respmat = _np.array(
-                self.configdb.get_config_value(ref_respmat_name))
+
         if self.isonline:
             self._create_devices()
 
@@ -361,15 +358,18 @@ class MeasACORM(_ThreadBaseClass):
                 measurements. Defaults to 10.
 
         """
+        ref_respmat = _np.array(
+                self.configdb.get_config_value(self.params.ref_respmat_name))
         self.analysis['magnets'] = self._process_magnets(
-            self.data['magnets'], mag_idx_ini, mag_min_freq, mag_max_freq)
+            self.data['magnets'], mag_idx_ini, mag_min_freq, mag_max_freq,
+            ref_respmat)
 
         rf_d = self.data.get('rf')
         if rf_d is not None:
             if 'mode' in rf_d and rf_d['mode'] == self.params.RFModes.Phase:
                 anly = self._process_rf_phase(
                     rf_d, rf_phase_window, central_freq=rf_phase_central_freq,
-                    orm_name=self.params.ref_respmat_name)
+                    ref_respmat=ref_respmat)
             else:
                 anly = self._process_rf_step(rf_d, rf_step_trans_len)
             self.analysis['rf'] = anly
@@ -934,7 +934,7 @@ class MeasACORM(_ThreadBaseClass):
         return anly
 
     def _process_rf_phase(
-            self, rf_data, window=10, central_freq=None, orm_name=None):
+            self, rf_data, window=10, central_freq=None, ref_respmat=None):
         anly = dict()
 
         fsamp = rf_data['sampling_frequency']
@@ -995,19 +995,15 @@ class MeasACORM(_ThreadBaseClass):
         mom_compac = rf_data.get('mom_compac', _asparams.SI_MOM_COMPACT)
 
         etax, etay = self._get_reference_dispersion(
-            rf_freq, mom_compac, orm_name)
+            rf_freq, mom_compac, ref_respmat)
         eta_meas = _OrbitAnalysis.calculate_eta_meas(orbx, orby, etax, etay)
         anly['mat_colx'] = - eta_meas[:orbx.shape[-1]] / mom_compac / rf_freq
         anly['mat_coly'] = - eta_meas[orbx.shape[-1]:] / mom_compac / rf_freq
         return anly
 
-    def _get_reference_dispersion(self, rf_freq, mom_compac, orm_name=None):
+    def _get_reference_dispersion(self, rf_freq, mom_compac, ref_respmat):
         """."""
-        if orm_name != self.params.ref_respmat_name:
-            orm = _np.array(self.configdb.get_config_value(orm_name))
-        else:
-            orm = self.ref_respmat
-        etaxy = orm[:, -1]
+        etaxy = ref_respmat[:, -1]
         nrbpms = etaxy.size // 2
         etaxy *= -mom_compac * rf_freq  # units of [um]
         etax, etay = etaxy[:nrbpms], etaxy[nrbpms:]
@@ -1077,7 +1073,8 @@ class MeasACORM(_ThreadBaseClass):
         return anly
 
     def _process_magnets(
-            self, magnets_data, idx_ini=None, min_freq=None, max_freq=None):
+            self, magnets_data, idx_ini=None, min_freq=None, max_freq=None,
+            ref_respmat=None):
         """."""
         sofb = self.sofb_data
         corr2idx = {name: i for i, name in enumerate(sofb.ch_names)}
@@ -1152,12 +1149,14 @@ class MeasACORM(_ThreadBaseClass):
             signy = _np.ones(ampy.shape)
             signy[_np.abs(phasey) > (_np.pi/2)] = -1
 
-            ref_respmat = self.ref_respmat
             mat_colsx = (signx * ampx / kicks[:, None]).T
-            xscalefactor = mat_colsx.std() / ref_respmat[:160, :-1].std(axis=0)
+            nr_bpms = self.sofb_data.nr_bpms
+            xscalefactor = mat_colsx.std(axis=0)
+            xscalefactor /= ref_respmat[:nr_bpms, idcs].std(axis=0)
             mat_colsx /= xscalefactor
             mat_colsy = (signy * ampy / kicks[:, None]).T
-            yscalefactor = mat_colsy.std() / ref_respmat[160:, :-1].std(axis=0)
+            yscalefactor = mat_colsy.std(axis=0)
+            yscalefactor /= ref_respmat[nr_bpms:, idcs].std(axis=0)
             mat_colsy /= yscalefactor
 
             anly['ampx'] = ampx
@@ -1170,10 +1169,10 @@ class MeasACORM(_ThreadBaseClass):
             anly['siny'] = siny
             anly['signx'] = signx
             anly['signy'] = signy
-            anly['mat_coslx'] = mat_colsx
-            anly['mat_cosly'] = mat_colsy
-            anly['xscalefactor'] = xscalefactor
-            anly['yscalefactor'] = yscalefactor
+            anly['mat_colsx'] = mat_colsx
+            anly['mat_colsy'] = mat_colsy
+            anly['mat_colsx_scale'] = xscalefactor
+            anly['mat_colsy_scale'] = yscalefactor
 
             analysis.append(anly)
         return analysis
