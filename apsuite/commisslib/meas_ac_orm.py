@@ -1152,6 +1152,14 @@ class MeasACORM(_ThreadBaseClass):
             signy = _np.ones(ampy.shape)
             signy[_np.abs(phasey) > (_np.pi/2)] = -1
 
+            ref_respmat = self.ref_respmat
+            mat_colsx = (signx * ampx / kicks[:, None]).T
+            xscalefactor = mat_colsx.std() / ref_respmat[:160, :-1].std(axis=0)
+            mat_colsx /= xscalefactor
+            mat_colsy = (signy * ampy / kicks[:, None]).T
+            yscalefactor = mat_colsy.std() / ref_respmat[160:, :-1].std(axis=0)
+            mat_colsy /= yscalefactor
+
             anly['ampx'] = ampx
             anly['ampy'] = ampy
             anly['phasex'] = phasex
@@ -1162,8 +1170,11 @@ class MeasACORM(_ThreadBaseClass):
             anly['siny'] = siny
             anly['signx'] = signx
             anly['signy'] = signy
-            anly['mat_colsx'] = (signx * ampx / kicks[:, None]).T
-            anly['mat_colsy'] = (signy * ampy / kicks[:, None]).T
+            anly['mat_coslx'] = mat_colsx
+            anly['mat_cosly'] = mat_colsy
+            anly['xscalefactor'] = xscalefactor
+            anly['yscalefactor'] = yscalefactor
+
             analysis.append(anly)
         return analysis
 
