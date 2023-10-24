@@ -317,17 +317,6 @@ class Tous_analysis():
         else:
             return res, fp*Ddeltas, fn*Ddeltas, deltp*1e2, deltn*1e2
     
-    # vale mencionar que a fast aquisition da forma como esta definida já está funcional
-    
-
-#    a função complete aquisition poderia receber uma lista com os nomes dos elementos que se 
-#    deseja estudar, mas poderia também passar uma lista de elementos quaisquer
-#    como fazer para a função calcular uma hora um uma hora outro ?
-
-# uma coisa é certa é melhor definir estas condições antes do programa realizar os calculos
-
-# eu poderia fazer um função para vincular o nome do elemento as posições s ao longo do anel
-# isso parece ser bem util caso alguem deseje estudar um elemento em um ponto ja especificado
 
     def complete_aquisition(self, lname_or_spos, par):
         param = tousfunc.char_check(lname_or_spos)
@@ -373,13 +362,69 @@ class Tous_analysis():
         index = _np.argmin(_np.abs(spos-single_spos))
         tousfunc.plot_track(self.accelerator, res, _np.intp(self.inds_pos),
                             self.off_energy, par, index, accep, dp, fp)
-        
-
-    #if the user desires to know all the scattering events along the ring, 
-    #only its necessary to do is to pass the 
 
     # remember that ind is the index that represents the initial position where tracking begins
+
+    def plot_normtousd(self, spos):
         
+        spos_ring = self._spos
+        model = self._model_fit
+        accep = self._accep
+        dic = tousfunc.norm_cutacp(self._model_fit, 
+                             spos, 5000, accep, norm=True)
+        
+        fdensp = dic['fdensp']
+        fdensn = dic['fdensp']
+        deltasp = dic['deltasp']
+        deltasn = dic['deltasn']
+
+        fig, ax = _plt.subplots(figsize=(10,5))
+        ax.set_title('Densidade de probabilidade para cada elemento da rede magnética')
+        ax.grid(True, alpha=0.5, ls='--', color='k')
+        ax.xaxis.grid(False)
+        ax.set_xlabel('s position [m]', fontsize=14)
+        ax.set_ylabel('Normalized density probability', fontsize=14)
+        ax.tick_params(axis='both', labelsize=12)
+
+        apind = []
+
+        for idx, s in enumerate(spos):
+            
+            array_fdens = fdensp[idx]
+            index = _np.intp(_np.where(array_fdens <= 1e-2)[0][1])
+
+            # apind.append(index)
+
+            # isso dai vai funcionar mas eu preciso dar um jeito de selecionar após um determinado indice
+
+            if not idx:
+                best_index = index
+            else:
+                if best_index < index:
+                    best_index = index
+                else:
+                    pass
+
+        for idx, s in enumerate(spos):
+            
+            mod_ind = _np.argmin(_np.abs(spos_ring-s))
+
+            fdenspi = fdensp[idx][:best_index]
+            fdensni = fdensn[idx][:best_index]
+            deltaspi = deltasp[idx][:best_index]
+            deltasni = -deltasn[idx][:best_index]
+
+            color = _plt.cm.gist_rainbow(idx/len(spos))
+
+            ax.plot(deltaspi, fdenspi, label='{}'.format(model[mod_ind].fam_name), color=color)
+            ax.plot(deltasni, fdensni, color=color )
+
+            apind.append(mod_ind)
+
+        ax.legend(loc='best', fontsize=13)
+        
+        return apind
+
 
     def get_track(self,l_scattered_pos):
         

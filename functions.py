@@ -344,9 +344,9 @@ def get_scaccep(acc, accep):
 
     return scalc, daccpp, daccpn
     
-def n_norm_d(acc, lsps, _npt, getsacp, cutoff, norm=False):
+def n_norm_d(acc, lsps, _npt, cutoff, accep, norm=False):
 
-    scalc, daccpp, daccpn = getsacp
+    scalc, daccpp, daccpn = get_scaccep(acc, accep)
     beta = _beam_rigidity(energy=3)[2]
 
     taum_p = (beta*daccpp)**2
@@ -397,9 +397,10 @@ def n_norm_d(acc, lsps, _npt, getsacp, cutoff, norm=False):
 # no cálculo já implementados para o tempo de vida touschek que é coerente com o tempo do SIRIUS
 # futuramente isso pode ser alterado e redefinido
 
-def nnorm_cutacp(acc, lsps, _npt, getsacp, norm=False):
+def norm_cutacp(acc, lsps, _npt, accep, norm=False):
+    dic = {}
 
-    scalc, daccpp, daccpn = getsacp
+    scalc, daccpp, daccpn = get_scaccep(acc, accep)
     beta = _beam_rigidity(energy=3)[2]
 
     taum_p = (beta*daccpp)**2
@@ -410,7 +411,7 @@ def nnorm_cutacp(acc, lsps, _npt, getsacp, norm=False):
     ltime = _pyaccel.lifetime.Lifetime(acc)
     b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
 
-    calc_dp, calc_dn = [], []
+    fdens_p, fdens_n = [], []
     deltasp, deltasn = [], []
 
     for _, s in enumerate(lsps):
@@ -426,6 +427,11 @@ def nnorm_cutacp(acc, lsps, _npt, getsacp, norm=False):
 
         y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
         y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
+        norm_facp = _scyint.trapz(y_p, deltap)
+        norm_facn = _scyint.trapz(y_n, deltan)
+
+        y_p /= norm_facp
+        y_n /= norm_facn
         
         # eliminating the negative values from array
         indp = _np.where(y_p<0)[0]
@@ -433,17 +439,22 @@ def nnorm_cutacp(acc, lsps, _npt, getsacp, norm=False):
         y_p[indp] = 0
         y_n[indn] = 0
         
-        calc_dp.append(y_p)
-        calc_dn.append(y_n)
+        fdens_p.append(y_p)
+        fdens_n.append(y_n)
         deltasp.append(deltap)
         deltasn.append(deltan)
 
-    calc_dp = _np.array(calc_dp, dtype=object)
-    calc_dn = _np.array(calc_dn, dtype=object)
+    fdens_p = _np.array(fdens_p, dtype=object)
+    fdens_n = _np.array(fdens_n, dtype=object)
     deltasp = _np.array(deltasp, dtype=object)
     deltasn = _np.array(deltasn, dtype=object)
 
-    return calc_dp, calc_dn, deltasp, deltasn
+    dic['fdensp'] = fdens_p
+    dic['fdensn'] = fdens_n
+    dic['deltasp'] = deltasp
+    dic['deltasn'] = deltasn
+
+    return dic
 
 
 def plot_hdis(acc, l_index, deltp, f_densp, deltn, f_densn, hp, hn):
