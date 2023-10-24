@@ -938,7 +938,7 @@ class MeasACORM(_ThreadBaseClass):
         anly = dict()
 
         fsamp = rf_data['sampling_frequency']
-        fswitch = rf_data['switching_frequency']  # bug
+        fswitch = rf_data['switching_frequency']
         sw_mode = rf_data['switching_mode']
         rf_freq = rf_data['rf_frequency']
         dtim = 1/fsamp
