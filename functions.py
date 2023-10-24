@@ -637,43 +637,46 @@ def scatter_particles(part1, part2, de_min):
 
     return part1_new, part2_new, fact
 
-def histgms(acc,l_spos,num_part, accep, de_min):
+def histgms(acc,l_spos,num_part, accep, de_min, cutaccep):
 
     envelopes = _pyaccel.optics.calc_beamenvelope(acc)
     spos=_pyaccel.lattice.find_spos(acc, indices='closed')
-    _npoint = int((spos[-1]-spos[0])/0.1)
-    scalc = _np.linspace(spos[0], spos[-1], _npoint)
-    histsp1=[]
-    histsp2=[]
-    indices=[]
+    npt = int((spos[-1]-spos[0])/0.1)
+    scalc = _np.linspace(spos[0], spos[-1], npt)
+
+    histsp1, histsp2, indices=[],[],[]
+    
     for iten in l_spos:
         
         idx_model = _np.argmin(_np.abs(spos - iten))
-        idx = _np.argmin(_np.abs(scalc - iten))
-
+        
+        # this index is necessary to the s position indices from analitically calculated PDF 
+        # match with monte carlo simulation s position indices
+        idx = _np.argmin(_np.abs(scalc-iten))
         env = envelopes[idx_model]
-        part1, part2= create_particles(env, num_part)
-        part1_new, part2_new, fact = scatter_particles(part1, part2, de_min)
 
-#         acpp, acpn = accep[1][idx], accep[0][idx]
+        # this two lines of code are the monte-carlo simulation
+        part1, part2= create_particles(env, num_part)
+        part1_new, part2_new, _ = scatter_particles(part1, part2, de_min)
+
+        if cutaccep: # if True selects the energy acceptance as the cutoof of the graphic
+
+            acpp, acpn = accep[1][idx], accep[0][idx]
+            check1 = acpp - part1_new[4]
+            check2 = -(acpn - part2_new[4])
+
+            ind1 = _np.intp(_np.where(check1<0)[0]) 
+            ind2 = _np.intp(_np.where(check2<0)[0])
         
-#         check1 = acpp - part1_new[4]
-#         check2 = -(acpn - part2_new[4])
-#         cond2 = check2<0
-#         cond1 = check1<0
-        
-#         ind1 = _np.where(cond1)[0] # apenas os desvios de energia maiores que a a aceitancia da máquina
-#         ind2 = _np.where(cond2)[0]
-        
-        ind1 = _np.where(part1_new[4]>=0.001) # teste sugerido pelo ximenes
-        ind2 = _np.where(part2_new[4]<=-0.001)
+        else:        
+            ind1 = _np.intp(_np.where(part1_new[4]>=0.001)) # teste sugerido pelo ximenes
+            ind2 = _np.intp(_np.where(part2_new[4]<=-0.001))
         
         histsp1.append((part1_new[4][ind1]))
         histsp2.append((part2_new[4][ind2]))
-        indices.append(idx)
         
-    hist1=_np.array(histsp1, dtype='object')
-    hist2=_np.array(histsp2, dtype='object')
+    # hist1=_np.array(histsp1, dtype='object')
+    # hist2=_np.array(histsp2, dtype='object')
     indices=_np.array(indices)
     
     return histsp1, histsp2, indices

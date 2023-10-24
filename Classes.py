@@ -365,6 +365,7 @@ class Tous_analysis():
 
     # remember that ind is the index that represents the initial position where tracking begins
 
+    # this function is used to compare the PDF of distinct s positions along the storage ring 
     def plot_normtousd(self, spos):
         
         spos_ring = self._spos
@@ -424,6 +425,12 @@ class Tous_analysis():
             # ap_ind.append(mod_ind)
 
         ax.legend(loc='best', fontsize=12)
+
+    #  this function plots the histograms returned by the monte carlo simulation
+    def plot_histograms(self):
+        
+        
+        return
 
 
     def get_track(self,l_scattered_pos):
