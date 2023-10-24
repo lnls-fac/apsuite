@@ -385,8 +385,7 @@ class Tous_analysis():
         ax.set_xlabel('s position [m]', fontsize=14)
         ax.set_ylabel('Normalized density probability', fontsize=14)
         ax.tick_params(axis='both', labelsize=12)
-
-        apind = []
+        # ap_ind = []
 
         for idx, s in enumerate(spos):
             
@@ -394,9 +393,7 @@ class Tous_analysis():
             index = _np.intp(_np.where(array_fdens <= 1e-2)[0][1])
 
             # apind.append(index)
-
-            # isso dai vai funcionar mas eu preciso dar um jeito de selecionar após um determinado indice
-
+            # this block selects the best index for plot the density distribution
             if not idx:
                 best_index = index
             else:
@@ -418,12 +415,9 @@ class Tous_analysis():
 
             ax.plot(deltaspi, fdenspi, label='{}'.format(model[mod_ind].fam_name), color=color)
             ax.plot(deltasni, fdensni, color=color )
-
-            apind.append(mod_ind)
+            # ap_ind.append(mod_ind)
 
         ax.legend(loc='best', fontsize=13)
-        
-        return apind
 
 
     def get_track(self,l_scattered_pos):
