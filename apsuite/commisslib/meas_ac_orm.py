@@ -155,6 +155,10 @@ class MeasACORM(_ThreadBaseClass):
 
         self.sofb_data = SOFBFactory.create('SI')
         self.configdb = _ConfigDBClient(config_type='si_orbcorr_respm')
+        ref_respmat_name = self.params.ref_respmat_name
+        if ref_respmat_name:
+            self.ref_respmat = _np.array(
+                self.configdb.get_config_value(ref_respmat_name))
         if self.isonline:
             self._create_devices()
 
@@ -364,7 +368,8 @@ class MeasACORM(_ThreadBaseClass):
         if rf_d is not None:
             if 'mode' in rf_d and rf_d['mode'] == self.params.RFModes.Phase:
                 anly = self._process_rf_phase(
-                    rf_d, rf_phase_window, central_freq=rf_phase_central_freq)
+                    rf_d, rf_phase_window, central_freq=rf_phase_central_freq,
+                    orm_name=self.params.ref_respmat_name)
             else:
                 anly = self._process_rf_step(rf_d, rf_step_trans_len)
             self.analysis['rf'] = anly
@@ -998,8 +1003,10 @@ class MeasACORM(_ThreadBaseClass):
 
     def _get_reference_dispersion(self, rf_freq, mom_compac, orm_name=None):
         """."""
-        orm_name = orm_name or 'ref_respmat'
-        orm = _np.array(self.configdb.get_config_value(orm_name))
+        if orm_name != self.params.ref_respmat_name:
+            orm = _np.array(self.configdb.get_config_value(orm_name))
+        else:
+            orm = self.ref_respmat
         etaxy = orm[:, -1]
         nrbpms = etaxy.size // 2
         etaxy *= -mom_compac * rf_freq  # units of [um]
