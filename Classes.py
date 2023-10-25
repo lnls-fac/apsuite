@@ -29,6 +29,8 @@ class Tous_analysis():
         self._inds_neg = None
         self._amps_pos = None
         self._amps_neg = None
+        self._num_part = 5000
+        self._energy_dev_min = 1e-4
 
         self._beta = beta # beta is a constant necessary to the calculations
         self._h_pos = get_attribute(self._model_fit, 'hmax', indices='closed') # getting the vchamber's height
@@ -194,6 +196,23 @@ class Tous_analysis():
     @property
     def amp_neg(self):
         return self._amps_neg
+    
+    @property
+    def num_part(self):
+        return self._num_part
+    
+    @num_part.setter
+    def num_part(self, new_num_part):
+        self._num_part = new_num_part
+
+    @property
+    def energy_dev_mcs(self):
+        return self._energy_dev_min
+    
+    @energy_dev_mcs.setter
+    def energy_dev_mcs(self, new_energy_dev):
+        self._energy_dev_min = new_energy_dev
+
 
     
     # define aceitancia de energia, define também o fator de conversão que é sempre necessário das posições s do modelo nominal para scalc, e além disso calcula
@@ -427,10 +446,30 @@ class Tous_analysis():
         ax.legend(loc='best', fontsize=12)
 
     #  this function plots the histograms returned by the monte carlo simulation
-    def plot_histograms(self):
+    def plot_histograms(self, l_spos):
+        # spos = self._spos
+        accep = self.accep
+        model = self._model_fit
+
+        tup = tousfunc.histgms(self._model_fit, l_spos, self._num_part, accep,
+                               self._energy_dev_min,cutaccep=False)
         
+        hp, hn, idx_model = tup
         
-        return
+        fig, ax = _plt.subplots(ncols=len(l_spos), nrows=1,figsize=(10,5))
+        # fig.set_title('Densidade de probabilidade a partir da simulação Monte-Carlo')
+        # ax.grid(True, alpha=0.5, ls='--', color='k')
+        # ax.xaxis.grid(False)
+        # ax.set_xlabel(r'$\delta$ [%]', fontsize=14)
+        # ax.set_ylabel('PDF', fontsize=14)
+        # ax.tick_params(axis='both', labelsize=12)
+
+        
+        for index, iten in enumerate(idx_model):
+            ay = ax[index]
+            ay.hist(hp[index], density=True, bins=200, color='lightgrey', label='{}'.format(model[iten].fam_name))
+            ay.hist(hn[index], density=True, bins=200, color='lightgrey')
+            ay.legend()
 
 
     def get_track(self,l_scattered_pos):
