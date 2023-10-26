@@ -29,7 +29,7 @@ class Tous_analysis():
         self._inds_neg = None
         self._amps_pos = None
         self._amps_neg = None
-        self._num_part = 5000
+        self._num_part = 50000
         self._energy_dev_min = 1e-4
 
         self._beta = beta # beta is a constant necessary to the calculations
@@ -447,7 +447,7 @@ class Tous_analysis():
 
     #  this function plots the histograms returned by the monte carlo simulation
     def plot_histograms(self, l_spos):
-        # spos = self._spos
+        spos = self._spos
         accep = self.accep
         model = self._model_fit
 
@@ -456,19 +456,24 @@ class Tous_analysis():
         
         hp, hn, idx_model = tup
         
-        fig, ax = _plt.subplots(ncols=len(l_spos), nrows=1,figsize=(10,5))
-        # fig.set_title('Densidade de probabilidade a partir da simulação Monte-Carlo')
-        # ax.grid(True, alpha=0.5, ls='--', color='k')
-        # ax.xaxis.grid(False)
-        # ax.set_xlabel(r'$\delta$ [%]', fontsize=14)
-        # ax.set_ylabel('PDF', fontsize=14)
-        # ax.tick_params(axis='both', labelsize=12)
 
+        fig, ax = _plt.subplots(ncols=len(l_spos), nrows=1,figsize=(10,5), sharey=True)
+        fig.suptitle('Densidade de probabilidade a partir da simulação Monte-Carlo')
         
+
         for index, iten in enumerate(idx_model):
+            color = _plt.cm.jet(index/len(idx_model))
             ay = ax[index]
-            ay.hist(hp[index], density=True, bins=200, color='lightgrey', label='{}'.format(model[iten].fam_name))
-            ay.hist(hn[index], density=True, bins=200, color='lightgrey')
+            if not index:
+                ay.set_ylabel('PDF', fontsize=14)
+
+            ay.grid(True, alpha=0.5, ls='--', color='k')
+            ay.xaxis.grid(False)
+            ay.set_xlabel(r'$\delta$ [%]', fontsize=14)
+            ay.tick_params(axis='both', labelsize=12)
+            ay.hist(hp[index], density=True, bins=200, color=color,
+                    label='element:{}, pos:{:.2f} [m]'.format(model[iten].fam_name, spos[iten]))
+            ay.hist(hn[index], density=True, bins=200, color=color)
             ay.legend()
 
 
