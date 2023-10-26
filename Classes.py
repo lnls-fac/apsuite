@@ -631,6 +631,28 @@ class Tous_analysis():
 
         return new_dict
     
+    def get_lost_profile(self, l_scattered_pos, reording_key):
+
+        dic = self.get_reordered_dict(l_scattered_pos, reording_key)
+
+        df = _pd.DataFrame(dic)
+        a = df.set_index('lost_positions')
+
+        summed = []
+        for idx, iten in a.iterrows():
+            sum_row = a.loc[idx][:].sum()
+            summed.append(sum_row)
+
+        fig, ax = _plt.subplots(figsize=(10,5))
+
+        ax.set_xlabel('s position [m]', fontsize=16)
+        ax.set_ylabel('lost position [m]', fontsize=16)
+
+        ax.scatter(list(a.index), summed, label='.', s=8)
+        ax.legend()
+
+        return 
+    
     def plot_scat_table(self, l_scattered_pos, n_r,n_c=1):
         spos = self._spos
         new_dic = self.get_reordered_dict(l_scattered_pos, 'lost_positions')
