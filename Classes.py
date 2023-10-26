@@ -7,7 +7,9 @@ import numpy as _np
 import matplotlib.pyplot as _plt
 from mathphys.beam_optics import beam_rigidity as _beam_rigidity
 import pandas as _pd
-
+import scipy.integrate as scyint
+import pyaccel as _pyaccel
+import matplotlib.gridspec as gs
 
 class Tous_analysis():
 
@@ -631,31 +633,40 @@ class Tous_analysis():
 
         return new_dict
     
-    def get_lost_profile(self, l_scattered_pos, reording_key):
+    def get_lost_profile(self, dic):
 
-        dic = self.get_reordered_dict(l_scattered_pos, reording_key)
+        # dic = self.get_reordered_dict(l_scattered_pos, reording_key)
+        spos = self._spos
 
         df = _pd.DataFrame(dic)
         a = df.set_index('lost_positions')
 
+        scat_pos = _np.array(a.columns, dtype=float)
+        
+        indices = []
+        for iten in scat_pos:
+            ind =  _np.argmin(_np.abs(spos-iten))
+            indices.append(ind)
+
         summed = []
         for idx, iten in a.iterrows():
-            sum_row = a.loc[idx][:].sum()
+            sum_row = scyint.trapz(a.loc[idx], spos[indices])
             summed.append(sum_row)
 
-        fig, ax = _plt.subplots(figsize=(10,5))
+        fig, ax = _plt.subplots(figsize=(10,5),gridspec_kw={'hspace': 0.2, 'wspace': 0.2})
+        ax.set_title('loss rate integral along the ring', fontsize=16)
 
-        ax.set_xlabel('s position [m]', fontsize=16)
-        ax.set_ylabel('lost position [m]', fontsize=16)
+        ax.set_xlabel('lost position [m]', fontsize=16)
+        ax.set_ylabel('loss rate [1/s]', fontsize=16)
 
-        ax.scatter(list(a.index), summed, label='.', s=8)
-        ax.legend()
+        ax.plot(list(a.index), summed, color='orange')
+        _pyaccel.graphics.draw_lattice(self._model_fit,
+                                       offset=-1e-6, height=1e-6, gca=True)
 
-        return 
     
-    def plot_scat_table(self, l_scattered_pos, n_r,n_c=1):
+    def plot_scat_table(self, l_scattered_pos, new_dic, n_r,n_c=1):
         spos = self._spos
-        new_dic = self.get_reordered_dict(l_scattered_pos, 'lost_positions')
+        # new_dic = self.get_reordered_dict(l_scattered_pos, 'lost_positions')
 
         if len(l_scattered_pos)%2 == 0:
             array = _np.arange(l_scattered_pos.size)
@@ -683,11 +694,11 @@ class Tous_analysis():
         fig, ax = _plt.subplots(n_c, n_r, figsize=(10, 6))
         ax.set_title('Loss profile')
         
-        legend = ax.text(0.5, -0.1, '{}'.format(fam_name), size=12, color='black',
-                  ha='center', va='center', transform=_plt.gca().transAxes)
+        # legend = ax.text(0.5, -0.1, '{}'.format(fam_name), size=12, color='black',
+        #           ha='center', va='center', transform=_plt.gca().transAxes)
 
-        # Ajustando a legenda (posicionamento)
-        legend.set_bbox({'facecolor': 'white', 'alpha': 0.5, 'edgecolor': 'black'})
+        # # Ajustando a legenda (posicionamento)
+        # legend.set_bbox({'facecolor': 'white', 'alpha': 0.5, 'edgecolor': 'black'})
 
         ax.set_xlabel('scattered positions [m]', fontsize=16)
         ax.set_ylabel('lost positions [m]', fontsize=16)
