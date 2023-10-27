@@ -44,6 +44,8 @@ class Tous_analysis():
         self._nturns = n_turns # defined like this by the standard
         self._deltas = deltas # defined by the standard 
         self._spos = find_spos(self._model_fit, indices='closed')
+        self._scraph_inds = find_indices(self._model, 'fam_name', 'SHVC')
+        self._scrapv_inds = find_indices(self._model, 'fam_name', 'SVVC')
 
 
     # Defining the energy acceptance. This method also needs a setter to change the value of the acceptance by a different inserted model
@@ -215,26 +217,20 @@ class Tous_analysis():
     def energy_dev_mcs(self, new_energy_dev):
         self._energy_dev_min = new_energy_dev
 
-
-    
-    # define aceitancia de energia, define também o fator de conversão que é sempre necessário das posições s do modelo nominal para scalc, e além disso calcula
-    # as amplitudes e os indices limitantes
-
-    # vai ser melhor retornar todos os parametros que eu preciso de uma vez, 
-    # esses parametros são utilizados em momentos diferentes mas todos eles são necessários para a realização das análises tanto rapida quanto a completa
-    # mas inicialmente não tem como o usuário saber que ele precisa definir estes parâmetros para visualização e análise dos gráficos entao
-    # eu ainda preciso pensar em como tornar esta biblioteca mais simples de ser utilizada por alguem que nao conhece a fundo o código
-    # isso significa que ao longo do codigo eu vou chamar as funções como se esses parametros ja tivessem sido definidos, mas na verdade eles so são 
-    # definidos pelo usuário quando a classe é instanciada e a função abaixo é chamada definido estes 3 parametros ao mesmo tempo
-    
-    # def get_scaccep(self):
-    #     return self.accep
-    
-    # def get_scalc(self):
-    #     return self.s_calc let this code here to remind me how I may call a function in a class
-
     def get_amps_idxs(self): # this step calls and defines 3 disctinct getters
         return self.amp_and_limidx, self.accep, self.s_calc
+    
+    def set_vchamber_scraper(self, vchamber):
+        model = self._model
+        scph_inds = self._scraph_inds
+        scpv_inds = self._scrapv_inds
+
+        for iten in scph_inds:
+            model[iten].hmin = vchamber[0]
+            model[iten].hmax = vchamber[1]
+        for iten in scpv_inds:
+            model[iten].vmin = vchamber[2]
+            model[iten].vmax = vchamber[3]
 
     def return_sinpos_track(self,single_spos, par):
         
@@ -302,15 +298,9 @@ class Tous_analysis():
         getdn = getdn[ind]
         deltn = deltn[ind]
 
-        # defining the energy deviation limit until tracking will be performed
-
         self.deltas = deltp[-1]*1e2
-
-        # this function will return the weighting factors in the scalc position convertion
         
         return getdp, getdn, deltp, deltn
-    
-    # In general, this function is usefull when we desire to calculate the touschek scattering weighting function for one specific point along the ring
 
     def fast_aquisition(self, single_spos, par):
         # this raise blocks to runing the program if the list of s position has more than 1 element
@@ -479,8 +469,8 @@ class Tous_analysis():
             ay.legend()
 
 
-    def get_track(self,l_scattered_pos):
-        
+    def get_track(self,l_scattered_pos, scrap, vchamber):
+
         all_track = []
         indices = []
         spos = self._spos
@@ -489,6 +479,11 @@ class Tous_analysis():
         self._model.cavity_on = True
         self._model.vchamber_on = True
 
+        if scrap:
+            self.set_vchamber_scraper(vchamber)
+            print(self._model[self._scraph_inds[0]].hmax)
+            print(self._model[self._scraph_inds[0]].hmin)
+
         for _, scattered_pos in enumerate(l_scattered_pos):
 
             index = _np.argmin(_np.abs(scattered_pos-spos))
@@ -496,11 +491,19 @@ class Tous_analysis():
             res = tousfunc.track_eletrons(self._deltas, self._nturns, index, self._model)
             all_track.append(res)
 
+        hx = self.model_fit[self._scraph_inds[0]].hmax
+        hn = self.model_fit[self._scraph_inds[0]].hmin
+        vx = self.model_fit[self._scraph_inds[0]].vmax
+        vn = self.model_fit[self._scraph_inds[0]].vmin
+        vchamber = [hx, hn, vx, vn]
+
+        self.set_vchamber_scraper(vchamber)# reseting vchamber height and width (nominal)
+
         return all_track, indices
     
-    def find_data(self, l_scattered_pos):
+    def find_data(self, l_scattered_pos, scrap, vchamber):
 
-        all_track, indices = self.get_track(l_scattered_pos)
+        all_track, indices = self.get_track(l_scattered_pos, scrap, vchamber)
         spos = self._spos
         
         fact = 0.03
@@ -593,10 +596,10 @@ class Tous_analysis():
         return all_lostp, prob, lostp
             # dataframe = _pd.DataFrame(dic_res)
     
-    def get_table(self,l_scattered_pos):
+    def get_table(self,l_scattered_pos, scrap, vchamber):
         
         dic_res = {}
-        all_lostp, prob, lostp = self.find_data(l_scattered_pos)
+        all_lostp, prob, lostp = self.find_data(l_scattered_pos, scrap, vchamber)
         n_scat = _np.round(l_scattered_pos, 2)
 
         for idx, scattered_pos in enumerate(n_scat):
@@ -621,9 +624,9 @@ class Tous_analysis():
 
         return dic_res
     
-    def get_reordered_dict(self, l_scattered_pos, reording_key): # chatgpt code to reorder the dictionary
+    def get_reordered_dict(self, l_scattered_pos, reording_key, scrap, vchamber): # chatgpt code to reorder the dictionary
 
-        dic = self.get_table(l_scattered_pos)
+        dic = self.get_table(l_scattered_pos, scrap, vchamber)
 
         zip_tuples = zip(*[dic[chave] for chave in dic])
         new_tuples = sorted(zip_tuples, key=lambda x: x[list(dic.keys()).index(reording_key)])
