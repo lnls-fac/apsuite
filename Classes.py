@@ -659,66 +659,62 @@ class Tous_analysis():
         ax.set_xlabel('lost position [m]', fontsize=16)
         ax.set_ylabel('loss rate [1/s]', fontsize=16)
 
-        ax.plot(list(a.index), summed, color='orange')
+        ax.plot(list(a.index), summed, color='navy')
         _pyaccel.graphics.draw_lattice(self._model_fit,
                                        offset=-1e-6, height=1e-6, gca=True)
 
     
     def plot_scat_table(self, l_scattered_pos, new_dic, n_r,n_c=1):
         spos = self._spos
+
         # new_dic = self.get_reordered_dict(l_scattered_pos, 'lost_positions')
 
-        if len(l_scattered_pos)%2 == 0:
-            array = _np.arange(l_scattered_pos.size)
-            j = _np.intp(_np.where(array == int((len(l_scattered_pos)/2 + 1)))[0])
-            array_j = l_scattered_pos[j]
-            index = _np.argmin(_np.abs(spos-array_j))
+        # if len(l_scattered_pos)%2 == 0:
+        #     array = _np.arange(l_scattered_pos.size)
+        #     j = _np.intp(_np.where(array == int((len(l_scattered_pos)/2 + 1)))[0])
+        #     array_j = l_scattered_pos[j]
+        #     index = _np.argmin(_np.abs(spos-array_j))
 
-            lists = list(find_dict(self._model_fit, 'fam_name').values())
+        #     lists = list(find_dict(self._model_fit, 'fam_name').values())
 
-        else:
-            array = _np.arange(l_scattered_pos.size)
-            j = _np.where(array == int((len(l_scattered_pos)+1)/2))[0]
-            array_j = l_scattered_pos[j]
-            index = _np.argmin(_np.abs(spos-array_j))
+        # else:
+        #     array = _np.arange(l_scattered_pos.size)
+        #     j = _np.where(array == int((len(l_scattered_pos)+1)/2))[0]
+        #     array_j = l_scattered_pos[j]
+        #     index = _np.argmin(_np.abs(spos-array_j))
 
-            lists = list(find_dict(self._model_fit, 'fam_name').values())
+        #     lists = list(find_dict(self._model_fit, 'fam_name').values())
 
-        for i, l in enumerate(lists):
-            if _np.isin(index, l).item():
-                fam_name = list(find_dict(self._model_fit, 'fam_name').keys())[i]
+        # for i, l in enumerate(lists):
+        #     if _np.isin(index, l).item():
+        #         fam_name = list(find_dict(self._model_fit, 'fam_name').keys())[i]
 
         df = _pd.DataFrame(new_dic)
         df = df.set_index('lost_positions')
 
-        fig, ax = _plt.subplots(n_c, n_r, figsize=(10, 6))
-        ax.set_title('Loss profile')
-        
-        # legend = ax.text(0.5, -0.1, '{}'.format(fam_name), size=12, color='black',
-        #           ha='center', va='center', transform=_plt.gca().transAxes)
+        val = df.values.copy()
+        idx = val != 0.0
+        val[idx] = _np.log(val[idx])
+        val[~idx] = val[idx].min()
 
-        # # Ajustando a legenda (posicionamento)
-        # legend.set_bbox({'facecolor': 'white', 'alpha': 0.5, 'edgecolor': 'black'})
+        fig, ax = _plt.subplots(figsize=(10,5))
+
+        y = _np.linspace(0,spos[-1],df.shape[0]+1)
+        x = _np.linspace(0,spos[-1],df.shape[1]+1)
+        X,Y = _np.meshgrid(x,y)
+
+        heatmp = ax.pcolor(X,Y,val, cmap='jet',shading='flat')
+
+        cbar = _plt.colorbar(heatmp)
+        cbar.set_label('scat. rate in logarithmic scale', rotation=90)
+
+        ax.set_title('Loss profile', fontsize=16)
 
         ax.set_xlabel('scattered positions [m]', fontsize=16)
         ax.set_ylabel('lost positions [m]', fontsize=16)
 
-        heatmap = ax.pcolor(df, cmap='jet')  
-        _plt.colorbar(heatmap)
-
-        step1 = int(len(new_dic.keys())/5)
-        arr1 = df.columns.values[::step1]
-
-        _plt.xticks(_np.arange(df.shape[1])[::step1] + 0.5, arr1, fontsize=12)
-
-        step2 = int(len(new_dic['lost_positions'])/5)
-        arr2 = df.index.values[::step2]
-
-        _plt.yticks(_np.arange(df.shape[0])[::step2] + 0.5, arr2, fontsize=12)
-
         fig.tight_layout()
-        
-        _plt.show()  
+        _plt.show()
 
 
 # # This function will probably will be in my repositories
