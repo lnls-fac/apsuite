@@ -491,10 +491,10 @@ class Tous_analysis():
             res = tousfunc.track_eletrons(self._deltas, self._nturns, index, self._model)
             all_track.append(res)
 
-        hx = self.model_fit[self._scraph_inds[0]].hmax
-        hn = self.model_fit[self._scraph_inds[0]].hmin
-        vx = self.model_fit[self._scraph_inds[0]].vmax
-        vn = self.model_fit[self._scraph_inds[0]].vmin
+        hx = self._model_fit[self._scraph_inds[0]].hmax
+        hn = self._model_fit[self._scraph_inds[0]].hmin
+        vx = self._model_fit[self._scraph_inds[0]].vmax
+        vn = self._model_fit[self._scraph_inds[0]].vmin
         vchamber = [hx, hn, vx, vn]
 
         self.set_vchamber_scraper(vchamber)# reseting vchamber height and width (nominal)
@@ -697,10 +697,10 @@ class Tous_analysis():
 
         val = df.values.copy()
         idx = val != 0.0
-        val[idx] = _np.log(val[idx])
+        val[idx] = _np.log10(val[idx])
         val[~idx] = val[idx].min()
 
-        fig, ax = _plt.subplots(figsize=(10,5))
+        fig, ax = _plt.subplots(figsize=(10,10))
 
         y = _np.linspace(0,spos[-1],df.shape[0]+1)
         x = _np.linspace(0,spos[-1],df.shape[1]+1)
@@ -709,7 +709,7 @@ class Tous_analysis():
         heatmp = ax.pcolor(X,Y,val, cmap='jet',shading='flat')
 
         cbar = _plt.colorbar(heatmp)
-        cbar.set_label('scat. rate in logarithmic scale', rotation=90)
+        cbar.set_label('scat. rate [1/s] in logarithmic scale', rotation=90)
 
         ax.set_title('Loss profile', fontsize=16)
 
@@ -717,6 +717,7 @@ class Tous_analysis():
         ax.set_ylabel('lost positions [m]', fontsize=16)
 
         fig.tight_layout()
+        _plt.gca().set_aspect('equal')
         _plt.show()
 
 
