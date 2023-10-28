@@ -165,7 +165,7 @@ class MeasACORM(_ThreadBaseClass):
     calc_svd = staticmethod(_AcqBPMsSignals.calc_svd)
 
     @staticmethod
-    def fitting_matrix(tim, freqs, num_cycles=None):
+    def fitting_matrix(tim, freqs, num_cycles=None, idx_ini=None):
         """Create the matrix used for fitting of fourier components.
 
         The ordering of the matrix is the following:
@@ -182,10 +182,17 @@ class MeasACORM(_ThreadBaseClass):
             numpy.ndarray: fitting matrix (len(tim), 2*len(freqs))
 
         """
+        if idx_ini is None:
+            idx_ini = _np.zeros(freqs.shape, dtype=int)
+        elif not isinstance(idx_ini, (list, tuple, _np.ndarray)):
+            idx_ini = _np.full(freqs.shape, idx_ini, dtype=int)
+
         mat = _np.zeros((tim.size, 2*freqs.size))
+        mat2 = mat.copy()
         arg = 2*_np.pi*freqs[None, :]*tim[:, None]
         cos = _np.cos(arg)
         sin = _np.sin(arg)
+        idx_ini = _np.vstack([idx_ini, idx_ini]).T.ravel()
 
         if num_cycles is not None:
             cond = arg > 2*_np.pi*num_cycles[None, :]
@@ -193,7 +200,13 @@ class MeasACORM(_ThreadBaseClass):
             sin[cond] = 0
         mat[:, ::2] = cos
         mat[:, 1::2] = sin
-        return mat
+
+        for i, idx in enumerate(idx_ini):
+            if not idx:
+                mat2[:, i] = mat[:, i]
+            else:
+                mat2[idx:, i] = mat[:-idx, i]
+        return mat2
 
     def get_ref_respmat(self):
         """Get reference response matrix from configdb server."""
@@ -205,7 +218,7 @@ class MeasACORM(_ThreadBaseClass):
 
     @classmethod
     def fit_fourier_components(
-            cls, data, freqs, dtim, num_cycles=None, pinv=None):
+            cls, data, freqs, dtim, num_cycles=None, idx_ini=None, pinv=None):
         """Fit Fourier components in signal for the given frequencies.
 
         Args:
@@ -225,7 +238,7 @@ class MeasACORM(_ThreadBaseClass):
         """
         if pinv is None:
             tim = _np.arange(data.shape[0]) * dtim
-            mat = cls.fitting_matrix(tim, freqs, num_cycles)
+            mat = cls.fitting_matrix(tim, freqs, num_cycles, idx_ini)
             u, s, vt = _np.linalg.svd(mat, full_matrices=False)
             pinv = vt.T/s @ u.T
             coeffs = pinv @ data
@@ -245,9 +258,9 @@ class MeasACORM(_ThreadBaseClass):
         return amps, phases
 
     @classmethod
-    def fitted_orbit(cls, cos, sin, freqs, tim, num_cycles=None):
+    def fitted_orbit(cls, cos, sin, freqs, tim, num_cycles=None, idx_ini=None):
         """."""
-        mat = cls.fitting_matrix(tim, freqs, num_cycles)
+        mat = cls.fitting_matrix(tim, freqs, num_cycles, idx_ini)
         coeffs = _np.zeros((sin.shape[0]*2, sin.shape[1]), dtype=float)
         coeffs[::2] = cos
         coeffs[1::2] = sin
@@ -667,6 +680,31 @@ class MeasACORM(_ThreadBaseClass):
         fig.show()
         return fig, (ax, ay)
 
+    def plot_scale_convertion_factors(self):
+        """Plot single corrector signatures of measured and reference respmat.
+
+        Returns:
+            matplotlib.Figure: Figure object of the plot.
+            matplotlib.Axes: Axes of the figure;
+
+        """
+        mags_data = self.analysis['magnets']
+        ch_f = _np.array([anl['mat_colsx_scale'] for anl in mags_data]).ravel()
+        cv_f = _np.array([anl['mat_colsy_scale'] for anl in mags_data]).ravel()
+        ch_p = self.sofb_data.ch_pos
+        cv_p = self.sofb_data.cv_pos
+
+        fig, ax = _mplt.subplots(1, 1, figsize=(6, 4))
+        ax.set_title(r'Scale Factors $M_\mathrm{DC} / M_\mathrm{AC}$')
+        ax.plot(ch_p, ch_f, label='CH')
+        ax.plot(cv_p, cv_f, label='CV')
+        ax.legend(loc='best')
+        ax.set_ylabel('Relative Factor')
+        ax.set_xlabel('Correctors Position [m]')
+        fig.tight_layout()
+        fig.show()
+        return fig, ax
+
     def plot_phases_vs_amplitudes(self, title='', corrsidx2highlight=None):
         """."""
         fig = _mplt.figure(figsize=(8, 6))
@@ -860,14 +898,16 @@ class MeasACORM(_ThreadBaseClass):
         ampx = anly['ampx']
         ampy = anly['ampy']
 
-        orbx = self.data['magnets'][excit_idx]['orbx'].copy()[idx_ini:]
-        orby = self.data['magnets'][excit_idx]['orby'].copy()[idx_ini:]
+        orbx = self.data['magnets'][excit_idx]['orbx'].copy()
+        orby = self.data['magnets'][excit_idx]['orby'].copy()
         orbx -= orbx.mean(axis=0)
         orby -= orby.mean(axis=0)
 
         tim = _np.arange(orbx.shape[0]) * dtim
-        orbx_fit = self.fitted_orbit(cosx, sinx, freqs0, tim, num_cycles)
-        orby_fit = self.fitted_orbit(cosy, siny, freqs0, tim, num_cycles)
+        orbx_fit = self.fitted_orbit(
+            cosx, sinx, freqs0, tim, num_cycles, idx_ini)
+        orby_fit = self.fitted_orbit(
+            cosy, siny, freqs0, tim, num_cycles, idx_ini)
         dorbx = orbx - orbx_fit
         dorby = orby - orby_fit
 
@@ -1564,13 +1604,14 @@ class MeasACORM(_ThreadBaseClass):
         analysis = []
         ref_respmat = self.get_ref_respmat()
         args = corr2idx, ref_respmat
-        pinv = None
+        pinv1 = pinv2 = pinv3 = pinv4 = None
         for i, data in enumerate(magnets_data):
             print(f'  Acquisition {i+1:02d}/{len(magnets_data):02d} ', end='')
             t0_ = _time.time()
+            nrfreqs = len(data['ch_names']) + len(data['cv_names'])
             if idx_ini is not None:
-                anl, pinv = self._process_single_excit(
-                    data, idx_ini, *args, naff=False, pinv=pinv)
+                anl, pinv4 = self._process_single_excit(
+                    data, idx_ini, *args, naff=False, pinv=pinv4)
                 analysis.append(anl)
                 print(f'ET: {_time.time()-t0_:1f}s')
                 continue
@@ -1585,28 +1626,23 @@ class MeasACORM(_ThreadBaseClass):
             delay *= dly_raw[dly_raw > 0].min()
             idx1 = int(delay * fsamp)
             idx2 = idx1 + 5
-            anl1, pinv = self._process_single_excit(
-                data, idx1, *args, pinv=pinv)
-            anl2, pinv = self._process_single_excit(
-                data, idx2, *args, pinv=pinv)
-            phs1 = _np.r_[anl1['phasex'].ravel(), anl1['phasey'].ravel()]
-            phs2 = _np.r_[anl2['phasex'].ravel(), anl2['phasey'].ravel()]
+            anl1, pinv1 = self._process_single_excit(
+                data, idx1, *args, pinv=pinv1)
+            anl2, pinv2 = self._process_single_excit(
+                data, idx2, *args, pinv=pinv2)
+            phs1 = _np.hstack([anl1['phasex'], anl1['phasey']])
+            phs2 = _np.hstack([anl2['phasex'], anl2['phasey']])
             phs1 /= _np.pi
             phs2 /= _np.pi
             phs1 = (phs1 + 0.5) % 1 - 0.5
             phs2 = (phs2 + 0.5) % 1 - 0.5
-            phs1 = phs1.mean()
-            phs2 = phs2.mean()
+            phs1 = phs1.reshape(-1, nrfreqs, 2).mean(axis=-1).mean(axis=0)
+            phs2 = phs2.reshape(-1, nrfreqs, 2).mean(axis=-1).mean(axis=0)
             coef = _np.polynomial.polynomial.polyfit(
-                [idx1, idx2], [phs1, phs2], deg=1)
-            idx = int(round(-coef[0]/coef[1]))
-            if idx == idx1:
-                anl = anl1
-            elif idx == idx2:
-                anl = anl2
-            else:
-                anl, pinv = self._process_single_excit(
-                    data, idx, *args, naff=False, pinv=pinv)
+                [idx1, idx2], _np.vstack([phs1, phs2]), deg=1)
+            idx = _np.round(-coef[0]/coef[1]).astype(int)
+            anl, pinv3 = self._process_single_excit(
+                data, idx, *args, naff=False, pinv=pinv3)
             analysis.append(anl)
             print(f'ET: {_time.time()-t0_:1f}s')
 
@@ -1621,6 +1657,8 @@ class MeasACORM(_ThreadBaseClass):
         ch_freqs = _np.array(data['ch_frequency'])
         cv_freqs = _np.array(data['cv_frequency'])
         freqs0 = _np.r_[ch_freqs, cv_freqs]
+        nr_bpms = self.sofb_data.nr_bpms
+        nch = ch_freqs.size
         anly['fsamp'] = fsamp
         anly['dtim'] = dtim
         anly['freqs0'] = freqs0
@@ -1647,19 +1685,27 @@ class MeasACORM(_ThreadBaseClass):
         orby -= orby.mean(axis=0)
 
         anly['idx_ini'] = idx_ini
-        orbx = orbx[idx_ini:]
-        orby = orby[idx_ini:]
 
         if naff:
             cosx, sinx = self.fit_fourier_components_naff(orbx, freqs0, dtim)
             cosy, siny = self.fit_fourier_components_naff(orby, freqs0, dtim)
         else:
             cosx, sinx, pinv = self.fit_fourier_components(
-                orbx, freqs0, dtim, num_cycles, pinv)
+                orbx, freqs0, dtim, num_cycles, idx_ini, pinv)
             cosy, siny, pinv = self.fit_fourier_components(
-                orby, freqs0, dtim, num_cycles, pinv)
+                orby, freqs0, dtim, num_cycles, idx_ini, pinv)
         ampx, phasex = self.fit_calc_amp_and_phase(cosx, sinx)
         ampy, phasey = self.fit_calc_amp_and_phase(cosy, siny)
+
+        # Compensate BPMs mis-synchronization
+        phsxch = phasex[:nch, :]
+        phsycv = phasey[nch:, :]
+        meanphs = phsxch[(phsxch < 0.5) & (phsxch > -0.5)].mean(axis=0)
+        meanphs = phsycv[(phsycv < 0.5) & (phsycv > -0.5)].mean(axis=0)
+        meanphs /= 2
+        phasex -= meanphs
+        phasey -= meanphs
+        anly['phase_mean'] = meanphs
 
         signx = _np.ones(ampx.shape)
         signx[_np.abs(phasex) > (_np.pi/2)] = -1
@@ -1668,13 +1714,14 @@ class MeasACORM(_ThreadBaseClass):
         mat_colsx = (signx * ampx / kicks[:, None]).T
         mat_colsy = (signy * ampy / kicks[:, None]).T
 
-        nr_bpms = self.sofb_data.nr_bpms
-        xscalefactor = ref_respmat[:nr_bpms, idcs].std(axis=0)
-        yscalefactor = ref_respmat[nr_bpms:, idcs].std(axis=0)
-        xscalefactor /= mat_colsx.std(axis=0)
-        yscalefactor /= mat_colsy.std(axis=0)
-        mat_colsx *= xscalefactor
-        mat_colsy *= yscalefactor
+        xscalefactor = ref_respmat[:nr_bpms, ch_idcs].std(axis=0)
+        yscalefactor = ref_respmat[nr_bpms:, cv_idcs].std(axis=0)
+        xscalefactor /= mat_colsx[:, :nch].std(axis=0)
+        yscalefactor /= mat_colsy[:, nch:].std(axis=0)
+        mat_colsx[:, :nch] *= xscalefactor
+        mat_colsx[:, nch:] *= yscalefactor
+        mat_colsy[:, :nch] *= xscalefactor
+        mat_colsy[:, nch:] *= yscalefactor
 
         anly['ampx'] = ampx.T
         anly['ampy'] = ampy.T
