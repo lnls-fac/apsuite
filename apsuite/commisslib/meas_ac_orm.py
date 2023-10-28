@@ -6,18 +6,17 @@ from functools import reduce as _red
 import operator as _opr
 
 import numpy as _np
+import matplotlib.pyplot as _mplt
 import scipy.optimize as _scyopt
-import scipy.stats as _scystat
 
 from mathphys.functions import save_pickle as _save_pickle
 
-from siriuspy.namesys import SiriusPVName as _PVName
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 from siriuspy.devices import StrengthConv, PowerSupply, CurrInfoSI, \
     Trigger, Event, EVG, RFGen, Tune, FamBPMs, ASLLRF
 from siriuspy.sofb.csdev import SOFBFactory
 from siriuspy.search import LLTimeSearch as _LLTime
-# import pyaccel as _pyaccel
+import pyaccel as _pa
 from mathphys.functions import get_namedtuple as _get_namedtuple
 from .. import asparams as _asparams
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
@@ -143,8 +142,8 @@ class MeasACORM(_ThreadBaseClass):
     """."""
 
     RF_CONDITIONING_FREQ = 1/12/4e6  # in units of RF frequency
-    RF_CONDITIONING_VOLTAGEMIN = 60  # mV
-    RF_CONDITIONING_DUTY = 55  # %
+    RF_CONDITIONING_VOLTAGEMIN = 60  # [mV]
+    RF_CONDITIONING_DUTY = 55  # [%]
 
     def __init__(self, isonline=True):
         """."""
@@ -155,23 +154,15 @@ class MeasACORM(_ThreadBaseClass):
 
         self.sofb_data = SOFBFactory.create('SI')
         self.configdb = _ConfigDBClient(config_type='si_orbcorr_respm')
+        self._ref_respmat = dict()
+        self._meas_finished_ok = True
 
         if self.isonline:
             self._create_devices()
 
-    def load_and_apply(self, fname: str):
-        """Load and apply `data` and `params` from pickle or HDF5 file.
-
-        Args:
-            fname (str): name of the pickle file. If extension is not provided,
-                '.pickle' will be added and a pickle file will be assumed.
-                If provided, must be '.pickle' for pickle files or
-                {'.h5', '.hdf5', '.hdf', '.hd5'} for HDF5 files.
-
-        """
-        super().load_and_apply(fname)
-        if isinstance(self.data, list):
-            self.data = {'magnets': self.data}
+    filter_data_frequencies = staticmethod(
+        _AcqBPMsSignals.filter_data_frequencies)
+    calc_svd = staticmethod(_AcqBPMsSignals.calc_svd)
 
     @staticmethod
     def fitting_matrix(tim, freqs, num_cycles=None):
@@ -204,8 +195,17 @@ class MeasACORM(_ThreadBaseClass):
         mat[:, 1::2] = sin
         return mat
 
+    def get_ref_respmat(self):
+        """Get reference response matrix from configdb server."""
+        name = self.params.ref_respmat_name
+        if name not in self._ref_respmat:
+            self._ref_respmat[name] = _np.array(
+                self.configdb.get_config_value(name))
+        return self._ref_respmat[name].copy()
+
     @classmethod
-    def fit_fourier_components(cls, data, freqs, dtim, num_cycles=None):
+    def fit_fourier_components(
+            cls, data, freqs, dtim, num_cycles=None, pinv=None):
         """Fit Fourier components in signal for the given frequencies.
 
         Args:
@@ -223,40 +223,74 @@ class MeasACORM(_ThreadBaseClass):
             numpy.ndarray, KxM: Fourier sine coefficients.
 
         """
-        tim = _np.arange(data.shape[0]) * dtim
-
-        mat = cls.fitting_matrix(tim, freqs, num_cycles)
-        coeffs, *_ = _np.linalg.lstsq(mat, data, rcond=None)
-
+        if pinv is None:
+            tim = _np.arange(data.shape[0]) * dtim
+            mat = cls.fitting_matrix(tim, freqs, num_cycles)
+            u, s, vt = _np.linalg.svd(mat, full_matrices=False)
+            pinv = vt.T/s @ u.T
+            coeffs = pinv @ data
+        else:
+            siz = min(pinv.shape[1], data.shape[0])
+            coeffs = pinv[:, :siz] @ data[:siz]
+        # coeffs, *_ = _np.linalg.lstsq(mat, data, rcond=None)
         cos = coeffs[::2]
         sin = coeffs[1::2]
+        return cos, sin, pinv
+
+    @staticmethod
+    def fit_calc_amp_and_phase(cos, sin):
+        """."""
         amps = _np.sqrt(cos**2 + sin**2)
         phases = _np.arctan2(cos, sin)
-        return amps, phases, cos, sin
+        return amps, phases
+
+    @classmethod
+    def fitted_orbit(cls, cos, sin, freqs, tim, num_cycles=None):
+        """."""
+        mat = cls.fitting_matrix(tim, freqs, num_cycles)
+        coeffs = _np.zeros((sin.shape[0]*2, sin.shape[1]), dtype=float)
+        coeffs[::2] = cos
+        coeffs[1::2] = sin
+        return mat @ coeffs
 
     @staticmethod
     def fit_fourier_components_naff(data, freqs0, dtim):
-        """Not implemented properly yet. Please don't use this."""
+        """."""
+        data = _AcqBPMsSignals.filter_data_frequencies(
+            data, freqs0.min()-10, freqs0.max()+10, 1/dtim)
+
         freqs = _np.zeros((len(freqs0), data.shape[1]))
         fourier = _np.zeros((len(freqs0), data.shape[1]), dtype=complex)
 
-        for i in range(data.shape[1]):
-            datum = data[:, i]
-            fre, four = _pyaccel.naff.naff_general(
-                datum, nr_ff=len(freqs0), is_real=True)
-            fre = _np.abs(fre)
-            idx = _np.argsort(fre)
-            fre = fre[idx]
-            four = four[idx]
-            freqs[:, i] = fre/dtim
-            fourier[:, i] = four
+        fres, four = _pa.naff.naff_general(
+            data.T, nr_ff=len(freqs0)+4, is_real=True)
 
-        amps = _np.abs(fourier)
-        phases = _np.angle(fourier)
+        fres = _np.abs(fres.T)
+        ind = _np.argsort(fres, axis=0)
+        fres = _np.take_along_axis(fres, ind, axis=0)
+        four = _np.take_along_axis(four.T, ind, axis=0)
+        fres /= dtim
+        four *= 2
+
+        for freq, fouri, fre, fou in zip(freqs.T, fourier.T, fres.T, four.T):
+            idcs = _np.searchsorted(fre, freqs0)
+            idsm1 = idcs.copy()
+            idcs[idcs >= fre.size] = fre.size - 1
+            idsm1[idcs > 0] -= 1
+            dif = _np.abs(fre[idcs]-freqs0)
+            difm1 = _np.abs(fre[idsm1]-freqs0)
+            idcs_min = _np.where(dif < difm1, idcs, idsm1)
+            dif = _np.where(dif < difm1, dif, difm1)
+            fre = fre[idcs_min]
+            fou = fou[idcs_min]
+            cond = dif < 1
+            freq[cond] = fre[cond]
+            fouri[cond] = fou[cond]
+
         cos = fourier.real
         sin = fourier.imag
 
-        return amps, phases, cos, sin
+        return cos, sin
 
     @staticmethod
     def calc_correlation(arr1, arr2):
@@ -271,9 +305,9 @@ class MeasACORM(_ThreadBaseClass):
                 column of arr2.
 
         """
-        corr = (arr1 * arr2).sum(axis=0)
-        corr /= _np.linalg.norm(arr1, axis=0)
-        corr /= _np.linalg.norm(arr2, axis=0)
+        corr = (arr1 * arr2).sum(axis=-2)
+        corr /= _np.linalg.norm(arr1, axis=-2)
+        corr /= _np.linalg.norm(arr2, axis=-2)
         return corr
 
     def save_loco_input_data(self, respmat_name: str, overwrite=False):
@@ -318,7 +352,7 @@ class MeasACORM(_ThreadBaseClass):
         self.configdb.insert_config(name, mat)
         return mat
 
-    def build_respmat(self):
+    def build_respmat(self, propty='mat_cols'):
         """Build response matrix from previously analysed data.
 
         Returns:
@@ -330,18 +364,18 @@ class MeasACORM(_ThreadBaseClass):
         mat = _np.zeros((2*sofb.nr_bpms, sofb.nr_corrs), dtype=float)
         anls = self.analysis['magnets']
         for anly in anls:
-            mat[:sofb.nr_bpms, anly['mat_idcs']] = anly['mat_colsx']
-            mat[sofb.nr_bpms:, anly['mat_idcs']] = anly['mat_colsy']
+            mat[:sofb.nr_bpms, anly['mat_idcs']] = anly[propty+'x']
+            mat[sofb.nr_bpms:, anly['mat_idcs']] = anly[propty+'y']
         if 'rf' in self.analysis:
             anl = self.analysis['rf']
-            mat[:sofb.nr_bpms, -1] = anl['mat_colx']
-            mat[sofb.nr_bpms:, -1] = anl['mat_coly']
+            if propty+'x' in anl:
+                mat[:sofb.nr_bpms, -1] = anl[propty+'x']
+                mat[sofb.nr_bpms:, -1] = anl[propty+'y']
         return mat
 
     def process_data(
-            self, mag_idx_ini=None, mag_min_freq=None, mag_max_freq=None,
-            rf_step_trans_len=10, rf_phase_central_freq=None,
-            rf_phase_window=10):
+            self, mag_idx_ini=None, rf_step_trans_len=10,
+            rf_phase_central_freq=None, rf_phase_window=10):
         """Process measured data.
 
         Args:
@@ -358,18 +392,14 @@ class MeasACORM(_ThreadBaseClass):
                 measurements. Defaults to 10.
 
         """
-        ref_respmat = _np.array(
-                self.configdb.get_config_value(self.params.ref_respmat_name))
         self.analysis['magnets'] = self._process_magnets(
-            self.data['magnets'], mag_idx_ini, mag_min_freq, mag_max_freq,
-            ref_respmat)
+            self.data['magnets'], mag_idx_ini)
 
         rf_d = self.data.get('rf')
         if rf_d is not None:
             if 'mode' in rf_d and rf_d['mode'] == self.params.RFModes.Phase:
                 anly = self._process_rf_phase(
-                    rf_d, rf_phase_window, central_freq=rf_phase_central_freq,
-                    ref_respmat=ref_respmat)
+                    rf_d, rf_phase_window, central_freq=rf_phase_central_freq)
             else:
                 anly = self._process_rf_step(rf_d, rf_step_trans_len)
             self.analysis['rf'] = anly
@@ -465,6 +495,426 @@ class MeasACORM(_ThreadBaseClass):
         data['tuney'] = self.devices['tune'].tuney
         return data
 
+    def check_measurement_finished_ok(self):
+        """Check if measument finished without errors.
+
+        Returns:
+            bool: True if measurement finished without errors.
+
+        """
+        return self._meas_finished_ok
+
+    def check_measurement_quality(self, mat_ac=None, mat_dc=None, dthres=1e-3):
+        """Check whether last measurement have meaningful results.
+
+        This method checks if the experiment has finished properly and
+        compares the measured matrix with the reference respmat.
+        If the diagonal terms of both matrices agree uppon the threshold dthres
+        it will return True, otherwise it will return False.
+
+        This method will call process_data if needed.
+
+        Args:
+            mat_ac (numpy.array, (320, 281), optional): The measured matrix.
+                Defaults to None.
+            mat_dc (numpy.array, (320, 281), optional): The reference matrix.
+                Defaults to None.
+            dthres (float, optional): The threshold used for comparison.
+                Defaults to 1e-3.
+
+        Returns:
+            bool: Whether or not measurement was successful.
+
+        """
+        if not self._meas_finished_ok:
+            return False
+
+        if not self.analysis:
+            self.process_data()
+
+        if mat_ac is None:
+            mat_ac = self.build_respmat()
+        if mat_dc is None:
+            mat_dc = self.get_ref_respmat()
+        mat1 = mat_ac.reshape(2, -1, mat_ac.shape[-1])
+        mat2 = mat_dc.reshape(2, -1, mat_dc.shape[-1])
+        corr = 1 - self.calc_correlation(mat1, mat2)
+        corr_ch = corr[:, :120]
+        corr_cv = corr[:, 120:280]
+        corr_rf = corr[:, -1]
+        cond_ok = (corr_ch[0] < dthres).all()
+        cond_ok &= (corr_cv[1] < dthres).all()
+        cond_ok &= (corr_rf[0] < dthres).all()
+        return cond_ok
+
+    def plot_comparison_correlations(self, mat_ac=None, mat_dc=None):
+        """Plot comparison of measured response matrix with reference respmat.
+
+        Two graphics will be made, one comparing the column space of both
+        matrix and another one comparing their Row space.
+
+        Args:
+            mat_ac (numpy.array, (320, 281), optional): The measured matrix.
+                Defaults to None.
+            mat_dc (numpy.array, (320, 281), optional): The reference matrix.
+                Defaults to None.
+
+        Returns:
+            matplotlib.Figure: Figure object of the plot.
+            tuple: Tuple with both axes of the figure;
+            col_dcorr (np.ndarray, (2, 281)): One minus colunm space
+                correlations.
+
+        """
+        if mat_ac is None:
+            mat_ac = self.build_respmat()
+        if mat_dc is None:
+            mat_dc = self.get_ref_respmat()
+
+        mat1 = mat_ac.reshape(2, -1, mat_ac.shape[-1])
+        mat2 = mat_dc.reshape(2, -1, mat_dc.shape[-1])
+
+        sofb = self.sofb_data
+        fig, (ax, ay) = _mplt.subplots(2, 1, figsize=(8, 6))
+
+        corr = 1 - self.calc_correlation(mat1, mat2)
+        cch = corr[:, :120]
+        ccv = corr[:, 120:280]
+        crf = corr[:, -1]
+        xch = sofb.ch_pos
+        xcv = sofb.cv_pos
+
+        ax.plot(xch, cch[0], '-o', label=r'$M_\mathrm{ch,x}$', color='C0')
+        ax.plot(xch, cch[1], '-o', label=r'$M_\mathrm{ch,y}$', color='C4')
+        ax.plot(xcv, ccv[0], '-o', label=r'$M_\mathrm{cv,x}$', color='C1')
+        ax.plot(xcv, ccv[1], '-o', label=r'$M_\mathrm{cv,y}$', color='tab:red')
+
+        ax.axhline(crf[0], label=r'$M_\mathrm{rf,x}$', ls='-', color='k')
+        ax.axhline(crf[1], label=r'$M_\mathrm{rf,y}$', ls='--', color='k')
+
+        ax.legend(framealpha=0.8, loc='center left', bbox_to_anchor=(1, 0.5))
+        ax.set_xlabel('Correctors Position [m]')
+        ax.set_yscale('log')
+        ax.set_title(
+            r'$1-\mathrm{Cor}(\mathrm{Col}(M_\mathrm{AC}), ' +
+            r'\mathrm{Col}(M_\mathrm{DC}))$')
+
+        mat1 = mat1.swapaxes(-2, -1)
+        mat2 = mat2.swapaxes(-2, -1)
+        cch = 1-self.calc_correlation(mat1[:, :120, :], mat2[:, :120, :])
+        ccv = 1-self.calc_correlation(mat1[:, 120:280, :], mat2[:, 120:280, :])
+        xbp = sofb.bpm_pos
+
+        ay.plot(xbp, cch[0], '-o', label=r'$M_\mathrm{ch,x}$', color='C0')
+        ay.plot(xbp, cch[1], '-o', label=r'$M_\mathrm{ch,y}$', color='C4')
+        ay.plot(xbp, ccv[0], '-o', label=r'$M_\mathrm{cv,x}$', color='C1')
+        ay.plot(xbp, ccv[1], '-o', label=r'$M_\mathrm{cv,y}$', color='tab:red')
+
+        ay.legend(framealpha=0.8, loc='center left', bbox_to_anchor=(1, 0.5))
+        ay.set_xlabel('BPMs Position [m]')
+        ay.set_yscale('log')
+        ay.set_title(
+            r'$1-\mathrm{Cor}(\mathrm{Row}(M_\mathrm{AC}), '
+            r'\mathrm{Row}(M_\mathrm{DC}))$')
+
+        fig.tight_layout()
+        fig.show()
+        return fig, (ax, ay), corr
+
+    def plot_comparison_single_corrector(
+            self, corr_idx, mat_ac=None, mat_dc=None):
+        """Plot single corrector signatures of measured and reference respmat.
+
+        Args:
+            corr_idx (int): corrector index [0, 119] for CH, [120, 279] for CV
+                and 280 for RF.
+            mat_ac (numpy.array, (320, 281), optional): The measured matrix.
+                Defaults to None.
+            mat_dc (numpy.array, (320, 281), optional): The reference matrix.
+                Defaults to None.
+
+        Returns:
+            matplotlib.Figure: Figure object of the plot.
+            tuple: Tuple with both axes of the figure;
+
+        """
+        if mat_ac is None:
+            mat_ac = self.build_respmat()
+        if mat_dc is None:
+            mat_dc = self.get_ref_respmat()
+
+        corr_names = self.sofb_data.ch_names + self.sofb_data.cv_names
+        corr_names += ['RF']
+        acm = mat_ac[:, corr_idx].copy()
+        dcm = mat_dc[:, corr_idx].copy()
+        dif = acm - dcm
+        pos = self.sofb_data.bpm_pos
+
+        fig, (ax, ay) = _mplt.subplots(2, 1, figsize=(8, 6))
+        ax.set_title(f'{corr_names[corr_idx]:s}')
+        ax.plot(pos, acm[:160], label='AC')
+        ax.plot(pos, dcm[:160], label='DC')
+        ax.plot(pos, dif[:160], label='Diff.', lw=0.5)
+        ay.plot(pos, acm[160:], label='AC')
+        ay.plot(pos, dcm[160:], label='DC')
+        ay.plot(pos, dif[160:], label='Diff.', lw=0.5)
+        ax.legend(loc='best')
+        unit = '[um/urad]' if corr_idx != 280 else '[um/Hz]'
+        ax.set_ylabel('Horizontal ' + unit)
+        ay.set_ylabel('Vertical ' + unit)
+        ay.set_xlabel('BPM position')
+        fig.tight_layout()
+        fig.show()
+        return fig, (ax, ay)
+
+    def plot_phases_vs_amplitudes(self, title='', corrsidx2highlight=None):
+        """."""
+        fig = _mplt.figure(figsize=(8, 6))
+        gs = _mplt.GridSpec(
+            2, 2, hspace=0.01, wspace=0.01,
+            top=0.95, left=0.09, right=0.99, bottom=0.08)
+        ahx = fig.add_subplot(gs[0, 0])
+        avy = fig.add_subplot(gs[1, 0], sharex=ahx, sharey=ahx)
+        ahy = fig.add_subplot(gs[0, 1], sharey=ahx)
+        avx = fig.add_subplot(gs[1, 1], sharey=ahx, sharex=ahy)
+
+        phs = self.build_respmat(propty='phase') / _np.pi
+        amp = self.build_respmat(propty='amp')
+
+        kws = dict(marker='.', mfc='None', ms=1, ls='None', color='C0')
+        spx = slice(None, 160)
+        sch = slice(None, 120)
+        spy = slice(160, None)
+        scv = slice(120, 280)
+        sel = spx, sch
+        ahx.plot(amp[sel].ravel(), phs[sel].ravel(), **kws)
+        sel = spy, sch
+        ahy.plot(amp[sel].ravel(), phs[sel].ravel(), **kws)
+        sel = spx, scv
+        avx.plot(amp[sel].ravel(), phs[sel].ravel(), **kws)
+        sel = spy, scv
+        avy.plot(amp[sel].ravel(), phs[sel].ravel(), **kws)
+
+        corridx = [] if corrsidx2highlight is None else corrsidx2highlight
+        kws.pop('color')
+        kws['ms'] = 2
+        for i, idx in enumerate(corridx):
+            cor = _mplt.cm.jet(i/(len(corridx)-1))
+            if idx < 120:
+                ahx.plot(amp[spx, idx], phs[spx, idx], color=cor, **kws)
+                ahy.plot(amp[spy, idx], phs[spy, idx], color=cor, **kws)
+            else:
+                avx.plot(amp[spx, idx], phs[spx, idx], color=cor, **kws)
+                avy.plot(amp[spy, idx], phs[spy, idx], color=cor, **kws)
+
+        fig.suptitle(title)
+
+        kws = dict(xy=(0.8, 0.7), xycoords='axes fraction', fontsize='large')
+        ahx.annotate(r'$M_\mathrm{CH,x}$', **kws)
+        ahy.annotate(r'$M_\mathrm{CH,y}$', **kws)
+        avx.annotate(r'$M_\mathrm{CV,x}$', **kws)
+        avy.annotate(r'$M_\mathrm{CV,y}$', **kws)
+
+        _mplt.setp(ahx.get_xticklabels(), visible=False)
+        _mplt.setp(ahy.get_xticklabels(), visible=False)
+        _mplt.setp(ahy.get_yticklabels(), visible=False)
+        _mplt.setp(avx.get_yticklabels(), visible=False)
+        avy.set_xlabel(r'Amplitudes [$\mu$m]')
+        avx.set_xlabel(r'Amplitudes [$\mu$m]')
+        ahx.set_ylabel(r'Phases [$\pi$]')
+        avy.set_ylabel(r'Phases [$\pi$]')
+
+        fig.show()
+        return fig, ((ahx, ahy), (avy, avx))
+
+    def plot_phases_histogram(self, title=''):
+        """."""
+        fig = _mplt.figure(figsize=(8, 6))
+        gs = _mplt.GridSpec(
+            2, 2, hspace=0.01, wspace=0.01,
+            top=0.95, left=0.09, right=0.99, bottom=0.08)
+        ahx = fig.add_subplot(gs[0, 0])
+        avy = fig.add_subplot(gs[1, 0], sharex=ahx, sharey=ahx)
+        ahy = fig.add_subplot(gs[0, 1], sharex=ahx, sharey=ahx)
+        avx = fig.add_subplot(gs[1, 1], sharex=ahx, sharey=ahx)
+
+        phs = self.build_respmat(propty='phase') / _np.pi
+
+        kws = dict(bins=60)
+        spx = slice(None, 160)
+        sch = slice(None, 120)
+        spy = slice(160, None)
+        scv = slice(120, 280)
+        sel = spx, sch
+        ahx.hist(phs[sel].ravel(), **kws)
+        sel = spy, sch
+        ahy.hist(phs[sel].ravel(), **kws)
+        sel = spx, scv
+        avx.hist(phs[sel].ravel(), **kws)
+        sel = spy, scv
+        avy.hist(phs[sel].ravel(), **kws)
+
+        fig.suptitle(title)
+
+        kws = dict(xy=(0.45, 2000), xycoords='data', fontsize='large')
+        ahx.annotate(r'$M_\mathrm{CH,x}$', **kws)
+        ahy.annotate(r'$M_\mathrm{CH,y}$', **kws)
+        avx.annotate(r'$M_\mathrm{CV,x}$', **kws)
+        avy.annotate(r'$M_\mathrm{CV,y}$', **kws)
+
+        _mplt.setp(ahx.get_xticklabels(), visible=False)
+        _mplt.setp(ahy.get_xticklabels(), visible=False)
+        _mplt.setp(ahy.get_yticklabels(), visible=False)
+        _mplt.setp(avx.get_yticklabels(), visible=False)
+        ahx.set_ylabel(r'Counts')
+        avy.set_ylabel(r'Counts')
+        avx.set_xlabel(r'Phases [$\pi$]')
+        avy.set_xlabel(r'Phases [$\pi$]')
+
+        fig.show()
+        return fig, ((ahx, ahy), (avy, avx))
+
+    def plot_bpms_fluctuations(self):
+        """Plot BPMs flutuations statistics along BPMs and Correctors.
+
+        Returns:
+            fig: matplolib.Figure;
+            axs: tuple with figure axes.
+
+        """
+        sofb = self.sofb_data
+        fig, (ax, ay) = _mplt.subplots(2, 1, figsize=(8, 6))
+
+        mat = self.analysis['bpms_noise']['bpm_variation']
+        mat = mat.reshape(2, -1, mat.shape[-1])
+        mat *= mat
+        std = _np.sqrt(mat.mean(axis=1))
+        cch = std[:, :120]
+        ccv = std[:, 120:280]
+        crf = std[:, -1]
+        xch = sofb.ch_pos
+        xcv = sofb.cv_pos
+
+        ax.plot(xch, cch[0], '-o', label=r'$M_\mathrm{ch,x}$', color='C0')
+        ax.plot(xch, cch[1], '-o', label=r'$M_\mathrm{ch,y}$', color='C4')
+        ax.plot(xcv, ccv[0], '-o', label=r'$M_\mathrm{cv,x}$', color='C1')
+        ax.plot(xcv, ccv[1], '-o', label=r'$M_\mathrm{cv,y}$', color='tab:red')
+
+        ax.axhline(crf[0], label=r'$M_\mathrm{rf,x}$', ls='-', color='k')
+        ax.axhline(crf[1], label=r'$M_\mathrm{rf,y}$', ls='--', color='k')
+
+        ax.legend(framealpha=0.8, loc='center left', bbox_to_anchor=(1, 0.5))
+        ax.set_xlabel('Correctors Position [m]')
+        ax.set_ylabel(r'Fluctuation [$\mu$m]')
+        ax.set_yscale('log')
+        ax.set_title('BPMs Variation along Correctors')
+
+        cch = _np.sqrt(mat[:, :, :120].mean(axis=-1))
+        ccv = _np.sqrt(mat[:, :, 120:260].mean(axis=-1))
+        xbp = sofb.bpm_pos
+
+        ay.plot(xbp, cch[0], '-o', label=r'$M_\mathrm{ch,x}$', color='C0')
+        ay.plot(xbp, cch[1], '-o', label=r'$M_\mathrm{ch,y}$', color='C4')
+        ay.plot(xbp, ccv[0], '-o', label=r'$M_\mathrm{cv,x}$', color='C1')
+        ay.plot(xbp, ccv[1], '-o', label=r'$M_\mathrm{cv,y}$', color='tab:red')
+
+        ay.legend(framealpha=0.8, loc='center left', bbox_to_anchor=(1, 0.5))
+        ay.set_xlabel('BPMs Position [m]')
+        ax.set_ylabel(r'Fluctuation [$\mu$m]')
+        ay.set_yscale('log')
+        ay.set_title('BPMs Variation along BPMs')
+
+        fig.tight_layout()
+        fig.show()
+        return fig, (ax, ay)
+
+    def plot_orbit_residue_after_fitting(
+            self, bpm_idx=0, excit_idx=0, time_domain=True):
+        """Plot orbit residue after fitting.
+
+        Args:
+            bpm_idx (int, optional): Index of the BPM to plot. Defaults to 0.
+            excit_idx (int, optional): Index of the correctors excitation to
+                plot. Defaults to 0.
+            time_domain (bool, optional): Whether to plot in time or in
+                frequency domain. Defaults to True.
+
+        Returns:
+            figure: matplotlib.Figure;
+            axes: Tuple with figure axes;
+            orbx_fit: vector with fitted horizontal orbit
+            orby_fit: vector with fitted vertical orbit
+            dorbx: vector with horizontal residue
+            dorby: vector with vertical residue
+
+        """
+        anly = self.analysis['magnets'][excit_idx]
+        dtim = anly['dtim']
+        freqs0 = anly['freqs0']
+        num_cycles = anly['num_cycles']
+        idx_ini = anly['idx_ini']
+        cosx = anly['cosx'].T
+        cosy = anly['cosy'].T
+        sinx = anly['sinx'].T
+        siny = anly['siny'].T
+        ampx = anly['ampx']
+        ampy = anly['ampy']
+
+        orbx = self.data['magnets'][excit_idx]['orbx'].copy()[idx_ini:]
+        orby = self.data['magnets'][excit_idx]['orby'].copy()[idx_ini:]
+        orbx -= orbx.mean(axis=0)
+        orby -= orby.mean(axis=0)
+
+        tim = _np.arange(orbx.shape[0]) * dtim
+        orbx_fit = self.fitted_orbit(cosx, sinx, freqs0, tim, num_cycles)
+        orby_fit = self.fitted_orbit(cosy, siny, freqs0, tim, num_cycles)
+        dorbx = orbx - orbx_fit
+        dorby = orby - orby_fit
+
+        fig, (ax, ay) = _mplt.subplots(2, 1, sharex=True)
+
+        bpmx = orbx[:, bpm_idx]
+        dbpmx = dorbx[:, bpm_idx]
+        bpmy = orby[:, bpm_idx]
+        dbpmy = dorby[:, bpm_idx]
+        if time_domain:
+            tim = _np.arange(bpmx.size) * dtim * 1e3
+            ax.plot(tim, bpmx, '.-', label='Orbit')
+            ax.plot(tim, dbpmx, '.-', label='Diff.')
+            ay.plot(tim, bpmy, '.-', label='Orbit')
+            ay.plot(tim, dbpmy, '.-', label='Diff.')
+            ax.set_xlabel('Time [ms]')
+            ay.set_xlabel('Time [ms]')
+        else:
+            siz = bpmx.size
+            rfft = _np.fft.rfft
+            frs = _np.fft.rfftfreq(siz, d=dtim)
+            ax.plot(frs, _np.abs(rfft(bpmx))*2/siz, '.-', label='Orbit')
+            ax.plot(frs, _np.abs(rfft(dbpmx))*2/siz, '.-', label='Diff')
+            ax.plot(freqs0, ampx[bpm_idx], 'o', label='Fitted')
+            ay.plot(frs, _np.abs(rfft(bpmy))*2/siz, '.-', label='Orbit')
+            ay.plot(frs, _np.abs(rfft(dbpmy))*2/siz, '.-', label='Diff')
+            ay.plot(freqs0, ampy[bpm_idx], 'o', label='Fitted')
+            for f in freqs0:
+                ax.axvline(f, ls='--', color='k')
+                ay.axvline(f, ls='--', color='k')
+            ax.set_xlim([freqs0.min()-2, freqs0.max()+2])
+            ax.set_ylim([4e-4, None])
+            ay.set_ylim([5e-4, None])
+            ax.set_yscale('log')
+            ay.set_yscale('log')
+            ax.set_xlabel('Frequency [Hz]')
+            ay.set_xlabel('Frequency [Hz]')
+
+        ax.set_ylabel('Horizontal [um]')
+        ay.set_ylabel('Vertical [um]')
+        ax.legend(
+            loc='lower center', bbox_to_anchor=(0.5, 1), fontsize='small',
+            ncols=4)
+        fig.tight_layout()
+        fig.show()
+        return fig, (ax, ay), orbx, orby, dorbx, dorby
+
     # ------------------ Auxiliary Methods ------------------
 
     def _create_devices(self):
@@ -483,9 +933,11 @@ class MeasACORM(_ThreadBaseClass):
         t00 = _time.time()
         print('Creating correctors       -> ', end='')
         self.devices.update({
-            nme: PowerSupply(nme) for nme in self.sofb_data.ch_names})
+            nme: PowerSupply(nme, props2init=[])
+            for nme in self.sofb_data.ch_names})
         self.devices.update({
-            nme: PowerSupply(nme) for nme in self.sofb_data.cv_names})
+            nme: PowerSupply(nme, props2init=[])
+            for nme in self.sofb_data.cv_names})
         print(f'ET: = {_time.time()-t00:.2f}s')
 
         # Create object to get stored current
@@ -521,11 +973,12 @@ class MeasACORM(_ThreadBaseClass):
     # ---------------- Measurement Methods ----------------
 
     def _do_measure(self):
+        self.analysis = dict()
         tim_state = self._get_timing_state()
         if self.params.meas_bpms_noise:
             self.data['bpms_noise'] = self._do_measure_bpms_noise()
 
-        if self._stopevt.is_set():
+        if self._stopevt.is_set() or not self._meas_finished_ok:
             self._set_timing_state(tim_state)
             print('Stopped!')
             return
@@ -533,7 +986,7 @@ class MeasACORM(_ThreadBaseClass):
         if self.params.meas_rf_line:
             self.data['rf'] = self._do_measure_rf_line()
 
-        if self._stopevt.is_set():
+        if self._stopevt.is_set() or not self._meas_finished_ok:
             self._set_timing_state(tim_state)
             print('Stopped!')
             return
@@ -543,6 +996,7 @@ class MeasACORM(_ThreadBaseClass):
         print(f'All measurements finished!!')
 
     def _do_measure_bpms_noise(self):
+        self._meas_finished_ok = True
         elt = _time.time()
         par = self.params
 
@@ -559,6 +1013,8 @@ class MeasACORM(_ThreadBaseClass):
             print(f'BPM {-ret-1:d} did not finish last acquisition.')
         elif ret > 0:
             print(f'BPM {ret-1:d} is not ready for acquisition.')
+        if ret:
+            self._meas_finished_ok = False
         self._config_timing()
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -576,9 +1032,11 @@ class MeasACORM(_ThreadBaseClass):
             print(
                 'Problem: timed out waiting BPMs update. '
                 f'Error code: {ret:d}')
+            self._meas_finished_ok = False
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
+        _time.sleep(0.1)
         data = self.get_general_data()
         data.update(self.get_bpms_data())
         data['ch_freqs'] = par.corrs_ch_freqs
@@ -590,6 +1048,7 @@ class MeasACORM(_ThreadBaseClass):
         return data
 
     def _do_measure_rf_line(self):
+        self._meas_finished_ok = True
         elt = _time.time()
         par = self.params
         print('Measuring RF Line:')
@@ -607,6 +1066,8 @@ class MeasACORM(_ThreadBaseClass):
             print(f'BPM {-ret-1:d} did not finish last acquisition.')
         elif ret > 0:
             print(f'BPM {ret-1:d} is not ready for acquisition.')
+        if ret:
+            self._meas_finished_ok = False
         self._config_timing()
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -638,6 +1099,7 @@ class MeasACORM(_ThreadBaseClass):
             print(
                 'Problem: timed out waiting BPMs update. '
                 f'Error code: {ret:d}')
+            self._meas_finished_ok = False
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         llrf = self.devices['llrf']
@@ -656,6 +1118,7 @@ class MeasACORM(_ThreadBaseClass):
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
+        _time.sleep(0.1)
         data.update(self.get_general_data())
         data.update(self.get_bpms_data())
         data['mode'] = par.rf_mode
@@ -695,6 +1158,7 @@ class MeasACORM(_ThreadBaseClass):
         llrf.phase_refmin = llrf.phase_sp
 
     def _do_measure_magnets(self):
+        self._meas_finished_ok = True
         elt0 = _time.time()
         data_mags = []
 
@@ -709,6 +1173,7 @@ class MeasACORM(_ThreadBaseClass):
         # set operation mode to slowref
         if not self._change_corrs_opmode('slowref'):
             print('Problem: Correctors not in SlowRef mode.')
+            self._meas_finished_ok = False
             return data_mags
 
         excit_time = self.params.corrs_excit_time
@@ -730,8 +1195,7 @@ class MeasACORM(_ThreadBaseClass):
         ch_kicks = _np.full(len(ch2meas), self.params.corrs_ch_kick)
         cv_kicks = _np.full(len(cv2meas), self.params.corrs_cv_kick)
         if self.params.corrs_norm_kicks:
-            orm = _np.array(self.configdb.get_config_value(
-                self.params.ref_respmat_name))
+            orm = self.get_ref_respmat()
 
             ch_idx = _np.array([ch_names.index(n) for n in ch2meas])
             cv_idx = _np.array([cv_names.index(n) for n in cv2meas])
@@ -749,6 +1213,7 @@ class MeasACORM(_ThreadBaseClass):
         nruns = max(nrh, nrv)
         nacqs = nruns // nr1acq
         nacqs += bool(nruns % nr1acq)
+
         for itr in range(nacqs):
             elt = _time.time()
             print(f'  Acquisition {itr+1:02d}/{nacqs:02d}')
@@ -777,6 +1242,9 @@ class MeasACORM(_ThreadBaseClass):
                 print(f'BPM {-ret-1:d} did not finish last acquisition.')
             elif ret > 0:
                 print(f'BPM {ret-1:d} is not ready for acquisition.')
+            if ret:
+                self._meas_finished_ok = False
+                break
             self._config_timing(
                 self.params.corrs_delay, chs_slc, cvs_slc, nr_points=nr_points)
             print(f'Done! ET: {_time.time()-t00:.2f}s')
@@ -795,6 +1263,7 @@ class MeasACORM(_ThreadBaseClass):
             print('    Changing Correctors to Cycle...', end='')
             if not self._change_corrs_opmode('cycle', chs_f + cvs_f):
                 print('Problem: Correctors not in Cycle mode.')
+                self._meas_finished_ok = False
                 break
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -813,6 +1282,7 @@ class MeasACORM(_ThreadBaseClass):
                 print(
                     'Problem: timed out waiting BPMs update. '
                     f'Error code: {ret:d}')
+                self._meas_finished_ok = False
                 break
             _time.sleep(0.1)
             print(f'Done! ET: {_time.time()-t00:.2f}s')
@@ -866,6 +1336,9 @@ class MeasACORM(_ThreadBaseClass):
             y[int(idx1):int(idx2)] = amp1
             y[int(idx2):int(idx3)] = amp2
             return y
+
+        t0_ = _time.time()
+        print('Processing RF Step...', end='')
 
         anly = dict()
 
@@ -931,11 +1404,15 @@ class MeasACORM(_ThreadBaseClass):
         anly['orby_pos'] = orby_pos
         anly['mat_colx'] = (orbx_pos - orbx_neg) / kick / 2
         anly['mat_coly'] = (orby_pos - orby_neg) / kick / 2
+
+        print(f'Done! ET: {_time.time()-t0_:2f}s')
         return anly
 
-    def _process_rf_phase(
-            self, rf_data, window=10, central_freq=None, ref_respmat=None):
+    def _process_rf_phase(self, rf_data, window=10, central_freq=None):
         anly = dict()
+
+        t0_ = _time.time()
+        print('Processing RF Phase...', end='')
 
         fsamp = rf_data['sampling_frequency']
         fswitch = rf_data['switching_frequency']
@@ -976,42 +1453,42 @@ class MeasACORM(_ThreadBaseClass):
             dfty = _np.abs(_np.fft.rfft(orby, axis=0))[idcs_min]
             amaxx = dftx.argmax(axis=0)
             amaxy = dfty.argmax(axis=0)
-            # res = _scystat.mode(_np.r_[amaxx, amaxy], keepdims=False)
-            res = _scystat.mode(_np.r_[amaxx, amaxy])
-            # res = _scystat.mode(amaxy, keepdims=False)
-            central_freq = freqx[idcs_min][res.mode[0]]
-            print(
-                f'Filtering data around {central_freq:.2f}Hz '
-                f'({res.count[0]:03d}).')
+            vals, cnts = _np.unique(_np.r_[amaxx, amaxy], return_counts=True)
+            cnts_argmax = cnts.argmax()
+            central_freq = freqx[idcs_min][vals[cnts_argmax]]
+            anly['central_freq_count'] = cnts[cnts_argmax]
 
+        anly['central_freq_guess'] = central_freq
         central_freq = int(round(central_freq/f_cond)) * f_cond
         fmin = central_freq - window/2
         fmax = central_freq + window/2
+        anly['central_freq'] = central_freq
+        anly['window'] = window
+        anly['freq_min'] = fmin
+        anly['freq_max'] = fmax
 
         orbx = _AcqBPMsSignals.filter_data_frequencies(
             orbx, fmin=fmin, fmax=fmax, fsampling=fsamp)
         orby = _AcqBPMsSignals.filter_data_frequencies(
             orby, fmin=fmin, fmax=fmax, fsampling=fsamp)
-        mom_compac = rf_data.get('mom_compac', _asparams.SI_MOM_COMPACT)
 
-        etax, etay = self._get_reference_dispersion(
-            rf_freq, mom_compac, ref_respmat)
-        eta_meas = _OrbitAnalysis.calculate_eta_meas(orbx, orby, etax, etay)
-        anly['mat_colx'] = - eta_meas[:orbx.shape[-1]] / mom_compac / rf_freq
-        anly['mat_coly'] = - eta_meas[orbx.shape[-1]:] / mom_compac / rf_freq
-        return anly
-
-    def _get_reference_dispersion(self, rf_freq, mom_compac, ref_respmat):
-        """."""
+        ref_respmat = self.get_ref_respmat()
         etaxy = ref_respmat[:, -1]
         nrbpms = etaxy.size // 2
-        etaxy *= -mom_compac * rf_freq  # units of [um]
         etax, etay = etaxy[:nrbpms], etaxy[nrbpms:]
-        return etax, etay
+        eta_meas = _OrbitAnalysis.calculate_eta_meas(orbx, orby, etax, etay)
+        anly['mat_colsx'] = eta_meas[:nrbpms]
+        anly['mat_colsy'] = eta_meas[nrbpms:]
+
+        print(f'Done! ET: {_time.time()-t0_:2f}s')
+        return anly
 
     def _process_bpms_noise(self, bpms_data):
         sofb = self.sofb_data
         anly = dict()
+
+        t0_ = _time.time()
+        print('Processing BPMs Noise...', end='')
 
         ch_freqs = bpms_data['ch_freqs']
         cv_freqs = bpms_data['cv_freqs']
@@ -1031,8 +1508,11 @@ class MeasACORM(_ThreadBaseClass):
         tim = _np.arange(orbx.shape[0]) * dtim
         anly['time'] = tim
 
-        ampx, *_ = self.fit_fourier_components(orbx, freqs0, dtim)
-        ampy, *_ = self.fit_fourier_components(orby, freqs0, dtim)
+        cosx, sinx, pinv = self.fit_fourier_components(orbx, freqs0, dtim)
+        cosy, siny, _ = self.fit_fourier_components(
+            orby, freqs0, dtim, pinv=pinv)
+        ampx, _ = self.fit_calc_amp_and_phase(cosx, sinx)
+        ampy, _ = self.fit_calc_amp_and_phase(cosy, siny)
         anly['noisex'] = ampx
         anly['noisey'] = ampy
 
@@ -1070,112 +1550,147 @@ class MeasACORM(_ThreadBaseClass):
         mat[sofb.nr_bpms:, -1] = ampy_rf
 
         anly['bpm_variation'] = mat
+
+        print(f'Done! ET: {_time.time()-t0_:2f}s')
         return anly
 
-    def _process_magnets(
-            self, magnets_data, idx_ini=None, min_freq=None, max_freq=None,
-            ref_respmat=None):
+    def _process_magnets(self, magnets_data, idx_ini=None):
         """."""
         sofb = self.sofb_data
         corr2idx = {name: i for i, name in enumerate(sofb.ch_names)}
         corr2idx.update({name: 120+i for i, name in enumerate(sofb.cv_names)})
 
+        print('Processing Magnets Data:')
         analysis = []
-        for data in magnets_data:
-            anly = dict()
+        ref_respmat = self.get_ref_respmat()
+        args = corr2idx, ref_respmat
+        pinv = None
+        for i, data in enumerate(magnets_data):
+            print(f'  Acquisition {i+1:02d}/{len(magnets_data):02d} ', end='')
+            t0_ = _time.time()
+            if idx_ini is not None:
+                anl, pinv = self._process_single_excit(
+                    data, idx_ini, *args, naff=False, pinv=pinv)
+                analysis.append(anl)
+                print(f'ET: {_time.time()-t0_:1f}s')
+                continue
+
+            # If idx_ini is not given, find adequate initial index for fitting.
+            # Since the excitation is a sine wave, we want the phases to be
+            # all close to 0 or PI. So this algorithm finds the index that
+            # brings all phases as close as possible to these values.
             fsamp = data['sampling_frequency']
-            dtim = 1/fsamp
-            ch_freqs = _np.array(data['ch_frequency'])
-            cv_freqs = _np.array(data['cv_frequency'])
-            freqs0 = _np.r_[ch_freqs, cv_freqs]
-            anly['fsamp'] = fsamp
-            anly['dtim'] = dtim
-            anly['freqs0'] = freqs0
+            delay = 4/data['rf_frequency']
+            dly_raw = data['corrs_trig_delta_delay_raw']
+            delay *= dly_raw[dly_raw > 0].min()
+            idx1 = int(delay * fsamp)
+            idx2 = idx1 + 5
+            anl1, pinv = self._process_single_excit(
+                data, idx1, *args, pinv=pinv)
+            anl2, pinv = self._process_single_excit(
+                data, idx2, *args, pinv=pinv)
+            phs1 = _np.r_[anl1['phasex'].ravel(), anl1['phasey'].ravel()]
+            phs2 = _np.r_[anl2['phasex'].ravel(), anl2['phasey'].ravel()]
+            phs1 /= _np.pi
+            phs2 /= _np.pi
+            phs1 = (phs1 + 0.5) % 1 - 0.5
+            phs2 = (phs2 + 0.5) % 1 - 0.5
+            phs1 = phs1.mean()
+            phs2 = phs2.mean()
+            coef = _np.polynomial.polynomial.polyfit(
+                [idx1, idx2], [phs1, phs2], deg=1)
+            idx = int(round(-coef[0]/coef[1]))
+            if idx == idx1:
+                anl = anl1
+            elif idx == idx2:
+                anl = anl2
+            else:
+                anl, pinv = self._process_single_excit(
+                    data, idx, *args, naff=False, pinv=pinv)
+            analysis.append(anl)
+            print(f'ET: {_time.time()-t0_:1f}s')
 
-            ch_ncycles = _np.array(data['ch_num_cycles'])
-            cv_ncycles = _np.array(data['cv_num_cycles'])
-            num_cycles = _np.r_[ch_ncycles, cv_ncycles]
-            anly['num_cycles'] = num_cycles
-
-            ch_amps = _np.array(data['ch_kick_amplitudes'])
-            cv_amps = _np.array(data['cv_kick_amplitudes'])
-            kicks = _np.r_[ch_amps, cv_amps]
-            anly['kicks'] = kicks
-
-            ch_idcs = _np.array([corr2idx[name] for name in data['ch_names']])
-            cv_idcs = _np.array([corr2idx[name] for name in data['cv_names']])
-            idcs = _np.r_[ch_idcs, cv_idcs]
-            anly['mat_idcs'] = idcs
-
-            orbx = data['orbx'].copy()
-            orby = data['orby'].copy()
-            orbx -= orbx.mean(axis=0)
-            orby -= orby.mean(axis=0)
-
-            tim = _np.arange(orbx.shape[0]) * dtim
-            if idx_ini is None:
-                # TODO: This logic is broken when more than one sector is
-                # excited per BPM acquisition, because in this case the
-                # deltaDelay variable is set, while delayRaw is kept as zero.
-                delay = 4/data['rf_frequency']
-                delay *= data['corrs_trig_delay_raw']
-                idx_ini = (tim >= delay).nonzero()[0][0]
-            anly['time'] = tim
-            anly['idx_ini'] = idx_ini
-
-            orbx = orbx[idx_ini:]
-            orby = orby[idx_ini:]
-
-            if min_freq is not None and max_freq is not None:
-                min_freq = min_freq or 0
-                max_freq = max_freq or fsamp/2
-                dftx = _np.fft.rfft(orbx, axis=0)
-                dfty = _np.fft.rfft(orby, axis=0)
-                freq = _np.fft.rfftfreq(orbx.shape[0], d=dtim)
-                idcs = (freq < min_freq) | (freq > max_freq)
-                dftx[idcs] = 0
-                orbx = _np.fft.irfft(dftx, axis=0)
-                orby = _np.fft.irfft(dfty, axis=0)
-            anly['min_freq'] = min_freq
-            anly['max_freq'] = max_freq
-
-            ampx, phasex, cosx, sinx = self.fit_fourier_components(
-                orbx, freqs0, dtim, num_cycles)
-            ampy, phasey, cosy, siny = self.fit_fourier_components(
-                orby, freqs0, dtim, num_cycles)
-
-            signx = _np.ones(ampx.shape)
-            signx[_np.abs(phasex) > (_np.pi/2)] = -1
-            signy = _np.ones(ampy.shape)
-            signy[_np.abs(phasey) > (_np.pi/2)] = -1
-
-            mat_colsx = (signx * ampx / kicks[:, None]).T
-            nr_bpms = self.sofb_data.nr_bpms
-            xscalefactor = mat_colsx.std(axis=0)
-            xscalefactor /= ref_respmat[:nr_bpms, idcs].std(axis=0)
-            mat_colsx /= xscalefactor
-            mat_colsy = (signy * ampy / kicks[:, None]).T
-            yscalefactor = mat_colsy.std(axis=0)
-            yscalefactor /= ref_respmat[nr_bpms:, idcs].std(axis=0)
-            mat_colsy /= yscalefactor
-
-            anly['ampx'] = ampx
-            anly['ampy'] = ampy
-            anly['phasex'] = phasex
-            anly['phasey'] = phasey
-            anly['cosx'] = cosx
-            anly['cosy'] = cosy
-            anly['sinx'] = sinx
-            anly['siny'] = siny
-            anly['signx'] = signx
-            anly['signy'] = signy
-            anly['mat_colsx'] = mat_colsx
-            anly['mat_colsy'] = mat_colsy
-            anly['mat_colsx_scale'] = xscalefactor
-            anly['mat_colsy_scale'] = yscalefactor
-
-            analysis.append(anly)
+        print('Done processing Magnets Data!')
         return analysis
+
+    def _process_single_excit(
+            self, data, idx_ini, corr2idx, ref_respmat, naff=False, pinv=None):
+        anly = dict()
+        fsamp = data['sampling_frequency']
+        dtim = 1/fsamp
+        ch_freqs = _np.array(data['ch_frequency'])
+        cv_freqs = _np.array(data['cv_frequency'])
+        freqs0 = _np.r_[ch_freqs, cv_freqs]
+        anly['fsamp'] = fsamp
+        anly['dtim'] = dtim
+        anly['freqs0'] = freqs0
+        anly['corr_names'] = data['ch_names'] + data['cv_names']
+
+        ch_ncycles = _np.array(data['ch_num_cycles'])
+        cv_ncycles = _np.array(data['cv_num_cycles'])
+        num_cycles = _np.r_[ch_ncycles, cv_ncycles]
+        anly['num_cycles'] = num_cycles
+
+        ch_amps = _np.array(data['ch_kick_amplitudes'])
+        cv_amps = _np.array(data['cv_kick_amplitudes'])
+        kicks = _np.r_[ch_amps, cv_amps]
+        anly['kicks'] = kicks
+
+        ch_idcs = _np.array([corr2idx[name] for name in data['ch_names']])
+        cv_idcs = _np.array([corr2idx[name] for name in data['cv_names']])
+        idcs = _np.r_[ch_idcs, cv_idcs]
+        anly['mat_idcs'] = idcs
+
+        orbx = data['orbx'].copy()
+        orby = data['orby'].copy()
+        orbx -= orbx.mean(axis=0)
+        orby -= orby.mean(axis=0)
+
+        anly['idx_ini'] = idx_ini
+        orbx = orbx[idx_ini:]
+        orby = orby[idx_ini:]
+
+        if naff:
+            cosx, sinx = self.fit_fourier_components_naff(orbx, freqs0, dtim)
+            cosy, siny = self.fit_fourier_components_naff(orby, freqs0, dtim)
+        else:
+            cosx, sinx, pinv = self.fit_fourier_components(
+                orbx, freqs0, dtim, num_cycles, pinv)
+            cosy, siny, pinv = self.fit_fourier_components(
+                orby, freqs0, dtim, num_cycles, pinv)
+        ampx, phasex = self.fit_calc_amp_and_phase(cosx, sinx)
+        ampy, phasey = self.fit_calc_amp_and_phase(cosy, siny)
+
+        signx = _np.ones(ampx.shape)
+        signx[_np.abs(phasex) > (_np.pi/2)] = -1
+        signy = _np.ones(ampy.shape)
+        signy[_np.abs(phasey) > (_np.pi/2)] = -1
+        mat_colsx = (signx * ampx / kicks[:, None]).T
+        mat_colsy = (signy * ampy / kicks[:, None]).T
+
+        nr_bpms = self.sofb_data.nr_bpms
+        xscalefactor = ref_respmat[:nr_bpms, idcs].std(axis=0)
+        yscalefactor = ref_respmat[nr_bpms:, idcs].std(axis=0)
+        xscalefactor /= mat_colsx.std(axis=0)
+        yscalefactor /= mat_colsy.std(axis=0)
+        mat_colsx *= xscalefactor
+        mat_colsy *= yscalefactor
+
+        anly['ampx'] = ampx.T
+        anly['ampy'] = ampy.T
+        anly['phasex'] = phasex.T
+        anly['phasey'] = phasey.T
+        anly['cosx'] = cosx.T
+        anly['cosy'] = cosy.T
+        anly['sinx'] = sinx.T
+        anly['siny'] = siny.T
+        anly['signx'] = signx.T
+        anly['signy'] = signy.T
+        anly['mat_colsx'] = mat_colsx
+        anly['mat_colsy'] = mat_colsy
+        anly['mat_colsx_scale'] = xscalefactor
+        anly['mat_colsy_scale'] = yscalefactor
+        return anly, pinv
 
     # ----------------- BPMs related methods -----------------------
 
