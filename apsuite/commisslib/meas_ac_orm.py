@@ -621,7 +621,7 @@ class MeasACORM(_ThreadBaseClass):
         Returns:
             matplotlib.Figure: Figure object of the plot.
             tuple: Tuple with both axes of the figure;
-            col_dcorr (np.ndarray, (2, 281)): One minus colunm space
+            col_dcorr (np.ndarray, (2, 281)): One minus column space
                 correlations.
 
         """
