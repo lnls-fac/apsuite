@@ -29,6 +29,7 @@ from .measure_orbit_stability import OrbitAnalysis as _OrbitAnalysis
 
 class ACORMParams(_ParamsBaseClass):
     """."""
+
     RFModes = _get_namedtuple('RFModes', ('Step', 'Phase'))
 
     def __init__(self):
@@ -41,7 +42,7 @@ class ACORMParams(_ParamsBaseClass):
 
         self.corrs_ch2meas = 'all'
         self.corrs_cv2meas = 'all'
-        self.corrs_nrruns_per_acq = 1
+        self.corrs_nrruns_per_acq = 4
         self.corrs_excit_time = 4  # [s]
         self.corrs_delay = 5e-3  # [s]
         self.corrs_norm_kicks = False
@@ -49,11 +50,11 @@ class ACORMParams(_ParamsBaseClass):
         self.corrs_cv_kick = 5  # [urad]
         self.corrs_dorb1ch = 20  # [um]
         self.corrs_dorb1cv = 20  # [um]
-        freqs = self.find_primes(20, start=3)
-        self.corrs_ch_freqs = freqs[::2][:6]
-        self.corrs_cv_freqs = freqs[1::2][:8]
+        freqs = self.find_primes(14, start=100)
+        self.corrs_ch_freqs = freqs[:6]
+        self.corrs_cv_freqs = freqs[6:6+8]
 
-        self.rf_excit_time = 4  # [s]
+        self.rf_excit_time = 1  # [s]
         self._rf_mode = self.RFModes.Phase
         self.rf_step_kick = 5  # [Hz]
         self.rf_step_delay = 200e-3  # [s]
@@ -152,6 +153,7 @@ class MeasACORM(_ThreadBaseClass):
         super().__init__(
             params=self.params, target=self._do_measure, isonline=isonline)
         self.bpms = None
+        self.verbose = True
 
         self.sofb_data = SOFBFactory.create('SI')
         self.configdb = _ConfigDBClient(config_type='si_orbcorr_respm')
@@ -557,6 +559,8 @@ class MeasACORM(_ThreadBaseClass):
             bool: True if measurement finished without errors.
 
         """
+        if self.ismeasuring:
+            return False
         return self._meas_finished_ok
 
     def check_measurement_quality(self, mat_ac=None, mat_dc=None, dthres=1e-3):
@@ -999,32 +1003,36 @@ class MeasACORM(_ThreadBaseClass):
 
     # ------------------ Auxiliary Methods ------------------
 
+    def _log(self, *args, **kwargs):
+        if self.verbose:
+            print(*args, **kwargs)
+
     def _create_devices(self):
         # Create objects to convert kicks to current
         t00 = _time.time()
-        print('Creating kick converters  -> ', end='')
+        self._log('Creating kick converters  -> ', end='')
         self.devices.update({
             n+':StrengthConv': StrengthConv(n, 'Ref-Mon')
             for n in self.sofb_data.ch_names})
         self.devices.update({
             n+':StrengthConv': StrengthConv(n, 'Ref-Mon')
             for n in self.sofb_data.cv_names})
-        print(f'ET: = {_time.time()-t00:.2f}s')
+        self._log(f'ET: = {_time.time()-t00:.2f}s')
 
         # Create objects to interact with correctors
         t00 = _time.time()
-        print('Creating correctors       -> ', end='')
+        self._log('Creating correctors       -> ', end='')
         self.devices.update({
             nme: PowerSupply(nme, props2init=[])
             for nme in self.sofb_data.ch_names})
         self.devices.update({
             nme: PowerSupply(nme, props2init=[])
             for nme in self.sofb_data.cv_names})
-        print(f'ET: = {_time.time()-t00:.2f}s')
+        self._log(f'ET: = {_time.time()-t00:.2f}s')
 
         # Create object to get stored current
         t00 = _time.time()
-        print('Creating General Devices  -> ', end='')
+        self._log('Creating General Devices  -> ', end='')
         self.devices['currinfo'] = CurrInfoSI()
         # Create RF generator object
         self.devices['rfgen'] = RFGen(
@@ -1032,25 +1040,25 @@ class MeasACORM(_ThreadBaseClass):
         self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SI)
         # Create Tune object:
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        print(f'ET: = {_time.time()-t00:.2f}s')
+        self._log(f'ET: = {_time.time()-t00:.2f}s')
 
         # Create BPMs trigger:
         t00 = _time.time()
-        print('Creating Timing           -> ', end='')
+        self._log('Creating Timing           -> ', end='')
         self.devices['trigbpms'] = Trigger('SI-Fam:TI-BPM')
         # Create Correctors Trigger:
         self.devices['trigcorrs'] = Trigger('SI-Glob:TI-Mags-Corrs')
         # Create event to start data acquisition sinchronously:
         self.devices['evt_study'] = Event('Study')
         self.devices['evg'] = EVG()
-        print(f'ET: = {_time.time()-t00:.2f}s')
+        self._log(f'ET: = {_time.time()-t00:.2f}s')
 
         # Create BPMs
         t00 = _time.time()
-        print('Creating BPMs             -> ', end='')
+        self._log('Creating BPMs             -> ', end='')
         self.bpms = FamBPMs(mturn_signals2acq='XY', props2init='acq')
         self.devices['fambpms'] = self.bpms
-        print(f'ET: = {_time.time()-t00:.2f}s')
+        self._log(f'ET: = {_time.time()-t00:.2f}s')
 
     # ---------------- Measurement Methods ----------------
 
@@ -1062,7 +1070,7 @@ class MeasACORM(_ThreadBaseClass):
 
         if self._stopevt.is_set() or not self._meas_finished_ok:
             self._set_timing_state(tim_state)
-            print('Stopped!')
+            self._log('Stopped!')
             return
 
         if self.params.meas_rf_line:
@@ -1070,52 +1078,52 @@ class MeasACORM(_ThreadBaseClass):
 
         if self._stopevt.is_set() or not self._meas_finished_ok:
             self._set_timing_state(tim_state)
-            print('Stopped!')
+            self._log('Stopped!')
             return
 
         self.data['magnets'] = self._do_measure_magnets()
         self._set_timing_state(tim_state)
-        print(f'All measurements finished!!')
+        self._log(f'All measurements finished!!')
 
     def _do_measure_bpms_noise(self):
         self._meas_finished_ok = True
         elt = _time.time()
         par = self.params
 
-        print('Measuring BPMs Noise:')
+        self._log('Measuring BPMs Noise:')
 
         t00 = _time.time()
-        print('    Configuring BPMs...', end='')
+        self._log('    Configuring BPMs...', end='')
         rf_freq = self.devices['rfgen'].frequency
         nr_points = par.corrs_excit_time + par.corrs_delay*2
         nr_points *= self.bpms.get_sampling_frequency(rf_freq, acq_rate='FAcq')
         nr_points = int(_np.ceil(nr_points))
         ret = self._config_bpms(nr_points, rate='FAcq')
         if ret < 0:
-            print(f'BPM {-ret-1:d} did not finish last acquisition.')
+            self._log(f'BPM {-ret-1:d} did not finish last acquisition.')
         elif ret > 0:
-            print(f'BPM {ret-1:d} is not ready for acquisition.')
+            self._log(f'BPM {ret-1:d} is not ready for acquisition.')
         if ret:
             self._meas_finished_ok = False
         self._config_timing()
-        print(f'Done! ET: {_time.time()-t00:.2f}s')
+        self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         t00 = _time.time()
-        print('    Sending Trigger signal...', end='')
+        self._log('    Sending Trigger signal...', end='')
         self.bpms.mturn_reset_flags_and_update_initial_timestamps()
         self.devices['evt_study'].cmd_external_trigger()
-        print(f'Done! ET: {_time.time()-t00:.2f}s')
+        self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # Wait BPMs PV to update with new data
         t00 = _time.time()
-        print('    Waiting BPMs to update...', end='')
+        self._log('    Waiting BPMs to update...', end='')
         ret = self.bpms.mturn_wait_update(timeout=par.timeout_bpms)
         if ret:
-            print(
+            self._log(
                 'Problem: timed out waiting BPMs update. '
                 f'Error code: {ret:d}')
             self._meas_finished_ok = False
-        print(f'Done! ET: {_time.time()-t00:.2f}s')
+        self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
         _time.sleep(0.1)
@@ -1126,63 +1134,63 @@ class MeasACORM(_ThreadBaseClass):
 
         elt -= _time.time()
         elt *= -1
-        print(f'    Elapsed Time: {elt:.2f}s')
+        self._log(f'    Elapsed Time: {elt:.2f}s')
         return data
 
     def _do_measure_rf_line(self):
         self._meas_finished_ok = True
         elt = _time.time()
         par = self.params
-        print('Measuring RF Line:')
+        self._log('Measuring RF Line:')
 
         rate = 'FOFB' if par.rf_mode == par.RFModes.Phase else 'FAcq'
 
         t00 = _time.time()
-        print('    Configuring BPMs...', end='')
+        self._log('    Configuring BPMs...', end='')
         rf_freq = self.devices['rfgen'].frequency
         nr_points = par.rf_excit_time + par.rf_step_delay*2
         nr_points *= self.bpms.get_sampling_frequency(rf_freq, acq_rate=rate)
         nr_points = int(_np.ceil(nr_points))
         ret = self._config_bpms(nr_points, rate=rate)
         if ret < 0:
-            print(f'BPM {-ret-1:d} did not finish last acquisition.')
+            self._log(f'BPM {-ret-1:d} did not finish last acquisition.')
         elif ret > 0:
-            print(f'BPM {ret-1:d} is not ready for acquisition.')
+            self._log(f'BPM {ret-1:d} is not ready for acquisition.')
         if ret:
             self._meas_finished_ok = False
         self._config_timing()
-        print(f'Done! ET: {_time.time()-t00:.2f}s')
+        self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         if par.rf_mode == par.RFModes.Phase:
             t00 = _time.time()
-            print('    Turning RF Conditioning On...', end='')
+            self._log('    Turning RF Conditioning On...', end='')
             self._turn_on_llrf_conditioning()
-            print(f'Done! ET: {_time.time()-t00:.2f}s')
+            self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         t00 = _time.time()
-        print('    Sending Trigger signal...', end='')
+        self._log('    Sending Trigger signal...', end='')
         self.bpms.mturn_reset_flags_and_update_initial_timestamps()
         self.devices['evt_study'].cmd_external_trigger()
-        print(f'    Done! ET: {_time.time()-t00:.2f}s')
+        self._log(f'    Done! ET: {_time.time()-t00:.2f}s')
 
         if par.rf_mode == par.RFModes.Step:
             t00 = _time.time()
-            print('    Sweep RF...', end='')
+            self._log('    Sweep RF...', end='')
             thr = _Thread(target=self._sweep_rf, daemon=True)
             _time.sleep(par.rf_step_delay)
             thr.start()
-            print(f'Done! ET: {_time.time()-t00:.2f}s')
+            self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # Wait BPMs PV to update with new data
         t00 = _time.time()
-        print('    Waiting BPMs to update...', end='')
+        self._log('    Waiting BPMs to update...', end='')
         ret = self.bpms.mturn_wait_update(timeout=par.timeout_bpms)
         if ret:
-            print(
+            self._log(
                 'Problem: timed out waiting BPMs update. '
                 f'Error code: {ret:d}')
             self._meas_finished_ok = False
-        print(f'Done! ET: {_time.time()-t00:.2f}s')
+        self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         llrf = self.devices['llrf']
         data = dict()
@@ -1195,9 +1203,9 @@ class MeasACORM(_ThreadBaseClass):
 
         if par.rf_mode == par.RFModes.Phase:
             t00 = _time.time()
-            print('    Turning RF Conditioning Off...', end='')
+            self._log('    Turning RF Conditioning Off...', end='')
             self._turn_off_llrf_conditioning()
-            print(f'Done! ET: {_time.time()-t00:.2f}s')
+            self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
         _time.sleep(0.1)
@@ -1212,7 +1220,7 @@ class MeasACORM(_ThreadBaseClass):
 
         elt -= _time.time()
         elt *= -1
-        print(f'    Elapsed Time: {elt:.2f}s')
+        self._log(f'    Elapsed Time: {elt:.2f}s')
         return data
 
     def _sweep_rf(self):
@@ -1244,7 +1252,7 @@ class MeasACORM(_ThreadBaseClass):
         elt0 = _time.time()
         data_mags = []
 
-        print('Measuring Magnets:')
+        self._log('Measuring Magnets:')
 
         # Shift correctors so first corrector is 01M1
         ch_names = self.sofb_data.ch_names
@@ -1254,7 +1262,7 @@ class MeasACORM(_ThreadBaseClass):
 
         # set operation mode to slowref
         if not self._change_corrs_opmode('slowref'):
-            print('Problem: Correctors not in SlowRef mode.')
+            self._log('Problem: Correctors not in SlowRef mode.')
             self._meas_finished_ok = False
             return data_mags
 
@@ -1298,7 +1306,7 @@ class MeasACORM(_ThreadBaseClass):
 
         for itr in range(nacqs):
             elt = _time.time()
-            print(f'  Acquisition {itr+1:02d}/{nacqs:02d}')
+            self._log(f'  Acquisition {itr+1:02d}/{nacqs:02d}')
 
             chs_slc, cvs_slc = [], []
             ch_kick, cv_kick = [], []
@@ -1318,56 +1326,56 @@ class MeasACORM(_ThreadBaseClass):
                     freqve.extend(freqv)
 
             t00 = _time.time()
-            print('    Configuring BPMs and timing...', end='')
+            self._log('    Configuring BPMs and timing...', end='')
             ret = self._config_bpms(nr_points * len(chs_slc), rate='FAcq')
             if ret < 0:
-                print(f'BPM {-ret-1:d} did not finish last acquisition.')
+                self._log(f'BPM {-ret-1:d} did not finish last acquisition.')
             elif ret > 0:
-                print(f'BPM {ret-1:d} is not ready for acquisition.')
+                self._log(f'BPM {ret-1:d} is not ready for acquisition.')
             if ret:
                 self._meas_finished_ok = False
                 break
             self._config_timing(
                 self.params.corrs_delay, chs_slc, cvs_slc, nr_points=nr_points)
-            print(f'Done! ET: {_time.time()-t00:.2f}s')
+            self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # configure correctors
             t00 = _time.time()
             chs_f = _red(_opr.add, chs_slc)
             cvs_f = _red(_opr.add, cvs_slc)
-            print('    Configuring Correctors...', end='')
+            self._log('    Configuring Correctors...', end='')
             self._config_correctors(chs_f, ch_kick, freqhe, excit_time)
             self._config_correctors(cvs_f, cv_kick, freqve, excit_time)
-            print(f'Done! ET: {_time.time()-t00:.2f}s')
+            self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # set operation mode to cycle
             t00 = _time.time()
-            print('    Changing Correctors to Cycle...', end='')
+            self._log('    Changing Correctors to Cycle...', end='')
             if not self._change_corrs_opmode('cycle', chs_f + cvs_f):
-                print('Problem: Correctors not in Cycle mode.')
+                self._log('Problem: Correctors not in Cycle mode.')
                 self._meas_finished_ok = False
                 break
-            print(f'Done! ET: {_time.time()-t00:.2f}s')
+            self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # send event through timing system to start acquisitions
             t00 = _time.time()
-            print('    Sending Timing signal...', end='')
+            self._log('    Sending Timing signal...', end='')
             self.bpms.mturn_reset_flags_and_update_initial_timestamps()
             self.devices['evt_study'].cmd_external_trigger()
-            print(f'Done! ET: {_time.time()-t00:.2f}s')
+            self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # Wait BPMs PV to update with new data
             t00 = _time.time()
-            print('    Waiting BPMs to update...', end='')
+            self._log('    Waiting BPMs to update...', end='')
             ret = self.bpms.mturn_wait_update(timeout=self.params.timeout_bpms)
             if ret:
-                print(
+                self._log(
                     'Problem: timed out waiting BPMs update. '
                     f'Error code: {ret:d}')
                 self._meas_finished_ok = False
                 break
             _time.sleep(0.1)
-            print(f'Done! ET: {_time.time()-t00:.2f}s')
+            self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # get data for each sector separately:
             data = self.get_general_data()
@@ -1383,30 +1391,30 @@ class MeasACORM(_ThreadBaseClass):
 
             # set operation mode to slowref
             t00 = _time.time()
-            print('    Changing Correctors to SlowRef...', end='')
+            self._log('    Changing Correctors to SlowRef...', end='')
             if not self._wait_cycle_to_finish(chs_f + cvs_f):
-                print('Problem: Cycle still not finished.')
+                self._log('Problem: Cycle still not finished.')
                 break
             if not self._change_corrs_opmode('slowref', chs_f + cvs_f):
-                print('Problem: Correctors not in SlowRef mode.')
+                self._log('Problem: Correctors not in SlowRef mode.')
                 break
-            print(f'Done! ET: {_time.time()-t00:.2f}s')
+            self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             elt -= _time.time()
             elt *= -1
-            print(f'  Elapsed Time: {elt:.2f}s')
+            self._log(f'  Elapsed Time: {elt:.2f}s')
             if self._stopevt.is_set():
-                print('Stopping...')
+                self._log('Stopping...')
                 break
 
         # set operation mode to slowref
         if not self._change_corrs_opmode('slowref'):
-            print('Problem: Correctors not in SlowRef mode.')
+            self._log('Problem: Correctors not in SlowRef mode.')
             return data_mags
 
         elt0 -= _time.time()
         elt0 *= -1
-        print(f'Finished!!  ET: {elt0/60:.2f}min')
+        self._log(f'Finished!!  ET: {elt0/60:.2f}min')
         return data_mags
 
     # ---------------- Data Processing methods ----------------
@@ -1420,7 +1428,7 @@ class MeasACORM(_ThreadBaseClass):
             return y
 
         t0_ = _time.time()
-        print('Processing RF Step...', end='')
+        self._log('Processing RF Step...', end='')
         fsamp = data['sampling_frequency']
         fswitch = data['switching_frequency']
         sw_mode = data['switching_mode']
@@ -1437,7 +1445,6 @@ class MeasACORM(_ThreadBaseClass):
         anly['tuney'] = data['tuney']
         anly['rf_frequency'] = data['rf_frequency']
         anly['acq_rate'] = data['acq_rate']
-        anly['corr_names'] = data['ch_names'] + data['cv_names']
         anly['nrsamples'] = data['nrsamples_pre'] + data['nrsamples_post']
 
         orbx = data['orbx'].copy()
@@ -1498,14 +1505,14 @@ class MeasACORM(_ThreadBaseClass):
         anly['mat_colx'] = (orbx_pos - orbx_neg) / kick / 2
         anly['mat_coly'] = (orby_pos - orby_neg) / kick / 2
 
-        print(f'Done! ET: {_time.time()-t0_:2f}s')
+        self._log(f'Done! ET: {_time.time()-t0_:2f}s')
         return anly
 
     def _process_rf_phase(self, data, window=10, central_freq=None):
         anly = dict()
 
         t0_ = _time.time()
-        print('Processing RF Phase...', end='')
+        self._log('Processing RF Phase...', end='')
 
         fsamp = data['sampling_frequency']
         fswitch = data['switching_frequency']
@@ -1524,7 +1531,6 @@ class MeasACORM(_ThreadBaseClass):
         anly['tuney'] = data['tuney']
         anly['rf_frequency'] = data['rf_frequency']
         anly['acq_rate'] = data['acq_rate']
-        anly['corr_names'] = data['ch_names'] + data['cv_names']
         anly['nrsamples'] = data['nrsamples_pre'] + data['nrsamples_post']
 
         orbx = data['orbx'].copy()
@@ -1584,14 +1590,14 @@ class MeasACORM(_ThreadBaseClass):
         anly['mat_colsx'] = eta_meas[:nrbpms]
         anly['mat_colsy'] = eta_meas[nrbpms:]
 
-        print(f'Done! ET: {_time.time()-t0_:2f}s')
+        self._log(f'Done! ET: {_time.time()-t0_:2f}s')
         return anly
 
     def _process_bpms_noise(self, data):
         sofb = self.sofb_data
 
         t0_ = _time.time()
-        print('Processing BPMs Noise...', end='')
+        self._log('Processing BPMs Noise...', end='')
 
         ch_freqs = data['ch_freqs']
         cv_freqs = data['cv_freqs']
@@ -1610,8 +1616,7 @@ class MeasACORM(_ThreadBaseClass):
         anly['tuney'] = data['tuney']
         anly['rf_frequency'] = data['rf_frequency']
         anly['acq_rate'] = data['acq_rate']
-        anly['corr_names'] = data['ch_names'] + data['cv_names']
-        anly['nrsamples'] = data['nrsamples_pre'] +  data['nrsamples_post']
+        anly['nrsamples'] = data['nrsamples_pre'] + data['nrsamples_post']
 
         orbx = data['orbx'].copy()
         orby = data['orby'].copy()
@@ -1664,7 +1669,7 @@ class MeasACORM(_ThreadBaseClass):
 
         anly['bpm_variation'] = mat
 
-        print(f'Done! ET: {_time.time()-t0_:2f}s')
+        self._log(f'Done! ET: {_time.time()-t0_:2f}s')
         return anly
 
     def _process_magnets(self, magnets_data, idx_ini=None):
@@ -1673,19 +1678,20 @@ class MeasACORM(_ThreadBaseClass):
         corr2idx = {name: i for i, name in enumerate(sofb.ch_names)}
         corr2idx.update({name: 120+i for i, name in enumerate(sofb.cv_names)})
 
-        print('Processing Magnets Data:')
+        self._log('Processing Magnets Data:')
         analysis = []
         ref_respmat = self.get_ref_respmat()
         args = corr2idx, ref_respmat
         pinv1 = pinv2 = pinv3 = None
         for i, data in enumerate(magnets_data):
-            print(f'  Acquisition {i+1:02d}/{len(magnets_data):02d} ', end='')
+            self._log(
+                f'  Acquisition {i+1:02d}/{len(magnets_data):02d} ', end='')
             t0_ = _time.time()
             if idx_ini is not None:
                 anl, pinv3, _ = self._process_single_excit(
                     data, idx_ini, *args, naff=False, pinv=pinv3)
                 analysis.append(anl)
-                print(f'ET: {_time.time()-t0_:1f}s')
+                self._log(f'ET: {_time.time()-t0_:1f}s')
                 continue
 
             # If idx_ini is not given, find adequate initial index for fitting.
@@ -1710,9 +1716,9 @@ class MeasACORM(_ThreadBaseClass):
             anl, *_ = self._process_single_excit(
                 data, idx_ini, *args, naff=False, pinv=None)
             analysis.append(anl)
-            print(f'ET: {_time.time()-t0_:1f}s')
+            self._log(f'ET: {_time.time()-t0_:1f}s')
 
-        print('Done processing Magnets Data!')
+        self._log('Done processing Magnets Data!')
         return analysis
 
     def _process_single_excit(
@@ -2000,7 +2006,7 @@ class MeasACORM(_ThreadBaseClass):
                 return True
             _time.sleep(interval)
 
-        print(corrname)
+        self._log(corrname)
         return False
 
     def _wait_cycle_to_finish(self, corr_names=None, timeout=10):
