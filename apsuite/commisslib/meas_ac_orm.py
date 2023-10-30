@@ -9,7 +9,8 @@ import numpy as _np
 import matplotlib.pyplot as _mplt
 import scipy.optimize as _scyopt
 
-from mathphys.functions import save_pickle as _save_pickle
+from mathphys.functions import save_pickle as _save_pickle, \
+    load_pickle as _load_pickle
 
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 from siriuspy.devices import StrengthConv, PowerSupply, CurrInfoSI, \
@@ -323,7 +324,8 @@ class MeasACORM(_ThreadBaseClass):
         corr /= _np.linalg.norm(arr2, axis=-2)
         return corr
 
-    def save_loco_input_data(self, respmat_name: str, overwrite=False):
+    def save_loco_input_data(
+            self, respmat_name: str, overwrite=False, save2servconf=False):
         """Save in `.pickle` format a dictionary with all LOCO input data.
 
         Args:
@@ -331,39 +333,79 @@ class MeasACORM(_ThreadBaseClass):
                 this name will be saved in configdb.
             overwrite (bool, optional): whether to overwrite existing files.
                 Defaults to False.
+            save2servconf (bool, optional): whether to save response matrix to
+                configDB server. Defaults to False.
 
         """
-        bpms_data = self.data['bpms_noise']
         bpms_anly = self.analysis['bpms_noise']
         data = dict()
         data['method'] = 'AC'
         data['info'] = str(self.params)
-        data['timestamp'] = bpms_data['timestamp']
-        data['rf_frequency'] = bpms_data['rf_frequency']
-        data['tunex'] = bpms_data['tunex']
-        data['tuney'] = bpms_data['tuney']
-        data['stored_current'] = bpms_data['stored_current']
+        data['timestamp'] = bpms_anly['timestamp']
+        data['rf_frequency'] = bpms_anly['rf_frequency']
+        data['tunex'] = bpms_anly['tunex']
+        data['tuney'] = bpms_anly['tuney']
+        data['stored_current'] = bpms_anly['stored_current']
         data['bpm_variation'] = bpms_anly['bpm_variation']
-        data['orbmat_name'] = respmat_name
-        mat = self.save_respmat_to_configdb(respmat_name)
+        mat = self.build_respmat()
         data['respmat'] = mat
-
+        if save2servconf:
+            data['orbmat_name'] = respmat_name
+            mat = self.save_respmat_to_configdb(respmat_name, mat=mat)
         _save_pickle(data, f'loco_input_{respmat_name:s}', overwrite=overwrite)
 
-    def save_respmat_to_configdb(self, name: str):
+    def save_analysis_dictionary(self, filename, overwrite=False):
+        """Save internal analysis dict to file.
+
+        Args:
+            filename (str): Name of the file to save. It it does not start
+                with 'analysis_', this prefix will be prepended to the name.
+            overwrite (bool, optional): Whether or not to overwrite existing
+                files. Defaults to False.
+
+        """
+        if not filename.startswith('analysis_'):
+            filename = 'analysis_' + filename
+        _save_pickle(self.analysis, filename, overwrite=overwrite)
+
+    def load_analysis_dictionary(self, filename, overwrite=False):
+        """Load file with analysis dictionary.
+
+        Args:
+            filename (str): Name of the file to load. It must start with
+                'analysis_', otherwise an ValueError will be raised.
+            overwrite (bool, optional): Whether or not to overwrite existing
+                files. Defaults to False.
+
+        Raises:
+            ValueError: when filename does not start with 'analysis_'
+
+        Returns:
+            dict: analysis dictionary.
+
+        """
+        if not filename.startswith('analysis_'):
+            raise ValueError('File name must start with "analysis_".')
+        return _load_pickle(self.analysis, filename, overwrite=overwrite)
+
+    def save_respmat_to_configdb(self, name: str, matrix=None):
         """Save response matrix to ConfigDb Server.
 
         Args:
             name (str): name of the matrix to saved.
+            matrix (numpy.ndarray, 320x281, optional): matrix to save.
+                If None the object will be built from the analysis data.
+                Defaults to None.
 
         Returns:
-            numpy.ndarray, 320x281: response matrix. Missing data is filled
-                with zeros.
+            numpy.ndarray, 320x281: saved response matrix. Missing data is
+                filled with zeros.
 
         """
-        mat = self.build_respmat()
-        self.configdb.insert_config(name, mat)
-        return mat
+        if matrix is None:
+            matrix = self.build_respmat()
+        self.configdb.insert_config(name, matrix)
+        return matrix
 
     def build_respmat(self, propty='mat_cols'):
         """Build response matrix from previously analysed data.
@@ -680,7 +722,7 @@ class MeasACORM(_ThreadBaseClass):
         fig.show()
         return fig, (ax, ay)
 
-    def plot_scale_convertion_factors(self):
+    def plot_scale_conversion_factors(self):
         """Plot single corrector signatures of measured and reference respmat.
 
         Returns:
@@ -1369,7 +1411,7 @@ class MeasACORM(_ThreadBaseClass):
 
     # ---------------- Data Processing methods ----------------
 
-    def _process_rf_step(self, rf_data, transition_length=10):
+    def _process_rf_step(self, data, transition_length=10):
         def _fitting_model(tim, *params):
             idx1, idx2, idx3, amp1, amp2 = params
             y = _np.zeros(tim.size)
@@ -1379,16 +1421,27 @@ class MeasACORM(_ThreadBaseClass):
 
         t0_ = _time.time()
         print('Processing RF Step...', end='')
+        fsamp = data['sampling_frequency']
+        fswitch = data['switching_frequency']
+        sw_mode = data['switching_mode']
+        dtim = 1/fsamp
 
         anly = dict()
-
-        fsamp = rf_data['sampling_frequency']
-        dtim = 1/fsamp
-        anly['fsamp'] = fsamp
+        anly['sampling_frequency'] = fsamp
         anly['dtim'] = dtim
+        anly['fswitch'] = fswitch
+        anly['sw_mode'] = sw_mode
+        anly['timestamp'] = data['timestamp']
+        anly['stored_current'] = data['stored_current']
+        anly['tunex'] = data['tunex']
+        anly['tuney'] = data['tuney']
+        anly['rf_frequency'] = data['rf_frequency']
+        anly['acq_rate'] = data['acq_rate']
+        anly['corr_names'] = data['ch_names'] + data['cv_names']
+        anly['nrsamples'] = data['nrsamples_pre'] + data['nrsamples_post']
 
-        orbx = rf_data['orbx'].copy()
-        orby = rf_data['orby'].copy()
+        orbx = data['orbx'].copy()
+        orby = data['orby'].copy()
         orbx -= orbx.mean(axis=0)
         orby -= orby.mean(axis=0)
 
@@ -1396,15 +1449,15 @@ class MeasACORM(_ThreadBaseClass):
         anly['time'] = tim
 
         # fit average horizontal orbit to find transition indices
-        excit_time = rf_data['excit_time']
-        dly = rf_data['step_delay']
-        kick = rf_data['step_kick']
+        excit_time = data['excit_time']
+        dly = data['step_delay']
+        kick = data['step_kick']
         idx1 = (tim > dly).nonzero()[0][0]
         idx2 = (tim > (excit_time/2 + dly)).nonzero()[0][0]
         idx3 = (tim > (excit_time + dly)).nonzero()[0][0]
         etax_avg = 0.033e6  # average dispersion function, in [um]
-        rf_freq = rf_data['rf_frequency']
-        mom_compac = rf_data.get('mom_compac', _asparams.SI_MOM_COMPACT)
+        rf_freq = data['rf_frequency']
+        mom_compac = data.get('mom_compac', _asparams.SI_MOM_COMPACT)
 
         amp1 = -kick * etax_avg / mom_compac / rf_freq
         amp2 = kick * etax_avg / mom_compac / rf_freq
@@ -1448,23 +1501,34 @@ class MeasACORM(_ThreadBaseClass):
         print(f'Done! ET: {_time.time()-t0_:2f}s')
         return anly
 
-    def _process_rf_phase(self, rf_data, window=10, central_freq=None):
+    def _process_rf_phase(self, data, window=10, central_freq=None):
         anly = dict()
 
         t0_ = _time.time()
         print('Processing RF Phase...', end='')
 
-        fsamp = rf_data['sampling_frequency']
-        fswitch = rf_data['switching_frequency']
-        sw_mode = rf_data['switching_mode']
-        rf_freq = rf_data['rf_frequency']
+        fsamp = data['sampling_frequency']
+        fswitch = data['switching_frequency']
+        sw_mode = data['switching_mode']
+        rf_freq = data['rf_frequency']
         dtim = 1/fsamp
-        anly['fsamp'] = fsamp
+
+        anly = dict()
+        anly['sampling_frequency'] = fsamp
         anly['dtim'] = dtim
         anly['fswitch'] = fswitch
+        anly['sw_mode'] = sw_mode
+        anly['timestamp'] = data['timestamp']
+        anly['stored_current'] = data['stored_current']
+        anly['tunex'] = data['tunex']
+        anly['tuney'] = data['tuney']
+        anly['rf_frequency'] = data['rf_frequency']
+        anly['acq_rate'] = data['acq_rate']
+        anly['corr_names'] = data['ch_names'] + data['cv_names']
+        anly['nrsamples'] = data['nrsamples_pre'] + data['nrsamples_post']
 
-        orbx = rf_data['orbx'].copy()
-        orby = rf_data['orby'].copy()
+        orbx = data['orbx'].copy()
+        orby = data['orby'].copy()
         orbx -= orbx.mean(axis=0)
         orby -= orby.mean(axis=0)
         if fsamp / fswitch > 1 and sw_mode == 'switching':
@@ -1523,25 +1587,34 @@ class MeasACORM(_ThreadBaseClass):
         print(f'Done! ET: {_time.time()-t0_:2f}s')
         return anly
 
-    def _process_bpms_noise(self, bpms_data):
+    def _process_bpms_noise(self, data):
         sofb = self.sofb_data
-        anly = dict()
 
         t0_ = _time.time()
         print('Processing BPMs Noise...', end='')
 
-        ch_freqs = bpms_data['ch_freqs']
-        cv_freqs = bpms_data['cv_freqs']
+        ch_freqs = data['ch_freqs']
+        cv_freqs = data['cv_freqs']
 
-        fsamp = bpms_data['sampling_frequency']
+        fsamp = data['sampling_frequency']
         dtim = 1/fsamp
         freqs0 = _np.r_[ch_freqs, cv_freqs]
-        anly['fsamp'] = fsamp
+
+        anly = dict()
+        anly['sampling_frequency'] = fsamp
         anly['dtim'] = dtim
         anly['freqs0'] = freqs0
+        anly['timestamp'] = data['timestamp']
+        anly['stored_current'] = data['stored_current']
+        anly['tunex'] = data['tunex']
+        anly['tuney'] = data['tuney']
+        anly['rf_frequency'] = data['rf_frequency']
+        anly['acq_rate'] = data['acq_rate']
+        anly['corr_names'] = data['ch_names'] + data['cv_names']
+        anly['nrsamples'] = data['nrsamples_pre'] +  data['nrsamples_post']
 
-        orbx = bpms_data['orbx'].copy()
-        orby = bpms_data['orby'].copy()
+        orbx = data['orbx'].copy()
+        orby = data['orby'].copy()
         orbx -= orbx.mean(axis=0)
         orby -= orby.mean(axis=0)
 
@@ -1604,21 +1677,20 @@ class MeasACORM(_ThreadBaseClass):
         analysis = []
         ref_respmat = self.get_ref_respmat()
         args = corr2idx, ref_respmat
-        pinv1 = pinv2 = pinv3 = pinv4 = None
+        pinv1 = pinv2 = pinv3 = None
         for i, data in enumerate(magnets_data):
             print(f'  Acquisition {i+1:02d}/{len(magnets_data):02d} ', end='')
             t0_ = _time.time()
-            nrfreqs = len(data['ch_names']) + len(data['cv_names'])
             if idx_ini is not None:
-                anl, pinv4 = self._process_single_excit(
-                    data, idx_ini, *args, naff=False, pinv=pinv4)
+                anl, pinv3, _ = self._process_single_excit(
+                    data, idx_ini, *args, naff=False, pinv=pinv3)
                 analysis.append(anl)
                 print(f'ET: {_time.time()-t0_:1f}s')
                 continue
 
             # If idx_ini is not given, find adequate initial index for fitting.
             # Since the excitation is a sine wave, we want the phases to be
-            # all close to 0 or PI. So this algorithm finds the index that
+            # all close to 0 or pi. So this algorithm finds the index that
             # brings all phases as close as possible to these values.
             fsamp = data['sampling_frequency']
             delay = 4/data['rf_frequency']
@@ -1626,23 +1698,17 @@ class MeasACORM(_ThreadBaseClass):
             delay *= dly_raw[dly_raw > 0].min()
             idx1 = int(delay * fsamp)
             idx2 = idx1 + 5
-            anl1, pinv1 = self._process_single_excit(
+            _, pinv1, phs1 = self._process_single_excit(
                 data, idx1, *args, pinv=pinv1)
-            anl2, pinv2 = self._process_single_excit(
+            _, pinv2, phs2 = self._process_single_excit(
                 data, idx2, *args, pinv=pinv2)
-            phs1 = _np.hstack([anl1['phasex'], anl1['phasey']])
-            phs2 = _np.hstack([anl2['phasex'], anl2['phasey']])
-            phs1 /= _np.pi
-            phs2 /= _np.pi
-            phs1 = (phs1 + 0.5) % 1 - 0.5
-            phs2 = (phs2 + 0.5) % 1 - 0.5
-            phs1 = phs1.reshape(-1, nrfreqs, 2).mean(axis=-1).mean(axis=0)
-            phs2 = phs2.reshape(-1, nrfreqs, 2).mean(axis=-1).mean(axis=0)
             coef = _np.polynomial.polynomial.polyfit(
                 [idx1, idx2], _np.vstack([phs1, phs2]), deg=1)
-            idx = _np.round(-coef[0]/coef[1]).astype(int)
-            anl, pinv3 = self._process_single_excit(
-                data, idx, *args, naff=False, pinv=pinv3)
+            idx_ini = _np.round(-coef[0]/coef[1]).astype(int)
+
+            # Evaluate data with optimal idx_ini:
+            anl, *_ = self._process_single_excit(
+                data, idx_ini, *args, naff=False, pinv=None)
             analysis.append(anl)
             print(f'ET: {_time.time()-t0_:1f}s')
 
@@ -1651,7 +1717,6 @@ class MeasACORM(_ThreadBaseClass):
 
     def _process_single_excit(
             self, data, idx_ini, corr2idx, ref_respmat, naff=False, pinv=None):
-        anly = dict()
         fsamp = data['sampling_frequency']
         dtim = 1/fsamp
         ch_freqs = _np.array(data['ch_frequency'])
@@ -1659,10 +1724,20 @@ class MeasACORM(_ThreadBaseClass):
         freqs0 = _np.r_[ch_freqs, cv_freqs]
         nr_bpms = self.sofb_data.nr_bpms
         nch = ch_freqs.size
-        anly['fsamp'] = fsamp
+        ncv = cv_freqs.size
+
+        anly = dict()
+        anly['sampling_frequency'] = fsamp
         anly['dtim'] = dtim
         anly['freqs0'] = freqs0
+        anly['timestamp'] = data['timestamp']
+        anly['stored_current'] = data['stored_current']
+        anly['tunex'] = data['tunex']
+        anly['tuney'] = data['tuney']
+        anly['rf_frequency'] = data['rf_frequency']
+        anly['acq_rate'] = data['acq_rate']
         anly['corr_names'] = data['ch_names'] + data['cv_names']
+        anly['nrsamples'] = data['nrsamples_pre'] + data['nrsamples_post']
 
         ch_ncycles = _np.array(data['ch_num_cycles'])
         cv_ncycles = _np.array(data['cv_num_cycles'])
@@ -1697,16 +1772,26 @@ class MeasACORM(_ThreadBaseClass):
         ampx, phasex = self.fit_calc_amp_and_phase(cosx, sinx)
         ampy, phasey = self.fit_calc_amp_and_phase(cosy, siny)
 
-        # Compensate BPMs mis-synchronization
-        phsxch = phasex[:nch, :]
-        phsycv = phasey[nch:, :]
-        meanphs = phsxch[(phsxch < 0.5) & (phsxch > -0.5)].mean(axis=0)
-        meanphs = phsycv[(phsycv < 0.5) & (phsycv > -0.5)].mean(axis=0)
+        # Compensate BPMs mis-synchronization:
+        phsxch = phasex[:nch, :]/_np.pi
+        phsycv = phasey[nch:, :]/_np.pi
+        # Wrap phases close to -1 and 1 around 0:
+        phsxch = (phsxch + 0.5) % 1 - 0.5
+        phsycv = (phsycv + 0.5) % 1 - 0.5
+        # Find average phase over all frequencies for each BPM
+        meanphs = phsxch.mean(axis=0)
+        meanphs += phsycv.mean(axis=0)
         meanphs /= 2
-        phasex -= meanphs
-        phasey -= meanphs
+        # Subtract average phase and wrap result to [-pi, pi]
+        phasex += _np.pi*(1 - meanphs)
+        phasey += _np.pi*(1 - meanphs)
+        phasex %= (2*_np.pi)
+        phasey %= (2*_np.pi)
+        phasex -= _np.pi
+        phasey -= _np.pi
         anly['phase_mean'] = meanphs
 
+        # Determine signal of elements:
         signx = _np.ones(ampx.shape)
         signx[_np.abs(phasex) > (_np.pi/2)] = -1
         signy = _np.ones(ampy.shape)
@@ -1714,6 +1799,7 @@ class MeasACORM(_ThreadBaseClass):
         mat_colsx = (signx * ampx / kicks[:, None]).T
         mat_colsy = (signy * ampy / kicks[:, None]).T
 
+        # Re-scale columns so that diagonal terms STD match reference matrix:
         xscalefactor = ref_respmat[:nr_bpms, ch_idcs].std(axis=0)
         yscalefactor = ref_respmat[nr_bpms:, cv_idcs].std(axis=0)
         xscalefactor /= mat_colsx[:, :nch].std(axis=0)
@@ -1737,7 +1823,12 @@ class MeasACORM(_ThreadBaseClass):
         anly['mat_colsy'] = mat_colsy
         anly['mat_colsx_scale'] = xscalefactor
         anly['mat_colsy_scale'] = yscalefactor
-        return anly, pinv
+
+        # Return average phase along BPMs for each frequency so that caller
+        # can use this info to optmize idx_ini.
+        phs = _np.hstack([phsxch.T, phsycv.T])
+        phs = phs.reshape(-1, nch+ncv, 2).mean(axis=-1).mean(axis=0)
+        return anly, pinv, phs
 
     # ----------------- BPMs related methods -----------------------
 
