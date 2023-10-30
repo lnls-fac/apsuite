@@ -94,11 +94,14 @@ class TbTData(DataBaseClass):
             raise TypeError(
                 'Both from_turn and to_turn must be tuples for len(traj)>1')
         for i, axis in enumerate(traj):
-            self.data['J'+axis], self.data['tunes'+axis] = \
+            self.data['J'+axis], params = \
                 TbTData._fit_hist_mat(data=self.data, traj=axis,
                                       from_turn=from_turn[i],
                                       to_turn=to_turn[i],
                                       model=model)
+            self.data['tunes'+axis] = params[:, 1]
+            self.data['fitted_amps'+axis] = params[:, 0]
+            self.data['fitted_phases'+axis] = params[:, -1]
 
     @staticmethod
     def _fit_hist_mat(data, traj='x', from_turn=0, to_turn=15, model=None):
@@ -139,21 +142,19 @@ class TbTData(DataBaseClass):
         bpms_idcs = _pa.lattice.flatten(famdata['BPM']['index'])
         twiss, *_ = _pa.optics.calc_twiss(
             accelerator=model, indices=bpms_idcs)
-        betax, betay = twiss.betax, twiss.betay
+        beta = twiss.betax if traj == 'x' else twiss.betay
 
         fitted_tunes = params[:, 1]
-        fitted_J = (params[:, 0]**4).sum() / (betax * params[:, 0]**2).sum()
+        fitted_J = (params[:, 0]**4).sum() / (beta * params[:, 0]**2).sum()
         # J is calculated as in eq. (9) of the reference X.R. Resende and M.B.
         # Alves and L. Liu and F.H. de Sá. Equilibrium and Nonlinear Beam
         # Dynamics Parameters From Sirius Turn-by-Turn BPM Data. In Proc.
         # IPAC'21. DOI: 10.18429/JACoW-IPAC2021-TUPAB219
 
-        string = f'avg tune {fitted_tunes.mean():.4f}'
+        string = f'avg tune {traj} {fitted_tunes.mean():.4f}'
         string += f' +- {fitted_tunes.std():.4f} (std)'
-        # TODO: add function to evaluate quality of the fit against BPMs data
         print(string)
-
-        return fitted_J, fitted_tunes
+        return fitted_J, params
 
     @staticmethod
     def _calculate_dft(traj, nturns=None):
@@ -278,8 +279,46 @@ class TbTData(DataBaseClass):
         fig.tight_layout()
         _mplt.show()
 
-    def evaluate_fit_quality(self, from_turn=None, to_turn=None):
-        raise NotImplementedError()
+    def evaluate_fit(self, traj='xy', from_turn=(0, 0), to_turn=(20, 20)):
+        """."""
+        for i, axis in enumerate(traj):
+            amps = self.data['fitted_amps'+axis]
+            tunes = self.data['tunes'+axis]
+            phases = self.data['fitted_phases'+axis]
+            hist_mat = self.data['traj'+axis][from_turn[i]:to_turn[i] + 1, :]
+            nturns = hist_mat.shape[0]
+            n = _np.arange(nturns)
+            fit = _np.zeros_like(hist_mat)
+            for i, (amp, tune, phase) in enumerate(zip(amps, tunes, phases)):
+                fit[:, i] = TbTData()._TbT_model(n, amp, tune, phase)
+            diff = hist_mat - fit
+            bpms_rms_error = diff.std(axis=0)
+            avg_rms_errors = bpms_rms_error.mean()
+            print(f'average RMS errors for BPMs time-series: {avg_rms_errors}')
+            self.data['fit'+axis] = fit
+
+    def compare_fit_with_data(
+            self, bpm_idx=0, traj='xy', from_turn=(0, 0), to_turn=(20, 20)):
+        """."""
+        fig, ax = _mplt.subplots(1, len(traj), sharey=False)
+        for i, plane in enumerate(traj):
+            from_t, to_t = from_turn[i], to_turn[i]
+            arg = _np.arange(from_t, to_t+1)
+            ax[i].plot(
+                arg,
+                self.data['traj'+plane][from_turn[i]:to_turn[i] + 1, bpm_idx],
+                'o-', color='blue')
+            ax[i].plot(
+                arg,
+                self.data['fit'+plane][:, bpm_idx], 'o--', color='red')
+            ax[i].set_title(f'{plane} trajectory')
+            ax[i].set_xlim(from_t, to_t+1)
+            x_ticks = _np.arange(from_t, to_t+1, step=(to_t-from_t)//5)
+            ax[i].set_xticks(x_ticks)
+        fig.supylabel(f'trajectory [mm]')
+        fig.supxlabel(f'turns')
+        fig.tight_layout()
+        _mplt.show()
 
 
 class ADTSAnalysis():
