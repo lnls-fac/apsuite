@@ -449,6 +449,8 @@ class LOCOConfig:
             setquadall = set(self.famname_quadset)
             if not setquadfit.issubset(setquadall):
                 raise Exception('invalid quadrupole name used to fit!')
+        if use_families is None:
+            use_families = False
         self.use_quad_families = use_families
         if self.use_quad_families:
             self.quad_indices_kl = [None] * len(self.quadrupoles_to_fit)
@@ -468,29 +470,30 @@ class LOCOConfig:
     def update_sext_knobs(self, use_families):
         """."""
         if self.sextupoles_to_fit is None:
-            self.sext_indices_kl = self.famname_sextset
-            self.sext_indices_ksl = self.sext_indices_kl
+            self.sextupoles_to_fit = self.famname_sextset
         else:
             setsextfit = set(self.sextupoles_to_fit)
             setsextall = set(self.famname_sextset)
             if not setsextfit.issubset(setsextall):
                 raise Exception('invalid sextupole name used to fit!')
-            self.use_sext_families = use_families
-            if self.use_sext_families:
-                self.sext_indices_kl = [None] * len(self.sextupoles_to_fit)
-                self.sext_indices_ksl = []
-                for idx, fam_name in enumerate(self.sextupoles_to_fit):
-                    fam = self.respm.fam_data
-                    self.sext_indices_kl[idx] = fam[fam_name]['index']
-                    self.sext_indices_ksl += self.sext_indices_kl[idx]
-                self.sext_indices_ksl.sort()
-            else:
-                self.sext_indices_kl = []
-                for fam_name in self.sextupoles_to_fit:
-                    fam = self.respm.fam_data
-                    self.sext_indices_kl += fam[fam_name]['index']
-                self.sext_indices_kl.sort()
-                self.sext_indices_ksl = self.sext_indices_kl
+        if use_families is None:
+            use_families = False
+        self.use_sext_families = use_families
+        if self.use_sext_families:
+            self.sext_indices_kl = [None] * len(self.sextupoles_to_fit)
+            self.sext_indices_ksl = []
+            for idx, fam_name in enumerate(self.sextupoles_to_fit):
+                fam = self.respm.fam_data
+                self.sext_indices_kl[idx] = fam[fam_name]['index']
+                self.sext_indices_ksl += self.sext_indices_kl[idx]
+            self.sext_indices_ksl.sort()
+        else:
+            self.sext_indices_kl = []
+            for fam_name in self.sextupoles_to_fit:
+                fam = self.respm.fam_data
+                self.sext_indices_kl += fam[fam_name]['index']
+            self.sext_indices_kl.sort()
+            self.sext_indices_ksl = self.sext_indices_kl
 
     def update_skew_quad_knobs(self):
         """."""
@@ -533,6 +536,8 @@ class LOCOConfig:
             setdipall = set(self.famname_dipset)
             if not setdipfit.issubset(setdipall):
                 raise Exception('invalid dipole name used to fit!')
+        if use_families is None:
+            use_families = False
         self.use_dip_families = use_families
         if self.use_dip_families:
             self.dip_indices_kl = [None] * len(self.dipoles_to_fit)
