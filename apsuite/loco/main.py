@@ -542,7 +542,9 @@ class LOCO:
 
         # apply weight
         self._jloco = _LOCOUtils.jloco_apply_weight(
-            self._jloco, self.config.weight_bpm, self.config.weight_corr)
+            self._jloco,
+            self.config.weight_bpm, self.config.weight_corr,
+            self.config.weight_dispx, self.config.weight_dispy)
 
         if not self.config.use_dispersion:
             jloco_temp = _np.reshape(
@@ -728,7 +730,9 @@ class LOCO:
         if not self.config.use_diagonal:
             matrix_diff = _LOCOUtils.remove_diagonal(matrix_diff, 160, 120)
         matrix_diff = _LOCOUtils.apply_all_weight(
-            matrix_diff, self.config.weight_bpm, self.config.weight_corr)
+            matrix_diff,
+            self.config.weight_bpm, self.config.weight_corr,
+            self.config.weight_dispx, self.config.weight_dispy)
         res = matrix_diff.ravel()
         if self.config.constraint_deltak_total:
             kdeltas = []

@@ -76,10 +76,22 @@ class LOCOUtils:
         return matrix * weight_corr[None, :]
 
     @staticmethod
-    def apply_all_weight(matrix, weight_bpm, weight_corr):
+    def apply_dispersion_weight(matrix, weight_dispx, weight_dispy):
+        """."""
+        mat = matrix.copy()
+        nr_bpm = mat.shape[0]//2
+        mat[:nr_bpm, -1] *= weight_dispx
+        mat[nr_bpm:, -1] *= weight_dispy
+        return mat
+
+    @staticmethod
+    def apply_all_weight(
+            matrix, weight_bpm, weight_corr, weight_dispx, weight_dispy):
         """."""
         matrix = LOCOUtils.apply_bpm_weight(matrix, weight_bpm)
         matrix = LOCOUtils.apply_corr_weight(matrix, weight_corr)
+        matrix = LOCOUtils.apply_dispersion_weight(
+            matrix, weight_dispx, weight_dispy)
         return matrix
 
     @staticmethod
@@ -611,9 +623,14 @@ class LOCOUtils:
         return jloco
 
     @staticmethod
-    def jloco_apply_weight(jloco, weight_bpm, weight_corr):
+    def jloco_apply_weight(
+            jloco, weight_bpm, weight_corr, weight_dispx, weight_dispy):
         """."""
-        weight = (weight_bpm * weight_corr[None, :]).ravel()
+        weight = weight_bpm * weight_corr[None, :]
+        nr_bpms = weight_bpm.size//2
+        weight[:nr_bpms, -1] *= weight_dispx
+        weight[nr_bpms:, -1] *= weight_dispy
+        weight = weight.ravel()
         return weight[:, None] * jloco
 
     @staticmethod

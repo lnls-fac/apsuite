@@ -99,6 +99,8 @@ class LOCOConfig:
         self.weight_bpm = None
         self.weight_corr = None
         self.weight_deltakl = None
+        self.weight_dispx = None
+        self.weight_dispy = None
         self.deltakl_normalization = None
         self.tolerance_delta = None
         self.tolerance_overfit = None
@@ -430,6 +432,12 @@ class LOCOConfig:
         if self.deltakl_normalization is None:
             self.deltakl_normalization = LOCOConfig.\
                 DEFAULT_DELTAK_NORMALIZATION
+
+        if self.weight_dispx is None:
+            self.weight_dispx = 1
+
+        if self.weight_dispy is None:
+            self.weight_dispy = 1
 
     def update_quad_knobs(self, use_families):
         """."""
