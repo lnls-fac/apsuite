@@ -28,7 +28,7 @@ if __name__ == '__main__':
     generate_errors = lattice_errors.GenerateErrors()
     generate_errors.nr_mach = nr_mach
     generate_errors.generate_new_seed()
-    # generate_errors.seed = 204800
+    # generate_errors.seed = 535040
     generate_errors.reset_seed()
     print(generate_errors.seed)
     generate_errors.famdata = famdata
@@ -40,8 +40,8 @@ if __name__ == '__main__':
     machineparams = lattice_errors.MachinesParams()
 
     # If running for the first time there will be no jacobian to load
-    machineparams.load_jacobians = True
-    machineparams.save_jacobians = False
+    machineparams.load_jacobians = False
+    machineparams.save_jacobians = True
 
     # Do corrections after application of multipole errors
     machineparams.do_multipoles_corr = True
@@ -56,11 +56,11 @@ if __name__ == '__main__':
     machineparams.force_orb_correction = True
 
     # Configure parameters for orbit correction
-    machineparams.orbcorr_params.minsingval = 0
+    machineparams.orbcorr_params.minsingval = 0.3
     machineparams.orbcorr_params.tikhonovregconst = 1
     machineparams.orbcorr_params.orbrmswarnthres = 20e-6  # rad
     machineparams.orbcorr_params.numsingval = 281
-    machineparams.orbcorr_params.maxnriters = 15
+    machineparams.orbcorr_params.maxnriters = 30
     machineparams.orbcorr_params.convergencetol = 1e-9
     machineparams.orbcorr_params.maxdeltakickch = 50e-6
     machineparams.orbcorr_params.maxdeltakickcv = 50e-6
@@ -68,12 +68,12 @@ if __name__ == '__main__':
     machineparams.orbcorr_params.maxkickcv = 300e-6  # rad
 
     # Configure parameters for optics correction
-    machineparams.optcorr_params.nr_singval = 80
+    machineparams.optcorr_params.nr_singval = 65
     machineparams.optcorr_params.tolerance = 1e-8
 
     # Configure parameters for coupling correction
-    machineparams.coupcorr_params.nr_singval = 80
-    machineparams.coupcorr_params.tolerance = 1e-8
+    machineparams.coupcorr_params.nr_singval = 40
+    machineparams.coupcorr_params.tolerance = 1e-6
     machineparams.coupcorr_params.weight_dispy = 1e5
 
     # Create GenerateMachines object

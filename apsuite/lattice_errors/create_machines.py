@@ -1,8 +1,4 @@
-#!/usr/bin/env python-sirius
-
 import numpy as _np
-import matplotlib.pyplot as _plt
-import time as _time
 import copy as _copy
 
 import pyaccel as _pyaccel
@@ -11,7 +7,6 @@ from apsuite.orbcorr import OrbitCorr, CorrParams
 from apsuite.optics_analysis import TuneCorr, OpticsCorr, CouplingCorr
 from apsuite.commisslib.measure_bba import BBAParams
 from mathphys.functions import save_pickle, load_pickle
-from mathphys import units
 
 
 class MachinesParams:
@@ -936,7 +931,7 @@ class GenerateMachines:
             pymodels object: Lattice with kickmap
 
         """
-        kickmaps = _pymodels.si.lattice.create_id_kickmaps_dict(
+        kickmaps, _ = _pymodels.si.lattice.create_id_kickmaps_dict(
             self.ids, energy=3e9)
         twiss, *_ = _pyaccel.optics.calc_twiss(model, indices='closed')
         print('Model without ID:')

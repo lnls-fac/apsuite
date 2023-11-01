@@ -1,17 +1,7 @@
-#!/usr/bin/env python-sirius
-
 import numpy as _np
-import matplotlib.pyplot as _plt
 import time as _time
-import copy as _copy
 
-import pyaccel as _pyaccel
-import pymodels as _pymodels
-from apsuite.orbcorr import OrbitCorr, CorrParams
-from apsuite.optics_analysis import TuneCorr, OpticsCorr, CouplingCorr
-from apsuite.commisslib.measure_bba import BBAParams
 from mathphys.functions import save_pickle, load_pickle
-from mathphys import units
 
 
 class ConfigErrors:
