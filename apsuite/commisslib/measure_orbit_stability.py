@@ -1,19 +1,18 @@
 """."""
 import numpy as _np
+import scipy.fft as _sp_fft
 import matplotlib.pyplot as _plt
 import datetime as _datetime
-import time as _time
 
 from mathphys.functions import load_pickle
 import siriuspy.clientconfigdb as _sconf
+
 from .. import asparams as _asparams
-from ..utils import MeasBaseClass as _BaseClass, \
-    ParamsBaseClass as _ParamsBaseClass
-from siriuspy.devices import Tune, CurrInfoSI, \
-    Trigger, Event, EVG, RFGen, FamBPMs
+
+from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals
 
 
-class OrbitAnalysis:
+class OrbitAnalysis(_AcqBPMsSignals):
     """."""
 
     MOM_COMPACT = _asparams.SI_MOM_COMPACT
@@ -21,7 +20,9 @@ class OrbitAnalysis:
     HARM_NUM = _asparams.SI_HARM_NUM
     ENERGY_SPREAD = _asparams.SI_ENERGY_SPREAD
 
-    def __init__(self, filename='', orm_name=''):
+    def __init__(
+                self, filename='', orm_name='', isonline=False,
+                ispost_mortem=False):
         """Analysis of orbit over time at BPMs for a given acquisition rate.
 
         Args:
@@ -30,15 +31,14 @@ class OrbitAnalysis:
             orm_name (str, optional): name of the ORM to be used as reference
                 for orbit analysis. Defaults to ''
         """
+        super().__init__(isonline=isonline, ispost_mortem=ispost_mortem)
         self._fname = filename
-        self._data = None
         self._etax, self._etay = None, None
         self._orbx, self._orby = None, None
         self._orm_meas = None
         self._sampling_freq = None
         self._switching_freq = None
         self._rf_freq = None
-        self.analysis = dict()
         self.orm_client = _sconf.ConfigDBClient(config_type='si_orbcorr_respm')
         if self.fname:
             self.load_orb()
@@ -52,15 +52,6 @@ class OrbitAnalysis:
     @fname.setter
     def fname(self, val):
         self._fname = val
-
-    @property
-    def data(self):
-        """."""
-        return self._data
-
-    @data.setter
-    def data(self, val):
-        self._data = val
 
     @property
     def orbx(self):
@@ -136,7 +127,11 @@ class OrbitAnalysis:
 
     def load_orb(self):
         """Load files in old format."""
-        data = load_pickle(self.fname)
+        keys = self.load_and_apply(self.fname)
+        if keys:
+            print('The following keys were not used:')
+            print('    ', str(keys))
+        data = self.data
         timestamp = _datetime.datetime.fromtimestamp(data['timestamp'])
         gtmp = '{0:<20s} = {1:}  {2:}\n'.format
         ftmp = '{0:<20s} = {1:9.5f}  {2:}\n'.format
@@ -148,22 +143,37 @@ class OrbitAnalysis:
         stg += ftmp('tuney', data['tuney'], '')
         stg += gtmp('tunex_enable', bool(data['tunex_enable']), '')
         stg += gtmp('tuney_enable', bool(data['tuney_enable']), '')
-        stg += gtmp('bpms_acq_rate', data['bpms_acq_rate'], '')
-        stg += gtmp('bpms_switching_mode', data['bpms_switching_mode'], '')
+        stg += gtmp('acq_rate', data['acq_rate'], '')
+        stg += gtmp('switching_mode', data['switching_mode'], '')
         stg += gtmp(
-            'bpms_switching_frequency', data['bpms_switching_frequency'], '')
-        stg += gtmp('bpms_nrsamples_pre', data['bpms_nrsamples_pre'], '')
-        stg += gtmp('bpms_nrsamples_post', data['bpms_nrsamples_post'], '')
-        orbx, orby = data['orbx'], data['orby']
+            'switching_frequency', data['switching_frequency'], '')
+        stg += gtmp('nrsamples_pre', data['nrsamples_pre'], '')
+        stg += gtmp('nrsamples_post', data['nrsamples_post'], '')
+        orbx, orby = data['orbx'].copy(), data['orby'].copy()
         # zero mean in samples dimension
         orbx -= orbx.mean(axis=0)[None, :]
         orby -= orby.mean(axis=0)[None, :]
-        self.data = data
         self.orbx, self.orby = orbx, orby
         self.rf_freq = data['rf_frequency']
         self._get_sampling_freq()
         self._get_switching_freq()
         return stg
+
+    def load_and_apply(self, fname, orm_name=''):
+        """Load and apply `data` and `params` from pickle or HDF5 file.
+
+        Args:
+            fname (str): name of the pickle file. If extension is not provided,
+                '.pickle' will be added and a pickle file will be assumed.
+                If provided, must be '.pickle' for pickle files or
+                {'.h5', '.hdf5', '.hdf', '.hd5'} for HDF5 files.
+
+        """
+        keys = super().load_and_apply(fname)
+        self.get_appropriate_orm_data(orm_name)
+        self._get_sampling_freq()
+        self._get_switching_freq()
+        return keys
 
     def get_appropriate_orm_data(self, orm_name=''):
         """Find Orbit Response Matrix measured close to data acquisition."""
@@ -183,24 +193,24 @@ class OrbitAnalysis:
 
     def calc_integrated_spectrum(self, spec, inverse=False):
         """."""
-        spec2 = spec*spec
+        spec_abs = _np.abs(spec)
+        spec2 = spec_abs*spec_abs
         if inverse:
             intpsd = _np.sqrt(2*_np.cumsum(spec2[::-1], axis=0))[::-1]
         else:
             intpsd = _np.sqrt(2*_np.cumsum(spec2, axis=0))
         return intpsd
 
-    def remove_switching_freq(self, orbx=None, orby=None):
+    def filter_switching(self, orb):
         """."""
-        orbx = orbx or self.orbx.copy()
-        orby = orby or self.orby.copy()
-        fs = self.sampling_freq
-        fsw = self.switching_freq
-        fil_orbx, freq = self.filter_matrix(
-            orbx, fmin=0, fmax=fsw*0.9, fs=fs)
-        fil_orby, _ = self.filter_matrix(
-            orby, fmin=0, fmax=fsw*0.9, fs=fs)
-        return fil_orbx, fil_orby, freq
+        fsmp = self.sampling_freq
+        fswt = self.switching_freq
+        sw_mode = self.data['switching_mode']
+        # remove switching only if switching mode was on during acquisition
+        # AND the sampling frequency is greater than switching frequency
+        if fsmp / fswt > 1 and sw_mode == 'switching':
+            return self.filter_switching_cycles(orb, fsmp, fswt)
+        return orb
 
     def filter_around_freq(
             self, orbx=None, orby=None, central_freq=24*64, window=5):
@@ -212,8 +222,10 @@ class OrbitAnalysis:
         fmin = central_freq - window/2
         fmax = central_freq + window/2
         fs = self.sampling_freq
-        fil_orbx, _ = self.filter_matrix(orbx, fmin=fmin, fmax=fmax, fs=fs)
-        fil_orby, _ = self.filter_matrix(orby, fmin=fmin, fmax=fmax, fs=fs)
+        fil_orbx = self.filter_orbit_frequencies(
+            orbx, fmin=fmin, fmax=fmax, fsampling=fs)
+        fil_orby = self.filter_orbit_frequencies(
+            orby, fmin=fmin, fmax=fmax, fsampling=fs)
         return fil_orbx, fil_orby
 
     def energy_stability_analysis(
@@ -245,13 +257,14 @@ class OrbitAnalysis:
                 Defaults to True.
 
         """
-        orbx_ns, orby_ns, _ = self.remove_switching_freq()
+        orbx_ns = self.filter_switching(self.orbx)
+        orby_ns = self.filter_switching(self.orby)
         orbx, orby = self.filter_around_freq(
             orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
 
         orbxy_fil = _np.hstack((orbx, orby))
-        _, _, vhmat = self._calc_pca(orbxy_fil)
+        _, _, vhmat = self.calc_svd(orbxy_fil)
         etaxy = _np.hstack((self.etax, self.etay))
         etaxy_nm = etaxy - _np.mean(etaxy)
 
@@ -291,7 +304,7 @@ class OrbitAnalysis:
             data by filtering around a center frequency with a window.
 
         Args:
-            central_freq (float, optional): harmonic of interested to be
+            central_freq (float, optional): harmonic of interest to be
                 analyzed in [Hz]. Defaults to 60Hz. Units [Hz].
             window (int, optional): frequency window to filter the data.
                 Units [Hz].
@@ -304,7 +317,8 @@ class OrbitAnalysis:
                 x and y data.
 
         """
-        orbx_ns, orby_ns, _ = self.remove_switching_freq()
+        orbx_ns = self.filter_switching(self.orbx)
+        orby_ns = self.filter_switching(self.orby)
         orbx_fil, orby_fil = self.filter_around_freq(
             orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
@@ -312,6 +326,8 @@ class OrbitAnalysis:
         orby_spec, freqy = self.calc_spectrum(orby_fil, fs=self.sampling_freq)
         ipsdx = self.calc_integrated_spectrum(orbx_spec, inverse=inverse)
         ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
+        self.analysis['orbx_filtered'] = orbx_fil
+        self.analysis['orby_filtered'] = orby_fil
         self.analysis['orb_freqmax'] = central_freq + window/2
         self.analysis['orb_freqmin'] = central_freq - window/2
         self.analysis['orbx_spectrum'] = orbx_spec
@@ -324,8 +340,8 @@ class OrbitAnalysis:
             return
 
         if split_planes:
-            umatx, svalsx, vhmatx = self._calc_pca(orbx_fil)
-            umaty, svalsy, vhmaty = self._calc_pca(orby_fil)
+            umatx, svalsx, vhmatx = self.calc_svd(orbx_fil)
+            umaty, svalsy, vhmaty = self.calc_svd(orby_fil)
             self.analysis['orbx_umat'] = umatx
             self.analysis['orbx_svals'] = svalsx
             self.analysis['orbx_vhmat'] = vhmatx
@@ -334,10 +350,37 @@ class OrbitAnalysis:
             self.analysis['orby_vhmat'] = vhmaty
         else:
             orbxy_fil = _np.hstack((orbx_fil, orby_fil))
-            umatxy, svalsxy, vhmatxy = self._calc_pca(orbxy_fil)
+            umatxy, svalsxy, vhmatxy = self.calc_svd(orbxy_fil)
             self.analysis['orbxy_umat'] = umatxy
             self.analysis['orbxy_svals'] = svalsxy
             self.analysis['orbxy_vhmat'] = vhmatxy
+
+    def process_data_energy(
+            self, central_freq=24*64, window=5, inverse=True, orm_name='',
+            use_eta_meas=True):
+        """Energy Stability Analysis."""
+        self.subtract_average_orb()
+        self.get_appropriate_orm_data(orm_name)
+        self.energy_stability_analysis(
+            central_freq=central_freq, window=window, inverse=inverse,
+            use_eta_meas=use_eta_meas)
+
+    def process_data_orbit(
+            self, central_freq=60, window=10, inverse=False, pca=True,
+            split_planes=True):
+        """Orbit Stability Analysis."""
+        self.subtract_average_orb()
+        self.orbit_stability_analysis(
+            central_freq=central_freq, window=window,
+            inverse=inverse, pca=pca, split_planes=split_planes)
+
+    def subtract_average_orb(self):
+        """."""
+        orbx = self.data['orbx'].copy()
+        orby = self.data['orby'].copy()
+        orbx -= orbx.mean(axis=0)[None, :]
+        orby -= orby.mean(axis=0)[None, :]
+        self.orbx, self.orby = orbx, orby
 
     # plotting methods
     def plot_orbit_spectrum(
@@ -357,8 +400,10 @@ class OrbitAnalysis:
 
         if fig is None or axs is None:
             fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
-        axs[0].plot(freqx, orbx_spec[:, bpmidx], label=label, color=color)
-        axs[1].plot(freqy, orby_spec[:, bpmidx], label=label, color=color)
+        axs[0].plot(
+            freqx, _np.abs(orbx_spec)[:, bpmidx], label=label, color=color)
+        axs[1].plot(
+            freqy, _np.abs(orby_spec)[:, bpmidx], label=label, color=color)
         if title:
             axs[0].set_title(title)
         axs[0].legend(
@@ -424,7 +469,7 @@ class OrbitAnalysis:
                 print('PCA results of x orbit missing in analysis dict.')
                 return None
         else:
-            umatx, svalsx, vhmatx = self._calc_pca(orbx)
+            umatx, svalsx, vhmatx = self.calc_svd(orbx)
         if orby is None:
             anly = self.analysis
             try:
@@ -434,7 +479,7 @@ class OrbitAnalysis:
                 print('PCA results of y orbit missing in analysis dict.')
                 return None
         else:
-            umaty, svalsy, vhmaty = self._calc_pca(orby)
+            umaty, svalsy, vhmaty = self.calc_svd(orby)
 
         spacx = vhmatx[modes].T*svalsx[modes]/_np.sqrt(umatx.shape[0])
         spacy = vhmaty[modes].T*svalsy[modes]/_np.sqrt(umaty.shape[0])
@@ -477,7 +522,7 @@ class OrbitAnalysis:
 
         if fig is None or axs is None:
             fig, axs = _plt.subplots(1, 1, figsize=(18, 6))
-        axs.plot(freq, energy_spec*100, label=label, color=color)
+        axs.plot(freq, _np.abs(energy_spec)*100, label=label, color=color)
         self._plot_ripple_rfjitter_harmonics(freq, axs)
         axs.set_xlabel('Frequency [Hz]')
         axs.set_ylabel(r'Amplitude for DFT of $\delta(t)$')
@@ -521,42 +566,44 @@ class OrbitAnalysis:
         return fig, axs
 
     def _get_sampling_freq(self):
-        samp_freq = self.data.get('bpms_sampling_frequency')
+        samp_freq = self.data.get('sampling_frequency')
         if samp_freq is None:
-            print('bpms_sampling_frequency is not in the data.')
+            print('sampling_frequency is not in the data.')
         self.sampling_freq = samp_freq
 
     def _get_switching_freq(self):
-        swc_freq = self.data.get('bpms_switching_frequency')
+        swc_freq = self.data.get('switching_frequency')
         if swc_freq is None:
-            print('bpms_switching_frequency is not in the data.')
+            print('switching_frequency is not in the data.')
         self.switching_freq = swc_freq
 
     # static methods
     @staticmethod
-    def filter_matrix(matrix, fmin=0, fmax=None, fs=1):
-        """."""
-        if fmax is None:
-            fmax = fs/2
-        dft = _np.fft.rfft(matrix, axis=0)
-        freq = _np.fft.rfftfreq(matrix.shape[0], d=1/fs)
-        idcs = (freq < fmin) | (freq > fmax)
-        dft[idcs] = 0
-        return _np.fft.irfft(dft, axis=0), freq
+    def filter_orbit_frequencies(
+            orb, fmin, fmax, fsampling, keep_within_range=True):
+        """Filter acquisition matrix considering a frequency range.
 
-    @staticmethod
-    def calc_spectrum(data, fs=1):
-        """."""
-        dft = _np.fft.rfft(data, axis=0)
-        freq = _np.fft.rfftfreq(data.shape[0], d=1/fs)
-        spec = _np.abs(dft)/data.shape[0]
-        return spec, freq
+        Args:
+            matrix (numpy.array): 2d-array with timesamples along rows and
+            BPMs indices along columns.
+            fmin (float): minimum frequency in range.
+            fmax (float): maximum frequency in range.
+            fsampling (float): sampling frequency on matrix
+            keep_within_range (bool, optional): Defaults to True.
 
-    @staticmethod
-    def _calc_pca(data):
-        """."""
-        umat, svals, vhmat = _np.linalg.svd(data, full_matrices=False)
-        return umat, svals, vhmat
+        Returns:
+            filtered matrix (numpy.array): same structure as matrix.
+
+        """
+        dft = _sp_fft.rfft(orb, axis=0)
+        freq = _sp_fft.rfftfreq(orb.shape[0], d=1/fsampling)
+        if keep_within_range:
+            idcs = (freq < fmin) | (freq > fmax)
+            dft[idcs] = 0
+        else:
+            idcs = (freq > fmin) & (freq < fmax)
+            dft[idcs] = 0
+        return _sp_fft.irfft(dft, axis=0)
 
     @staticmethod
     def _calc_correlation(vec1, vec2):
@@ -576,222 +623,7 @@ class OrbitAnalysis:
         ripple, rfjitt = OrbitAnalysis._calc_ripple_rfjitter_harmonics(freq)
         for idx, rip in enumerate(ripple):
             lab = r'n $\times$ 60Hz' if not idx else ''
-            ax.axvline(
-                x=rip, ls='--', lw=1, label=lab, color='k')
+            ax.axvline(x=rip, ls='--', lw=1, label=lab, color='k')
         for idx, jit in enumerate(rfjitt):
             lab = r'n $\times$ 64Hz' if not idx else ''
-            ax.axvline(
-                x=jit, ls='--', lw=2, label=lab, color='tab:red')
-
-
-class OrbitAcquisitionParams(_ParamsBaseClass):
-    """."""
-
-    def __init__(self):
-        """."""
-        self.trigbpm_delay = 0.0
-        self.trigbpm_nrpulses = 1
-        self.do_pulse_evg = True
-        self.timing_event = 'Study'
-        self.event_delay = 0.0
-        self.event_mode = 'External'
-        self.orbit_timeout = 40
-        self.orbit_nrpoints_before = 0
-        self.orbit_nrpoints_after = 20000
-        self.orbit_acq_rate = 'FAcq'
-        self.orbit_acq_repeat = False
-
-    def __str__(self):
-        """."""
-        ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
-        dtmp = '{0:26s} = {1:9d}  {2:s}\n'.format
-        stmp = '{0:26s} = {1:9}  {2:s}\n'.format
-        stg = ''
-        stg += ftmp('trigbpm_delay', self.trigbpm_delay, '[us]')
-        stg += dtmp('trigbpm_nrpulses', self.trigbpm_nrpulses, '')
-        stg += stmp('do_pulse_evg', str(self.do_pulse_evg), '')
-        stg += stmp('timing_event', self.timing_event, '')
-        stg += ftmp('event_delay', self.event_delay, '[us]')
-        stg += stmp('event_mode', self.event_mode, '')
-        stg += ftmp('orbit_timeout', self.orbit_timeout, '[s]')
-        stg += dtmp('orbit_nrpoints_before', self.orbit_nrpoints_before, '')
-        stg += dtmp('orbit_nrpoints_after', self.orbit_nrpoints_after, '')
-        stg += stmp('orbit_acq_rate', self.orbit_acq_rate, '')
-        stg += dtmp('orbit_acq_repeat', self.orbit_acq_repeat, '')
-        return stg
-
-
-class OrbitAcquisition(OrbitAnalysis, _BaseClass):
-    """."""
-
-    BPM_TRIGGER = 'SI-Fam:TI-BPM'
-    PSM_TRIGGER = 'SI-Fam:TI-BPM-PsMtn'
-
-    def __init__(self, isonline=True, ispost_mortem=False):
-        """."""
-        _BaseClass.__init__(
-            self, params=OrbitAcquisitionParams(), isonline=isonline)
-        OrbitAnalysis.__init__(self)
-        self._ispost_mortem = ispost_mortem
-
-        if self.isonline:
-            self.create_devices()
-
-    def create_devices(self):
-        """."""
-        self.devices['currinfo'] = CurrInfoSI()
-        self.devices['fambpms'] = FamBPMs(
-            FamBPMs.DEVICES.SI, ispost_mortem=self._ispost_mortem)
-        self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        trigname = self.BPM_TRIGGER
-        if self._ispost_mortem:
-            trigname = self.PSM_TRIGGER
-        self.devices['trigbpm'] = Trigger(trigname)
-        self.devices['evt_study'] = Event('Study')
-        self.devices['evg'] = EVG()
-        self.devices['rfgen'] = RFGen()
-
-    def get_initial_state(self):
-        """."""
-        trigbpm = self.devices['trigbpm']
-        evt_study = self.devices['evt_study']
-        state = dict()
-        state['trigbpm_source'] = trigbpm.source
-        state['trigbpm_nrpulses'] = trigbpm.nr_pulses
-        state['trigbpm_delay'] = trigbpm.delay
-        state['evt_study_delay'] = evt_study.delay
-        state['evt_study_mode'] = evt_study.mode
-        return state
-
-    def recover_initial_state(self, state):
-        """."""
-        trigbpm = self.devices['trigbpm']
-        evt_study = self.devices['evt_study']
-
-        trigbpm.source = state['trigbpm_source']
-        trigbpm.nr_pulses = state['trigbpm_nrpulses']
-        trigbpm.delay = state['trigbpm_delay']
-        evt_study.delay = state['evt_study_delay']
-        evt_study.mode = state['evt_study_mode']
-
-    def prepare_timing(self):
-        """."""
-        if self.params.timing_event != 'Study':
-            return
-
-        trigbpm = self.devices['trigbpm']
-        evt_study = self.devices['evt_study']
-
-        trigbpm.delay = self.params.trigbpm_delay
-        trigbpm.nr_pulses = self.params.trigbpm_nrpulses
-        trigbpm.source = self.params.timing_event
-
-        evt_study.delay = self.params.event_delay
-        evt_study.mode = self.params.event_mode
-
-        # Update event configurations in EVG
-        self.devices['evg'].cmd_update_events()
-
-    def trigger_timing_signal(self):
-        """."""
-        if not self.params.do_pulse_evg:
-            return
-        if self.params.timing_event == 'Study':
-            self.devices['evt_study'].cmd_external_trigger()
-        else:
-            self.devices['evg'].cmd_turn_on_injection()
-
-    def prepare_bpms_acquisition(self):
-        """."""
-        fambpms = self.devices['fambpms']
-        prms = self.params
-        return fambpms.mturn_config_acquisition(
-            nr_points_after=prms.orbit_nrpoints_after,
-            nr_points_before=prms.orbit_nrpoints_before,
-            acq_rate=prms.orbit_acq_rate,
-            repeat=prms.orbit_acq_repeat)
-
-    def acquire_data(self):
-        """."""
-        fambpms = self.devices['fambpms']
-        ret = self.prepare_bpms_acquisition()
-        if ret < 0:
-            print(f'BPM {-ret-1:d} did not finish last acquisition.')
-        elif ret > 0:
-            print(f'BPM {ret-1:d} is not ready for acquisition.')
-
-        get_sum = False
-        fambpms.mturn_reset_flags_and_update_initial_timestamps(
-            consider_sum=get_sum)
-
-        self.trigger_timing_signal()
-
-        time0 = _time.time()
-        ret = fambpms.mturn_wait_update(
-            timeout=self.params.orbit_timeout, consider_sum=get_sum)
-        print(f'it took {_time.time()-time0:02f}s to update bpms')
-        if ret != 0:
-            print(f'There was a problem with acquisition. Error code {ret:d}')
-            return
-        self.data = self.get_data(get_sum=get_sum)
-
-    def get_data(self, get_sum=False):
-        """Get Orbit and auxiliary data."""
-        fambpms = self.devices['fambpms']
-        orbx, orby = fambpms.get_mturn_orbit(return_sum=get_sum)
-
-        data = dict()
-        data['ispost_mortem'] = self._ispost_mortem
-        data['timestamp'] = _time.time()
-        self.rf_freq = self.devices['rfgen'].frequency
-        data['rf_frequency'] = self.rf_freq
-        data['stored_current'] = self.devices['currinfo'].current
-        data['orbx'], data['orby'] = orbx, orby
-        tune = self.devices['tune']
-        data['tunex'], data['tuney'] = tune.tunex, tune.tuney
-        bpm0 = self.devices['fambpms'].devices[0]
-        data['bpms_acq_rate'] = bpm0.acq_channel_str
-        data['bpms_sampling_frequency'] = fambpms.get_sampling_frequency(
-            self.rf_freq)
-        data['bpms_nrsamples_pre'] = bpm0.acq_nrsamples_pre
-        data['bpms_nrsamples_post'] = bpm0.acq_nrsamples_post
-        data['bpms_trig_delay_raw'] = self.devices['trigbpm'].delay_raw
-        data['bpms_switching_mode'] = bpm0.switching_mode_str
-        data['bpms_switching_frequency'] = fambpms.get_switching_frequency(
-            self.rf_freq)
-        data['tunex_enable'] = tune.enablex
-        data['tuney_enable'] = tune.enabley
-        return data
-
-    def process_data_energy(
-            self, central_freq=24*64, window=5, inverse=True,
-            orm_name='', use_eta_meas=True):
-        """Energy Stability Analysis."""
-        self._subtract_average_orb()
-        self.get_appropriate_orm_data(orm_name)
-        self.energy_stability_analysis(
-            central_freq=central_freq, window=window, inverse=inverse,
-            use_eta_meas=use_eta_meas)
-
-    def process_data_orbit(
-            self, central_freq=60, window=10, inverse=False, pca=True,
-            split_planes=True):
-        """Orbit Stability Analysis."""
-        self._subtract_average_orb()
-        self.orbit_stability_analysis(
-            central_freq=central_freq, window=window,
-            inverse=inverse, pca=pca, split_planes=split_planes)
-
-    def _subtract_average_orb(self):
-        orbx = self.data['orbx'].copy()
-        orby = self.data['orby'].copy()
-        orbx -= orbx.mean(axis=0)[None, :]
-        orby -= orby.mean(axis=0)[None, :]
-        self.orbx, self.orby = orbx, orby
-
-    def load_and_apply(self, fname, orm_name=''):
-        """."""
-        super().load_and_apply(fname)
-        self.get_appropriate_orm_data(orm_name)
-        self._get_sampling_freq()
-        self._get_switching_freq()
+            ax.axvline(x=jit, ls='--', lw=2, label=lab, color='tab:red')

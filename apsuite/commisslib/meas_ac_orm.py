@@ -99,7 +99,7 @@ class MeasACORM(_ThreadBaseClass):
         params = ACORMParams() if params is None else params
         super().__init__(
             params=params, target=self._do_measure, isonline=isonline)
-        self.bpms = dict()
+        self.bpms = None
 
         self.sofb_data = SOFBFactory.create('SI')
         self.configdb = _ConfigDBClient(config_type='si_orbcorr_respm')
@@ -107,10 +107,13 @@ class MeasACORM(_ThreadBaseClass):
             self._create_devices()
 
     def load_and_apply(self, fname: str):
-        """Load and apply `data` and `params` from pickle file.
+        """Load and apply `data` and `params` from pickle or HDF5 file.
 
         Args:
-            fname (str): name of the pickle file. Extension is not needed.
+            fname (str): name of the pickle file. If extension is not provided,
+                '.pickle' will be added and a pickle file will be assumed.
+                If provided, must be '.pickle' for pickle files or
+                {'.h5', '.hdf5', '.hdf', '.hd5'} for HDF5 files.
 
         """
         super().load_and_apply(fname)
@@ -365,16 +368,17 @@ class MeasACORM(_ThreadBaseClass):
             dict: BPMs data.
 
         """
-        orbx, orby = self.bpms.get_mturn_orbit(return_sum=False)
+        orbx, orby = self.bpms.get_mturn_signals()
         bpm0 = self.bpms.devices[0]
         rf_freq = self.devices['rfgen'].frequency
 
         data = dict()
         data['orbx'] = orbx
         data['orby'] = orby
+        data['rf_frequency'] = rf_freq
         data['bpms_acq_rate'] = bpm0.acq_channel_str
         data['bpms_sampling_frequency'] = self.bpms.get_sampling_frequency(
-            self.devices['rfgen'].frequency, data['bpms_acq_rate'])
+            rf_freq)
         data['bpms_nrsamples_pre'] = bpm0.acq_nrsamples_pre
         data['bpms_nrsamples_post'] = bpm0.acq_nrsamples_post
         data['bpms_trig_delay_raw'] = self.devices['trigbpms'].delay_raw
@@ -392,7 +396,6 @@ class MeasACORM(_ThreadBaseClass):
         """
         data = dict()
         data['timestamp'] = _time.time()
-        data['rf_frequency'] = self.devices['rfgen'].frequency
         data['stored_current'] = self.devices['currinfo'].current
         data['tunex'] = self.devices['tune'].tunex
         data['tuney'] = self.devices['tune'].tuney
@@ -445,7 +448,7 @@ class MeasACORM(_ThreadBaseClass):
         # Create BPMs
         t00 = _time.time()
         print('Creating BPMs             -> ', end='')
-        self.bpms = FamBPMs(FamBPMs.DEVICES.SI)
+        self.bpms = FamBPMs(mturn_signals2acq='XY')
         self.devices['fambpms'] = self.bpms
         print(f'ET: = {_time.time()-t00:.2f}s')
 
@@ -485,16 +488,14 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         print('    Sending Trigger signal...', end='')
-        self.bpms.mturn_reset_flags_and_update_initial_timestamps(
-            consider_sum=False)
+        self.bpms.mturn_reset_flags_and_update_initial_timestamps()
         self.devices['evt_study'].cmd_external_trigger()
         print(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         print('    Waiting BPMs to update...', end='')
-        ret = self.bpms.mturn_wait_update(
-            timeout=self.params.timeout_bpms, consider_sum=False)
+        ret = self.bpms.mturn_wait_update(timeout=self.params.timeout_bpms)
         if ret:
             print(
                 'Problem: timed out waiting BPMs update. '
@@ -526,8 +527,7 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         print('    Sending Trigger signal...', end='')
-        self.bpms.mturn_reset_flags_and_update_initial_timestamps(
-            consider_sum=False)
+        self.bpms.mturn_reset_flags_and_update_initial_timestamps()
         self.devices['evt_study'].cmd_external_trigger()
 
         t00 = _time.time()
@@ -544,8 +544,7 @@ class MeasACORM(_ThreadBaseClass):
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         print('    Waiting BPMs to update...', end='')
-        ret = self.bpms.mturn_wait_update(
-            timeout=self.params.timeout_bpms, consider_sum=False)
+        ret = self.bpms.mturn_wait_update(timeout=self.params.timeout_bpms)
         if ret:
             print(
                 'Problem: timed out waiting BPMs update. '
@@ -643,16 +642,14 @@ class MeasACORM(_ThreadBaseClass):
             # send event through timing system to start acquisitions
             t00 = _time.time()
             print('    Sending Timing signal...', end='')
-            self.bpms.mturn_reset_flags_and_update_initial_timestamps(
-                consider_sum=False)
+            self.bpms.mturn_reset_flags_and_update_initial_timestamps()
             self.devices['evt_study'].cmd_external_trigger()
             print(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # Wait BPMs PV to update with new data
             t00 = _time.time()
             print('    Waiting BPMs to update...', end='')
-            ret = self.bpms.mturn_wait_update(
-                timeout=self.params.timeout_bpms, consider_sum=False)
+            ret = self.bpms.mturn_wait_update(timeout=self.params.timeout_bpms)
             if ret:
                 print(
                     'Problem: timed out waiting BPMs update. '
@@ -931,9 +928,8 @@ class MeasACORM(_ThreadBaseClass):
 
     def _config_bpms(self, nr_points):
         return self.bpms.mturn_config_acquisition(
-            acq_rate=self.params.acq_rate,
-            nr_points_before=0, nr_points_after=nr_points,
-            repeat=False, external=True)
+            acq_rate=self.params.acq_rate, nr_points_before=0,
+            nr_points_after=nr_points, repeat=False, external=True)
 
     # ----------------- Timing related methods -----------------------
 
