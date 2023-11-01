@@ -350,7 +350,7 @@ class LOCOConfig:
         # bpm
         if gain_bpm is None:
             if self.gain_bpm is None:
-                self.gain_bpm = _np.zeros(2*self.nr_bpm)
+                self.gain_bpm = _np.ones(2*self.nr_bpm)
         else:
             if isinstance(gain_bpm, (int, float)):
                 self.gain_bpm = _np.ones(2*self.nr_bpm) * gain_bpm
@@ -369,7 +369,7 @@ class LOCOConfig:
         # corr
         if gain_corr is None:
             if self.gain_corr is None:
-                self.gain_corr = _np.zeros(self.nr_corr)
+                self.gain_corr = _np.ones(self.nr_corr)
         else:
             if isinstance(gain_corr, (int, float)):
                 self.gain_bpm = _np.ones(self.nr_corr) * gain_corr
@@ -481,7 +481,7 @@ class LOCOConfig:
                 self.sext_indices_ksl = []
                 for idx, fam_name in enumerate(self.sextupoles_to_fit):
                     fam = self.respm.fam_data
-                    self.sext_indices_kl[idx] = [fam_name]['index']
+                    self.sext_indices_kl[idx] = fam[fam_name]['index']
                     self.sext_indices_ksl += self.sext_indices_kl[idx]
                 self.sext_indices_ksl.sort()
             else:

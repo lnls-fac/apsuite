@@ -697,7 +697,7 @@ class LOCO:
 
         # bpm inival and deltas
         if self._gain_bpm_inival is None:
-            self._gain_bpm_inival = _np.zeros(2*self.config.nr_bpm)
+            self._gain_bpm_inival = _np.ones(2*self.config.nr_bpm)
         if self._roll_bpm_inival is None:
             self._roll_bpm_inival = _np.zeros(self.config.nr_bpm)
         self._gain_bpm_delta = _np.zeros(2*self.config.nr_bpm)
@@ -705,7 +705,7 @@ class LOCO:
 
         # corr inival and deltas
         if self._gain_corr_inival is None:
-            self._gain_corr_inival = _np.zeros(self.config.nr_corr)
+            self._gain_corr_inival = _np.ones(self.config.nr_corr)
         self._gain_corr_delta = _np.zeros(self.config.nr_corr)
 
         check_case = self._gain_bpm_inival is not None

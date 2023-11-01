@@ -40,7 +40,7 @@ class LOCOUtils:
     @staticmethod
     def apply_bpm_gain(matrix, gain):
         """."""
-        return (1 + gain[:, None]) * matrix
+        return gain[:, None] * matrix
 
     @staticmethod
     def apply_bpm_roll(matrix, roll):
@@ -54,7 +54,7 @@ class LOCOUtils:
     @staticmethod
     def apply_corr_gain(matrix, gain):
         """."""
-        matrix[:, :-1] *= (1 + gain[None, :])
+        matrix[:, :-1] *= gain[None, :]
         return matrix
 
     @staticmethod
@@ -221,7 +221,7 @@ class LOCOUtils:
         if config.gain_bpm is not None:
             g_bpm = config.gain_bpm
         else:
-            g_bpm = _np.zeros(2*nbpm)
+            g_bpm = _np.ones(2*nbpm)
         if config.roll_bpm is not None:
             alpha_bpm = config.roll_bpm
         else:
@@ -246,7 +246,7 @@ class LOCOUtils:
             kron = LOCOUtils.kronecker(idx, idx, shape0//2)
             kron = _np.tile(kron, (2, 2))
             drmat = _np.dot(kron, dr_alpha)
-            dbmat = drmat * (1 + g_bpm[:, None])
+            dbmat = drmat * g_bpm[:, None]
             dmdalpha_bpm[:, idx] = _np.dot(dbmat, matrix).ravel()
 
         dmdg_corr = _np.zeros((shape0*shape1, ncorr))
