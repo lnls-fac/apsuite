@@ -247,7 +247,7 @@ class FOFBSysIdAcq(_BaseClass):
         lvls1 = off + amp * vs
         return lvls0[:-1], lvls1[:-1]
 
-    def get_levels_bpms_from_svd(self, lvl0, lvl1):
+    def get_levels_bpms_from_svd(self, lvl0, lvl1, ampmin=0):
         """Get levels from SVD for BPMs devices.
 
         Args:
@@ -266,17 +266,24 @@ class FOFBSysIdAcq(_BaseClass):
 
         """
         respm = self.params.svd_levels_respmat
+        # Zeroing RF column
+        respm[:, -1].fill(0)
         singval = self.params.svd_levels_singmode_idx
 
         if self.params.svd_levels_regularize_matrix:
             respm = self._calc_matrix_regularization(respm)
         respm = self._convert_respmat_from_phys2hard_units(respm)
 
-        u, *_ = self._calc_svd(respm)
+        u, s, _ = self._calc_svd(respm)
         us = u[:, singval]
         us /= _np.abs(us).max()
+        ss = s[singval]
+        ss /= _np.abs(s).max()
         amp = (lvl1-lvl0)/2
         off = (lvl1+lvl0)/2
+        # Scales the amplitude with its corresponding singular value
+        # (normalized). The amplitudes are saturated to 'ampmin'.
+        amp = max(amp * ss, ampmin)
         lvls0 = off - amp * us
         lvls1 = off + amp * us
         lvls0x, lvls1x = lvls0[:SI_NUM_BPMS], lvls1[:SI_NUM_BPMS]
