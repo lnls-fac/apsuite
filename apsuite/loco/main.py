@@ -67,10 +67,10 @@ class LOCO:
         self._jloco_ksl_bc = None
         self._jloco_ksl_skew_quad = None
 
-        self._jloco_kick_b1 = None
-        self._jloco_kick_b2 = None
-        self._jloco_kick_bc = None
-        self._jloco_kick_dip = None
+        self._jloco_hkick_b1 = None
+        self._jloco_hkick_b2 = None
+        self._jloco_hkick_bc = None
+        self._jloco_hkick_dip = None
 
         self._jloco_energy_shift = None
         self._jloco_girder_shift = None
@@ -101,8 +101,8 @@ class LOCO:
         self._skew_quad_ksl_deltas = None
         self._skew_quad_ksl_deltas_step = None
 
-        self._dip_kick_inival = None
-        self._dip_kick_deltas = None
+        self._dip_hkick_inival = None
+        self._dip_hkick_deltas = None
 
         self._energy_shift_inival = None
         self._energy_shift_deltas = None
@@ -149,7 +149,7 @@ class LOCO:
                fname_jloco_ksl_quad=None,
                fname_jloco_ksl_sext=None,
                fname_jloco_ksl_dip=None,
-               fname_jloco_kick_dip=None,
+               fname_jloco_hkick_dip=None,
                fname_jloco_ksl_skewquad=None,
                fname_jloco_girder_shift=None):
         """."""
@@ -168,7 +168,7 @@ class LOCO:
                 fname_jloco_ksl_quad=fname_jloco_ksl_quad,
                 fname_jloco_ksl_sext=fname_jloco_ksl_sext,
                 fname_jloco_ksl_dip=fname_jloco_ksl_dip,
-                fname_jloco_kick_dip=fname_jloco_kick_dip,
+                fname_jloco_hkick_dip=fname_jloco_hkick_dip,
                 fname_jloco_ksl_skewquad=fname_jloco_ksl_skewquad,
                 fname_jloco_girder_shift=fname_jloco_girder_shift)
             print('update svd...')
@@ -374,20 +374,20 @@ class LOCO:
                 self._jloco_ksl_sext = self._convert_dict2array(
                     jloco_ksl_sext_dict, 'sextupole', is_normal=False)
 
-    def _handle_dip_fit_kick(self, fname_jloco_kick_dip=None):
-        # calculate kick jacobian for dipole
-        if self.config.fit_dipoles_kick:
-            if fname_jloco_kick_dip is None:
-                print('calculating dipoles kick matrix...')
-                self._jloco_kick_dip = _LOCOUtils.jloco_calc_kick_dipoles(
+    def _handle_dip_fit_hkick(self, fname_jloco_hkick_dip=None):
+        # calculate hkick jacobian for dipole
+        if self.config.fit_dipoles_hkick:
+            if fname_jloco_hkick_dip is None:
+                print('calculating dipoles hkick matrix...')
+                self._jloco_hkick_dip = _LOCOUtils.jloco_calc_hkick_dipoles(
                     self.config, self._model)
             else:
-                print('loading dipole kick matrix...')
-                self._jloco_kick_dip = _LOCOUtils.load_data(
-                    fname_jloco_kick_dip)['jloco_klmatrix']
+                print('loading dipole hkick matrix...')
+                self._jloco_hkick_dip = _LOCOUtils.load_data(
+                    fname_jloco_hkick_dip)['jloco_klmatrix']
 
     def _handle_girder_shift(self, fname_jloco_girder_shift=None):
-        # calculate kick jacobian for dipole
+        # calculate hkick jacobian for dipole
         if self.config.fit_girder_shift:
             if fname_jloco_girder_shift is None:
                 print('calculating girder shift matrix...')
@@ -494,7 +494,7 @@ class LOCO:
                      fname_jloco_ksl_dip=None,
                      fname_jloco_ksl_quad=None,
                      fname_jloco_ksl_sext=None,
-                     fname_jloco_kick_dip=None,
+                     fname_jloco_hkick_dip=None,
                      fname_jloco_ksl_skewquad=None,
                      fname_jloco_girder_shift=None):
         """."""
@@ -506,7 +506,7 @@ class LOCO:
             self._jloco_kl = _LOCOUtils.load_data(
                 fname_jloco_kl)['jloco_klmatrix']
         else:
-            self._handle_dip_fit_kick(fname_jloco_kick_dip)
+            self._handle_dip_fit_hkick(fname_jloco_hkick_dip)
 
             self._handle_dip_fit_kl(fname_jloco_kl_dip)
             self._handle_quad_fit_kl(fname_jloco_kl_quad)
@@ -537,7 +537,7 @@ class LOCO:
             self._jloco_kl_quad, self._jloco_kl_sext, self._jloco_kl_dip,
             self._jloco_ksl_quad, self._jloco_ksl_sext, self._jloco_ksl_dip,
             self._jloco_gain_bpm, self._jloco_roll_bpm,
-            self._jloco_gain_corr, self._jloco_kick_dip,
+            self._jloco_gain_corr, self._jloco_hkick_dip,
             self._jloco_energy_shift, self._jloco_ksl_skew_quad,
             self._jloco_girder_shift)
 
@@ -952,14 +952,14 @@ class LOCO:
                     model, idx_set,
                     self._dip_ksl_inival[idx], self._dip_ksl_deltas[idx])
             one_knob = True
-        if 'dipoles_kicks' in param_dict:
-            # update dipoles kick delta
-            self._dip_kick_deltas += param_dict['dipoles_kick']
+        if 'dipoles_hkicks' in param_dict:
+            # update dipoles hkick delta
+            self._dip_hkick_deltas += param_dict['dipoles_hkick']
             # update local model
-            for idx, idx_set in enumerate(config.dip_indices_kick):
-                _LOCOUtils.set_dipmag_kick(
+            for idx, idx_set in enumerate(config.dip_indices_hkick):
+                _LOCOUtils.set_dipmag_hkick(
                     model, idx_set,
-                    self._dip_kick_inival[idx], self._dip_kick_deltas[idx])
+                    self._dip_hkick_inival[idx], self._dip_hkick_deltas[idx])
             one_knob = True
         if 'skew_quadrupoles' in param_dict:
             # update skew quadrupoles

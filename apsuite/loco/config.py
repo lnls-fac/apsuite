@@ -16,7 +16,7 @@ class LOCOConfig:
 
     DEFAULT_DELTA_KL = 1e-6  # [1/m]
     DEFAULT_DELTA_KSL = 1e-6  # [1/m]
-    DEFAULT_DELTA_DIP_KICK = 1e-6  # [rad]
+    DEFAULT_DELTA_DIP_HKICK = 1e-6  # [rad]
     DEFAULT_DELTA_RF = 100  # [Hz]
     DEFAULT_SVD_THRESHOLD = 1e-6
     DEFAULT_DELTAK_NORMALIZATION = 1e-3
@@ -69,7 +69,7 @@ class LOCOConfig:
         self.fit_gain_bpm = None
         self.fit_roll_bpm = None
         self.fit_gain_corr = None
-        self.fit_dipoles_kick = None
+        self.fit_dipoles_hkick = None
         self.fit_energy_shift = None
         self.fit_girder_shift = None
         self.constraint_deltakl_total = None
@@ -90,7 +90,7 @@ class LOCOConfig:
         self.sext_indices_ksl = None
         self.dip_indices_kl = None
         self.dip_indices_ksl = None
-        self.dip_indices_kick = None
+        self.dip_indices_hkick = None
         self.b1_indices_kl = None
         self.b2_indices_kl = None
         self.bc_indices_kl = None
@@ -542,21 +542,21 @@ class LOCOConfig:
         if self.use_dip_families:
             self.dip_indices_kl = [None] * len(self.dipoles_to_fit)
             self.dip_indices_ksl = []
-            self.dip_indices_kick = []
+            self.dip_indices_hkick = []
             for idx, fam_name in enumerate(self.dipoles_to_fit):
                 fam = self.respm.fam_data
                 self.dip_indices_kl[idx] = fam[fam_name]['index']
                 self.dip_indices_ksl += self.dip_indices_kl[idx]
                 self.dip_indices_ksl.sort()
-                self.dip_indices_kick += self.dip_indices_kl[idx]
-                self.dip_indices_kick.sort()
+                self.dip_indices_hkick += self.dip_indices_kl[idx]
+                self.dip_indices_hkick.sort()
         else:
             self.dip_indices_kl = []
             for fam_name in self.dipoles_to_fit:
                 self.dip_indices_kl += self.respm.fam_data[fam_name]['index']
                 self.dip_indices_kl.sort()
                 self.dip_indices_ksl = self.dip_indices_kl
-                self.dip_indices_kick = self.dip_indices_kl
+                self.dip_indices_hkick = self.dip_indices_kl
 
     def update_girder_knobs(self):
         """."""
@@ -585,8 +585,8 @@ class LOCOConfig:
             idx += self.nr_bpm
         if self.fit_gain_corr:
             idx += self.nr_corr
-        if self.fit_dipoles_kick:
-            idx += len(self.dip_indices_kick)
+        if self.fit_dipoles_hkick:
+            idx += len(self.dip_indices_hkick)
         if self.fit_energy_shift:
             idx += self.nr_corr
         if self.fit_skew_quadrupoles:

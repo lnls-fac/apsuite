@@ -183,13 +183,15 @@ class LOCOUtils:
                 model, 'KsL', idx_mag, newks)
 
     @staticmethod
-    def set_dipmag_kick(model, idx_mag, kick_values, kick_delta):
+    def set_dipmag_hkick(model, idx_mag, hkick_values, hkick_delta):
         """."""
         angle = _np.array(
             _pyaccel.lattice.get_attribute(model, 'angle', idx_mag))
         angle /= _np.sum(angle)
+        # hkick proportional to angle of each dipole segment
         _pyaccel.lattice.set_attribute(
-            model, 'hkick_polynom', idx_mag, kick_values + kick_delta * angle)
+            model, 'hkick_polynom', idx_mag,
+            hkick_values + hkick_delta * angle)
 
     @staticmethod
     def set_girders_long_shift(model, girders, ds_shift):
@@ -435,39 +437,39 @@ class LOCOUtils:
         return kslmatrix
 
     @staticmethod
-    def jloco_calc_kick_dipoles(config, model):
+    def jloco_calc_hkick_dipoles(config, model):
         """."""
         dip_indices = config.respm.fam_data['BN']['index']
-        kick_matrix = LOCOUtils._parallel_base(
+        hkick_matrix = LOCOUtils._parallel_base(
             config, model, dip_indices,
-            LOCOUtils._jloco_calc_kick_dip)
-        return kick_matrix
+            LOCOUtils._jloco_calc_hkick_dip)
+        return hkick_matrix
 
     @staticmethod
-    def _jloco_calc_kick_dip(config, model, dip_indices, magtype=None):
-        dip_kick_values = _np.atleast_1d(_pyaccel.lattice.get_attribute(
+    def _jloco_calc_hkick_dip(config, model, dip_indices):
+        dip_hkick_values = _np.atleast_1d(_pyaccel.lattice.get_attribute(
             model, 'hkick_polynom', dip_indices))
-        set_dip_kick = LOCOUtils.set_dipmag_kick
+        set_dip_hkick = LOCOUtils.set_dipmag_hkick
         matrix_nominal = LOCOUtils.respm_calc(
             model, config.respm, config.use_dispersion)
 
-        dip_kick_matrix = _np.zeros((matrix_nominal.size, 1))
-        delta_kick = config.DEFAULT_DELTA_DIP_KICK
+        dip_hkick_matrix = _np.zeros((matrix_nominal.size, 1))
+        delta_hkick = config.DEFAULT_DELTA_DIP_HKICK
 
         model_this = _dcopy(model)
         for idx, idx_set in enumerate(dip_indices):
-            set_dip_kick(
+            set_dip_hkick(
                 model_this, idx_set,
-                dip_kick_values[idx], delta_kick)
+                dip_hkick_values[idx], delta_hkick)
             nmags = len(idx_set)
         matrix_this = LOCOUtils.respm_calc(
             model_this, config.respm, config.use_dispersion)
-        dmatrix = (matrix_this - matrix_nominal) / delta_kick / nmags
-        dip_kick_matrix[:, 0] = dmatrix.ravel()
+        dmatrix = (matrix_this - matrix_nominal) / delta_hkick / nmags
+        dip_hkick_matrix[:, 0] = dmatrix.ravel()
 
         for idx, idx_set in enumerate(dip_indices):
-            set_dip_kick(model_this, idx_set, dip_kick_values[idx], 0)
-        return dip_kick_matrix
+            set_dip_hkick(model_this, idx_set, dip_hkick_values[idx], 0)
+        return dip_hkick_matrix
 
     @staticmethod
     def jloco_calc_energy_shift(config, model):
@@ -521,7 +523,7 @@ class LOCOUtils:
             config, km_quad, km_sext, km_dip,
             ksm_quad, ksm_sext, ksm_dip,
             dmdg_bpm, dmdalpha_bpm, dmdg_corr,
-            kick_dip, energy_shift, ks_skewquad,
+            hkick_dip, energy_shift, ks_skewquad,
             girder_shift):
         """."""
         nbpm = config.nr_bpm
@@ -556,7 +558,7 @@ class LOCOUtils:
             knobs_linear += nch + ncv
         if config.fit_energy_shift:
             knobs_linear += nch + ncv
-        if config.fit_dipoles_kick:
+        if config.fit_dipoles_hkick:
             knobs_linear += 3
         if config.fit_girder_shift:
             knobs_gir += girder_shift.shape[1]
@@ -604,9 +606,9 @@ class LOCOUtils:
             num = dmdg_corr.shape[1]
             jloco[:, idx:idx+num] = dmdg_corr
             idx += num
-        if config.fit_dipoles_kick:
-            num = kick_dip.shape[1]
-            jloco[:, idx:idx+num] = kick_dip
+        if config.fit_dipoles_hkick:
+            num = hkick_dip.shape[1]
+            jloco[:, idx:idx+num] = hkick_dip
             idx += num
         if config.fit_energy_shift:
             num = energy_shift.shape[1]
@@ -674,9 +676,9 @@ class LOCOUtils:
             size = config.nr_corr
             param_dict['gain_corr'] = param[idx:idx+size]
             idx += size
-        if config.fit_dipoles_kick:
-            size = len(config.dip_indices_kick)
-            param_dict['dipoles_kick'] = param[idx:idx+size]
+        if config.fit_dipoles_hkick:
+            size = len(config.dip_indices_hkick)
+            param_dict['dipoles_hkick'] = param[idx:idx+size]
             idx += size
         if config.fit_energy_shift:
             size = config.nr_corr
