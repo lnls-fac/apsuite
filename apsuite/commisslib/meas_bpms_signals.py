@@ -349,7 +349,7 @@ class AcqBPMsSignals(_BaseClass):
             print('WARN:Event is not configurable.')
             return None
         stg = f'evt_{evtname.lower():s}'
-        evt = self.devices.get(stg, Event(stg))
+        evt = self.devices.get(stg, Event(evtname))
         if evt.wait_for_connection(timeout=10):
             self.devices[stg] = evt
         else:
