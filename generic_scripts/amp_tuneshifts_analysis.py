@@ -69,14 +69,19 @@ class TbTData(DataBaseClass):
         if get_dft:
             self.data['dftx'], self.data['dfty'] = data[2], data[3]
 
-    def filter_data(self, trajs='y', central_tune=0.08, band=0.03,
-                    keep_within_range=False):
+    def filter_data(
+            self, trajs='y', central_tune=(0.08, 0.14), band=(0.03, 0.03),
+            keep_within_range=True):
         """."""
-        for traj in trajs:
+        is_tuple = isinstance(central_tune, tuple) and isinstance(band, tuple)
+        if len(trajs) > 1 and (not is_tuple):
+            raise TypeError(
+                'must provide central tunes and bands for both planes')
+        for traj, tune, bd in zip(trajs, central_tune, band):
             dft = self.data['dft'+traj].copy()
             tunes = _np.fft.rfftfreq(n=self.data['traj'+traj].shape[0])
-            tunemin = central_tune - band
-            tunemax = central_tune + band
+            tunemin = tune - bd
+            tunemax = tune + bd
             if keep_within_range:
                 idcs = (tunes < tunemin) | (tunes > tunemax)
                 dft[idcs] = 0
