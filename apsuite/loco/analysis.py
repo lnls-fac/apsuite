@@ -1,7 +1,7 @@
 """."""
 import numpy as np
 import pandas as pd
-from mathphys.functions import load_pickle, save_pickle
+from mathphys.functions import save as _save, load as _load
 
 import pyaccel
 from pymodels import si
@@ -42,7 +42,7 @@ class LOCOAnalysis():
 
     def get_setup(self):
         """."""
-        loco_setup = load_pickle(self.fname_setup)
+        loco_setup = _load(self.fname_setup)
         if 'data' in loco_setup:
             loco_setup = loco_setup['data']
         self.loco_setup = loco_setup
@@ -110,7 +110,7 @@ class LOCOAnalysis():
 
     def get_loco_results(self):
         """."""
-        loco_data = load_pickle(self.fname_fit)
+        loco_data = _load(self.fname_fit)
 
         config = loco_data['config']
         model_fitting = loco_data['fit_model']
@@ -395,7 +395,7 @@ class LOCOAnalysis():
         for famname in quad_families:
             quadfam_averages[famname] = np.mean(dkl[quadfam_idx[famname]])
 
-        save_pickle(
+        _save(
             data=quadfam_averages,
             fname='quad_family_average' + fname, overwrite=True)
 

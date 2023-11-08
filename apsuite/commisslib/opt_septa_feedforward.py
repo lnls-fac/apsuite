@@ -9,7 +9,7 @@ import scipy.signal as _scysig
 import matplotlib.pyplot as _mplt
 import pywt as _pywt
 
-from mathphys.functions import load_pickle
+from mathphys.functions import load as _load
 from pymodels import si as _si
 from siriuspy.devices import PowerSupply, SOFB, Trigger
 from siriuspy.clientconfigdb import ConfigDBClient as _CDBClient
@@ -226,7 +226,7 @@ class OptSeptaFF(_RCDS):
     @staticmethod
     def load_orbit(fname, npts_mean=None):
         """Load orbit data file."""
-        data = load_pickle(fname)
+        data = _load(fname)
         data = data['data']
         if 'bpms_sampling_frequency' in data:
             fs = data['bpms_sampling_frequency']
