@@ -35,61 +35,100 @@ class TbTData(DataBaseClass):
             self.data = {key: data[key] for key in is_data}
             self.params = {key: data[key] for key in is_params}
 
-    @staticmethod
-    def _process_data(data, get_dft=True):
+    # @staticmethod
+    def process_data(self, auto_filtering=False):
         """."""
         try:
-            trajx, trajy = data['trajx'].copy()*1e-3, data['trajy'].copy()*1e-3
-            # trajx, trajy = data['trajx'][0]*1e-3, data['trajy'][0]*1e-3
-            trajx -= trajx.mean(axis=0)
-            trajy -= trajy.mean(axis=0)
+            trajx = self.data['trajx'].copy()*1e-3
+            trajy = self.data['trajy'].copy()*1e-3
+            # trajx, trajy = self.data['trajx'][0]*1e-3, self.data['trajy'][0]*1e-3
+            self.data['trajx'] -= trajx.mean(axis=0)
+            self.data['trajy'] -= trajy.mean(axis=0)
         except KeyError:
-            trajx = data['sofb_tbt']['x']*1e-3
-            trajy = data['sofb_tbt']['y']*1e-3
-            trajx -= trajx.mean(axis=0)
-            trajy -= trajy.mean(axis=0)
-        if get_dft:
-            dftx = TbTData._calculate_dft(trajx)
-            dfty = TbTData._calculate_dft(trajy)
-            return trajx, trajy, dftx, dfty
-        return trajx, trajy
+            trajx = self.data['sofb_tbt']['x'].copy()*1e-3
+            trajy = self.data['sofb_tbt']['y'].copy()*1e-3
+            self.data['trajx'] -= trajx.mean(axis=0)
+            self.data['trajy'] -= trajy.mean(axis=0)
+        self.data['dftx'] = TbTData._calculate_dft(trajx)
+        self.data['dfty'] = TbTData._calculate_dft(trajy)
 
-    def process_data(self, get_dft=True):
-        """Get mean-subtracted trajctories in [mm] and calculate the DFT.
+        tunexpeaks = TbTData._get_dft_peaks_tunes(
+            self.data['dftx'], nturns=trajx.shape[0])
+        tuneypeaks = TbTData._get_dft_peaks_tunes(
+            self.data['dfty'], nturns=trajy.shape[0])
 
-        Store the trajectories as atributes `trajx` and `trajy` and the DFTs
-         as `dftx` `dfty`.
+        recalculate_peaks = False
+        for idc, (tunex, tuney) in enumerate(zip(tunexpeaks, tuneypeaks)):
+            if tunex != tuney:
+                # band-pass filter around the peaks
+                self.filter_data(trajs='xy', central_tunes=(tunex, tuney),
+                                 bands=(0.005, 0.005),
+                                 keep_within_range=(True, True),
+                                 bpm_idc=idc)
+            else:
+                # band-pass around tunex peak & filter-out tunex from y
+                self.filter_data(trajs='xy', central_tunes=(tunex, tunex),
+                                 bands=(0.005, 0.01),
+                                 keep_within_range=(True, False),
+                                 bpm_idc=idc)
+                recalculate_peaks = recalculate_peaks or True
 
-        Args:
-            get_dft (bool, optional): Whether to calculate the Discrete
-             Fourier Transform (DFT). Defaults to True.
-        """
-        data = TbTData._process_data(self.data, get_dft=get_dft)
-        self.data['trajx'], self.data['trajy'] = data[0], data[1]
-        if get_dft:
-            self.data['dftx'], self.data['dfty'] = data[2], data[3]
+        if recalculate_peaks:
+            tuneypeaks = TbTData._get_dft_peaks_tunes(
+                self.data['dfty'], nturns=trajy.shape[0])
+            print(tuneypeaks)
+            for idc, tuney in enumerate(tuneypeaks):
+                self.filter_data(trajs='y', central_tunes=tuney, bands=0.05,
+                                 keep_within_range=True, bpm_idc=idc)
 
-    def filter_data(
-            self, trajs='y', central_tune=(0.08, 0.14), band=(0.03, 0.03),
-            keep_within_range=True):
+    # def process_data(self, auto_filtering=True):
+    #     """Get mean-subtracted trajctories in [mm] and calculate the DFT.
+
+    #     Store the trajectories as atributes `trajx` and `trajy` and the DFTs
+    #      as `dftx` `dfty`.
+
+    #     Args:
+    #         get_dft (bool, optional): Whether to calculate the Discrete
+    #          Fourier Transform (DFT). Defaults to True.
+    #     """
+    #     data = TbTData._process_data(self.data,auto_filtering=auto_filtering)
+    #     self.data['trajx'], self.data['trajy'] = data[0], data[1]
+    #     self.data['dftx'], self.data['dfty'] = data[2], data[3]
+
+    def filter_data(self, trajs='xy', central_tunes=(0.08, 0.14),
+                    bands=(0.03, 0.03), keep_within_range=(True, True),
+                    bpm_idc=None):
         """."""
-        is_tuple = isinstance(central_tune, tuple) and isinstance(band, tuple)
+        is_tuple = isinstance(central_tunes, tuple)
+        is_tuple = is_tuple and isinstance(bands, tuple)
+        is_tuple = is_tuple and isinstance(keep_within_range, tuple)
         if len(trajs) > 1 and (not is_tuple):
-            raise TypeError(
-                'must provide central tunes and bands for both planes')
-        for traj, tune, bd in zip(trajs, central_tune, band):
+            raise TypeError('must provide central tunes, bands and whether to keep_within range for both planes')
+
+        elif len(trajs)==1:
+            central_tunes = (central_tunes,)
+            bands, keep_within_range = (bands,), (keep_within_range,)
+
+        for traj, tune, bd, kp in zip(trajs, central_tunes, bands,
+                                      keep_within_range):
             dft = self.data['dft'+traj].copy()
+            if bpm_idc is not None:
+                dft = dft[:, bpm_idc]
             tunes = _np.fft.rfftfreq(n=self.data['traj'+traj].shape[0])
             tunemin = tune - bd
             tunemax = tune + bd
-            if keep_within_range:
+            if kp:
                 idcs = (tunes < tunemin) | (tunes > tunemax)
                 dft[idcs] = 0
             else:
                 idcs = (tunes > tunemin) & (tunes < tunemax)
                 dft[idcs] = 0
-            self.data['traj'+traj] = _np.fft.irfft(dft, axis=0)
-            self.data['dft'+traj] = dft
+            if bpm_idc is not None:
+                self.data['dft'+traj][:, bpm_idc] = dft
+                self.data['traj'+traj][:, bpm_idc] = _np.fft.irfft(dft, axis=0)
+            else:
+                self.data['dft'+traj] = dft
+                self.data['traj'+traj] = _np.fft.irfft(dft, axis=0)
 
     def fit_hist_mat(self, traj='xy',
                      from_turn=None, to_turn=None, model=None):
@@ -163,7 +202,8 @@ class TbTData(DataBaseClass):
 
     @staticmethod
     def _calculate_dft(traj, nturns=None):
-        """Calculate the Discrete Fourier Transform (DFT) history matrix.
+        """Calculate the Discrete Fourier Transform (DFT) of the history
+          matrix.
 
         Args:
             data (n x m array): history matrix where n is the number of turns
@@ -193,8 +233,8 @@ class TbTData(DataBaseClass):
         """
         tunes = _np.fft.rfftfreq(n=nturns)
         idcs = _np.abs(dft).argmax(axis=0)
-        tune_guesses = _np.array([tunes[idc] for idc in idcs], dtype=float)
-        return tune_guesses
+        peaks_tunes = _np.array([tunes[idc] for idc in idcs], dtype=float)
+        return peaks_tunes
 
     @staticmethod
     def _calc_projections_hist_mat(data, tune_guesses):
