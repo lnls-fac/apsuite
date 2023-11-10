@@ -100,7 +100,7 @@ class TbTData(DataBaseClass):
 
     def filter_data2(self):
         """."""
-        dftx, dfty = self.data['dftx'].copy(), self.data['dfty'].copy()
+        dftx, dfty = self.data['dftx'], self.data['dfty']
         xpeaks_idcs = _np.argmax(_np.abs(dftx), axis=0)
         ypeaks_idcs = _np.argmax(_np.abs(dfty), axis=0)
         tunesx = _np.fft.rfftfreq(self.data['trajx'].shape[0])
@@ -119,16 +119,23 @@ class TbTData(DataBaseClass):
 
         # Band-pass filter on trajx spectra
         dftx = self.filter_around_peak(dftx, xpeaks_idcs, keep_within=True)
+        # Band-pass filter for tunesy with no overlap with tunesx
+        dfty[:, ~msk] = self.filter_around_peak(
+            dfty[:, ~msk], ypeaks_idcs[~msk], keep_within=True, n=2)
         # Filter out tunex peak from trajy, remove coupling artifacts
-        dfty.T[msk] = self.filter_around_peak(
-            dfty.T[msk].T, ypeaks_idcs[msk], keep_within=False, n=4).T
+        dfty[:, msk] = self.filter_around_peak(
+            dfty[:, msk], ypeaks_idcs[msk], keep_within=False, n=4)
         # identify BPMs with significant spectrum signal-to-noise ratio
-        msk = _np.abs(dfty).max(axis=0) > 10 * _np.abs(dfty).std(axis=0)
+        msk = _np.abs(dfty).max(axis=0) > 5 * _np.abs(dfty).std(axis=0)
         # identify spectra peaks for those BPMs with significan SNR
-        ypeaks_idcs[msk] = _np.argmax(_np.abs(dfty.T[msk]).T, axis=0)
+        ypeaks_idcs[msk] = _np.argmax(_np.abs(dfty[:, msk]), axis=0)
+        # ypeaks_idcs = _np.argmax(_np.abs(dfty), axis=0)
         # Band-pass filter on trajy spectra on those BPMs
-        dfty.T[msk] = self.filter_around_peak(
-            dfty.T[msk].T, ypeaks_idcs[msk], keep_within=True, n=2).T
+        # dfty.T[msk] = self.filter_around_peak(
+            # dfty.T[msk].T, ypeaks_idcs[msk], keep_within=True, n=2).T
+        dfty[:, msk] = self.filter_around_peak(
+            dfty[:, msk], ypeaks_idcs[msk], keep_within=True, n=2)
+
 
         self.data['dftx'], self.data['dfty'] = dftx, dfty
         self.data['trajx'] = _np.fft.irfft(dftx, axis=0)
