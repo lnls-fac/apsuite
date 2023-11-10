@@ -5,6 +5,7 @@ import time as _time
 
 from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
+from siriuspy.search import HLTimeSearch as _HLTimeSearch
 from siriuspy.devices import Tune, CurrInfoSI, \
     Trigger, Event, EVG, RFGen, FamBPMs
 
@@ -14,11 +15,11 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
 
     def __init__(self):
         """."""
-        self.trigbpm_delay = 0.0
+        self.trigbpm_delay = None
         self.trigbpm_nrpulses = 1
         self.do_pulse_evg = True
-        self.timing_event = 'Study'
-        self.event_delay = 0.0
+        self._timing_event = 'Study'
+        self.event_delay = None
         self.event_mode = 'External'
         self.timeout = 40
         self.nrpoints_before = 0
@@ -33,11 +34,23 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
         dtmp = '{0:26s} = {1:9d}  {2:s}\n'.format
         stmp = '{0:26s} = {1:9}  {2:s}\n'.format
         stg = ''
-        stg += ftmp('trigbpm_delay', self.trigbpm_delay, '[us]')
+        dly = self.trigbpm_delay
+        if dly is None:
+            stg += stmp(
+                'trigbpm_delay', 'same',
+                '(script will not change current value)')
+        else:
+            stg += ftmp('trigbpm_delay', dly, '[us]')
         stg += dtmp('trigbpm_nrpulses', self.trigbpm_nrpulses, '')
         stg += stmp('do_pulse_evg', str(self.do_pulse_evg), '')
         stg += stmp('timing_event', self.timing_event, '')
-        stg += ftmp('event_delay', self.event_delay, '[us]')
+        dly = self.event_delay
+        if dly is None:
+            stg += stmp(
+                'event_delay', 'same',
+                '(script will not change current value)')
+        else:
+            stg += ftmp('event_delay', dly, '[us]')
         stg += stmp('event_mode', self.event_mode, '')
         stg += ftmp('timeout', self.timeout, '[s]')
         stg += dtmp('nrpoints_before', self.nrpoints_before, '')
@@ -46,6 +59,17 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
         stg += dtmp('acq_repeat', self.acq_repeat, '')
         stg += stmp('signals2acq', str(self.signals2acq), '')
         return stg
+
+    @property
+    def timing_event(self):
+        """."""
+        return self._timing_event
+
+    @timing_event.setter
+    def timing_event(self, value):
+        if value not in _HLTimeSearch.get_hl_events():
+            return
+        self._timing_event = value
 
     def from_dict(self, params_dict):
         """."""
@@ -108,13 +132,18 @@ class AcqBPMsSignals(_BaseClass):
     def get_timing_state(self):
         """."""
         trigbpm = self.devices['trigbpm']
-        evt_study = self.devices['evt_study']
+
         state = dict()
         state['trigbpm_source'] = trigbpm.source
         state['trigbpm_nrpulses'] = trigbpm.nr_pulses
         state['trigbpm_delay'] = trigbpm.delay
-        state['evt_study_delay'] = evt_study.delay
-        state['evt_study_mode'] = evt_study.mode
+        if self.params.do_pulse_evg:
+            state['evg_nrpulses'] = self.devices['evg'].nrpulses
+
+        evt = self._get_event(self.params.timing_event)
+        if evt is not None:
+            state['evt_delay'] = evt.delay
+            state['evt_mode'] = evt.mode
         return state
 
     def recover_timing_state(self, state):
@@ -126,27 +155,36 @@ class AcqBPMsSignals(_BaseClass):
         state = dict() if state is None else state
 
         trigbpm = self.devices['trigbpm']
-        trigbpm.delay = state.get('trigbpm_delay', self.params.trigbpm_delay)
+        dly = state.get('trigbpm_delay', self.params.trigbpm_delay)
+        if dly is not None:
+            trigbpm.delay = dly
+
         trigbpm.nr_pulses = state.get(
             'trigbpm_nrpulses', self.params.trigbpm_nrpulses)
         src = state.get('trigbpm_source', self.params.timing_event)
         trigbpm.source = src
 
-        if src != 'Study':
-            return
-        evt_study = self.devices['evt_study']
-        evt_study.delay = state.get('evt_study_delay', self.params.event_delay)
-        evt_study.mode = state.get('evt_study_mode', self.params.event_mode)
+        evt = self._get_event(self.params.timing_event)
+        if evt is not None:
+            dly = state.get('evt_delay', self.params.event_delay)
+            if dly is not None:
+                evt.delay = dly
+            evt.mode = state.get('evt_mode', self.params.event_mode)
 
-        # Update event configurations in EVG
-        self.devices['evg'].cmd_update_events()
+        nrpul = 1 if self.params.do_pulse_evg else None
+        nrpul = state.get('evg_nrpulses', nrpul)
+        if nrpul is not None:
+            evg = self.devices['evg']
+            evg.set_nrpulses(nrpul)
+            evg.cmd_update_events()
 
     def trigger_timing_signal(self):
         """."""
         if not self.params.do_pulse_evg:
             return
-        if self.params.timing_event == 'Study':
-            self.devices['evt_study'].cmd_external_trigger()
+        evt = self._get_event(self.params.timing_event)
+        if evt is not None and evt.mode_str == 'External':
+            evt.cmd_external_trigger()
         else:
             self.devices['evg'].cmd_turn_on_injection()
 
@@ -305,3 +343,16 @@ class AcqBPMsSignals(_BaseClass):
     def _bpm_tag(self, idx):
         names = self.devices['fambpms'].bpm_names
         return f'{names[idx]:s} (idx={idx:d})'
+
+    def _get_event(self, evtname):
+        if evtname not in _HLTimeSearch.get_configurable_hl_events():
+            print('WARN:Event is not configurable.')
+            return None
+        stg = f'evt_{evtname.lower():s}'
+        evt = self.devices.get(stg, Event(evtname))
+        if evt.wait_for_connection(timeout=10):
+            self.devices[stg] = evt
+        else:
+            print('ERR:Event not connected.')
+            return None
+        return evt
