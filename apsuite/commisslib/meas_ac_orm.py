@@ -9,9 +9,7 @@ import numpy as _np
 import matplotlib.pyplot as _mplt
 import scipy.optimize as _scyopt
 
-from mathphys.functions import save_pickle as _save_pickle, \
-    load_pickle as _load_pickle
-
+from mathphys.functions import save as _save, load as _load
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 from siriuspy.devices import StrengthConv, PowerSupply, CurrInfoSI, \
     Trigger, Event, EVG, RFGen, Tune, FamBPMs, ASLLRF
@@ -354,7 +352,7 @@ class MeasACORM(_ThreadBaseClass):
         if save2servconf:
             data['orbmat_name'] = respmat_name
             mat = self.save_respmat_to_configdb(respmat_name, mat=mat)
-        _save_pickle(data, f'loco_input_{respmat_name:s}', overwrite=overwrite)
+        _save(data, f'loco_input_{respmat_name:s}', overwrite=overwrite)
 
     def save_analysis_dictionary(self, filename, overwrite=False):
         """Save internal analysis dict to file.
@@ -368,7 +366,7 @@ class MeasACORM(_ThreadBaseClass):
         """
         if not filename.startswith('analysis_'):
             filename = 'analysis_' + filename
-        _save_pickle(self.analysis, filename, overwrite=overwrite)
+        _save(self.analysis, filename, overwrite=overwrite)
 
     def load_analysis_dictionary(self, filename, overwrite=False):
         """Load file with analysis dictionary.
@@ -388,7 +386,7 @@ class MeasACORM(_ThreadBaseClass):
         """
         if not filename.startswith('analysis_'):
             raise ValueError('File name must start with "analysis_".')
-        return _load_pickle(self.analysis, filename, overwrite=overwrite)
+        return _load(self.analysis, filename, overwrite=overwrite)
 
     def save_respmat_to_configdb(self, name: str, matrix=None):
         """Save response matrix to ConfigDb Server.

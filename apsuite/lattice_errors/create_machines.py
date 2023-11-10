@@ -6,7 +6,7 @@ import pymodels as _pymodels
 from apsuite.orbcorr import OrbitCorr, CorrParams
 from apsuite.optics_analysis import TuneCorr, OpticsCorr, CouplingCorr
 from apsuite.commisslib.measure_bba import BBAParams
-from mathphys.functions import save_pickle, load_pickle
+from mathphys.functions import save as _save, load as _load
 
 
 class MachinesParams:
@@ -674,7 +674,7 @@ class GenerateMachines:
         """Configure all corrections - orbit and optics."""
         orbmat, optmat, tunemat, coupmat = None, None, None, None
         if self.load_jacobians:
-            respmats = load_pickle('respmats')
+            respmats = _load('respmats')
             orbmat = respmats['orbmat']
             optmat = respmats['optmat']
             tunemat = respmats['tunemat']
@@ -702,7 +702,7 @@ class GenerateMachines:
             respmats['optmat'] = optmat
             respmats['tunemat'] = tunemat
             respmats['coupmat'] = coupmat
-            save_pickle(respmats, 'respmats', overwrite=True)
+            _save(respmats, 'respmats', overwrite=True)
 
     def save_machines(self, sufix=None):
         """Save all random machines in a pickle.
@@ -718,7 +718,7 @@ class GenerateMachines:
             filename += '_' + self.ids[0].fam_name
         if sufix is not None:
             filename += sufix
-        save_pickle(self.machines_data, filename, overwrite=True)
+        _save(self.machines_data, filename, overwrite=True)
 
     def load_machines(self):
         """Load random machines.
@@ -729,7 +729,7 @@ class GenerateMachines:
         """
         filename = self.params.acc + '_' + str(self.nr_mach)
         filename += '_machines_seed_' + str(self.seed)
-        data = load_pickle(filename)
+        data = _load(filename)
         print('loading ' + filename)
         return data
 

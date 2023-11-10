@@ -1,7 +1,7 @@
 import numpy as _np
 import time as _time
 
-from mathphys.functions import save_pickle, load_pickle
+from mathphys.functions import save as _save, load as _load
 
 
 class ConfigErrors:
@@ -602,7 +602,7 @@ class GenerateErrors():
         if filename is None:
             filename = str(self.nr_mach) + '_errors_seed_' + str(
                 self.seed)
-        save_pickle(self.fam_errors_dict, filename, overwrite=True)
+        _save(self.fam_errors_dict, filename, overwrite=True)
 
     def load_error_file(self, filename):
         """Load the dicionary error file.
@@ -614,7 +614,7 @@ class GenerateErrors():
             dict: dictionary with all errors
 
         """
-        fam_errors_dict = load_pickle(filename)
+        fam_errors_dict = _load(filename)
         fams = list(fam_errors_dict.keys())
         nr_mach = len(fam_errors_dict[fams[0]]['posx'])
         self.nr_mach = int(nr_mach)

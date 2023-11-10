@@ -5,8 +5,7 @@ import multiprocessing as mp_
 
 import numpy as _np
 
-from mathphys.functions import save_pickle as _save_pickle, \
-    load_pickle as _load_pickle
+from mathphys.functions import save as _save, load as _load
 import pyaccel as _pyaccel
 
 
@@ -16,12 +15,12 @@ class LOCOUtils:
     @staticmethod
     def save_data(fname, jlocodict, overwrite=True):
         """."""
-        _save_pickle(jlocodict, fname, overwrite=overwrite)
+        _save(jlocodict, fname, overwrite=overwrite)
 
     @staticmethod
     def load_data(fname):
         """."""
-        return _load_pickle(fname)
+        return _load(fname)
 
     @staticmethod
     def get_idx(indcs):

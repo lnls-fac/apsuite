@@ -4,7 +4,6 @@ import scipy.fft as _sp_fft
 import matplotlib.pyplot as _plt
 import datetime as _datetime
 
-from mathphys.functions import load_pickle
 import siriuspy.clientconfigdb as _sconf
 
 from .. import asparams as _asparams
