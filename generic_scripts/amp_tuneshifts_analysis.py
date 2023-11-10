@@ -42,44 +42,47 @@ class TbTData(DataBaseClass):
             trajx = self.data['trajx'].copy()*1e-3
             trajy = self.data['trajy'].copy()*1e-3
             # trajx, trajy = self.data['trajx'][0]*1e-3, self.data['trajy'][0]*1e-3
-            self.data['trajx'] -= trajx.mean(axis=0)
-            self.data['trajy'] -= trajy.mean(axis=0)
+            trajx -= trajx.mean(axis=0)
+            trajy -= trajy.mean(axis=0)
         except KeyError:
             trajx = self.data['sofb_tbt']['x'].copy()*1e-3
             trajy = self.data['sofb_tbt']['y'].copy()*1e-3
-            self.data['trajx'] -= trajx.mean(axis=0)
-            self.data['trajy'] -= trajy.mean(axis=0)
+            trajx -= trajx.mean(axis=0)
+            trajy -= trajy.mean(axis=0)
         self.data['dftx'] = TbTData._calculate_dft(trajx)
         self.data['dfty'] = TbTData._calculate_dft(trajy)
 
-        tunexpeaks = TbTData._get_dft_peaks_tunes(
-            self.data['dftx'], nturns=trajx.shape[0])
-        tuneypeaks = TbTData._get_dft_peaks_tunes(
-            self.data['dfty'], nturns=trajy.shape[0])
+        self.filter_data2()
 
-        recalculate_peaks = False
-        for idc, (tunex, tuney) in enumerate(zip(tunexpeaks, tuneypeaks)):
-            if tunex != tuney:
-                # band-pass filter around the peaks
-                self.filter_data(trajs='xy', central_tunes=(tunex, tuney),
-                                 bands=(0.005, 0.005),
-                                 keep_within_range=(True, True),
-                                 bpm_idc=idc)
-            else:
-                # band-pass around tunex peak & filter-out tunex from y
-                self.filter_data(trajs='xy', central_tunes=(tunex, tunex),
-                                 bands=(0.005, 0.01),
-                                 keep_within_range=(True, False),
-                                 bpm_idc=idc)
-                recalculate_peaks = recalculate_peaks or True
+        # tunexpeaks = TbTData._get_dft_peaks_tunes(
+        #     self.data['dftx'], nturns=trajx.shape[0])
+        # tuneypeaks = TbTData._get_dft_peaks_tunes(
+        #     self.data['dfty'], nturns=trajy.shape[0])
 
-        if recalculate_peaks:
-            tuneypeaks = TbTData._get_dft_peaks_tunes(
-                self.data['dfty'], nturns=trajy.shape[0])
-            print(tuneypeaks)
-            for idc, tuney in enumerate(tuneypeaks):
-                self.filter_data(trajs='y', central_tunes=tuney, bands=0.05,
-                                 keep_within_range=True, bpm_idc=idc)
+        # recalculate_peaks = False
+        # for idc, (tunex, tuney) in enumerate(zip(tunexpeaks, tuneypeaks)):
+        #     if tunex != tuney:
+        #         # band-pass filter around the peaks
+        #         self.filter_data(trajs='xy', central_tunes=(tunex, tuney),
+        #                          bands=(0.005, 0.01),
+        #                          keep_within_range=(True, True),
+        #                          bpm_idc=idc)
+        #     else:
+        #         # band-pass around tunex peak & filter-out tunex from y
+        #         print('equal')
+        #         self.filter_data(trajs='xy', central_tunes=(tunex, tunex),
+        #                          bands=(0.005, 0.01),
+        #                          keep_within_range=(True, False),
+        #                          bpm_idc=idc)
+        #         recalculate_peaks = recalculate_peaks or True
+
+        # if recalculate_peaks:
+        #     tuneypeaks = TbTData._get_dft_peaks_tunes(
+        #         self.data['dfty'], nturns=trajy.shape[0])
+        #     print(tuneypeaks)
+        #     for idc, tuney in enumerate(tuneypeaks):
+        #         self.filter_data(trajs='y', central_tunes=tuney, bands=0.05,
+        #                          keep_within_range=True, bpm_idc=idc)
 
     # def process_data(self, auto_filtering=True):
     #     """Get mean-subtracted trajctories in [mm] and calculate the DFT.
@@ -94,6 +97,54 @@ class TbTData(DataBaseClass):
     #     data = TbTData._process_data(self.data,auto_filtering=auto_filtering)
     #     self.data['trajx'], self.data['trajy'] = data[0], data[1]
     #     self.data['dftx'], self.data['dfty'] = data[2], data[3]
+
+    def filter_data2(self):
+        """."""
+        dftx, dfty = self.data['dftx'].copy(), self.data['dfty'].copy()
+        xpeaks_idcs = _np.argmax(_np.abs(dftx), axis=0)
+        ypeaks_idcs = _np.argmax(_np.abs(dfty), axis=0)
+        tunesx = _np.fft.rfftfreq(self.data['trajx'].shape[0])
+        tunesy = _np.fft.rfftfreq(self.data['trajy'].shape[0])
+
+        tunesx_at_peaks = list()
+        tunesy_at_peaks = list()
+        for idcx, idcy in zip(xpeaks_idcs, ypeaks_idcs):
+            tunesx_at_peaks.append(tunesx[idcx])
+            tunesy_at_peaks.append(tunesy[idcy])
+        tunesx_at_peaks = _np.array(tunesx_at_peaks)
+        tunesy_at_peaks = _np.array(tunesy_at_peaks)
+
+        # identify BPMs whose spectra overlap
+        msk = _np.abs(tunesy_at_peaks - tunesx_at_peaks) < 0.06
+
+        # Band-pass filter on trajx spectra
+        dftx = self.filter_around_peak(dftx, xpeaks_idcs, keep_within=True)
+        # Filter out tunex peak from trajy, remove coupling artifacts
+        dfty.T[msk] = self.filter_around_peak(
+            dfty.T[msk].T, ypeaks_idcs[msk], keep_within=False, n=4).T
+        # identify BPMs with significant spectrum signal-to-noise ratio
+        msk = _np.abs(dfty).max(axis=0) > 10 * _np.abs(dfty).std(axis=0)
+        # identify spectra peaks for those BPMs with significan SNR
+        ypeaks_idcs[msk] = _np.argmax(_np.abs(dfty.T[msk]).T, axis=0)
+        # Band-pass filter on trajy spectra on those BPMs
+        dfty.T[msk] = self.filter_around_peak(
+            dfty.T[msk].T, ypeaks_idcs[msk], keep_within=True, n=2).T
+
+        self.data['dftx'], self.data['dfty'] = dftx, dfty
+        self.data['trajx'] = _np.fft.irfft(dftx, axis=0)
+        self.data['trajy'] = _np.fft.irfft(dfty, axis=0)
+
+    def filter_around_peak(self, dft, peak_idcs, keep_within=True, n=2):
+        """."""
+        for i, (idc, bpm_dft) in enumerate(zip(peak_idcs, dft.T)):
+            bpm_spec = _np.abs(bpm_dft)
+            peak = bpm_spec[idc]
+            msk = bpm_spec < peak / n
+            if keep_within:
+                dft[msk, i] = 0
+            else:
+                dft[~msk, i] = 0
+        return dft
 
     def filter_data(self, trajs='xy', central_tunes=(0.08, 0.14),
                     bands=(0.03, 0.03), keep_within_range=(True, True),
