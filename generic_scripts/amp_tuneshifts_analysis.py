@@ -52,7 +52,10 @@ class TbTData(DataBaseClass):
         self.data['dftx'] = TbTData._calculate_dft(trajx)
         self.data['dfty'] = TbTData._calculate_dft(trajy)
 
-        self.filter_data2()
+        self.data['trajx'] = trajx
+        self.data['trajy'] = trajy
+
+        # self.filter_data2()
 
         # tunexpeaks = TbTData._get_dft_peaks_tunes(
         #     self.data['dftx'], nturns=trajx.shape[0])
@@ -115,27 +118,22 @@ class TbTData(DataBaseClass):
         tunesy_at_peaks = _np.array(tunesy_at_peaks)
 
         # identify BPMs whose spectra overlap
-        msk = _np.abs(tunesy_at_peaks - tunesx_at_peaks) < 0.06
-
+        overlap = _np.abs(tunesy_at_peaks - tunesx_at_peaks) < 0.06
         # Band-pass filter on trajx spectra
-        dftx = self.filter_around_peak(dftx, xpeaks_idcs, keep_within=True)
-        # Band-pass filter for tunesy with no overlap with tunesx
-        dfty[:, ~msk] = self.filter_around_peak(
-            dfty[:, ~msk], ypeaks_idcs[~msk], keep_within=True, n=2)
-        # Filter out tunex peak from trajy, remove coupling artifacts
-        dfty[:, msk] = self.filter_around_peak(
-            dfty[:, msk], ypeaks_idcs[msk], keep_within=False, n=4)
-        # identify BPMs with significant spectrum signal-to-noise ratio
-        msk = _np.abs(dfty).max(axis=0) > 5 * _np.abs(dfty).std(axis=0)
-        # identify spectra peaks for those BPMs with significan SNR
-        ypeaks_idcs[msk] = _np.argmax(_np.abs(dfty[:, msk]), axis=0)
-        # ypeaks_idcs = _np.argmax(_np.abs(dfty), axis=0)
-        # Band-pass filter on trajy spectra on those BPMs
-        # dfty.T[msk] = self.filter_around_peak(
-            # dfty.T[msk].T, ypeaks_idcs[msk], keep_within=True, n=2).T
-        dfty[:, msk] = self.filter_around_peak(
-            dfty[:, msk], ypeaks_idcs[msk], keep_within=True, n=2)
-
+        dftx = self.filter_around_peak(dftx, xpeaks_idcs,
+                                       keep_within=True, n=2)
+        # Band-pass filter around y peaks for tunesy w/ no overlap with tunesx
+        dfty[:, ~overlap] = self.filter_around_peak(dfty[:, ~overlap],
+                                                    ypeaks_idcs[~overlap],
+                                                    keep_within=True,
+                                                    n=2)
+        # Filter out tunex peak from trajy to remove coupling artifacts
+        dfty[:, overlap] = self.filter_around_peak(dfty[:, overlap],
+                                                   ypeaks_idcs[overlap],
+                                                   keep_within=False, n=4)
+        ypeaks_idcs = _np.argmax(_np.abs(dfty), axis=0)
+        dfty = self.filter_around_peak(dfty, ypeaks_idcs,
+                                       keep_within=True, n=2)
 
         self.data['dftx'], self.data['dfty'] = dftx, dfty
         self.data['trajx'] = _np.fft.irfft(dftx, axis=0)
@@ -146,11 +144,19 @@ class TbTData(DataBaseClass):
         for i, (idc, bpm_dft) in enumerate(zip(peak_idcs, dft.T)):
             bpm_spec = _np.abs(bpm_dft)
             peak = bpm_spec[idc]
-            msk = bpm_spec < peak / n
-            if keep_within:
-                dft[msk, i] = 0
+            idcs = _np.argwhere(bpm_spec < peak / n)
+            idx = idcs[_np.argmin(_np.abs(idcs - idc))][0]
+            if idx < idc:
+                lower_lim = idx
+                upper_lim = idc + (idc - lower_lim)
             else:
-                dft[~msk, i] = 0
+                lower_lim = idc - (idx - idc)
+                upper_lim = idx
+            if keep_within:
+                dft[:lower_lim, i] = 0
+                dft[upper_lim:, i] = 0
+            else:
+                dft[lower_lim:upper_lim+1, i] = 0
         return dft
 
     def filter_data(self, trajs='xy', central_tunes=(0.08, 0.14),
