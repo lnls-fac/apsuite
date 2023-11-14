@@ -2046,7 +2046,7 @@ class MeasACORM(_ThreadBaseClass):
                 return False
             dt_ -= _time.time()
             timeout = max(timeout + dt_, 0)
-            # cmo.current = cmo.current
+            cmo.current = cmo.current
         return True
 
     def _wait_cycle_to_finish(self, corr_names=None, timeout=10):
