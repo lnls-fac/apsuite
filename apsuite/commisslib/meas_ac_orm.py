@@ -34,6 +34,7 @@ class ACORMParams(_ParamsBaseClass):
         """."""
         super().__init__()
         self.timeout_bpms = 60  # [s]
+        self.timeout_correctors = 20  # [s]
         self.ref_respmat_name = 'ref_respmat'
         self.meas_bpms_noise = True
         self.meas_rf_line = True
@@ -66,6 +67,7 @@ class ACORMParams(_ParamsBaseClass):
 
         stg = ''
         stg += ftmp('timeout_bpms', self.timeout_bpms, '[s]')
+        stg += ftmp('timeout_correctors', self.timeout_correctors, '[s]')
         stg += stmp('ref_respmat_name', self.ref_respmat_name, '')
         stg += stmp('meas_bpms_noise', str(self.meas_bpms_noise), '')
         stg += stmp('meas_rf_line', str(self.meas_rf_line), '')
@@ -1020,11 +1022,20 @@ class MeasACORM(_ThreadBaseClass):
         # Create objects to interact with correctors
         t00 = _time.time()
         self._log('Creating correctors       -> ', end='')
+        props = [
+            'Kick-SP', 'OpMode-Sel', 'OpMode-Sts', 'Current-RB', 'Current-SP',
+            'CycleType-Sel', 'CycleFreq-SP', 'CycleAmpl-SP', 'CurrentRef-Mon',
+            'CycleOffset-SP', 'CycleAuxParam-RB', 'CycleAuxParam-SP',
+            'CycleNrCycles-SP', 'CycleAmpl-RB', 'CycleOffset-RB',
+            'CycleFreq-RB', 'CycleNrCycles-RB', 'CycleType-Sts',
+            'CycleEnbl-Mon', 'Current-Mon', 'CycleAuxParam-SP',
+            'CycleAuxParam-RB', 'ParamPWMFreq-Cte',
+            ]
         self.devices.update({
-            nme: PowerSupply(nme, props2init=[])
+            nme: PowerSupply(nme, props2init=props)
             for nme in self.sofb_data.ch_names})
         self.devices.update({
-            nme: PowerSupply(nme, props2init=[])
+            nme: PowerSupply(nme, props2init=props)
             for nme in self.sofb_data.cv_names})
         self._log(f'ET: = {_time.time()-t00:.2f}s')
 
@@ -1033,9 +1044,13 @@ class MeasACORM(_ThreadBaseClass):
         self._log('Creating General Devices  -> ', end='')
         self.devices['currinfo'] = CurrInfoSI()
         # Create RF generator object
-        self.devices['rfgen'] = RFGen(
-            props2init=('GeneralFreq-SP', 'GeneralFreq-RB'))
-        self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SI)
+        props = ['GeneralFreq-SP', 'GeneralFreq-RB']
+        self.devices['rfgen'] = RFGen(props2init=props)
+        props = [
+            'mV:AL:REF-SP', 'mV:AMPREF:MIN:S', 'PL:REF:S', 'PHSREF:MIN:S',
+            'COND:DC:S', 'COND:DC', 'PULSE:S', 'PULSE',
+            ]
+        self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SI, props2init=props)
         # Create Tune object:
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self._log(f'ET: = {_time.time()-t00:.2f}s')
@@ -1043,12 +1058,29 @@ class MeasACORM(_ThreadBaseClass):
         # Create BPMs trigger:
         t00 = _time.time()
         self._log('Creating Timing           -> ', end='')
-        self.devices['trigbpms'] = Trigger('SI-Fam:TI-BPM')
+        props = [
+            'Src-Sts', 'NrPulses-RB', 'DelayRaw-RB', 'Src-Sel', 'NrPulses-SP',
+            'DelayRaw-SP',
+            ]
+        self.devices['trigbpms'] = Trigger('SI-Fam:TI-BPM', props2init=props)
+
         # Create Correctors Trigger:
-        self.devices['trigcorrs'] = Trigger('SI-Glob:TI-Mags-Corrs')
+        props = [
+            'Src-Sts', 'NrPulses-RB', 'DelayRaw-RB', 'DeltaDelayRaw-RB',
+            'Src-Sel', 'NrPulses-SP', 'DelayRaw-SP', 'LowLvlTriggers-Cte',
+            'DeltaDelayRaw-SP',
+            ]
+        self.devices['trigcorrs'] = Trigger(
+            'SI-Glob:TI-Mags-Corrs', props2init=props)
+
         # Create event to start data acquisition sinchronously:
-        self.devices['evt_study'] = Event('Study')
-        self.devices['evg'] = EVG()
+        props = [
+            'Mode-Sts', 'DelayRaw-RB', 'Mode-Sel', 'DelayRaw-SP',
+            'ExtTrig-Cmd',
+            ]
+        self.devices['evt_study'] = Event('Study', props2init=props)
+        props = ['ContinuousEvt-Sts', 'UpdateEvt-Cmd']
+        self.devices['evg'] = EVG(props2init=props)
         self._log(f'ET: = {_time.time()-t00:.2f}s')
 
         # Create BPMs
@@ -1258,12 +1290,7 @@ class MeasACORM(_ThreadBaseClass):
         chs_shifted = self._shift_list(ch_names, 1)
         cvs_shifted = self._shift_list(cv_names, 1)
 
-        # set operation mode to slowref
-        if not self._change_corrs_opmode('slowref'):
-            self._log('Problem: Correctors not in SlowRef mode.')
-            self._meas_finished_ok = False
-            return data_mags
-
+        tout_cor = self.params.timeout_correctors
         excit_time = self.params.corrs_excit_time
         freqh = self.params.corrs_ch_freqs
         freqv = self.params.corrs_cv_freqs
@@ -1279,6 +1306,13 @@ class MeasACORM(_ThreadBaseClass):
             ch2meas = chs_shifted
         if isinstance(cv2meas, str) and cv2meas.startswith('all'):
             cv2meas = cvs_shifted
+
+        # set operation mode to slowref
+        if not self._change_corrs_opmode(
+                'slowref', ch2meas+cv2meas, timeout=tout_cor):
+            self._log('Problem: Correctors not in SlowRef mode.')
+            self._meas_finished_ok = False
+            return data_mags
 
         ch_kicks = _np.full(len(ch2meas), self.params.corrs_ch_kick)
         cv_kicks = _np.full(len(cv2meas), self.params.corrs_cv_kick)
@@ -1349,7 +1383,7 @@ class MeasACORM(_ThreadBaseClass):
             # set operation mode to cycle
             t00 = _time.time()
             self._log('    Changing Correctors to Cycle...', end='')
-            if not self._change_corrs_opmode('cycle', chs_f + cvs_f):
+            if not self._change_corrs_opmode('cycle', chs_f+cvs_f, tout_cor):
                 self._log('Problem: Correctors not in Cycle mode.')
                 self._meas_finished_ok = False
                 break
@@ -1390,10 +1424,10 @@ class MeasACORM(_ThreadBaseClass):
             # set operation mode to slowref
             t00 = _time.time()
             self._log('    Changing Correctors to SlowRef...', end='')
-            if not self._wait_cycle_to_finish(chs_f + cvs_f):
+            if not self._wait_cycle_to_finish(chs_f + cvs_f, timeout=tout_cor):
                 self._log('Problem: Cycle still not finished.')
                 break
-            if not self._change_corrs_opmode('slowref', chs_f + cvs_f):
+            if not self._change_corrs_opmode('slowref', chs_f+cvs_f, tout_cor):
                 self._log('Problem: Correctors not in SlowRef mode.')
                 break
             self._log(f'Done! ET: {_time.time()-t00:.2f}s')
@@ -1406,8 +1440,9 @@ class MeasACORM(_ThreadBaseClass):
                 break
 
         # set operation mode to slowref
-        if not self._change_corrs_opmode('slowref'):
-            self._log('Problem: Correctors not in SlowRef mode.')
+        if not self._change_corrs_opmode(
+                'slowref', ch2meas+cv2meas, timeout=tout_cor):
+            self._log('Problem: Correctors still not in SlowRef mode.')
             return data_mags
 
         elt0 -= _time.time()
@@ -1850,13 +1885,13 @@ class MeasACORM(_ThreadBaseClass):
         return {
             'trigbpm_source': trigbpm.source,
             'trigbpm_nr_pulses': trigbpm.nr_pulses,
-            'trigbpm_delay': trigbpm.delay,
+            'trigbpm_delay_raw': trigbpm.delay_raw,
             'trigcorr_source': trigcorr.source,
             'trigcorr_nr_pulses': trigcorr.nr_pulses,
             'trigcorr_delay_raw': trigcorr.delay_raw,
             'trigcorr_delta_delay_raw': trigcorr.delta_delay_raw,
             'evt_study_mode': evt_study.mode,
-            'evt_study_delay': evt_study.delay,
+            'evt_study_delay_raw': evt_study.delay_raw,
             }
 
     def _set_timing_state(self, state):
@@ -1869,8 +1904,8 @@ class MeasACORM(_ThreadBaseClass):
             trigbpm.source = state['trigbpm_source']
         if 'trigbpm_nr_pulses' in state:
             trigbpm.nr_pulses = state['trigbpm_nr_pulses']
-        if 'trigbpm_delay' in state:
-            trigbpm.delay = state['trigbpm_delay']
+        if 'trigbpm_delay_raw' in state:
+            trigbpm.delay_raw = state['trigbpm_delay_raw']
         if 'trigcorr_source' in state:
             trigcorr.source = state['trigcorr_source']
         if 'trigcorr_nr_pulses' in state:
@@ -1881,8 +1916,8 @@ class MeasACORM(_ThreadBaseClass):
             trigcorr.delta_delay_raw = state['trigcorr_delta_delay_raw']
         if 'evt_study_mode' in state:
             evt_study.mode = state['evt_study_mode']
-        if 'evt_study_delay' in state:
-            evt_study.delay = state['evt_study_delay']
+        if 'evt_study_delay_raw' in state:
+            evt_study.delay_raw = state['evt_study_delay_raw']
         _time.sleep(0.1)
         evg.cmd_update_events()
 
@@ -1975,6 +2010,19 @@ class MeasACORM(_ThreadBaseClass):
             cmo.cycle_theta_begin = 0
             cmo.cycle_theta_end = 0
             cmo.cycle_num_cycles = int(excit_time * freqs[i])
+            # NOTE: There is a bug in the firmware of the power supplies
+            # (apparently comparison >= should be replaced by > in line 353 of
+            # the file siggen.c of the repository C28) that makes the endpoint
+            # of the cycle not be equal to the starting point. So we need to
+            # add a very small phase at the ending of the senoid to compensate
+            # for this bug. The code bellow adds a phase compatible with a
+            # small fraction (0.1) of the phase advance between two points of
+            # the signal at the end of the cycling.
+            fsamp = cmo['ParamPWMFreq-Cte']
+            params = cmo.cycle_aux_param
+            params[1] = freqs[i] / fsamp * 360
+            params[1] *= 0.1
+            cmo.cycle_aux_param = params
 
     def _change_corrs_opmode(self, mode, corr_names=None, timeout=10):
         """."""
@@ -1990,22 +2038,16 @@ class MeasACORM(_ThreadBaseClass):
             cmo = self.devices[cmn]
             cmo.opmode = mode_sel
 
-        interval = 0.2
-        for _ in range(int(timeout/interval)):
-            okk = True
-            corrname = ''
-            for cmn in corr_names:
-                cmo = self.devices[cmn]
-                oki = cmo.opmode == mode_sts
-                if not oki:
-                    corrname = cmn
-                okk &= oki
-            if okk:
-                return True
-            _time.sleep(interval)
-
-        self._log(corrname)
-        return False
+        for cmn in corr_names:
+            dt_ = _time.time()
+            cmo = self.devices[cmn]
+            if not cmo._wait('OpMode-Sts', mode_sts, timeout=timeout):
+                self._log('ERR:'+cmn+' did not change to '+mode)
+                return False
+            dt_ -= _time.time()
+            timeout = max(timeout + dt_, 0)
+            # cmo.current = cmo.current
+        return True
 
     def _wait_cycle_to_finish(self, corr_names=None, timeout=10):
         if corr_names is None:
