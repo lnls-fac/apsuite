@@ -1,7 +1,8 @@
 """."""
 import numpy as _np
 import matplotlib.pyplot as _mplt
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit, OptimizeWarning
+from scipy.signal import hilbert
 
 import pyaccel as _pa
 from pymodels import si as _si
@@ -118,7 +119,7 @@ class TbTData(DataBaseClass):
         tunesy_at_peaks = _np.array(tunesy_at_peaks)
 
         # identify BPMs whose spectra overlap
-        overlap = _np.abs(tunesy_at_peaks - tunesx_at_peaks) < 0.06
+        overlap = _np.abs(tunesy_at_peaks - tunesx_at_peaks) < 0.08
         # Band-pass filter on trajx spectra
         dftx = self.filter_around_peak(dftx, xpeaks_idcs,
                                        keep_within=True, n=2)
@@ -128,9 +129,11 @@ class TbTData(DataBaseClass):
                                                     keep_within=True,
                                                     n=2)
         # Filter out tunex peak from trajy to remove coupling artifacts
+
         dfty[:, overlap] = self.filter_around_peak(dfty[:, overlap],
                                                    ypeaks_idcs[overlap],
-                                                   keep_within=False, n=4)
+                                                   keep_within=False,
+                                                   n=4)
         ypeaks_idcs = _np.argmax(_np.abs(dfty), axis=0)
         dfty = self.filter_around_peak(dfty, ypeaks_idcs,
                                        keep_within=True, n=2)
@@ -210,6 +213,85 @@ class TbTData(DataBaseClass):
             self.data['tunes'+axis] = params[:, 1]
             self.data['fitted_amps'+axis] = params[:, 0]
             self.data['fitted_phases'+axis] = params[:, -1]
+
+    def fit_trajectories(self):
+        """."""
+        for axis in 'xy':
+            traj= self.data['traj'+axis].copy()
+
+            # calculate analystic singal (hilbert transform)
+            traj_a = hilbert(traj, axis=0)
+            # identify instantaneous amplitudes (envelopes)
+            amps = _np.abs(traj_a)
+            # instantaneous phase
+            inst_phases = _np.unwrap(_np.angle(traj_a), axis=0)
+            # and instantaneous frequencies (tunes)
+            tunes = _np.diff(inst_phases, axis=0)
+            tunes /= 2 * _np.pi
+            # find samples with largest instantaneous amplitudes
+            peaks_idcs = amps.argmax(axis=0)
+            # selects the rows (turns) surrounding the turn where
+            # amplitude peaks (most "stable" region for fitting)
+            from_turn = _np.maximum(0, peaks_idcs-10)
+            to_turn = _np.minimum(traj.shape[0], from_turn+20)
+            traj = _np.vstack([traj[f:t, i] for i, (f, t) in
+                              enumerate(zip(from_turn, to_turn))]).T
+
+            amp_guesses = amps.max(axis=0)
+            tune_guesses = _np.array(
+                [tunes[idc, col] for col, idc in enumerate(peaks_idcs)])
+            phase_guesses = _np.array([inst_phases[f, i] for i, f in
+                                      enumerate(from_turn)])
+
+            p0 = _np.concatenate((amp_guesses[:, None],
+                                 tune_guesses[:, None],
+                                 phase_guesses[:, None]), axis=1)
+
+            params = _np.zeros((traj.shape[1], 3), dtype=float)
+            n = _np.arange(traj.shape[0])
+
+            for i, param_guess in enumerate(p0):
+                try:
+                    params[i, :], _ = curve_fit(TbTData._TbT_model,
+                                                xdata=n,
+                                                ydata=traj[:, i],
+                                                p0=param_guess)
+                except RuntimeError:
+                    print(f'{i}th BPM time-series could not be fitted')
+                    continue
+                except OptimizeWarning:
+                    stg = f'Covariance of parameters could not be estimated'
+                    stg = f'fitting for {i}th BPM is unreliable.\n'
+                    print(stg)
+                    continue
+
+            model = _si.create_accelerator()
+            model.radiation_on = False
+            model.cavity_on = False
+            model.vchamber_on = False
+
+            famdata = _si.get_family_data(model)
+            bpms_idcs = _pa.lattice.flatten(famdata['BPM']['index'])
+            twiss, *_ = _pa.optics.calc_twiss(
+                accelerator=model, indices=bpms_idcs)
+            beta = twiss.betax if traj == 'x' else twiss.betay
+
+            fitted_tunes = params[:, 1]
+            fitted_J = (params[:, 0]**4).sum() / (beta * params[:, 0]**2).sum()
+            # J is calculated as in eq. (9) of the reference X.R. Resende and M.B.
+            # Alves and L. Liu and F.H. de Sá. Equilibrium and Nonlinear Beam
+            # Dynamics Parameters From Sirius Turn-by-Turn BPM Data. In Proc.
+            # IPAC'21. DOI: 10.18429/JACoW-IPAC2021-TUPAB219
+
+            stg = f'avg tune {traj} {fitted_tunes.mean():.4f}'
+            stg += f' +- {fitted_tunes.std():.4f} (std)'
+            print(stg)
+
+            self.data['fit_params'+axis] = params
+            self.data['action'+axis] = fitted_J
+            self.data['from_turn'+axis] = from_turn
+            self.data['to_turn'+axis] = to_turn
+
 
     @staticmethod
     def _fit_hist_mat(data, traj='x', from_turn=0, to_turn=15, model=None):
