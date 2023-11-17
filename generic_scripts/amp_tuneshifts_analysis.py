@@ -234,12 +234,15 @@ class TbTData(DataBaseClass):
             # amplitude peaks (most "stable" region for fitting)
             from_turn = _np.maximum(0, peaks_idcs-10)
             to_turn = _np.minimum(traj.shape[0], from_turn+20)
+            # adjust those peaks near the edge
+            msk = to_turn == traj.shape[0]
+            from_turn[msk] = to_turn[msk] - 20
             traj = _np.vstack([traj[f:t, i] for i, (f, t) in
                               enumerate(zip(from_turn, to_turn))]).T
 
             amp_guesses = amps.max(axis=0)
-            tune_guesses = _np.array(
-                [tunes[idc, col] for col, idc in enumerate(peaks_idcs)])
+            tune_guesses = _np.array([tunes[idc, col] for col, idc in
+                                      enumerate(peaks_idcs)])
             phase_guesses = _np.array([inst_phases[f, i] for i, f in
                                       enumerate(from_turn)])
 
@@ -247,7 +250,7 @@ class TbTData(DataBaseClass):
                                  tune_guesses[:, None],
                                  phase_guesses[:, None]), axis=1)
 
-            params = _np.zeros((traj.shape[1], 3), dtype=float)
+            params = _np.zeros(p0.shape, dtype=float)
             n = _np.arange(traj.shape[0])
 
             for i, param_guess in enumerate(p0):
@@ -274,7 +277,7 @@ class TbTData(DataBaseClass):
             bpms_idcs = _pa.lattice.flatten(famdata['BPM']['index'])
             twiss, *_ = _pa.optics.calc_twiss(
                 accelerator=model, indices=bpms_idcs)
-            beta = twiss.betax if traj == 'x' else twiss.betay
+            beta = twiss.betax if axis == 'x' else twiss.betay
 
             fitted_tunes = params[:, 1]
             fitted_J = (params[:, 0]**4).sum() / (beta * params[:, 0]**2).sum()
@@ -283,7 +286,7 @@ class TbTData(DataBaseClass):
             # Dynamics Parameters From Sirius Turn-by-Turn BPM Data. In Proc.
             # IPAC'21. DOI: 10.18429/JACoW-IPAC2021-TUPAB219
 
-            stg = f'avg tune {traj} {fitted_tunes.mean():.4f}'
+            stg = f'avg tune {axis} {fitted_tunes.mean():.4f}'
             stg += f' +- {fitted_tunes.std():.4f} (std)'
             print(stg)
 
@@ -473,9 +476,15 @@ class TbTData(DataBaseClass):
     def evaluate_fit(self, traj='xy', from_turn=(0, 0), to_turn=(20, 20)):
         """."""
         for i, axis in enumerate(traj):
-            amps = self.data['fitted_amps'+axis]
-            tunes = self.data['tunes'+axis]
-            phases = self.data['fitted_phases'+axis]
+            if 'fitted_amps'+axis not in self.data.keys():
+                amps = self.data['fit_params'+axis][:, 0]
+                tunes = self.data['fit_params'+axis][:, 1]
+                phases = self.data['fit_params'+axis][:, 2]
+            else:
+                amps = self.data['fitted_amps'+axis]
+                tunes = self.data['tunes'+axis]
+                phases = self.data['fitted_phases'+axis]
+
             hist_mat = self.data['traj'+axis][from_turn[i]:to_turn[i] + 1, :]
             nturns = hist_mat.shape[0]
             n = _np.arange(nturns)
@@ -486,6 +495,31 @@ class TbTData(DataBaseClass):
             bpms_rms_error = diff.std(axis=0)
             avg_rms_errors = bpms_rms_error.mean()
             print(f'average RMS errors for BPMs time-series: {avg_rms_errors}')
+            self.data['fit'+axis] = fit
+
+    def evaluate_fit2(self):
+        """."""
+        for i, axis in enumerate('xy'):
+            amps = self.data['fit_params'+axis][:, 0]
+            tunes = self.data['fit_params'+axis][:, 1]
+            phases = self.data['fit_params'+axis][:, 2]
+
+            from_turn = self.data['from_turn'+axis]
+            to_turn = self.data['to_turn'+axis]
+
+            traj = self.data['traj'+axis]
+            traj = _np.vstack([traj[f:t, i] for i, (f, t) in
+                              enumerate(zip(from_turn, to_turn))]).T
+
+            nturns = traj.shape[0]
+            n = _np.arange(nturns)
+            fit = _np.zeros_like(traj)
+            for i, (a, t, p) in enumerate(zip(amps, tunes, phases)):
+                fit[:, i] = TbTData()._TbT_model(n, a, t, p)
+            diff = traj - fit
+            bpms_rms_error = diff.std(axis=0)
+            avg_rms_errors = bpms_rms_error.mean()
+            print(f'avg RMS error for BPMs time-series: {avg_rms_errors}')
             self.data['fit'+axis] = fit
 
     def compare_fit_with_data(
@@ -505,6 +539,30 @@ class TbTData(DataBaseClass):
             ax[i].set_title(f'{plane} trajectory')
             ax[i].set_xlim(from_t, to_t+1)
             x_ticks = _np.arange(from_t, to_t+1, step=(to_t-from_t)//5)
+            ax[i].set_xticks(x_ticks)
+        fig.supylabel(f'trajectory [mm]')
+        fig.supxlabel(f'turns')
+        fig.tight_layout()
+        _mplt.show()
+
+    def compare_fit_with_data2(self, bpm_idc=0):
+        """."""
+        fig, ax = _mplt.subplots(1, 2, sharey=False)
+        for i, plane in enumerate('xy'):
+            from_turn= self.data['from_turn'+plane][bpm_idc]
+            to_turn = self.data['to_turn'+plane][bpm_idc]
+            arg = _np.arange(from_turn, to_turn)
+            ax[i].plot(
+                arg, self.data['traj'+plane][from_turn:to_turn, bpm_idc],
+                'o-', color='blue', label='data')
+            ax[i].plot(
+                arg,
+                self.data['fit'+plane][:, bpm_idc], 'o--', color='red',
+                label='fit')
+            ax[i].set_title(f'{plane} trajectory')
+            ax[i].set_xlim(from_turn, to_turn+1)
+            x_ticks = _np.arange(
+                from_turn-1, to_turn+1, step=(to_turn-from_turn)//4)
             ax[i].set_xticks(x_ticks)
         fig.supylabel(f'trajectory [mm]')
         fig.supxlabel(f'turns')
