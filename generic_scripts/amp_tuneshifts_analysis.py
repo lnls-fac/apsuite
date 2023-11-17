@@ -229,7 +229,7 @@ class TbTData(DataBaseClass):
             tunes = _np.diff(inst_phases, axis=0)
             tunes /= 2 * _np.pi
             # find samples with largest instantaneous amplitudes
-            peaks_idcs = amps.argmax(axis=0)
+            peaks_idcs = amps[20:-19].argmax(axis=0)
             # selects the rows (turns) surrounding the turn where
             # amplitude peaks (most "stable" region for fitting)
             from_turn = _np.maximum(0, peaks_idcs-10)
