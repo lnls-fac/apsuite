@@ -295,7 +295,6 @@ class TbTData(DataBaseClass):
             self.data['from_turn'+axis] = from_turn
             self.data['to_turn'+axis] = to_turn
 
-
     @staticmethod
     def _fit_hist_mat(data, traj='x', from_turn=0, to_turn=15, model=None):
         """."""
@@ -451,6 +450,7 @@ class TbTData(DataBaseClass):
             ax[i].plot(tunes, abs_dft)
             ax[i].set_xlabel(f'{plane} tunes')
             peak_tune = tunes[abs_dft.argmax()]
+            print(f'DFT tune{plane} guess: {peak_tune}')
             ax[i].axvline(x=peak_tune, color='r', linestyle='--', alpha=0.6,
                           label=f'peak @ {peak_tune:.3f}')
             ax[i].legend()
