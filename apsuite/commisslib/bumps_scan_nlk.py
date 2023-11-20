@@ -143,7 +143,7 @@ class BumpNLK(_BaseClass):
         refy0 = refy0 or self.reforby
         nr_iters = self.params.orbcorr_nr_iters
         residue = self.params.orbcorr_residue
-        sec = sec if sec is None else BumpNLK.DEFAULT_SS
+        sec = sec if sec is not None else BumpNLK.DEFAULT_SS
 
         nrefx, nrefy = sofb.si_calculate_bumps(
             refx0, refy0, sec, agx=agx, agy=agy, psx=psx, psy=psy)
