@@ -165,22 +165,28 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     
     spos = _pyaccel.lattice.find_spos(acc)
 
-    fig, (a1, a2, a3) = _plt.subplots(1, 3, figsize=(10, 5), sharey=True, gridspec_kw={'width_ratios': [1, 3, 3]})
+    fig = _plt.figure(figsize=(17, 7))
+    gs = _plt.GridSpec(1, 3, left=0.1, right=0.98, wspace=0.03, top=0.95, bottom=0.1, width_ratios=[2, 3, 8])
+    a1 = fig.add_subplot(gs[0, 0])
+    a2 = fig.add_subplot(gs[0, 1], sharey=a1)
+    a3 = fig.add_subplot(gs[0, 2], sharey=a1)
+    a2.tick_params(axis='y', which='both', left=False, right=False, labelleft=False)
+    a3.tick_params(axis='y', which='both', left=False, right=False, labelleft=False)
     
     # defining the form that graphic will be plotted, trying to amplify the best I can the letters to see it in a easier way
     a1.grid(True, alpha=0.5, ls='--', color='k')
-    a1.tick_params(axis='both', labelsize=12)
+    a1.tick_params(axis='both', labelsize=18)
     a2.grid(True, alpha=0.5, ls='--', color='k')
-    a2.tick_params(axis='both', labelsize=12)
+    # a2.tick_params(axis='both', labelsize=18)
     a3.grid(True, alpha=0.5, ls='--', color='k')
-    a3.tick_params(axis='both', labelsize=12)
+    # a3.tick_params(axis='both', labelsize=18)
     a1.xaxis.grid(False)
     a2.xaxis.grid(False)
     a3.xaxis.grid(False)
-    
+    _plt.subplots_adjust(wspace=0.1)
 
     if 'pos' in param: # defining the y and x label of the first graphic
-        a1.set_ylabel(r'positive $\delta$ [%]', fontsize=14)
+        a1.set_ylabel(r'positive $\delta$ [%]', fontsize=25)
         
         a3.plot(spos[int(lista_resul[1][-1])], lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[1][element_idx] # defining the acceptance given the begining tracking point, this will be necessary to define until where the graphic will be plotted
@@ -188,26 +194,26 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
         for item in lista_resul:
             a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
     elif'neg' in param:
-        a1.set_ylabel(r'negative $\delta$ [%]', fontsize=14)
+        a1.set_ylabel(r'negative $\delta$ [%]', fontsize=25)
         a3.plot(spos[int(lista_resul[1][-1])], -lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[0][element_idx] # defining the acceptance given the begining tracking point, this will be necessary to define until where the graphic will be plotted
         indx = _np.argmin(_np.abs(lista_off-acp_s))
         for item in lista_resul:
             a3.plot(spos[int(item[1])], -item[2]*1e2, 'r.')
             
-    a1.set_title(r'taxa de espalhamento touschek', fontsize=14) # setting the title of the first graphic
-    a1.set_xlabel(r'Scattering touschek rate', fontsize=14)
+    a1.set_title(r'$\delta \times scat. rate$', fontsize=20) # setting the title of the first graphic
+    a1.set_xlabel(r'$\tau _T$ [1/s]', fontsize=25)
 
     a1.plot(f_dens, delt, label='Scattering touschek rate', color='black')
     
 
-    a2.set_title(r'$\delta \times$ lost turn', fontsize=16) # setting the tilte of the second graphic
-    a2.set_xlabel(r'n de voltas', fontsize=14)
+    a2.set_title(r'$\delta \times$ lost turn', fontsize=20) # setting the tilte of the second graphic
+    a2.set_xlabel(r'number of turns', fontsize=25)
     for iten in lista_resul:
         a2.plot(iten[0], iten[2]*1e2, 'k.', label = '')
 
     
-    a3.set_title(r'tracking ', fontsize=16) # setting the title of the third graphic
+    a3.set_title(r'tracking ', fontsize=20) # setting the title of the third graphic
     a3.plot(spos[lista_idx][:indx], lista_off[:indx]*1e2,'b.', label=r'accep. limit', alpha=0.25)
     
     _plt.hlines(1e2*acp_s, spos[0], spos[-1], color='black', linestyles='dashed', alpha=0.5) # acceptance cutoff
@@ -217,10 +223,10 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     a3.plot(spos[element_idx], 0, 'ko', label='{}, ({} m)'.format(
         acc[element_idx].fam_name, "%.2f" % spos[element_idx])) # initial position where tracking begins
     
-    a3.set_xlabel(r'$s$ [m]', fontsize=14) # setting configurations of the graphic
-    a3.legend(loc='best', ncol=2)
+    a3.set_xlabel(r'$s$ [m]', fontsize=25) # setting configurations of the graphic
+    a3.legend(loc='upper right', ncol=1, fontsize=15)
 
-    fig.tight_layout()
+    # fig.tight_layout()
     fig.show()
     
 def select_idx(list_, param1, param2):

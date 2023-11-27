@@ -391,12 +391,12 @@ class Tous_analysis():
         deltasn = dic['deltasn']
 
         fig, ax = _plt.subplots(figsize=(10,5))
-        ax.set_title('Densidade de probabilidade para posições distintas da rede magnética')
+        ax.set_title('Probability density analytically calculated', fontsize=20)
         ax.grid(True, alpha=0.5, ls='--', color='k')
         ax.xaxis.grid(False)
-        ax.set_xlabel(r'$\delta$ [%]', fontsize=14)
-        ax.set_ylabel('PDF', fontsize=14)
-        ax.tick_params(axis='both', labelsize=12)
+        ax.set_xlabel(r'$\delta$ [%]', fontsize=25)
+        ax.set_ylabel('PDF', fontsize=25)
+        ax.tick_params(axis='both', labelsize=28)
         # ap_ind = []
 
         for idx, s in enumerate(spos):
@@ -435,7 +435,7 @@ class Tous_analysis():
             ax.plot(deltasni, fdensni, color=color )
             # ap_ind.append(mod_ind)
 
-        ax.legend(loc='best', fontsize=12)
+        ax.legend(loc='best', fontsize=20)
 
     #  this function plots the histograms returned by the monte carlo simulation
     def plot_histograms(self, l_spos):
@@ -449,23 +449,24 @@ class Tous_analysis():
         hp, hn, idx_model = tup
         
 
-        fig, ax = _plt.subplots(ncols=len(l_spos), nrows=1,figsize=(10,5), sharey=True)
-        fig.suptitle('Densidade de probabilidade a partir da simulação Monte-Carlo')
+        fig, ax = _plt.subplots(ncols=len(l_spos), nrows=1,figsize=(30,10), sharey=True)
+        fig.suptitle('Probability density calculated by Monte-Carlo simulation', fontsize=20)
         
 
         for index, iten in enumerate(idx_model):
             color = _plt.cm.jet(index/len(idx_model))
             ay = ax[index]
             if not index:
-                ay.set_ylabel('PDF', fontsize=14)
+                ay.set_ylabel('PDF', fontsize=25)
 
             ay.grid(True, alpha=0.5, ls='--', color='k')
             ay.xaxis.grid(False)
-            ay.set_xlabel(r'$\delta$ [%]', fontsize=14)
-            ay.tick_params(axis='both', labelsize=12)
+            ay.set_xlabel(r'$\delta$ [%]', fontsize=25)
+            ay.tick_params(axis='both', labelsize=18)
             ay.hist(hp[index], density=True, bins=200, color=color,
                     label='element:{}, pos:{:.2f} [m]'.format(model[iten].fam_name, spos[iten]))
             ay.hist(hn[index], density=True, bins=200, color=color)
+            _plt.tight_layout()
             ay.legend()
 
 
@@ -661,6 +662,7 @@ class Tous_analysis():
 
         ax.set_xlabel('lost position [m]', fontsize=16)
         ax.set_ylabel('loss rate [1/s]', fontsize=16)
+        ax.tick_params(axis='both', labelsize=16)
 
         ax.plot(list(a.index), summed, color='navy')
         _pyaccel.graphics.draw_lattice(self._model_fit,
