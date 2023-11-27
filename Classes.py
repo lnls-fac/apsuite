@@ -711,7 +711,7 @@ class Tous_analysis():
         heatmp = ax.pcolor(X,Y,val, cmap='jet',shading='flat')
 
         cbar = _plt.colorbar(heatmp)
-        cbar.set_label('scat. rate [1/s] in logarithmic scale', rotation=90)
+        cbar.set_label('Loss rate [1/s] in logarithmic scale', rotation=90)
 
         ax.set_title('Loss profile', fontsize=16)
 
