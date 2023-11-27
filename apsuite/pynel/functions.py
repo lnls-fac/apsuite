@@ -6,32 +6,71 @@ from .std_si_data import BPMIDX as _BPMIDX_
 
 _BPMIDX = _BPMIDX_()
 
-_FUNCS = {
-        'dx': _pyaccel.lattice.set_error_misalignment_x ,
-        'dy': _pyaccel.lattice.set_error_misalignment_y ,
-        'dr': _pyaccel.lattice.set_error_rotation_roll ,
+_SET_FUNCS = {
+        'dx':  _pyaccel.lattice.set_error_misalignment_x ,
+        'dy':  _pyaccel.lattice.set_error_misalignment_y ,
+        'dr':  _pyaccel.lattice.set_error_rotation_roll ,
         'drp': _pyaccel.lattice.set_error_rotation_pitch ,
         'dry': _pyaccel.lattice.set_error_rotation_yaw
         }
 
-def revoke_deltas(model, base):
-    for i, button in enumerate(base.buttons):
-        _FUNCS[button.dtype](model, indices=button.indices, values=0.0)
+_GET_FUNCS = {
+        'dx':  _pyaccel.lattice.get_error_misalignment_x ,
+        'dy':  _pyaccel.lattice.get_error_misalignment_y ,
+        'dr':  _pyaccel.lattice.get_error_rotation_roll ,
+        'drp': _pyaccel.lattice.get_error_rotation_pitch ,
+        'dry': _pyaccel.lattice.get_error_rotation_yaw
+        }
 
-def apply_delta(model, button, delta):
-    if isinstance(delta, (_np.int_, _np.float_, float, int)):
-        _FUNCS[button.dtype](model, indices=button.indices, values=delta)
-    elif len(delta) == len(button.indices):
-        _FUNCS[button.dtype](model, indices=button.indices, values=delta)
+_ADD_FUNCS = {
+        'dx':  _pyaccel.lattice.add_error_misalignment_x ,
+        'dy':  _pyaccel.lattice.add_error_misalignment_y ,
+        'dr':  _pyaccel.lattice.add_error_rotation_roll ,
+        'drp': _pyaccel.lattice.add_error_rotation_pitch ,
+        'dry': _pyaccel.lattice.add_error_rotation_yaw
+        }
+
+
+def get_error(model, button):
+    return _GET_FUNCS[button.dtype](model, indices=[button.indices[0]])
+
+def get_errors(model, base):
+    errors = []
+    for button in base.buttons:
+        errors.append(get_error(model, button))
+    return _np.array(errors)
+
+def set_error(model, button, error):
+    if isinstance(error, (_np.int_, _np.float_, float, int)):
+        _SET_FUNCS[button.dtype](model, indices=button.indices, values=error)
+    elif len(error) == len(button.indices):
+        _SET_FUNCS[button.dtype](model, indices=button.indices, values=error)
     else:
         raise ValueError('problem with deltas')
     
-def apply_deltas(model, base, deltas, condition=0):
+def set_errors(model, base, errors):
+    if len(errors) != len(base):
+        raise ValueError('"errors" size is incompatible with "base" size')
+    for i, button in enumerate(base.buttons):
+        set_error(model, button, errors[i])    
+         
+def add_delta_error(model, button, delta):
+    if isinstance(delta, (_np.int_, _np.float_, float, int)):
+        _ADD_FUNCS[button.dtype](model, indices=button.indices, values=delta)
+    elif len(delta) == len(button.indices):
+        _ADD_FUNCS[button.dtype](model, indices=button.indices, values=delta)
+    else:
+        raise ValueError('problem with delta')
+
+def add_delta_errors(model, base, deltas):
     if len(deltas) != len(base):
         raise ValueError('"deltas" size is incompatible with "base" size')
     for i, button in enumerate(base.buttons):
-        if abs(deltas[i])>condition:
-            apply_delta(model, button, deltas[i])
+        add_delta_error(model, button, deltas[i])    
+
+def remove_delta_errors(model, base, deltas):
+    for i, button in enumerate(base.buttons):
+        _ADD_FUNCS[button.dtype](model, indices=button.indices, values=-deltas[i])
 
 def add_error_ksl(lattice, indices, values):
     if isinstance(values, list):
@@ -63,6 +102,32 @@ def calc_disp(model, indices='bpm'):
     orbn = _pyaccel.tracking.find_orbit4(model, indices=indices, energy_offset=-1e-6)
     return _np.hstack([(orbp[0,:] - orbn[0,:])/(2e-6), (orbp[2,:] - orbn[2,:])/(2e-6)])
 
+def calc_pinv(matrix, svals="auto", cut=1e-3, return_svd=False):
+    u, smat, vh = _np.linalg.svd(matrix, full_matrices=False)
+    if svals == "auto":
+        ismat = []
+        c = 1
+        for s in smat:
+            if _np.log10(s / smat[0]) > _np.log10(cut):
+                ismat.append(1 / s)
+                c += 1
+            else:
+                ismat.append(0)
+    elif isinstance(svals, int):
+        ismat = 1 / smat
+        ismat[svals:] *= 0.0
+        c = svals
+    elif svals == "all":
+        ismat = 1 / smat
+        c = len(smat)
+    else:
+        raise ValueError('svals should be "auto" or an integer')
+    imat = vh.T @ _np.diag(ismat) @ u.T
+    if return_svd:
+        return imat, u, smat, vh, c
+    else:
+        return imat
+    
 def rmk_correct_orbit(OrbitCorr_obj, jacobian_matrix, goal_orbit=None):
     """Orbit correction routine
         --> returns: 
@@ -108,27 +173,9 @@ def rmk_correct_orbit(OrbitCorr_obj, jacobian_matrix, goal_orbit=None):
             ismat = OrbitCorr_obj.get_inverse_matrix(jmat)
     return OrbitCorr_obj.CORR_STATUS.ConvergenceFail, maxit
 
-def calc_pinv(matrix, svals="auto", cut=1e-3):
-    u, smat, vh = _np.linalg.svd(matrix, full_matrices=False)
-    if svals == "auto":
-        ismat = []
-        c = 1
-        for s in smat:
-            if _np.log10(s / smat[0]) > _np.log10(cut):
-                ismat.append(1 / s)
-                c += 1
-            else:
-                ismat.append(0)
-    elif isinstance(svals, int):
-        ismat = 1 / smat
-        ismat[svals:] *= 0.0
-        c = svals
-    elif svals == "all":
-        ismat = 1 / smat
-        c = len(smat)
-    else:
-        raise ValueError('svals should be "auto" or an integer')
-    imat = vh.T @ _np.diag(ismat) @ u.T
-    return imat, u, smat, vh, c
-
-__all__ = ('calc_pinv', 'calc_rms', 'calc_disp', 'calc_vdisp', 'calc_hdisp', 'rmk_correct_orbit', 'apply_deltas', 'revoke_deltas')
+__all__ = ('calc_pinv', 'calc_rms', 
+           'calc_disp', 'calc_vdisp', 'calc_hdisp',
+           'get_error', 'get_errors',
+           'set_error','set_errors',
+           'add_delta_error','add_delta_errors',
+           'rmk_correct_orbit')

@@ -1,8 +1,7 @@
 """Module 'base' for the class object 'Base': a collection of 'Button'(s)"""
 
 from .std_si_data import STD_ELEMS, STD_SECTS, \
-    STD_TYPES, BPMIDX,  SI_SECTOR_TYPES, \
-    COMPLETE_BUTTONS_VERTICAL_DISPERSION
+    STD_TYPES, BPMIDX,  SI_SECTOR_TYPES
 from .buttons import Button as _Button
 import numpy as _np
 from copy import deepcopy as _dpcopy
@@ -13,34 +12,19 @@ _STD_SECTS          = STD_SECTS()
 _STD_TYPES          = STD_TYPES()
 _STD_SECT_TYPES     = SI_SECTOR_TYPES()
 _bpmidx             = BPMIDX()
-_FULL_VERTC_BUTTONS = COMPLETE_BUTTONS_VERTICAL_DISPERSION()
 
 class Base:
     """
-    Object Base: a collection of buttons (Button Object)
-    About:
-    ---> The Base object was implemented to group Button objects and perform analisys on how these buttons can modify the optics in SIRIUS ring.
-
-    Creation:
-    ---> Creating a Base can be performed in two basic ways: passing specified elements and sectors or passing girder indices:
-
-    > Creating by default requires passing three args: 
-    >'sects' (integers), 'elements' (name strings of the magnets) and 'dtypes' (variations between 'dx', 'dy', 'dr')
-
-    > Creating by buttons requires passing only one arg: 
-    >'buttons' (a list of buttons or a single one)
-
-    > Creating by girders indices requires passing only two args: 
-    > 'girders' (the indices of a single girder or more girders) and 'dtypes' (variations between 'dx', 'dy', 'dr')
-
-    *kwargs:
-    auto_refine: default=True ---> automatically refines the Base by removing invalid buttons and flatten the valids
-    exclude: default=None ---> create the base without a group of unwanted elements, sects or dtypes
-    valids_cond: default=False ---> reset the 'valid' condition for buttons if it is not a SIRIUS standart valid button ("Sandbox buttons")
-    func: default='vertical_disp'/'testfunc' ---> set the default signature function of the buttons
+    I'll rewrite this. Be patience.
     """
-    def __init__(self, sects='all', elements='all', dtypes='all', auto_refine=True, exclude=None, valids_cond=['std', 'std', 'std'], func='vertical_disp', buttons=None, force_rebuild=False):
-        self.rebuild = force_rebuild
+    def __init__(self, sects='all', elements='all', dtypes='all', auto_refine=True, exclude=None, 
+                 valids_cond=['std', 'std', 'std'], func='vertical_disp', buttons=None, 
+                 root_Base=None):
+        self.__root_Buttons = []
+        if root_Base is not None and not isinstance(root_Base, Base):
+            raise ValueError('root_Base should be a valid Base object')
+        elif root_Base is not None and isinstance(root_Base, Base):
+            self.__root_Buttons = root_Base.buttons
         self.__func = func
         self.__init_flag = None
         self.bpmidx = _bpmidx
@@ -67,10 +51,10 @@ class Base:
         if auto_refine:
             self.refine_base(update_buttons=True, flatten=True, return_removed=False, show_invalids=False)
 
-        if self.rebuild == False and self.__init_flag == 'by_default':
+        if self.__root_Buttons != [] and self.__init_flag == 'by_default':
             temp_buttons = []
             for button in self.__buttons_list:
-                for buttonV in _FULL_VERTC_BUTTONS:
+                for buttonV in []:
                     if (button.indices == buttonV.indices) and (button.dtype == buttonV.dtype) and (button.fantasy_name == buttonV.fantasy_name):
                         button.signature = _dpcopy(buttonV.signature)
                         temp_buttons.append(button)
@@ -192,7 +176,7 @@ class Base:
         for exbutton in to_exclude:
             exparams.append((exbutton.sect, exbutton.dtype, exbutton.bname))
 
-        if self.rebuild == True:
+        if self.__root_Buttons == []:
             all_buttons = []
             for dtype in self._TYPES:
                 for sect in self._SECTS:
@@ -200,7 +184,7 @@ class Base:
                         if (sect, dtype, elem) not in exparams:
                             temp_Button = _Button(name=elem, dtype=dtype, sect=sect, default_valids=default_valids, func=stdfunc)
                             all_buttons.append(temp_Button)
-        elif self.rebuild == False:
+        elif self.__root_Buttons != []:
             all_buttons = []
             for dtype in self._TYPES:
                 for sect in self._SECTS:

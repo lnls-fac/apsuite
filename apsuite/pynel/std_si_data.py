@@ -3,19 +3,14 @@
 import pymodels as _pymodels
 import numpy as _np
 from pyaccel.lattice import find_spos as _find_spos, find_indices as _find_indices
-import os as _os
 from copy import deepcopy as _deepcopy
-from mathphys.functions import load_pickle as _load_pickle
 from pyaccel import lattice as _latt
+from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 
-_path_model = _os.path.join(_os.path.dirname(__file__), "model_SI_V25_04_v1.17.0.pickle")
-if _pymodels.__version__ == '1.17.0':
-    __model = _load_pickle(_path_model)
-else:
-    __model = _pymodels.si.create_accelerator()
-    __model.radiation_on = True
-    __model.vchamber_on = True
-    __model.cavity_on = True
+__model = _pymodels.si.create_accelerator()
+__model.radiation_on = True
+__model.vchamber_on = True
+__model.cavity_on = True
 
 def MODEL_BASE():
     """Generate a standart (BASE) SIRIUS model with radiation, cavity and vchambers ON."""
@@ -46,10 +41,6 @@ def SI_QUADRUPOLES():
             'QFB','QDB1','QDB2',
             'QFP','QDP1','QDP2',
             'Q1','Q2','Q3','Q4']
-
-# if _famdata is None:
-#     print('getting_famdata')
-#     _famdata = _pymodels.si.families.get_family_data(_model)
 
 def SI_FAMDATA():
     """Get the default SIRIUS families data"""
@@ -122,26 +113,16 @@ def SI_SECTOR_TYPES():
             'LowBetaP -> LowBetaB', 
             'LowBetaB -> HighBetaA']
 
-def NothingHere():
-    """You will find nothing here..."""
-    print('Nothing Here!')
+__deltas = {
+    'dx':  {'B':40e-6, 'Q':40e-6, 'S':40e-6}, 
+    'dy':  {'B':40e-6, 'Q':40e-6, 'S':40e-6}, 
+    'dr':  {'B':0.3e-3, 'Q':0.3e-3, 'S':0.3e-3},
+    'drp': {'B':0.3e-3, 'Q':0.3e-3, 'S':0.3e-3}, 
+    'dry': {'B':0.3e-3, 'Q':0.3e-3, 'S':0.3e-3}}
 
-# #_orbcorr_jacob_mat = _OrbitCorr(_model, 'SI').get_jacobian_matrix()
-__orbcorr_jacob_mat = _load_pickle(_os.path.join(_os.path.dirname(__file__), 'orbcorr_jacobian_SI_V25_04_v1.17.0.pickle')) # pre-saved jacobian for MODEL_BASE
-def STD_ORBCORR_JACOBIAN():
-    """Return the inverse matrix of the Orbit Correction Jacobian of the standart pymodels SIRIUS model"""
-    return _deepcopy(__orbcorr_jacob_mat)
-
-__deltas = {'dx':  {'B':40e-6, 'Q':40e-6, 'S':40e-6}, 'dy':  {'B':40e-6, 'Q':40e-6, 'S':40e-6}, 
- 'dr':  {'B':0.3e-3, 'Q':0.3e-3, 'S':0.17e-3}, 'drp': {'B':0.3e-3, 'Q':0.3e-3, 'S':0.17e-3}, 
- 'dry': {'B':0.3e-3, 'Q':0.3e-3, 'S':0.17e-3}}
 def STD_ERROR_DELTAS():
     """Default misalignment and rotation expected error"""
     return _deepcopy(__deltas)
-
-__full_buttons = _load_pickle(_os.path.join(_os.path.dirname(__file__), "full_buttons_04_09_23.pickle"))
-def COMPLETE_BUTTONS_VERTICAL_DISPERSION():
-    return _deepcopy(__full_buttons)
 
 def ELEMS_ALL_INDICES():
     return dict((fam, _np.array(_latt.find_indices(__model, 'fam_name', fam))) for fam in STD_ELEMS())

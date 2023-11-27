@@ -7,7 +7,7 @@ from .std_si_data import MODEL_BASE, SI_SPOS, SI_SECT_SPOS, \
 from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 import numpy as _np
 from copy import deepcopy as _deepcopy
-from .misc_functions import calc_vdisp as _calc_vdisp, _FUNCS, rmk_correct_orbit
+from .functions import calc_vdisp as _calc_vdisp, _SET_FUNCS, rmk_correct_orbit
 
 _SI_SPOS          = SI_SPOS()
 _SI_SECT_SPOS     = SI_SECT_SPOS()
@@ -22,7 +22,7 @@ _OC.params.maxnriters = 30
 _OC.params.convergencetol = 1e-9
 _OC.params.use6dorb = True
 _INIT_KICKS = _OC.get_kicks()
-_JAC = STD_ORBCORR_JACOBIAN()
+_JAC = _OC.get_jacobian_matrix()
 _STD_SECT_TYPES = SI_SECTOR_TYPES()
 _SI_SECT_INDICES = SI_SECT_INDICES()
 _DELTAS = STD_ERROR_DELTAS()
@@ -278,7 +278,7 @@ class Button:
         return disp
     
     def __calc_vertical_dispersion_signature(self):
-        func = _FUNCS[self.dtype]
+        func = _SET_FUNCS[self.dtype]
         if all(isinstance(i, list) for i in self.indices): # list of list of ints
             indices = self.indices
         elif all(isinstance(i, (int, _np.integer)) for i in self.indices): # list of ints
@@ -289,64 +289,14 @@ class Button:
         disp = []
         delta = _DELTAS[self.dtype][self.bname[0]]
         for ind in indices:
+            disp_0 = _calc_vdisp(_OC_MODEL)
             func(_OC_MODEL, indices=ind, values=delta) # applying (SETTING) positive delta
             rmk_correct_orbit(_OC, _JAC)
             disp_p = _calc_vdisp(_OC_MODEL)
-            # *** modded way to compute signature: approximation to dn/dp = n(p)/p
-            # func(_OC_MODEL, indices=ind, values=-delta/2) # applying (SETTING) negative delta
-            # f = rmk_correct_orbit(_OC, _JAC)
-            # #print(self.indices[0], 'corr -', f, end='')
-            # disp_n = _calc_vdisp(_OC_MODEL)
-            #disp_ = (disp_p - disp_n)/delta
-            disp.append((disp_p/delta).ravel())
+            disp.append(((disp_p-disp_0)/delta).ravel())
             func(_OC_MODEL, indices=ind, values=0.0)
             _OC.set_kicks(_INIT_KICKS)
-        #del disp_, disp_n, disp_p #, OC_, MODEL_
         return disp
-    
-    # *** Not developed yet ***
-    def __calc_twiss_signatures(self):
-        # func = _FUNCS[self.dtype]
-        # if all(isinstance(i, list) for i in self.indices): # list of list of ints
-        #     indices = self.indices
-        # elif all(isinstance(i, (int, _np.integer)) for i in self.indices): # list of ints
-        #     indices = [self.indices]  
-        # else:
-        #     raise ValueError('Indices with format problem')
-        # twiss = []
-        # # the calculation:
-        # for ind in indices:
-        #     func(_OC_MODEL, indices=ind, values=+1e-6) # applying (SETTING) positive delta
-        #     rmk_correct_orbit(_OC, _IJMAT)
-        #     twiss_p = _calc_twiss(_OC_MODEL)[0]
-            
-        #     func(_OC_MODEL, indices=ind, values=-1e-6) # applying (SETTING) negative delta
-        #     rmk_correct_orbit(_OC, _IJMAT)
-        #     twiss_n = _calc_twiss(_OC_MODEL)[0]
-            
-        #     twiss_ = _deepcopy(twiss_p)
-        #     twiss_.betax  = ((twiss_p.betax  - twiss_n.betax )/(2e-6)).ravel()
-        #     twiss_.mux    = ((twiss_p.mux    - twiss_n.mux   )/(2e-6)).ravel()
-        #     twiss_.alphax = ((twiss_p.alphax - twiss_n.alphax)/(2e-6)).ravel()
-        #     twiss_.betay  = ((twiss_p.betay  - twiss_n.betay )/(2e-6)).ravel()
-        #     twiss_.alphay = ((twiss_p.alphay - twiss_n.alphay)/(2e-6)).ravel()
-        #     twiss_.muy    = ((twiss_p.muy    - twiss_n.muy   )/(2e-6)).ravel()                      
-        #     twiss_.etax   = ((twiss_p.etax   - twiss_n.etax  )/(2e-6)).ravel()
-        #     twiss_.etapx  = ((twiss_p.etapx  - twiss_n.etapx )/(2e-6)).ravel()
-        #     twiss_.etay   = ((twiss_p.etay   - twiss_n.etay  )/(2e-6)).ravel()
-        #     twiss_.etapy  = ((twiss_p.etapy  - twiss_n.etapy )/(2e-6)).ravel()
-        #     twiss_.rx     = ((twiss_p.rx     - twiss_n.rx    )/(2e-6)).ravel() 
-        #     twiss_.px     = ((twiss_p.px     - twiss_n.px    )/(2e-6)).ravel() 
-        #     twiss_.ry     = ((twiss_p.ry     - twiss_n.ry    )/(2e-6)).ravel() 
-        #     twiss_.py     = ((twiss_p.py     - twiss_n.py    )/(2e-6)).ravel() 
-        #     twiss_.de     = ((twiss_p.de     - twiss_n.de    )/(2e-6)).ravel() 
-        #     twiss_.dl     = ((twiss_p.dl     - twiss_n.dl    )/(2e-6)).ravel()
-        #     twiss_ = _ZERO_TWISS
-        #     twiss.append(twiss_)
-        #     #func(_OC_MODEL, indices=ind, values=0.0)
-        # del twiss_p, twiss_, twiss_n
-        # return twiss
-        return self.__calc_test_func_signature()
 
     def flatten(self):
         """Split the button if its contains two or more magnets"""
