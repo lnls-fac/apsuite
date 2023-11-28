@@ -3,7 +3,7 @@
 from .std_si_data import MODEL_BASE, SI_SPOS, SI_SECT_SPOS, \
     STD_SECTS, STD_TYPES, STD_ELEMS_HALB, STD_ELEMS_LBLP, \
     SI_SECTOR_TYPES, STD_ERROR_DELTAS, STD_ELEMS, \
-    STD_ORBCORR_JACOBIAN, SI_SECT_INDICES, ELEMS_ALL_INDICES
+    SI_SECT_INDICES, ELEMS_ALL_INDICES
 from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 import numpy as _np
 from copy import deepcopy as _deepcopy
@@ -29,16 +29,16 @@ _DELTAS = STD_ERROR_DELTAS()
 _FAMS_INDICES = ELEMS_ALL_INDICES()
 
 class Button:
-    """Button object for storing a magnet (bname), it's sector (sect), it's indices 
+    """Button object for storing a magnet, it's sector (sect), it's indices 
        and it's vertical dispersion signature due to an misaligment (dtype)"""
-    def __init__(self, sect=None, dtype=None, name=None, func='testfunc', indices='auto', default_valids='std'):
+    def __init__(self, sect=None, dtype=None, elem=None, func='testfunc', indices='auto', default_valids='std'):
         self.func = func
         default_valids = self.__process_valids(default_valids)
         if indices == 'auto':
-            if (sect is None) and (name is None) and (dtype is None):
-                raise ValueError('Some parameters are missing "sect, name, dtype" (OR) "indices"')
+            if (sect is None) and (elem is None) and (dtype is None):
+                raise ValueError('Some parameters are missing "sect, elem, dtype" (OR) "indices"')
             else:
-                self.__init_by_default(sect=sect, dtype=dtype, name=name, func=func, default_valids=default_valids)
+                self.__init_by_default(sect=sect, dtype=dtype, elem=elem, func=func, default_valids=default_valids)
         elif isinstance(indices, (list, _np.ndarray)):
             if all(isinstance(i, (int, _np.integer)) for i in indices):
                 self.__init_by_indices(indices=indices, dtype=dtype, func=func, default_valids=default_valids)
@@ -51,13 +51,13 @@ class Button:
 
     def __init_by_indices(self, indices, dtype, func, default_valids):
         self.indices = indices
-        name = _OC_MODEL[indices[0]].fam_name
+        elem = _OC_MODEL[indices[0]].elem
         sect = list({j + 1 for i in indices for j in range(20) if (_SI_SECT_SPOS[j] < _SI_SPOS[i]) and (_SI_SPOS[i] < _SI_SECT_SPOS[j + 1])})
         if len(sect) > 1:
             raise ValueError(f'some elements passed are from different sectors: {sect}')
         self.sect = sect[-1]
-        self.bname = name
-        self.fantasy_name = name
+        self.elem = elem
+        self.fantasy_name = elem
         self.dtype = dtype
         self.sectype = self.__sector_type()
 
@@ -94,10 +94,10 @@ class Button:
             else:
                 self.signature = temp
 
-    def __init_by_default(self, sect, dtype, name, func, default_valids):
+    def __init_by_default(self, sect, dtype, elem, func, default_valids):
         #print('init by default', default_valids)
-        self.bname = name.rsplit('_')[0]
-        self.fantasy_name = name
+        self.elem = elem.rsplit('_')[0]
+        self.fantasy_name = elem
         self.dtype = dtype
         self.sect = sect
         self.sectype = self.__sector_type()
@@ -199,7 +199,7 @@ class Button:
             validify[1] = True
         if self.__validnames == 'off':
             validify[2] = True
-        elif (self.bname in self.__validnames):
+        elif (self.elem in self.__validnames):
             validify[2] = True
         return all(validify)
     
@@ -215,28 +215,28 @@ class Button:
             validify[1] = True
         if self.__validnames == 'off':
             validify[2] = True
-        elif (self.bname in self.__validnames):
+        elif (self.elem in self.__validnames):
             validify[2] = True
         return validify
         
     def show_invalid_parameters(self):
         valids = self.__check_isvalid_for_printing()
         invalid = []
-        strings = ['sector', 'dtype', 'name']
+        strings = ['sector', 'dtype', 'elem']
         for i, v in enumerate(valids):
             if not v:
                 invalid.append(strings[i])
         if len(invalid) == 0:
-            print('(%d, %s, %s) ---> valid button' % (self.sect,self.dtype, self.bname))
+            print('(%d, %s, %s) ---> valid button' % (self.sect,self.dtype, self.elem))
         if len(invalid) == 1:
-            print('(%d, %s, %s) ---> invalid %s' % (self.sect, self.dtype, self.bname,  invalid[0]))
+            print('(%d, %s, %s) ---> invalid %s' % (self.sect, self.dtype, self.elem,  invalid[0]))
         if len(invalid) == 2:
-            print('(%d, %s, %s) ---> invalid %s & %s' % (self.sect, self.dtype, self.bname, invalid[0], invalid[1]))
+            print('(%d, %s, %s) ---> invalid %s & %s' % (self.sect, self.dtype, self.elem, invalid[0], invalid[1]))
         if len(invalid) == 3:
-            print('(%d, %s, %s) ---> completely invalid' % (self.sect, self.dtype, self.bname))
+            print('(%d, %s, %s) ---> completely invalid' % (self.sect, self.dtype, self.elem))
 
     def __find_indices(self):
-        famidx = _FAMS_INDICES[self.bname]
+        famidx = _FAMS_INDICES[self.elem]
         idx = _np.where((famidx > _SI_SECT_INDICES[self.sect-1]) & (famidx < _SI_SECT_INDICES[self.sect]))
         idx = list(famidx[idx])
         if '_' in self.fantasy_name:
@@ -244,9 +244,9 @@ class Button:
             if number == 1:
                 return idx[:int(len(idx)/2)]
             return idx[int(len(idx)/2):]
-        elif self.bname in ['Q1', 'Q2', 'Q3', 'Q4']:
+        elif self.elem in ['Q1', 'Q2', 'Q3', 'Q4']:
             return [[idx[0]], [idx[1]]]
-        elif self.bname in ['B2', 'B1']:
+        elif self.elem in ['B2', 'B1']:
             return [idx[:int(len(idx)/2)], idx[int(len(idx)/2):]]
         return [idx]
 
@@ -287,7 +287,7 @@ class Button:
             raise ValueError('Indices with format problem')
         # the calculation:
         disp = []
-        delta = _DELTAS[self.dtype][self.bname[0]]
+        delta = _DELTAS[self.dtype][self.elem[0]]
         for ind in indices:
             disp_0 = _calc_vdisp(_OC_MODEL)
             func(_OC_MODEL, indices=ind, values=delta) # applying (SETTING) positive delta

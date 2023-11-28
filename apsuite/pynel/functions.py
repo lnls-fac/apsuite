@@ -102,39 +102,50 @@ def calc_disp(model, indices='bpm'):
     orbn = _pyaccel.tracking.find_orbit4(model, indices=indices, energy_offset=-1e-6)
     return _np.hstack([(orbp[0,:] - orbn[0,:])/(2e-6), (orbp[2,:] - orbn[2,:])/(2e-6)])
 
-def calc_pinv(matrix, svals="auto", cut=1e-3, return_svd=False):
+def calc_pinv(matrix, **kwargs):
+    """**kwargs: svals, cut, return_svd
+        > svals: integer or strings ("auto" or "all") to limit the quantity of singular values
+        > cut: floating point to limit the quantity of singular values related to the max singular value -> min_sval =  max_sval * cut
+        > return_svd: bool (True or False) to return elements of the SVD decomposition
+
+        >>> 
+        if return_svd=True:
+            return: inverse_matrix, u_matrix, s_matriz, v.T_matrix, number_of_svals
+        if return_svd=False:
+            return: inverse_matrix
+    """
+    svals="auto"; cut=5e-3; return_svd=False
+    if "svals" in kwargs:
+        svals = kwargs['svals']
+    if "cut" in kwargs:
+        cut = kwargs['cut']
+    if "return_svd" in kwargs:
+        return_svd = kwargs['return_svd']
     u, smat, vh = _np.linalg.svd(matrix, full_matrices=False)
-    if svals == "auto":
-        ismat = []
-        c = 1
-        for s in smat:
-            if _np.log10(s / smat[0]) > _np.log10(cut):
-                ismat.append(1 / s)
-                c += 1
-            else:
-                ismat.append(0)
-    elif isinstance(svals, int):
-        ismat = 1 / smat
-        ismat[svals:] *= 0.0
-        c = svals
-    elif svals == "all":
-        ismat = 1 / smat
-        c = len(smat)
+    if isinstance(svals, (_np.integer, int)):
+        ismat =  _np.zeros_like(smat)
+        ismat += 1/smat
+        ismat[svals:] = 0
+    elif isinstance(svals, str):
+        if svals == 'all':
+            ismat = 1/smat
+        if svals == 'auto':
+            ismat = _np.array([1/s if s >= cut*smat[0] else 0 for s in smat])
     else:
-        raise ValueError('svals should be "auto" or an integer')
+        raise ValueError('"svals" arg should be integer or string ("all" or "auto")!')
     imat = vh.T @ _np.diag(ismat) @ u.T
     if return_svd:
-        return imat, u, smat, vh, c
+        return imat, u, smat, vh, len(_np.nonzero(ismat)[0])
     else:
         return imat
     
-def rmk_correct_orbit(OrbitCorr_obj, jacobian_matrix, goal_orbit=None):
-    """Orbit correction routine
-        --> returns: 
-        0 = Succes
-        1 = Orb RMS Warning
-        2 = Convergence Fail
-        3 = Saturation Fail
+def rmk_correct_orbit(OrbitCorr_obj, jacobian_matrix=None, goal_orbit=None):
+    """
+    Orbit correction\\
+    0 = Succes\\
+    1 = Orb RMS Warning\\
+    2 = Convergence Fail\\
+    3 = Saturation Fail
     """
     if goal_orbit is None:
         nbpm = len(OrbitCorr_obj.respm.bpm_idx)

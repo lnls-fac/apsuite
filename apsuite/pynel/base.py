@@ -6,25 +6,36 @@ from .buttons import Button as _Button
 import numpy as _np
 from copy import deepcopy as _dpcopy
 from time import time as _time
-
+from mathphys.functions import load_pickle, save_pickle
 _STD_ELEMS          = STD_ELEMS()
 _STD_SECTS          = STD_SECTS()
 _STD_TYPES          = STD_TYPES()
 _STD_SECT_TYPES     = SI_SECTOR_TYPES()
 _bpmidx             = BPMIDX()
 
+path = '/'.join(__file__.split('/')[:-1])
+
+DEFAULT_BUTTONS = None
+def load_default_base_button():
+    globals()['DEFAULT_BUTTONS'] = load_pickle(path+'/Default_Pynel_Base_Buttons.pickle')
+try:
+    load_default_base_button()
+except FileNotFoundError:
+
+    DEFAULT_BUTTONS = None
+
 class Base:
     """
-    I'll rewrite this. Be patience.
+    I'll rewrite this docstring. Be patience.
     """
     def __init__(self, sects='all', elements='all', dtypes='all', auto_refine=True, exclude=None, 
                  valids_cond=['std', 'std', 'std'], func='vertical_disp', buttons=None, 
-                 root_Base=None):
+                 use_root_Buttons=True):
         self.__root_Buttons = []
-        if root_Base is not None and not isinstance(root_Base, Base):
-            raise ValueError('root_Base should be a valid Base object')
-        elif root_Base is not None and isinstance(root_Base, Base):
-            self.__root_Buttons = root_Base.buttons
+        if not isinstance(use_root_Buttons, bool):
+            raise ValueError('root_Base should be True or False')
+        if use_root_Buttons == True and DEFAULT_BUTTONS is not None:
+            self.__root_Buttons = DEFAULT_BUTTONS
         self.__func = func
         self.__init_flag = None
         self.bpmidx = _bpmidx
@@ -51,16 +62,6 @@ class Base:
         if auto_refine:
             self.refine_base(update_buttons=True, flatten=True, return_removed=False, show_invalids=False)
 
-        if self.__root_Buttons != [] and self.__init_flag == 'by_default':
-            temp_buttons = []
-            for button in self.__buttons_list:
-                for buttonV in []:
-                    if (button.indices == buttonV.indices) and (button.dtype == buttonV.dtype) and (button.fantasy_name == buttonV.fantasy_name):
-                        button.signature = _dpcopy(buttonV.signature)
-                        temp_buttons.append(button)
-
-            self.__buttons_list = temp_buttons
-
         self.__matrix = self.__make_matrix()
         _t = _time()
         self.id = str(int((_t-int(_t))*1e6))
@@ -77,8 +78,8 @@ class Base:
             if button.sect not in _SECTS: 
                 _SECTS.append(button.sect) 
 
-            if button.bname not in _ELEMS: 
-                _ELEMS.append(button.bname) 
+            if button.elem not in _ELEMS: 
+                _ELEMS.append(button.elem) 
 
             if button.dtype not in _TYPES: 
                 _TYPES.append(button.dtype)
@@ -171,46 +172,47 @@ class Base:
                 raise TypeError("Exclude parameters not in format!")
         
         if to_exclude == []:
-            to_exclude = [_Button(sect=-1, name='FalseButton', dtype='dF')]
+            to_exclude = [_Button(sect=-1, elem='FalseButton', dtype='dF')]
         exparams=[]
         for exbutton in to_exclude:
-            exparams.append((exbutton.sect, exbutton.dtype, exbutton.bname))
+            exparams.append((exbutton.sect, exbutton.dtype, exbutton.elem))
 
-        if self.__root_Buttons == []:
-            all_buttons = []
-            for dtype in self._TYPES:
-                for sect in self._SECTS:
-                    for elem in self._ELEMS:
-                        if (sect, dtype, elem) not in exparams:
-                            temp_Button = _Button(name=elem, dtype=dtype, sect=sect, default_valids=default_valids, func=stdfunc)
-                            all_buttons.append(temp_Button)
-        elif self.__root_Buttons != []:
-            all_buttons = []
-            for dtype in self._TYPES:
-                for sect in self._SECTS:
-                    for elem in self._ELEMS:
-                        if (sect, dtype, elem) not in exparams:
-                            temp_Button = _Button(name=elem, dtype=dtype, sect=sect, default_valids=default_valids, func='testfunc')
-                            all_buttons.append(temp_Button)
+        all_buttons = []
+        for dtype in self._TYPES:
+            for sect in self._SECTS:
+                for elem in self._ELEMS:
+                    if (sect, dtype, elem) not in exparams:
+                        sig_flag = 0
+                        for bt in self.__root_Buttons:
+                            if (sect, dtype, elem) == (bt.sect, bt.dtype, bt.elem): 
+                                sig = bt.signature
+                                sig_flag = 1
+                        if sig_flag == 0:
+                            temp_Button = _Button(elem=elem, dtype=dtype, sect=sect, default_valids=default_valids, func='vertical_disp')
+                        else:
+                            temp_Button = _Button(elem=elem, dtype=dtype, sect=sect, default_valids=default_valids, func='testfunc')
+                            temp_Button.signature = _dpcopy(sig)
+
+                        all_buttons.append(temp_Button)
         return all_buttons
 
     def __exclude_buttons(self, par1, par2=None, par3=None):
         if par2 == None and par3 == None:
             if isinstance(par1, int):
-                exbuttons = [_Button(name=elem, dtype=dtype, sect=sect, func='testfunc' )
+                exbuttons = [_Button(elem=elem, dtype=dtype, sect=sect, func='testfunc' )
                              for sect in self._SECTS
                              for dtype in self._TYPES
                              for elem in self._ELEMS
                              if sect == par1]
             elif isinstance(par1, str):
                 if par1[0] == 'd':
-                    exbuttons = [_Button(name=elem, dtype=dtype, sect=sect, func='testfunc' )
+                    exbuttons = [_Button(elem=elem, dtype=dtype, sect=sect, func='testfunc' )
                                  for sect in self._SECTS
                                  for dtype in self._TYPES
                                  for elem in self._ELEMS
                                  if dtype == par1]
                 else:
-                    exbuttons = [_Button(name=elem, dtype=dtype, sect=sect, func='testfunc' )
+                    exbuttons = [_Button(elem=elem, dtype=dtype, sect=sect, func='testfunc' )
                                  for sect in self._SECTS
                                  for dtype in self._TYPES
                                  for elem in self._ELEMS
@@ -218,42 +220,42 @@ class Base:
         elif par3 == None:
             if isinstance(par1, int):  # par1 = sect
                 if par2.startswith('d'):  # par1 = sect, par2 = dtype #### (sect, dtype)
-                    exbuttons = [_Button(name=elem, dtype=dtype, sect=sect, func='testfunc' )
+                    exbuttons = [_Button(elem=elem, dtype=dtype, sect=sect, func='testfunc' )
                                  for sect in self._SECTS
                                  for dtype in self._TYPES
                                  for elem in self._ELEMS
                                  if (dtype == par2 and sect == par1)]
                 # par1 = sect, par2 = elem                     #### (sect, elem)
                 else:
-                    exbuttons = [_Button(name=elem, dtype=dtype, sect=sect, func='testfunc' )
+                    exbuttons = [_Button(elem=elem, dtype=dtype, sect=sect, func='testfunc' )
                                  for sect in self._SECTS
                                  for dtype in self._TYPES
                                  for elem in self._ELEMS
                                  if (elem == par2 and sect == par1)]
             elif isinstance(par2, int):  # par2 = sect
                 if par1.startswith('d'):  # par1 = dtype, par2 = sect #### (dtype, sect)
-                    exbuttons = [_Button(name=elem, dtype=dtype, sect=sect, func='testfunc' )
+                    exbuttons = [_Button(elem=elem, dtype=dtype, sect=sect, func='testfunc' )
                                  for sect in self._SECTS
                                  for dtype in self._TYPES
                                  for elem in self._ELEMS
                                  if (dtype == par1 and sect == par2)]
                 # par1 = elem, par2 = sect                     #### (elem, sect)
                 else:
-                    exbuttons = [_Button(name=elem, dtype=dtype, sect=sect, func='testfunc' )
+                    exbuttons = [_Button(elem=elem, dtype=dtype, sect=sect, func='testfunc' )
                                  for sect in self._SECTS
                                  for dtype in self._TYPES
                                  for elem in self._ELEMS
                                  if (elem == par1 and sect == par2)]
             else:  # par1, par2 = elem or dtype:
                 if par1.startswith('d'):  # par1 = dtype, par2 = elem #### (dtype, elem)
-                    exbuttons = [_Button(name=elem, dtype=dtype, sect=sect, func='testfunc' )
+                    exbuttons = [_Button(elem=elem, dtype=dtype, sect=sect, func='testfunc' )
                                  for sect in self._SECTS
                                  for dtype in self._TYPES
                                  for elem in self._ELEMS
                                  if (dtype == par1 and elem == par2)]
                 # par1 = elem, par2 = dtype                   #### (elem, dtype)
                 else:
-                    exbuttons = [_Button(name=elem, dtype=dtype, sect=sect, func='testfunc' )
+                    exbuttons = [_Button(elem=elem, dtype=dtype, sect=sect, func='testfunc' )
                                  for sect in self._SECTS
                                  for dtype in self._TYPES
                                  for elem in self._ELEMS
@@ -266,7 +268,7 @@ class Base:
                     dtype = el
                 if isinstance(el, str) and el[0] != 'd':
                     elem = el
-            exbuttons = [_Button(name=elem, dtype=dtype, sect=sect, func='testfunc' )]
+            exbuttons = [_Button(elem=elem, dtype=dtype, sect=sect, func='testfunc' )]
         return exbuttons
 
     def refine_base(self, update_buttons=True, flatten=True, return_removed=False, show_invalids=False):  
@@ -302,8 +304,8 @@ class Base:
                     self.__buttons_list.append(button)
                     if button.sect not in self._SECTS: 
                         self._SECTS.append(button.sect) 
-                    if button.bname not in self._ELEMS: 
-                        self._ELEMS.append(button.bname) 
+                    if button.elem not in self._ELEMS: 
+                        self._ELEMS.append(button.elem) 
                     if button.dtype not in self._TYPES: 
                         self._TYPES.append(button.dtype) 
 
@@ -395,5 +397,12 @@ class Base:
                     return False
             return True
         return False
+
+    def set_default_base_buttons(self):
+        if self.__func == 'vertical_disp':
+            save_pickle(self.buttons, path+'/Default_Pynel_Base_Buttons.pickle', overwrite=True)
+            load_default_base_button()
+        else:
+            raise ValueError('Only "vertical dispersion" Bases can be set as default Pynel Base and Buttons')
     
 __all__ = ("Base")

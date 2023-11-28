@@ -5,7 +5,6 @@ import numpy as _np
 from pyaccel.lattice import find_spos as _find_spos, find_indices as _find_indices
 from copy import deepcopy as _deepcopy
 from pyaccel import lattice as _latt
-from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 
 __model = _pymodels.si.create_accelerator()
 __model.radiation_on = True

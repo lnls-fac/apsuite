@@ -1,92 +1,120 @@
 """Fitting module to run dispersion fitting and analisys"""
 import numpy as _np
 from apsuite.orbcorr import OrbitCorr as _OrbitCorr
-from .functions import apply_deltas as _apply_deltas, \
-    calc_vdisp as _calc_vdisp, rmk_correct_orbit as _rmk_correct_orbit,\
-    calc_rms as _calc_rms, revoke_deltas as _revoke_deltas, calc_pinv as _calc_pinv
+from .functions import set_errors as _set_errors, get_errors as _get_errors, rmk_correct_orbit as _correct_orbit, calc_pinv as _pinv, calc_disp as _disp
+from pymodels import si as _si
 
-_IJMAT = None 
+def fit(base, dispy_meta, **kwargs):
+    r"""
+    Fitting routine: fit a "meta" vertical dispersion in SIRIUS model using magnets misalignments.
 
-def dev_fit(model, disp_meta, base, n_iter, inv_jacob_mat='std', True_Apply=True, svals="auto", cut=1e-3):
-    """Returns: disp, deltas, smat, num_svals, rms_res, corr_coef, total_iter"""
-    imat, _, smat, _, num_svals = _calc_pinv(base.resp_mat, svals, cut)
-    print("N_svals =", num_svals)
-    deltas = _np.zeros(len(base.buttons))
-    disp = _np.zeros(160)
-    OrbcorrObj = _OrbitCorr(model, 'SI')
-    if isinstance(inv_jacob_mat, str):
-        if inv_jacob_mat == 'std':
-            inv_jacob_mat = _IJMAT
-        elif inv_jacob_mat == 'auto':
-            _jacob_mat = OrbcorrObj.get_jacobian_matrix()
-            inv_jacob_mat = OrbcorrObj.get_inverse_matrix(_jacob_mat)
-        else:
-            raise ValueError('inv_jacob_mat should be "std", "auto", or a "numpy.ndarray" with shape: (320, 281)')
-    elif isinstance(inv_jacob_mat, (_np.ndarray)):
-        pass
-    else:
-        raise ValueError('inv_jacob_mat should be "std", "auto", or a "numpy.ndarray" with shape: (320, 281)')
-    total_iter = 0
-    for i in range(n_iter):
-        disp = _calc_vdisp(model); 
-        diff = disp_meta - disp;
-        delta = imat @ diff; 
-        deltas += delta
-        _apply_deltas(model=model, base=base, deltas=deltas);
+    Args.:
+    > base: Pynel Base object
+    > dispy_meta: 1-D array with size=160 
+    > **kargs: 
+        > model: pymodels SIRIUS model (unnecessary when orbcorr_obj is passed!)
+        > orbcorr_obj: Apsuite's OrbitCorr SI object 
+        > orbcorr_jacobian: jacobian matrix for orbit correction
+        > svals: integer number to limit the singular values for fitting procedure
+        > cut: floating point to limit the number of singular values for fitting proc.
+        > nr_iters: integer fot set the number of iterations in the fitting proc.
+        > TrueApply: bool (True or False) for applying the fit or not in the model
+        > return_conv: bool (True or False) for returning step-by-step of the fitting proc.
+
+    Return:
+        If "return_conv" = False and model or orbcorr_obj is passed: 
+            > fitted_dispy, deltas
+        If "return_conv" = True
+            > fitted_dispy, deltas, fitting_dict_evolution
+        If neither model or orbcorr_obj is passed:
+            > [...], model
+    """
+    model = None; 
+    nr_iters = 10; 
+    svals = "auto"; 
+    cut = 5e-3;
+    return_conv = False;
+    trueapply = True
+    oc = None;
+    jac = None
+    if "model" in kwargs:
+        model = kwargs['model']
+    if "orbcorr_obj" in kwargs:
+        oc = kwargs['orbcorr_obj']
+        model = oc.respm.model
+        if oc.respm.model != model:
+            print("""> Passed model is different from the model in OrbitCorr object. Now using model from OrbitCorr object!""")
+    if "orbcorr_jacobian" in kwargs:
+        jac = kwargs['orbcorr_jacobian']
+    if "TrueApply" in kwargs:
+        trueapply = kwargs['TrueApply']
+        if not isinstance(trueapply, bool):
+            raise ValueError('TrueApply should be True or False!')
+    rtn_model_flag = False
+    if model is None:
+        model = _si.create_accelerator()
+        rtn_model_flag = True
+        if trueapply == False:
+            trueapply = True
+            print('When model isnt passed, a new model is created and returned with applied fit')
+    if oc is None:
+        oc = _OrbitCorr(model, 'SI')
+    if jac is None:
+        jac = oc.get_jacobian_matrix()
+    if "svals" in kwargs:
+        svals = kwargs['svals']
+    if "cut" in kwargs:
+        cut = kwargs['cut']
+    if "nr_iters" in kwargs:
+        nr_iters = kwargs['nr_iters']
+    if "return_conv" in kwargs:
+        return_conv = kwargs['return_conv']
+        if not isinstance(return_conv, bool):
+            raise ValueError('return_conv should be True or False!')
+    
+    mat = _np.zeros_like(base.resp_mat)
+    mat += base.resp_mat
+    imat, u, smat, vt, nr_sv = _pinv(mat, svals=svals, cut=cut, return_svd=True)
+    init_errors = _get_errors(model, base)
+    init_kicks = oc.get_kicks()
+    fulldeltas = _np.zeros(len(base))
+    if return_conv:
+        evo = {'deltas':[], 'dispersion':[_disp(model)],
+               'rms_deltas':[], 'rms_dispy':[], 'orbcorr_status':[]}
+    for i in range(nr_iters):
+        disp = _disp(model)
+        ddispy = dispy_meta - disp[160:]
+        deltas = _np.dot(imat, ddispy)
+        fulldeltas += deltas
+        _set_errors(model, base, fulldeltas)
         try:
-            total_iter += 1
-            _rmk_correct_orbit(OrbcorrObj, inverse_jacobian_matrix=inv_jacob_mat); 
+            oc_flag, _ = _correct_orbit(oc, jac)
+            if return_conv:
+                evo['deltas'].append(deltas)
+                evo['rms_deltas'].append(_np.std(deltas))
+                evo['rms_dispy'].append(_np.std(disp[160:]))
+                evo['dispersion'].append(disp)
+                evo['orbcorr_status'].append(oc_flag)
         except:
+            fulldeltas -= deltas
+            _set_errors(model, base, fulldeltas)
+            oc_flag, _ = _correct_orbit(oc, jac)
             break
-    try:
-        disp_exit = _calc_vdisp(model)
-    except: 
-        disp_exit = disp
-    rms_res = _calc_rms(disp_exit-disp_meta)
-    corr_coef = _np.corrcoef(disp_exit, disp_meta)[1,0]*100
-    print(f"RMS residue = {rms_res:f}")
-    print(f"Corr. coef. = {corr_coef:.3f}%")
-    if not True_Apply:
-        _revoke_deltas(model, base)
-        _rmk_correct_orbit(OrbcorrObj, inverse_jacobian_matrix=inv_jacob_mat); 
-    return disp_exit, deltas, smat, num_svals, rms_res, corr_coef, total_iter
-
-def fit(model, disp_meta, base, n_iter, svals="auto", cut=1e-3, Orbcorr="auto"):
-    """
-    Function for fitting a 'meta vertical dispersion' into a model, using some Base.
-    > model: Accelerator
-    > disp_meta: Numpy array with shape (160,)
-    > base: Base object
-    Returns: disp, deltas, smat, num_svals, rms_res, corr_coef
-    """
-    imat, _, smat, _, num_svals = _calc_pinv(base.resp_mat, svals, cut)
-    print("N_svals =", num_svals)
-    deltas = _np.zeros(len(base.buttons))
-    disp = _np.zeros(160)
-    if Orbcorr == "auto":
-        oc = _OrbitCorr(model, acc="SI")
-        oc_jacob_mat = oc.get_jacobian_matrix()
-        oc_inv_jacob_mat = oc.get_inverse_matrix(jacobian_matrix=oc_jacob_mat)
-        oc.params.maxnriters = 100
-    elif isinstance(Orbcorr, tuple) and isinstance(Orbcorr[0], _OrbitCorr):
-        oc = Orbcorr[0]
-        oc_inv_jacob_mat = Orbcorr[1]
-    else:
-        raise ValueError(
-            "Orbcorr in wrong format: should be a tuple of (_OrbitCorr obj, inverse_jacobian_matrix)"
-        )
-    for i in range(n_iter):
-        disp = _calc_vdisp(model)
-        diff = disp_meta - disp
-        delta = imat @ diff
-        deltas += delta
-        _apply_deltas(model=model, base=base, deltas=deltas)
-        _rmk_correct_orbit(oc, inverse_jacobian_matrix=oc_inv_jacob_mat)
-    disp = _calc_vdisp(model)
-    rms_res = _calc_rms(disp-disp_meta)
-    corr_coef = _np.corrcoef(disp, disp_meta)[1,0]*100
-    print(f"RMS residue = {rms_res:f}")
-    print(f"Corr. coef. = {corr_coef:.3f}%")
-    _revoke_deltas(model, base)
-    _rmk_correct_orbit(oc, inverse_jacobian_matrix=oc_inv_jacob_mat)
-    return disp, deltas, smat, num_svals, rms_res, corr_coef
+        count = i+1
+    finaldispy = _disp(model)[160:]
+    diff = dispy_meta - finaldispy
+    rms_diff = _np.std(diff)
+    coef = _np.corrcoef(finaldispy, dispy_meta)[0, 1]
+    print("Fitting done!\n"+fr'Total iterations: {count:d}')
+    print(f"RMS diff = {rms_diff*1e3:.3f} [mm]")
+    print(f"Correlation coef. = {coef*1e2:.1f} [%]")
+    if not trueapply:
+        _set_errors(model, base, init_errors)
+        oc.set_kicks(init_kicks)
+    res = [finaldispy, fulldeltas]
+    if return_conv:
+     res.append(evo)
+    if rtn_model_flag:
+        res.append(model)
+    return res
+    

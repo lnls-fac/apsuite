@@ -1,10 +1,10 @@
 # Pynel package for vertical dispersion analysis
 
-The pynel package has 2 main objects: Base and Button. These objects have properties that envolves the computation, study and analysis of vertical dispersion function of the SIRIUS storage ring and its signatures associated to magnets and misalignment and rotation errors.
+The pynel package has 2 main objects: Base and Button. These objects have properties that envolves the analysis of vertical dispersion function of the SIRIUS storage ring and its signatures associated to magnets tranversal and rotation misalignments.
 
 ## Object Button
 
-The Button object basically associates one kind of error (transversal misalignment or rotations) to one magnet of the SIRIUS ring and store the vertical dispersion signature caused by the magnet and the error choosen.
+The Button object associates one kind of error (transversal or rotation misalignment: x, y, roll, pitch and yaw) to one magnet of the SIRIUS ring and store the vertical dispersion signature caused by the magnet and the error choosen.
 
 #### The creation
 The creation of a Button follows 2 possible ways. 
@@ -12,6 +12,7 @@ The creation of a Button follows 2 possible ways.
 Example: ``` qfa_sect5_dx = Button(sect=5, name="QFA", dtype="dx")``` -> creates a quadrupole QFA Button located in the 5th sector with tranversal horizontal misalignment error. 
 - 2nd. Passing 2 arguments: the magnet indices in the SIRIUS _"pymodels"_ model, and the error associated. \
 Example: ``` sfa1_sect1_dr = Button(indices=[74], dtype="dx")``` -> creates a sextupole SFA1 Button located in the 1st sector with rotation roll error. 
+For the 2nd option to create a Button, its necessary to check if Pymodels is up-to-date.
 
 #### About the arguments
 - ```name```: the creation of any Button requires its name (when not passing "indices" arg) that is any magnet family name that exists in the SIRIUS ring: _"B1, B2, BC, Q1, Q2 ... QFA ... QDB2 ... SFA1 ... SFP2 ... SDB3"_. \
