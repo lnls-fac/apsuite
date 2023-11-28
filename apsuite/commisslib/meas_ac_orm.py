@@ -996,7 +996,7 @@ class MeasACORM(_ThreadBaseClass):
         ay.set_ylabel('Vertical [um]')
         ax.legend(
             loc='lower center', bbox_to_anchor=(0.5, 1), fontsize='small',
-            ncols=4)
+            ncol=4)
         fig.tight_layout()
         fig.show()
         return fig, (ax, ay), orbx, orby, dorbx, dorby
@@ -1943,10 +1943,10 @@ class MeasACORM(_ThreadBaseClass):
         state = dict()
         state['trigbpm_source'] = 'Study'
         state['trigbpm_nr_pulses'] = 1
-        state['trigbpm_delay'] = 0.0
+        state['trigbpm_delay_raw'] = 0.0
 
         state['evt_study_mode'] = 'External'
-        state['evt_study_delay'] = 0
+        state['evt_study_delay_raw'] = 0
 
         state['trigcorr_source'] = 'Study'
         state['trigcorr_nr_pulses'] = 1
