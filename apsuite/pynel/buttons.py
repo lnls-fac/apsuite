@@ -336,3 +336,69 @@ class Button:
         else:
             raise ValueError('"default_valids" parameter should be "off", "std" or a list/tuple')
         
+
+########################################
+# FUTURE FIZ FOR INIT FUNCTION OF BUTTONS
+
+#init button
+# def init(elem=None, sect=None, indices=None):
+#     split_flag = False
+#     fixpos = -1
+#     # check if elem+sect is passed
+#     if elem is not None and sect is not None and indices is None:
+#         if isinstance(elem, str):
+#             elem = elem.rsplit('_')
+#             if len(elem) == 1:
+#                 elem = elem[0]
+#             else:
+#                 elem, fixpos = elem[0], int(elem[1])
+#         else:
+#             raise ValueError('problem with arg elem')
+#         if not isinstance(sect, (int, np.integer)):
+#             raise ValueError('arg sect passed in wrong format')
+#         if sect > 20 or sect < 1: 
+#             raise ValueError('sect should be an integer between 1 and 20 (inclusive 1 and 20)')
+#     elif indices is not None and elem is None:
+#         if isinstance(indices, (int, np.integer)):
+#             indices = [indices]
+#         elif isinstance(indices, (np.ndarray, list, tuple)):
+#             pass
+#         else:
+#             ValueError('indices passed in wrong format')
+#         found_elems = [fname for fname in list(set([model[int(idx)].fam_name for idx in indices])) if fname in valid_fam_names]
+#         if len(found_elems) != 1:
+#             raise ValueError('invalid indices')
+#         elem = found_elems.pop()
+#     else:
+#         raise ValueError('("elem" + "sect") OR ("indices") must be passed!')
+#     if indices is not None:
+#         indices = [f for f in fam[elem]['index'] if indices[0] in f]
+#         if len(indices) == 1:
+#             indices = indices[0]
+#     if sect is None:
+#         sect = [int(fam[elem]['subsection'][i][:2]) for i,f in enumerate(fam[elem]['index']) if indices[0] in f].pop()
+#     sects = sects_dict[elem]
+#     if indices is None:
+#         indices = [fam[elem]['index'][i] for i,s in enumerate(sects) if s == sect]
+#         if len(indices) == 1:
+#             if isinstance(indices[0], (list, tuple, np.ndarray)) and len(indices[0]) > 1:
+#                 indices = indices[0]
+#         else:
+#             split_flag = True
+#     spos = [sposS[i[0]] for i in indices] if split_flag else sposS[indices[0]]
+#     if len(set(sects)) != len(sects) and split_flag == False:
+#         pos = 0
+#         for i, s in enumerate(sects):
+#             if s == sect:
+#                 pos += 1
+#                 if indices[0] in fam[elem]['index'][i]:
+#                     break
+#         fantasy_name = elem+'_'+str(pos)
+#     elif len(set(sects)) != len(sects) and split_flag == True:
+#         fantasy_name = [elem+'_'+str(i+1) for i in range(len(indices))]
+#     else:
+#         fantasy_name = elem
+#     if fixpos == -1:
+#         return fantasy_name, sect, spos, indices
+#     else:
+#         return fantasy_name[fixpos-1], sect, spos[fixpos-1], indices[fixpos-1]
