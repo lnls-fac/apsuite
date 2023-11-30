@@ -358,7 +358,7 @@ class Tous_analysis():
         return ress, scat_dis
     
     # this function plot the graphic of tracking and the touschek scattering distribution for one single position
-    def plot_analysis_at_position(self, single_spos, par, accep):
+    def plot_analysis_at_position(self, single_spos, par, accep,filename):
         # defining some params top plot the tracking and the scattering distribution
         # In a first approach I dont have to be concerned in this decision structure because all variables necessary for the calculation will be defined
         # I will may let this part of the code if I know a best method or decide to make a change here
@@ -372,12 +372,12 @@ class Tous_analysis():
         spos = self.spos
         index = _np.argmin(_np.abs(spos-single_spos))
         tousfunc.plot_track(self.accelerator, res, _np.intp(self.inds_pos),
-                            self.off_energy, par, index, accep, dp, fp)
+                            self.off_energy, par, index, accep, dp, fp, filename)
 
     # remember that ind is the index that represents the initial position where tracking begins
 
     # this function is used to compare the PDF of distinct s positions along the storage ring 
-    def plot_normtousd(self, spos):
+    def plot_normtousd(self, spos,filename):
         
         spos_ring = self._spos
         model = self._model_fit
@@ -436,6 +436,7 @@ class Tous_analysis():
             # ap_ind.append(mod_ind)
 
         ax.legend(loc='best', fontsize=20)
+        fig.savefig(filename, dpi=150)
 
     #  this function plots the histograms returned by the monte carlo simulation
     def plot_histograms(self, l_spos):
@@ -494,8 +495,8 @@ class Tous_analysis():
 
         hx = self._model_fit[self._scraph_inds[0]].hmax
         hn = self._model_fit[self._scraph_inds[0]].hmin
-        vx = self._model_fit[self._scraph_inds[0]].vmax
-        vn = self._model_fit[self._scraph_inds[0]].vmin
+        vx = self._model_fit[self._scrapv_inds[0]].vmax
+        vn = self._model_fit[self._scrapv_inds[0]].vmin
         vchamber = [hx, hn, vx, vn]
 
         self.set_vchamber_scraper(vchamber)# reseting vchamber height and width (nominal)
@@ -637,7 +638,7 @@ class Tous_analysis():
 
         return new_dict
     
-    def get_lost_profile(self, dic):
+    def get_lost_profile(self, dic, filename):
 
         # dic = self.get_reordered_dict(l_scattered_pos, reording_key)
         spos = self._spos
@@ -657,7 +658,7 @@ class Tous_analysis():
             sum_row = scyint.trapz(a.loc[idx], spos[indices])
             summed.append(sum_row)
 
-        fig, ax = _plt.subplots(figsize=(10,5),gridspec_kw={'hspace': 0.2, 'wspace': 0.2})
+        fig, ax = _plt.subplots(figsize=(13,7),gridspec_kw={'hspace': 0.2, 'wspace': 0.2})
         ax.set_title('loss rate integral along the ring', fontsize=16)
 
         ax.set_xlabel('lost position [m]', fontsize=16)
@@ -667,9 +668,36 @@ class Tous_analysis():
         ax.plot(list(a.index), summed, color='navy')
         _pyaccel.graphics.draw_lattice(self._model_fit,
                                        offset=-1e-6, height=1e-6, gca=True)
+        fig.savefig(filename,dpi=150)
+
+    def get_lost_profilel(self, l_dic):
+
+        # dic = self.get_reordered_dict(l_scattered_pos, reording_key)
+        l = []
+        for dic in l_dic:    
+            spos = self._spos
+
+            df = _pd.DataFrame(dic)
+            a = df.set_index('lost_positions')
+
+            scat_pos = _np.array(a.columns, dtype=float)
+            
+            indices = []
+            for iten in scat_pos:
+                ind =  _np.argmin(_np.abs(spos-iten))
+                indices.append(ind)
+
+            summed = []
+            for idx, iten in a.iterrows():
+                sum_row = scyint.trapz(a.loc[idx], spos[indices])
+                summed.append(sum_row)
+
+            l.append((a.index, summed))
+        
+        return l
 
     
-    def plot_scat_table(self, l_scattered_pos, new_dic, n_r,n_c=1):
+    def plot_scat_table(self, l_scattered_pos, new_dic, n_r,filename, n_c=1):
         spos = self._spos
 
         # new_dic = self.get_reordered_dict(l_scattered_pos, 'lost_positions')
@@ -720,31 +748,6 @@ class Tous_analysis():
 
         fig.tight_layout()
         _plt.gca().set_aspect('equal')
+        # fig.savefig(filename, dpi=150)
         _plt.show()
-
-
-# # This function will probably will be in my repositories
-# # I dont know if I will use it again, but it seems to me that it could be uselfull in some point
-
-# def extract_delt(groups, deltas):
-#     c = 0
-#     big_list = []
-#     for lists in groups:
-#         lil_list = []
-#         for _ in lists:
-#             lil_list.append(c)
-#             c+=1
-            
-#         big_list.append(lil_list)
-    
-#     sep_deltas = []
-#     comp_l = []
-
-#     for iten in big_list:
-#         sep_deltas.append(deltas[iten])
-#         comp_l.append(len(iten))
-
-
-#     return sep_deltas, comp_l
-
 

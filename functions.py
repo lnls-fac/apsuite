@@ -156,16 +156,18 @@ def char_check(elmnt):
 # this function will plot the tracking simultation with the linear model calculated plus the touschek scattering distribution
 # in the first graphic the plot will be the touschek scattering distribution 
 
-def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep, delt, f_dens):
+def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep, delt, f_dens, filename):
     # ----------------
     
+    cm = 1/2.54
+
     twi0,*_ = _pyaccel.optics.calc_twiss(acc,indices='open')
     betax = twi0.betax
     betax = betax*(1/5)
     
     spos = _pyaccel.lattice.find_spos(acc)
 
-    fig = _plt.figure(figsize=(17, 7))
+    fig = _plt.figure(figsize=(38.5*cm,18*cm))
     gs = _plt.GridSpec(1, 3, left=0.1, right=0.98, wspace=0.03, top=0.95, bottom=0.1, width_ratios=[2, 3, 8])
     a1 = fig.add_subplot(gs[0, 0])
     a2 = fig.add_subplot(gs[0, 1], sharey=a1)
@@ -177,9 +179,9 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     a1.grid(True, alpha=0.5, ls='--', color='k')
     a1.tick_params(axis='both', labelsize=18)
     a2.grid(True, alpha=0.5, ls='--', color='k')
-    # a2.tick_params(axis='both', labelsize=18)
+    a2.tick_params(axis='both', labelsize=18)
     a3.grid(True, alpha=0.5, ls='--', color='k')
-    # a3.tick_params(axis='both', labelsize=18)
+    a3.tick_params(axis='both', labelsize=18)
     a1.xaxis.grid(False)
     a2.xaxis.grid(False)
     a3.xaxis.grid(False)
@@ -227,6 +229,7 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     a3.legend(loc='upper right', ncol=1, fontsize=15)
 
     # fig.tight_layout()
+    fig.savefig(filename, dpi=150)
     fig.show()
     
 def select_idx(list_, param1, param2):
