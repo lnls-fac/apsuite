@@ -22,7 +22,7 @@ class Tous_analysis():
             beta = _beam_rigidity(energy=3)[2]  
 
         self._model_fit = accelerator
-        self._model = pymodels.si.create_accelerator() 
+        self._model = pymodels.si.create_accelerator()
 
         self._amp_and_limidx = None
         self._sc_accps = None
@@ -31,21 +31,20 @@ class Tous_analysis():
         self._inds_neg = None
         self._amps_pos = None
         self._amps_neg = None
-        self._num_part = 50000
-        self._energy_dev_min = 1e-4
+        self.num_part = 50000
+        self.energy_dev_min = 1e-4
 
-        self._beta = beta # beta is a constant necessary to the calculations
-        self._h_pos = get_attribute(self._model_fit, 'hmax', indices='closed') # getting the vchamber's height
-        self._h_neg = get_attribute(self._model_fit, 'hmin', indices='closed')
-        self._ltime = Lifetime(self._model_fit)
-        # self._lname = ['BC', 'Q1', 'SDA0'] # names defined by default. it can be modified as the users desires
-        
-        self._off_energy = energy_off # interval of energy deviation for calculating the amplitudes and idx_limitants from linear model
-        self._nturns = n_turns # defined like this by the standard
-        self._deltas = deltas # defined by the standard 
-        self._spos = find_spos(self._model_fit, indices='closed')
-        self._scraph_inds = find_indices(self._model, 'fam_name', 'SHVC')
-        self._scrapv_inds = find_indices(self._model, 'fam_name', 'SVVC')
+        self.beta = beta # beta is a constant necessary to the calculations
+        self.h_pos = get_attribute(self._model_fit, 'hmax', indices='closed') 
+        self.h_neg = get_attribute(self._model_fit, 'hmin', indices='closed')
+        self.ltime = Lifetime(self._model_fit)
+        # self._lname = ['BC', 'Q1', 'SDA0'] # it can be modified as the users desires
+        self._off_energy = energy_off # en_dev to calculate amplitudes and idx_limitants from linear model
+        self.nturns = n_turns 
+        self._deltas = deltas  
+        self.spos = find_spos(self._model_fit, indices='closed')
+        self.scraph_inds = find_indices(self._model, 'fam_name', 'SHVC')
+        self.scrapv_inds = find_indices(self._model, 'fam_name', 'SVVC')
 
 
     # Defining the energy acceptance. This method also needs a setter to change the value of the acceptance by a different inserted model
@@ -83,16 +82,12 @@ class Tous_analysis():
             self.nom_model.cavity_on = False # this step is necessary to define if the 
             self.nom_model.radiation_on = False
             self._amps_pos, self._inds_pos = tousfunc.calc_amp(self.nom_model,
-                                                               self.off_energy, self._h_pos, self._h_neg)
+                                                               self.off_energy, self.h_pos, self.h_neg)
             self._amps_neg, self._inds_neg = tousfunc.calc_amp(self.nom_model,
-                                                               -self.off_energy, self._h_pos, self._h_neg)
+                                                               -self.off_energy, self.h_pos, self.h_neg)
             self._amp_and_limidx =  True
 
         return self._amp_and_limidx
-
-    @property
-    def ltime(self):
-        return self._ltime
 
     @property
     def off_energy(self):
@@ -103,7 +98,7 @@ class Tous_analysis():
     def off_energy(self, accep): # pass a new energy acceptance tuple of arrays if the user desire
         accep_pos, accep_neg = accep
         accep_lim = _np.max(_np.maximum(accep_pos, _np.abs(accep_neg)))
-        steps = int(accep_lim*10000) # choosed to be the number of steps
+        steps = int(accep_lim*10000) # choosen to be the number of steps
         self._off_energy = _np.linspace(0, accep_lim, steps)
 
     @property
@@ -147,8 +142,8 @@ class Tous_analysis():
     
     def set_vchamber_scraper(self, vchamber):
         model = self._model
-        scph_inds = self._scraph_inds
-        scpv_inds = self._scrapv_inds
+        scph_inds = self.scraph_inds
+        scpv_inds = self.scrapv_inds
 
         for iten in scph_inds:
             model[iten].hmin = vchamber[0]
@@ -162,14 +157,14 @@ class Tous_analysis():
         self._model.cavity_on = True
         self._model.radiation_on = True
         self._model.vchamber_on = True
-        spos = self._spos
+        s = self.spos
         
-        index = _np.argmin(_np.abs(spos-single_spos))
+        index = _np.argmin(_np.abs(s-single_spos))
         if 'pos' in par:
-            res = tousfunc.track_eletrons(self.deltas,self._nturns,
+            res = tousfunc.track_eletrons(self.deltas,self.nturns,
                                                index, self.nom_model, pos_x=1e-5, pos_y=3e-6)
         elif 'neg' in par:
-            res = tousfunc.track_eletrons(-self.deltas,self._nturns,
+            res = tousfunc.track_eletrons(-self.deltas,self.nturns,
                                                index, self.nom_model, pos_x=1e-5, pos_y=3e-6)
         
         return res
@@ -182,19 +177,19 @@ class Tous_analysis():
 
         if 'pos' in par:
             res = tousfunc.trackm_elec(self.nom_model, self.deltas,
-                                            self._nturns, lspos)
+                                            self.nturns, lspos)
         elif 'neg' in par:
             res = tousfunc.trackm_elec(self.nom_model, -self.deltas,
-                                            self._nturns, lspos)
+                                            self.nturns, lspos)
         return res
         
     
     def get_weighting_tous(self, single_spos, npt=5000):
         
         scalc, daccp, daccn  = tousfunc.get_scaccep(self.accelerator, self.accep)
-        bf = self._beta # bf is the beta factor
-        ltime = self._ltime
-        b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
+        bf = self.beta # bf is the beta factor
+        lt = self.ltime
+        b1, b2 = lt.touschek_data['touschek_coeffs']['b1'],lt.touschek_data['touschek_coeffs']['b2']
         
         taup, taun = (bf* daccp)**2, (bf*daccn)**2
         idx = _np.argmin(_np.abs(scalc-single_spos))
@@ -257,7 +252,7 @@ class Tous_analysis():
     def complete_aquisition(self, lname_or_spos, par):
         param = tousfunc.char_check(lname_or_spos)
         getsacp = tousfunc.get_scaccep(self._model_fit, self._accep)
-        spos = self._spos
+        s = self.spos
 
         if issubclass(param, str): # if user pass a list of element names
             
@@ -268,8 +263,8 @@ class Tous_analysis():
 
             for indices in all_indices:
                 
-                res = self.return_compos_track(spos[indices], par)
-                scat_dis = tousfunc.nnorm_cutacp(self._model_fit, spos[indices],
+                res = self.return_compos_track(s[indices], par)
+                scat_dis = tousfunc.nnorm_cutacp(self._model_fit, s[indices],
                                                  npt=5000, getsacp=getsacp)
                 ress.append(res)
                 scatsdis.append(scat_dis)
@@ -277,7 +272,7 @@ class Tous_analysis():
         # if user pass a list of positions (it can be all s posistions if the user desires)
         elif issubclass(param, float):
             ress = self.return_compos_track(lname_or_spos, par)
-            scat_dis = tousfunc.nnorm_cutacp(self._model_fit, spos[indices],
+            scat_dis = tousfunc.nnorm_cutacp(self._model_fit, s[indices],
                                              npt=5000, getsacp=getsacp)
             
         return ress, scat_dis
@@ -286,14 +281,14 @@ class Tous_analysis():
     def plot_analysis_at_position(self, single_spos, par, accep,filename):
 
         res, fp, dp = self.fast_aquisition(single_spos, par)
-        spos = self._spos
-        index = _np.argmin(_np.abs(spos-single_spos))
+        s = self.spos
+        index = _np.argmin(_np.abs(s-single_spos))
         tousfunc.plot_track(self.accelerator, res, _np.intp(self.inds_pos),
                             self.off_energy, par, index, accep, dp, fp, filename)
 
     def plot_normtousd(self, spos,filename): # user must provide a list of s positions
         
-        spos_ring = self._spos
+        spos_ring = self.spos
         dic = tousfunc.norm_cutacp(self._model_fit, 
                              spos, 5000, self._accep, norm=True)
         
@@ -351,12 +346,12 @@ class Tous_analysis():
     #  this function plots the histograms returned by the monte carlo simulation
     
     def plot_histograms(self, l_spos): # user must provide a list of s positions
-        spos = self._spos
+        s = self.spos
         accep = self.accep
         model = self._model_fit
 
-        tup = tousfunc.histgms(self._model_fit, l_spos, self._num_part, accep,
-                               self._energy_dev_min,cutaccep=False)
+        tup = tousfunc.histgms(self._model_fit, l_spos, self.num_part, accep,
+                               self.energy_dev_min,cutaccep=False)
         
         hp, hn, idx_model = tup
         
@@ -374,7 +369,7 @@ class Tous_analysis():
             ay.set_xlabel(r'$\delta$ [%]', fontsize=25)
             ay.tick_params(axis='both', labelsize=18)
             ay.hist(hp[index], density=True, bins=200, color=color,
-                    label='element:{}, pos:{:.2f} [m]'.format(model[iten].fam_name, spos[iten]))
+                    label='element:{}, pos:{:.2f} [m]'.format(model[iten].fam_name, s[iten]))
             ay.hist(hn[index], density=True, bins=200, color=color)
             _plt.tight_layout()
             ay.legend()
@@ -384,7 +379,7 @@ class Tous_analysis():
 
         all_track = []
         indices = []
-        spos = self._spos
+        spos = self.spos
         
         self._model.radiation_on = True
         self._model.cavity_on = True
@@ -392,20 +387,18 @@ class Tous_analysis():
 
         if scrap:
             self.set_vchamber_scraper(vchamber)
-            print(self._model[self._scraph_inds[0]].hmax)
-            print(self._model[self._scraph_inds[0]].hmin)
 
         for _, scattered_pos in enumerate(l_scattered_pos):
 
             index = _np.argmin(_np.abs(scattered_pos-spos))
             indices.append(index)
-            res = tousfunc.track_eletrons(self._deltas, self._nturns, index, self._model)
+            res = tousfunc.track_eletrons(self._deltas, self.nturns, index, self._model)
             all_track.append(res)
 
-        hx = self._model_fit[self._scraph_inds[0]].hmax
-        hn = self._model_fit[self._scraph_inds[0]].hmin
-        vx = self._model_fit[self._scrapv_inds[0]].vmax
-        vn = self._model_fit[self._scrapv_inds[0]].vmin
+        hx = self._model_fit[self.scraph_inds[0]].hmax
+        hn = self._model_fit[self.scraph_inds[0]].hmin
+        vx = self._model_fit[self.scrapv_inds[0]].vmax
+        vn = self._model_fit[self.scrapv_inds[0]].vmin
         vchamber = [hx, hn, vx, vn]
 
         self.set_vchamber_scraper(vchamber)# reseting vchamber height and width (nominal)
@@ -415,11 +408,10 @@ class Tous_analysis():
     def find_data(self, l_scattered_pos, scrap, vchamber):
 
         all_track, indices = self.get_track(l_scattered_pos, scrap, vchamber)
-        spos = self._spos
+        spos = self.spos
         
-        fact = 0.03
-        ltime = Lifetime(self._model_fit)
-        tous_rate = ltime.touschek_data['rate']
+        fact = 0.03 
+        tous_rate = self.ltime.touschek_data['rate']
         
         prob = []
         lostp = []
@@ -550,7 +542,7 @@ class Tous_analysis():
     def get_lost_profile(self, dic, filename):
 
         # dic = self.get_reordered_dict(l_scattered_pos, reording_key)
-        spos = self._spos
+        spos = self.spos
 
         df = _pd.DataFrame(dic)
         a = df.set_index('lost_positions')
@@ -584,7 +576,7 @@ class Tous_analysis():
         # dic = self.get_reordered_dict(l_scattered_pos, reording_key)
         l = []
         for dic in l_dic:    
-            spos = self._spos
+            s = self.spos
 
             df = _pd.DataFrame(dic)
             a = df.set_index('lost_positions')
@@ -593,12 +585,12 @@ class Tous_analysis():
             
             indices = []
             for iten in scat_pos:
-                ind =  _np.argmin(_np.abs(spos-iten))
+                ind =  _np.argmin(_np.abs(s-iten))
                 indices.append(ind)
 
             summed = []
             for idx, iten in a.iterrows():
-                sum_row = scyint.trapz(a.loc[idx], spos[indices])
+                sum_row = scyint.trapz(a.loc[idx], s[indices])
                 summed.append(sum_row)
 
             l.append((a.index, summed))
@@ -607,7 +599,7 @@ class Tous_analysis():
 
     
     def plot_scat_table(self, l_scattered_pos, new_dic, n_r,filename, n_c=1):
-        spos = self._spos
+        s = self.spos
 
         # new_dic = self.get_reordered_dict(l_scattered_pos, 'lost_positions')
 
@@ -641,8 +633,8 @@ class Tous_analysis():
 
         fig, ax = _plt.subplots(figsize=(10,10))
 
-        y = _np.linspace(0,spos[-1],df.shape[0]+1)
-        x = _np.linspace(0,spos[-1],df.shape[1]+1)
+        y = _np.linspace(0,s[-1],df.shape[0]+1)
+        x = _np.linspace(0,s[-1],df.shape[1]+1)
         X,Y = _np.meshgrid(x,y)
 
         heatmp = ax.pcolor(X,Y,val, cmap='jet',shading='flat')
