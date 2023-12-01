@@ -18,15 +18,15 @@ class Tous_analysis():
             energy_off = _np.linspace(0,0.046, 460) # used when calculating physical limitants by the linear model
             deltas = _np.linspace(0,0.1,400) # used in tracking simulation
 
-        if beam_energy is None: # beam_energy is associated to the beta factor of the electrons of the storage ring 
-            beta = _beam_rigidity(energy=3)[2]  # defining by default the energy of the beam
+        if beam_energy is None: # defining beta factor
+            beta = _beam_rigidity(energy=3)[2]  
 
         self._model_fit = accelerator
-        self._model = pymodels.si.create_accelerator() # No necessity to change this model, because it's an internal tool for calculations.
+        self._model = pymodels.si.create_accelerator() 
 
         self._amp_and_limidx = None
         self._sc_accps = None
-        self._accep = None      
+        self._accep = None
         self._inds_pos = None
         self._inds_neg = None
         self._amps_pos = None
@@ -62,23 +62,6 @@ class Tous_analysis():
     def nom_model(self):
         return self._model
 
-    # defining the heights of the vchamber, this properties vary the lenght of the array hpos and hneg
-    @property
-    def hpos(self):
-        return self._h_pos
-    
-    @hpos.setter
-    def hpos(self, indices):
-        self._h_pos = get_attribute(self.accelerator, 'hmax', indices=indices)
-
-    @property
-    def hneg(self):
-        return self._h_neg
-    
-    @hneg.setter
-    def hneg(self, indices):
-        self._h_neg = get_attribute(self.accelerator, 'hmin', indices=indices)
-
     @property
     def accep(self):
         if self._accep is None:
@@ -100,42 +83,16 @@ class Tous_analysis():
             self.nom_model.cavity_on = False # this step is necessary to define if the 
             self.nom_model.radiation_on = False
             self._amps_pos, self._inds_pos = tousfunc.calc_amp(self.nom_model,
-                                                               self.off_energy, self.hpos, self.hneg)
+                                                               self.off_energy, self._h_pos, self._h_neg)
             self._amps_neg, self._inds_neg = tousfunc.calc_amp(self.nom_model,
-                                                               -self.off_energy, self.hpos, self.hneg)
+                                                               -self.off_energy, self._h_pos, self._h_neg)
             self._amp_and_limidx =  True
 
         return self._amp_and_limidx
-    
-    # Defining the energy array to get the maximum amplitudes and the limitant indices by the linear model
 
     @property
     def ltime(self):
         return self._ltime
-    
-    @property
-    def beam_energy(self):
-        return self._beta
-    
-    @beam_energy.setter
-    def beam_energy(self, new_beam_energy): # the user could change the energy of the beam if it is necessary
-        self._beta = _beam_rigidity(energy=new_beam_energy)[2]
-
-    @property
-    def pos_vchamber(self):
-        return self.h_pos
-    
-    @pos_vchamber.setter
-    def pos_vchamber(self, indices): # here indices must be a string, closed or open, the user could define if it is necessary
-        self.h_pos = find_spos(self._model_fit, indices=indices)
-
-    @property
-    def neg_vchamber(self):
-        return self.h_neg
-    
-    @neg_vchamber.setter
-    def neg_vchamber(self, indices):
-        self.h_neg = find_spos(self._model_fit, indices=indices)
 
     @property
     def off_energy(self):
@@ -148,14 +105,6 @@ class Tous_analysis():
         accep_lim = _np.max(_np.maximum(accep_pos, _np.abs(accep_neg)))
         steps = int(accep_lim*10000) # choosed to be the number of steps
         self._off_energy = _np.linspace(0, accep_lim, steps)
-
-    @property
-    def nturns(self):
-        return self._nturns
-    
-    @nturns.setter
-    def nturns(self, new_turns):
-        self._nturns = new_turns # changes in the nturns to simulate with tracking
 
     @property
     def deltas(self):
@@ -173,14 +122,6 @@ class Tous_analysis():
     @lname.setter
     def lname(self, call_lname): # call_name is the list of element names (passed by the user) that someone desires to know the distribution
         self._lname = call_lname
-    
-    @property
-    def spos(self):
-        return self._spos
-    
-    @spos.setter
-    def spos(self, indices): # if the user desires to make a change in the indices in the s position array / the variable indices must be a string 'closed' or 'open'
-        self._spos = find_spos(self._model_fit, indices=indices)
 
     # the four properties defining below are to be fixed
     # this indices are obtained from the linear approach for the physical limitants
@@ -200,22 +141,6 @@ class Tous_analysis():
     @property
     def amp_neg(self):
         return self._amps_neg
-    
-    @property
-    def num_part(self):
-        return self._num_part
-    
-    @num_part.setter
-    def num_part(self, new_num_part):
-        self._num_part = new_num_part
-
-    @property
-    def energy_dev_mcs(self):
-        return self._energy_dev_min
-    
-    @energy_dev_mcs.setter
-    def energy_dev_mcs(self, new_energy_dev):
-        self._energy_dev_min = new_energy_dev
 
     def get_amps_idxs(self): # this step calls and defines 3 disctinct getters
         return self.amp_and_limidx, self.accep, self.s_calc
@@ -241,7 +166,7 @@ class Tous_analysis():
         
         index = _np.argmin(_np.abs(spos-single_spos))
         if 'pos' in par:
-            res = tousfunc.track_eletrons(self.deltas,self.nturns,
+            res = tousfunc.track_eletrons(self.deltas,self._nturns,
                                                index, self.nom_model, pos_x=1e-5, pos_y=3e-6)
         elif 'neg' in par:
             res = tousfunc.track_eletrons(-self.deltas,self._nturns,
@@ -257,17 +182,17 @@ class Tous_analysis():
 
         if 'pos' in par:
             res = tousfunc.trackm_elec(self.nom_model, self.deltas,
-                                            self.nturns, lspos)
+                                            self._nturns, lspos)
         elif 'neg' in par:
             res = tousfunc.trackm_elec(self.nom_model, -self.deltas,
-                                            self.nturns, lspos)
+                                            self._nturns, lspos)
         return res
         
     
     def get_weighting_tous(self, single_spos, npt=5000):
         
         scalc, daccp, daccn  = tousfunc.get_scaccep(self.accelerator, self.accep)
-        bf = self.beam_energy # bf is the beta factor
+        bf = self._beta # bf is the beta factor
         ltime = self._ltime
         b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
         
@@ -359,36 +284,21 @@ class Tous_analysis():
     
     # this function plot the graphic of tracking and the touschek scattering distribution for one single position
     def plot_analysis_at_position(self, single_spos, par, accep,filename):
-        # defining some params top plot the tracking and the scattering distribution
-        # In a first approach I dont have to be concerned in this decision structure because all variables necessary for the calculation will be defined
-        # I will may let this part of the code if I know a best method or decide to make a change here
-
-        # if self._amp_and_limidx is None:
-        #     amps_and_idxs = self.amp_and_limidx
-        # else:
-        #     amps_and_idxs = self._amp_and_limidx
 
         res, fp, dp = self.fast_aquisition(single_spos, par)
-        spos = self.spos
+        spos = self._spos
         index = _np.argmin(_np.abs(spos-single_spos))
         tousfunc.plot_track(self.accelerator, res, _np.intp(self.inds_pos),
                             self.off_energy, par, index, accep, dp, fp, filename)
 
-    # remember that ind is the index that represents the initial position where tracking begins
-
-    # this function is used to compare the PDF of distinct s positions along the storage ring 
-    def plot_normtousd(self, spos,filename):
+    def plot_normtousd(self, spos,filename): # user must provide a list of s positions
         
         spos_ring = self._spos
-        model = self._model_fit
-        accep = self._accep
         dic = tousfunc.norm_cutacp(self._model_fit, 
-                             spos, 5000, accep, norm=True)
+                             spos, 5000, self._accep, norm=True)
         
-        fdensp = dic['fdensp']
-        fdensn = dic['fdensp']
-        deltasp = dic['deltasp']
-        deltasn = dic['deltasn']
+        fdensp, fdensn = dic['fdensp'], dic['fdensn'] 
+        deltasp, deltasn = dic['deltasp'], dic['deltasn']
 
         fig, ax = _plt.subplots(figsize=(10,5))
         ax.set_title('Probability density analytically calculated', fontsize=20)
@@ -397,7 +307,6 @@ class Tous_analysis():
         ax.set_xlabel(r'$\delta$ [%]', fontsize=25)
         ax.set_ylabel('PDF', fontsize=25)
         ax.tick_params(axis='both', labelsize=28)
-        # ap_ind = []
 
         for idx, s in enumerate(spos):
             
@@ -428,10 +337,11 @@ class Tous_analysis():
                            'mia', 'mib', 'mip',
                            'mb1', 'mb2', 'mc']
         
-            while model[mod_ind].fam_name in not_desired:
+            while self._model_fit[mod_ind].fam_name in not_desired:
                 mod_ind += 1
 
-            ax.plot(deltaspi, fdenspi,label='{} em {} m'.format(model[mod_ind].fam_name, _np.round(spos_ring[mod_ind], 2)),color=color)
+            ax.plot(deltaspi, fdenspi,
+                    label='{} em {} m'.format(self._model_fit[mod_ind].fam_name, _np.round(spos_ring[mod_ind], 2)),color=color)
             ax.plot(deltasni, fdensni, color=color )
             # ap_ind.append(mod_ind)
 
@@ -439,7 +349,8 @@ class Tous_analysis():
         fig.savefig(filename, dpi=150)
 
     #  this function plots the histograms returned by the monte carlo simulation
-    def plot_histograms(self, l_spos):
+    
+    def plot_histograms(self, l_spos): # user must provide a list of s positions
         spos = self._spos
         accep = self.accep
         model = self._model_fit
@@ -449,11 +360,9 @@ class Tous_analysis():
         
         hp, hn, idx_model = tup
         
-
         fig, ax = _plt.subplots(ncols=len(l_spos), nrows=1,figsize=(30,10), sharey=True)
         fig.suptitle('Probability density calculated by Monte-Carlo simulation', fontsize=20)
         
-
         for index, iten in enumerate(idx_model):
             color = _plt.cm.jet(index/len(idx_model))
             ay = ax[index]

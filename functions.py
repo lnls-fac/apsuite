@@ -5,9 +5,6 @@ import numpy as _np
 import scipy.integrate as _scyint
 import scipy.special as _special
 from mathphys.beam_optics import beam_rigidity as _beam_rigidity
-from mathphys.functions import save_pickle, load_pickle
-import pandas as pd
-
 
 def calc_amp(acc,energy_offsets, hmax, hmin):
     a_def = _np.zeros(energy_offsets.size)
@@ -33,14 +30,8 @@ def calc_amp(acc,energy_offsets, hmax, hmin):
         pass
     return _np.sqrt(a_def), indices
 
-# Função criada em outro programa utilizando tracking
-
-# ---------------------
 def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
 
-    #     pos_x and pos_y have default values but it can be varied
-    #     here we define the initial conditions for the simulation
-    
     orb = _pyaccel.tracking.find_orbit6(model, indices=[0, element_idx])
     orb = orb[:, 1]
     
@@ -59,19 +50,12 @@ def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
     turnl_element = []
 
     for i,item in enumerate(turn_lost):
-        if item == n_turn and element_lost[i] == element_idx: # ignora elétrons que não foram perdidos
+        if item == n_turn and element_lost[i] == element_idx: 
             pass
         else:
             turnl_element.append((item, element_lost[i], deltas[i]))
     
     return turnl_element
-
-def f_mchn_stdy():
-    pass
-
-# This function will calculate where the electrons are lost using tracking
-
-# The function recives an array containing all the s positions along the ring 
 
 def trackm_elec(acc,deltas, n_turn, lspos):
     results = []
@@ -84,28 +68,6 @@ def trackm_elec(acc,deltas, n_turn, lspos):
         results.append(turnl) # 
         
     return results
-
-# this function will sellect the index by the array containing the names of the elements along the ring that people desire to study
-# please let's try to run away from the repetitive structures that
-
-# certo eu vou ter todos os indices referentes ao elementos que eu preciso e quero analisar, mas qual eu devo escolher,
-# devo tentar selecionar o trecho em que o beta é mínimo para obter 
-
-# sabendo que a função beta é a envoltória do feixe e, portanto, os pontos onde o feixe se encontra em posições de menor beta são as posições onde podem
-# ocorrer com maior probabilidade os espalhamentos touschek, lembrando que a envoltória é quem rege o quanto de espaço estes elétrons possuem para oscilar
-# Dessa forma, menor a envoltória menor também será o espaço que os elétrons podem realizar suas oscilações betatron aumentando a densidade do feixe em regiões 
-# de baixo beta
-
-# so the lname passed to the function must be an array 
-
-# lname deve ser a lista de elementos que será passada para a função ['BC','B1','B2'] por exemplo
-    
-
-# function returns the desired element index of dipoles, quadrupoles, sextupoles and any other 
-# element that is desired, the only thing that is needed is to pass a string 
-
-# eu preciso pensar se vale a pena colocar todos os indices que eu estou pensando em colocar ou se o pymodels da conta do recado
-# eu tenho que me perguntar se é interessante obter os indices de elementos como lkkp por exemplo
 
 def el_idx_collector(acc, lname):
     all_index = []
@@ -143,8 +105,6 @@ def el_idx_collector(acc, lname):
     
     return all_index
 
-# this function recieves a list and search all elements checking if there are strings into the list
-   
 def char_check(elmnt):
     for char in elmnt:
         returnval = type(char)
@@ -153,13 +113,10 @@ def char_check(elmnt):
         elif returnval is float or returnval is int:
             return float
 
-# this function will plot the tracking simultation with the linear model calculated plus the touschek scattering distribution
-# in the first graphic the plot will be the touschek scattering distribution 
-
 def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep, delt, f_dens, filename):
     # ----------------
     
-    cm = 1/2.54
+    cm = 1/2.54 # 'poster'
 
     twi0,*_ = _pyaccel.optics.calc_twiss(acc,indices='open')
     betax = twi0.betax
@@ -187,18 +144,18 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     a3.xaxis.grid(False)
     _plt.subplots_adjust(wspace=0.1)
 
-    if 'pos' in param: # defining the y and x label of the first graphic
+    if 'pos' in param: 
         a1.set_ylabel(r'positive $\delta$ [%]', fontsize=25)
         
         a3.plot(spos[int(lista_resul[1][-1])], lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
-        acp_s = accep[1][element_idx] # defining the acceptance given the begining tracking point, this will be necessary to define until where the graphic will be plotted
+        acp_s = accep[1][element_idx] 
         indx = _np.argmin(_np.abs(lista_off-acp_s))
         for item in lista_resul:
             a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
     elif'neg' in param:
         a1.set_ylabel(r'negative $\delta$ [%]', fontsize=25)
         a3.plot(spos[int(lista_resul[1][-1])], -lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
-        acp_s = accep[0][element_idx] # defining the acceptance given the begining tracking point, this will be necessary to define until where the graphic will be plotted
+        acp_s = accep[0][element_idx] 
         indx = _np.argmin(_np.abs(lista_off-acp_s))
         for item in lista_resul:
             a3.plot(spos[int(item[1])], -item[2]*1e2, 'r.')
@@ -453,10 +410,10 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
         deltasp.append(deltap)
         deltasn.append(deltan)
 
-    fdens_p = _np.array(fdens_p, dtype=object)
-    fdens_n = _np.array(fdens_n, dtype=object)
-    deltasp = _np.array(deltasp, dtype=object)
-    deltasn = _np.array(deltasn, dtype=object)
+    fdens_p = _np.array(fdens_p)
+    fdens_n = _np.array(fdens_n)
+    deltasp = _np.array(deltasp)
+    deltasn = _np.array(deltasn)
 
     dic['fdensp'] = fdens_p
     dic['fdensn'] = fdens_n
@@ -541,10 +498,10 @@ def get_cross_section_distribution(psim, _npts=3000):
     beta_bar = 0
     psi = _np.logspace(_np.log10(_np.pi/2 - psim), 0, _npts)
     psi = _np.pi/2 - psi
-    psi = psi[::-1] # this step is necessary to reverse the order of psi
+    psi = psi[::-1] 
     cpsi = _np.cos(psi)
     cross = _np.zeros(cpsi.size)
-    if beta_bar > 1e-19: # I think it maybe will be related to the relativistic regime
+    if beta_bar > 1e-19: 
         cross += (1 + 1/beta_bar**2)**2 * (2*(1 + cpsi**2)/cpsi**3 - 3/cpsi)
     cross += 4/cpsi + 1
     cross *= _np.sin(psi)
