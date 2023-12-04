@@ -1,25 +1,28 @@
 from pyaccel.lifetime import Lifetime
-from pyaccel.lattice import get_attribute, find_indices, find_spos, find_dict
+from pyaccel.lattice import get_attribute, find_indices, find_spos
 import touschek_pack.functions as tousfunc
 import pymodels
 import pyaccel.optics as py_op
 import numpy as _np
 import matplotlib.pyplot as _plt
+import matplotlib.cm as _cm
 from mathphys.beam_optics import beam_rigidity as _beam_rigidity
 import pandas as _pd
 import scipy.integrate as scyint
 import pyaccel as _pyaccel
-import matplotlib.gridspec as gs
 
 class Tous_analysis():
+    """Class for related with Touschek loss rate along the ring."""
 
-    def __init__(self, accelerator, energies_off=None, beam_energy=None, n_turns=7):
+    def __init__(self, accelerator,
+                 energies_off=None, beam_energy=None, n_turns=7):
+        """."""
         if energies_off is None:
-            energy_off = _np.linspace(0,0.046, 460) # used when calculating physical limitants by the linear model
-            deltas = _np.linspace(0,0.1,400) # used in tracking simulation
+            energy_off = _np.linspace(0,0.046, 460) # physical limitants
+            deltas = _np.linspace(0,0.1,400) # energy off for tracking
 
         if beam_energy is None: # defining beta factor
-            beta = _beam_rigidity(energy=3)[2]  
+            beta = _beam_rigidity(energy=3)[2]
 
         self._model_fit = accelerator
         self._model = pymodels.si.create_accelerator()
@@ -34,35 +37,37 @@ class Tous_analysis():
         self.num_part = 50000
         self.energy_dev_min = 1e-4
 
-        self.beta = beta # beta is a constant necessary to the calculations
-        self.h_pos = get_attribute(self._model_fit, 'hmax', indices='closed') 
+        self.beta = beta # beta factor
+        self.h_pos = get_attribute(self._model_fit, 'hmax', indices='closed')
         self.h_neg = get_attribute(self._model_fit, 'hmin', indices='closed')
         self.ltime = Lifetime(self._model_fit)
-        # self._lname = ['BC', 'Q1', 'SDA0'] # it can be modified as the users desires
-        self._off_energy = energy_off # en_dev to calculate amplitudes and idx_limitants from linear model
-        self.nturns = n_turns 
-        self._deltas = deltas  
+        # self._lname = ['BC', 'Q1', 'SDA0'] # it can be modified as the users
+        #desires
+        self._off_energy = energy_off # (linear model) en_dev to
+        # amplitudes
+        self.nturns = n_turns
+        self._deltas = deltas
         self.spos = find_spos(self._model_fit, indices='closed')
         self.scraph_inds = find_indices(self._model, 'fam_name', 'SHVC')
         self.scrapv_inds = find_indices(self._model, 'fam_name', 'SVVC')
 
-
-    # Defining the energy acceptance. This method also needs a setter to change the value of the acceptance by a different inserted model
     @property
     def accelerator(self):
+        """."""
         return self._model_fit
-    
+
     @accelerator.setter
-    def accelerator(self, new_model): #This line defines a new accelerator if the user desires
+    def accelerator(self, new_model):
         self._model_fit = new_model
 
-    # defining the nominal accelerator
     @property
     def nom_model(self):
+        """."""
         return self._model
 
     @property
     def accep(self):
+        """."""
         if self._accep is None:
             self._accep = py_op.calc_touschek_energy_acceptance(self.accelerator)
         return self._accep
@@ -71,31 +76,37 @@ class Tous_analysis():
     # the description above is actually the returns of the function
     @property
     def s_calc(self):
+        """."""
         if self._sc_accps is None:
             self._sc_accps = tousfunc.get_scaccep(self.accelerator, self.accep)
         return self._sc_accps
-    
+
     # This property calculates the physical limitants by the prediction of the linear model
     @property
     def amp_and_limidx(self):
+        """."""
         if self._amp_and_limidx is None:
-            self.nom_model.cavity_on = False # this step is necessary to define if the 
+            self.nom_model.cavity_on = False # this step is necessary to define if the
             self.nom_model.radiation_on = False
-            self._amps_pos, self._inds_pos = tousfunc.calc_amp(self.nom_model,
-                                                               self.off_energy, self.h_pos, self.h_neg)
-            self._amps_neg, self._inds_neg = tousfunc.calc_amp(self.nom_model,
-                                                               -self.off_energy, self.h_pos, self.h_neg)
+            self._amps_pos, self._inds_pos = tousfunc.calc_amp(
+                self.nom_model,self.off_energy, self.h_pos, self.h_neg)
+
+            self._amps_neg, self._inds_neg = tousfunc.calc_amp(
+                self.nom_model,-self.off_energy, self.h_pos, self.h_neg)
+
             self._amp_and_limidx =  True
 
         return self._amp_and_limidx
 
     @property
     def off_energy(self):
+        """."""
         return self._off_energy
-    
+
     # the cutoff for energy deviation is the energy acceptance limit
     @off_energy.setter
     def off_energy(self, accep): # pass a new energy acceptance tuple of arrays if the user desire
+        """."""
         accep_pos, accep_neg = accep
         accep_lim = _np.max(_np.maximum(accep_pos, _np.abs(accep_neg)))
         steps = int(accep_lim*10000) # choosen to be the number of steps
@@ -103,44 +114,54 @@ class Tous_analysis():
 
     @property
     def deltas(self):
+        """."""
         return self._deltas
-    
+
     @deltas.setter
-    def deltas(self, dev_percent,steps=400):
+    def deltas(self, dev_percent,steps=400): # dev_percent input-> [%]
         dev_percent /= 100
-        self._deltas = _np.linspace(0,dev_percent, steps) # if the user desires to make a change in the quantity of energ. dev. in tracking simulation
-    
+        self._deltas = _np.linspace(0,dev_percent, steps) # if the user
+        # desires to make a change in the quantity of energ. dev. in tracking
+        #  simulation
+
     @property
     def lname(self):
+        """."""
         return self._lname
-    
+
     @lname.setter
-    def lname(self, call_lname): # call_name is the list of element names (passed by the user) that someone desires to know the distribution
+    def lname(self, call_lname): # input: list of element names
+        # used in tracking to define the elements' list
+        """."""
         self._lname = call_lname
 
-    # the four properties defining below are to be fixed
-    # this indices are obtained from the linear approach for the physical limitants
+    # the four properties defining below are to be static
     @property
     def inds_pos(self):
+        """."""
         return self._inds_pos
-    
+
     @property
     def inds_neg(self):
+        """."""
         return self._inds_neg
-    
-    # This two propertier will help if the user wants to plot the amplitudes calculated by the linear model
+
     @property
     def amp_pos(self):
+        '''positive amplitudes from linear model'''
         return self._amps_pos
-    
-    @property
+
+    @property # negative amplitudes from linear model
     def amp_neg(self):
+        """negative amplitudes from linear model"""
         return self._amps_neg
 
-    def get_amps_idxs(self): # this step calls and defines 3 disctinct getters
+    def get_amps_idxs(self): # Defines various parameters
+        """."""
         return self.amp_and_limidx, self.accep, self.s_calc
-    
+
     def set_vchamber_scraper(self, vchamber):
+        """."""
         model = self._model
         scph_inds = self.scraph_inds
         scpv_inds = self.scrapv_inds
@@ -153,44 +174,51 @@ class Tous_analysis():
             model[iten].vmax = vchamber[3]
 
     def return_sinpos_track(self,single_spos, par):
-        
+        """."""
+
         self._model.cavity_on = True
         self._model.radiation_on = True
         self._model.vchamber_on = True
         s = self.spos
-        
+
         index = _np.argmin(_np.abs(s-single_spos))
         if 'pos' in par:
-            res = tousfunc.track_eletrons(self.deltas,self.nturns,
-                                               index, self.nom_model, pos_x=1e-5, pos_y=3e-6)
+            res = tousfunc.track_eletrons(
+                self.deltas,self.nturns,index,
+                self.nom_model, pos_x=1e-5, pos_y=3e-6)
         elif 'neg' in par:
-            res = tousfunc.track_eletrons(-self.deltas,self.nturns,
-                                               index, self.nom_model, pos_x=1e-5, pos_y=3e-6)
-        
+            res = tousfunc.track_eletrons(
+                -self.deltas,self.nturns,index,
+                self.nom_model, pos_x=1e-5, pos_y=3e-6)
+
         return res
-    
+
 
     def return_compos_track(self, lspos, par):
+        """."""
         self.nom_model.cavity_on = True
         self.nom_model.radiation_on = True
         self.nom_model.vchamber_on = True
 
         if 'pos' in par:
-            res = tousfunc.trackm_elec(self.nom_model, self.deltas,
-                                            self.nturns, lspos)
+            res = tousfunc.trackm_elec(
+                self.nom_model, self.deltas,self.nturns, lspos)
         elif 'neg' in par:
-            res = tousfunc.trackm_elec(self.nom_model, -self.deltas,
-                                            self.nturns, lspos)
+            res = tousfunc.trackm_elec(
+                self.nom_model, -self.deltas,self.nturns, lspos)
         return res
-        
-    
+
+
     def get_weighting_tous(self, single_spos, npt=5000):
-        
-        scalc, daccp, daccn  = tousfunc.get_scaccep(self.accelerator, self.accep)
-        bf = self.beta # bf is the beta factor
+        """."""
+
+        scalc, daccp, daccn  = tousfunc.get_scaccep(
+            self.accelerator, self.accep)
+        bf = self.beta # bf:beta factor
         lt = self.ltime
-        b1, b2 = lt.touschek_data['touschek_coeffs']['b1'],lt.touschek_data['touschek_coeffs']['b2']
-        
+        b1 = lt.touschek_data['touschek_coeffs']['b1']
+        b2 = lt.touschek_data['touschek_coeffs']['b2']
+
         taup, taun = (bf* daccp)**2, (bf*daccn)**2
         idx = _np.argmin(_np.abs(scalc-single_spos))
         taup_0, taun_0 = taup[idx], taun[idx]
@@ -202,8 +230,11 @@ class Tous_analysis():
 
         deltp = _np.tan(kappa_pos)/bf
         deltn = _np.tan(kappa_neg)/bf
-        getdp = tousfunc.f_function_arg_mod(kappa_pos, kappap_0, b1[idx], b2[idx],norm=False)
-        getdn = tousfunc.f_function_arg_mod(kappa_neg, kappan_0, b1[idx], b2[idx],norm=False)
+        getdp = tousfunc.f_function_arg_mod(
+            kappa_pos, kappap_0, b1[idx], b2[idx],norm=False)
+
+        getdn = tousfunc.f_function_arg_mod(
+            kappa_neg, kappan_0, b1[idx], b2[idx],norm=False)
 
         # eliminating negative values
         indp = _np.where(getdp<0)[0]
@@ -219,80 +250,83 @@ class Tous_analysis():
         deltn = deltn[ind]
 
         self.deltas = deltp[-1]*1e2
-        
+
         return getdp, getdn, deltp, deltn
 
     def fast_aquisition(self, single_spos, par):
         # this raise blocks to runing the program if the list of s position has more than 1 element
+        """."""
         if len(tousfunc.t_list(single_spos)) != 1:
-            raise Exception('This function suports only one s position')
+            raise ValueError('This function suports only one s position')
 
         fdensp, fdensn, deltp, deltn = self.get_weighting_tous(single_spos)
-        
+
         fp = fdensp.squeeze()
         fn = fdensn.squeeze()
-        
+
         res = self.return_sinpos_track(single_spos, par)
         delta = _np.zeros(len(res))
 
         for index, iten in enumerate(res):
-            tlost, ellost, delt = iten
+            _, _, delt = iten
             delta[index] = delt
 
-        Ddeltas = _np.diff(delta)[0]
+        delta_ = _np.diff(delta)[0]
 
         if 'pos' in par:
-            return res, fp*Ddeltas, deltp *1e2
+            return res, fp*delta_, deltp *1e2
         elif 'neg' in par:
-            return res, fn*Ddeltas, deltn*1e2
+            return res, fn*delta_, deltn*1e2
         else:
-            return res, fp*Ddeltas, fn*Ddeltas, deltp*1e2, deltn*1e2
-    
+            return res, fp*delta_, fn*delta_, deltp*1e2, deltn*1e2
 
-    def complete_aquisition(self, lname_or_spos, par):
-        param = tousfunc.char_check(lname_or_spos)
-        getsacp = tousfunc.get_scaccep(self._model_fit, self._accep)
-        s = self.spos
 
-        if issubclass(param, str): # if user pass a list of element names
-            
-            all_indices = tousfunc.el_idx_collector(self._model_fit, lname_or_spos)
-            all_indices = _np.array(all_indices, dtype=object)
-            ress = []
-            scatsdis = []
+    # def complete_aquisition(self, lname_or_spos, par):
+    #     """."""
+    #     param = tousfunc.char_check(lname_or_spos)
+    #     getsacp = tousfunc.get_scaccep(self._model_fit, self._accep)
+    #     s = self.spos
 
-            for indices in all_indices:
-                
-                res = self.return_compos_track(s[indices], par)
-                scat_dis = tousfunc.nnorm_cutacp(self._model_fit, s[indices],
-                                                 npt=5000, getsacp=getsacp)
-                ress.append(res)
-                scatsdis.append(scat_dis)
+    #     if issubclass(param, str): # if user pass a list of element names
 
-        # if user pass a list of positions (it can be all s posistions if the user desires)
-        elif issubclass(param, float):
-            ress = self.return_compos_track(lname_or_spos, par)
-            scat_dis = tousfunc.nnorm_cutacp(self._model_fit, s[indices],
-                                             npt=5000, getsacp=getsacp)
-            
-        return ress, scat_dis
-    
-    # this function plot the graphic of tracking and the touschek scattering distribution for one single position
+    #         all_indices = tousfunc.el_idx_collector(self._model_fit, lname_or_spos)
+    #         all_indices = _np.array(all_indices, dtype=object)
+    #         ress = []
+    #         scatsdis = []
+
+    #         for indices in all_indices:
+
+    #             res = self.return_compos_track(s[indices], par)
+    #             scat_dis = tousfunc.nnorm_cutacp(self._model_fit, s[indices],
+    #                                              npt=5000, getsacp=getsacp)
+    #             ress.append(res)
+    #             scatsdis.append(scat_dis)
+
+    #     # if user pass a list of positions (it can be all s posistions if the user desires)
+    #     elif issubclass(param, float):
+    #         ress = self.return_compos_track(lname_or_spos, par)
+    #         scat_dis = tousfunc.nnorm_cutacp(self._model_fit, s[indices],
+    #                                          npt=5000, getsacp=getsacp)
+
+        # return ress, scat_dis
+
+    # this function plot the graphic of tracking and the touschek scattering
+    # distribution for one single position
     def plot_analysis_at_position(self, single_spos, par, accep,filename):
-
+        """."""
         res, fp, dp = self.fast_aquisition(single_spos, par)
         s = self.spos
         index = _np.argmin(_np.abs(s-single_spos))
         tousfunc.plot_track(self.accelerator, res, _np.intp(self.inds_pos),
                             self.off_energy, par, index, accep, dp, fp, filename)
 
-    def plot_normtousd(self, spos,filename): # user must provide a list of s positions
-        
+    def plot_normtousd(self, spos, filename): # user must provide a list of s positions
+        """touschek scattering density"""
         spos_ring = self.spos
-        dic = tousfunc.norm_cutacp(self._model_fit, 
+        dic = tousfunc.norm_cutacp(self._model_fit,
                              spos, 5000, self._accep, norm=True)
-        
-        fdensp, fdensn = dic['fdensp'], dic['fdensn'] 
+
+        fdensp, fdensn = dic['fdensp'], dic['fdensn']
         deltasp, deltasn = dic['deltasp'], dic['deltasn']
 
         fig, ax = _plt.subplots(figsize=(10,5))
@@ -304,7 +338,7 @@ class Tous_analysis():
         ax.tick_params(axis='both', labelsize=28)
 
         for idx, s in enumerate(spos):
-            
+
             array_fdens = fdensp[idx]
             index = _np.intp(_np.where(array_fdens <= 1e-2)[0][1])
 
@@ -327,39 +361,46 @@ class Tous_analysis():
             deltaspi = deltasp[idx][:best_index]*1e2
             deltasni = -deltasn[idx][:best_index]*1e2
 
-            color = _plt.cm.gist_rainbow(idx/len(spos))
+            color = _cm.gist_rainbow(idx/len(spos))
             not_desired = ['calc_mom_accep',
                            'mia', 'mib', 'mip',
                            'mb1', 'mb2', 'mc']
-        
+
             while self._model_fit[mod_ind].fam_name in not_desired:
                 mod_ind += 1
 
-            ax.plot(deltaspi, fdenspi,
-                    label='{} em {} m'.format(self._model_fit[mod_ind].fam_name, _np.round(spos_ring[mod_ind], 2)),color=color)
+            fam_name = self._model_fit[mod_ind].fam_name
+            s_stri = _np.round(spos_ring[mod_ind], 2)
+            stri = f'{fam_name} em {s_stri} m'
+
+            ax.plot(deltaspi, fdenspi, label= stri, color=color)
             ax.plot(deltasni, fdensni, color=color )
-            # ap_ind.append(mod_ind)
 
         ax.legend(loc='best', fontsize=20)
         fig.savefig(filename, dpi=150)
 
     #  this function plots the histograms returned by the monte carlo simulation
-    
-    def plot_histograms(self, l_spos): # user must provide a list of s positions
+
+    def plot_histograms(self, l_spos):
+        """Touschek scattering density from Monte-Carlo simulation;
+        input: list of desired positions"""
         s = self.spos
         accep = self.accep
         model = self._model_fit
 
         tup = tousfunc.histgms(self._model_fit, l_spos, self.num_part, accep,
                                self.energy_dev_min,cutaccep=False)
-        
+
         hp, hn, idx_model = tup
-        
-        fig, ax = _plt.subplots(ncols=len(l_spos), nrows=1,figsize=(30,10), sharey=True)
-        fig.suptitle('Probability density calculated by Monte-Carlo simulation', fontsize=20)
-        
+
+        fig, ax = _plt.subplots(
+            ncols=len(l_spos), nrows=1,figsize=(30,10), sharey=True)
+        fig.suptitle(
+            'Probability density calculated by Monte-Carlo simulation',
+                fontsize=20)
+
         for index, iten in enumerate(idx_model):
-            color = _plt.cm.jet(index/len(idx_model))
+            color = _cm.jet(index/len(idx_model))
             ay = ax[index]
             if not index:
                 ay.set_ylabel('PDF', fontsize=25)
@@ -368,19 +409,25 @@ class Tous_analysis():
             ay.xaxis.grid(False)
             ay.set_xlabel(r'$\delta$ [%]', fontsize=25)
             ay.tick_params(axis='both', labelsize=18)
-            ay.hist(hp[index], density=True, bins=200, color=color,
-                    label='element:{}, pos:{:.2f} [m]'.format(model[iten].fam_name, s[iten]))
+
+            stri = f'{model[iten].fam_name:s}, {s[iten]:.2f}'
+            ay.hist(hp[index], density=True, bins=200, color=color, label=stri)
             ay.hist(hn[index], density=True, bins=200, color=color)
             _plt.tight_layout()
             ay.legend()
 
 
     def get_track(self,l_scattered_pos, scrap, vchamber):
+        """Tracking to get the loss profile along the ring.
+
+        l_scattered_pos: scattered positions,
+        scrap: if True, the vchamber's height must be changed,
+        vchmaber: defines the vchamber's height"""
 
         all_track = []
         indices = []
         spos = self.spos
-        
+
         self._model.radiation_on = True
         self._model.cavity_on = True
         self._model.vchamber_on = True
@@ -404,15 +451,16 @@ class Tous_analysis():
         self.set_vchamber_scraper(vchamber)# reseting vchamber height and width (nominal)
 
         return all_track, indices
-    
+
     def find_data(self, l_scattered_pos, scrap, vchamber):
+        """obtaining the graphic"""
 
         all_track, indices = self.get_track(l_scattered_pos, scrap, vchamber)
         spos = self.spos
-        
-        fact = 0.03 
+
+        fact = 0.03
         tous_rate = self.ltime.touschek_data['rate']
-        
+
         prob = []
         lostp = []
         all_lostp = []
@@ -420,50 +468,68 @@ class Tous_analysis():
         for j, iten in enumerate(all_track):
 
             index = indices[j]
-            scattered_pos = l_scattered_pos[j]
-            
+            # scattered_pos = l_scattered_pos[j]
+
             lostinds, deltas = _np.zeros(len(iten)), _np.zeros(len(iten))
             for idx,iten in enumerate(iten):
                 _, ellost, delta = iten
                 lostinds[idx] = ellost
-                deltas[idx] = delta # alguns elétrons possuem desvio de energia abaixo da aceitancia e acabam não sendo perdidos
+                deltas[idx] = delta # alguns elétrons possuem desvio de
+                # energia abaixo da aceitancia e acabam não sendo perdidos
 
             lostinds = _np.intp(lostinds)
             lost_positions = _np.round(spos[lostinds], 2)
 
             step = int((deltas[0]+deltas[-1])/fact)
-            itv_track = _np.linspace(deltas[0], deltas[-1], step) # method learned by fac repositories
+            itv_track = _np.linspace(deltas[0], deltas[-1], step)
 
-            data = _pd.DataFrame({'lost_pos_by_tracking': lost_positions}) # create the dataframe that is obtained by tracking
-            lost_pos_column = (data.groupby('lost_pos_by_tracking').groups).keys()
-            data = _pd.DataFrame({'lost_pos_by_tracking':lost_pos_column}) # this step agroups the lost_positions
+            data = _pd.DataFrame({'lost_pos_by_tracking': lost_positions})
+            # dataframe that storages the tracking data
+            lost_pos_column = \
+                (data.groupby('lost_pos_by_tracking').groups).keys()
+            data = _pd.DataFrame({'lost_pos_by_tracking':lost_pos_column})
+            # this step agroups the lost_positions
 
-            # scat_lost_df = pd.DataFrame(f'{s}':) # dataframe will contain the scattered positions and the lost positions after scattering
+            # scat_lost_df = pd.DataFrame(f'{s}':) # dataframe will contain
+            # the scattered positions and the lost positions after scattering
 
             itv_delta = []
             for current, next_iten in zip(itv_track, itv_track[1:]):
-                data['{:.2f} % < delta < {:.2f} %'.format(current*1e2, next_iten*1e2)] = _np.zeros(len(list(lost_pos_column))) # this step creates new columns in the dataframe and fill with zeros
-                itv_delta.append((current, next_iten))
-                # Next step must calculate each matrix element from the dataframe
+                stri = f'{current*1e2:.2f} % < delta < {next_iten*1e2:.2f} %'
+                data[stri] = _np.zeros(len(list(lost_pos_column))) # this step
+                #creates new columns in the dataframe and fill with zeros
 
-            var = list(data.index) 
-            # quando as duas variáveis são iguais isso acab resultando em um erro então estou colocando essa condição.
+                itv_delta.append((current, next_iten))
+                # Next step must calculate each matrix element from the
+                # dataframe
+
+            var = list(data.index)
+            # quando as duas variáveis são iguais isso acab resultando em um
+            # erro então estou colocando essa condição.
             if var == lost_pos_column:
                 pass
             else:
                 data = data.set_index('lost_pos_by_tracking')
 
-            for idx, lost_pos in enumerate(lost_positions): # essas duas estruturas de repetição são responsáveis por calcular 
-                # o percentual dos eletrons que possuem um determinado desvio de energia e se perdem em um intervalo de desvio de energia específico
+            for idx, lost_pos in enumerate(lost_positions): # essas duas
+                # estruturas de repetição são responsáveis por calcular
+                # o percentual dos eletrons que possuem um determinado desvio
+                # de energia e se perdem em um intervalo de desvio de energia
+                # específico
                 delta = deltas[idx]
-                lps = []
+                # lps = []
                 for i, interval in enumerate(itv_delta):
                     if i == 0:
                         if interval[0]<= delta <= interval[1]:
-                            data.loc[lost_pos, '{:.2f} % < delta < {:.2f} %'.format(interval[0]*1e2, interval[1]*1e2)] += 1
+                            stri = \
+                f'{interval[0]*1e2:.2f} % < delta < {interval[1]*1e2:.2f} %'
+                            data.loc[lost_pos, stri] += 1
+
                     else:
                         if interval[0]< delta <= interval[1]:
-                            data.loc[lost_pos, '{:.2f} % < delta < {:.2f} %'.format(interval[0]*1e2, interval[1]*1e2)] += 1
+                            stri = \
+                f'{interval[0]*1e2:.2f} % < delta < {interval[1]*1e2:.2f} %'
+                            data.loc[lost_pos, stri] += 1
 
             data = data / len(deltas)
 
@@ -498,9 +564,10 @@ class Tous_analysis():
 
         return all_lostp, prob, lostp
             # dataframe = _pd.DataFrame(dic_res)
-    
+
     def get_table(self,l_scattered_pos, scrap, vchamber):
-        
+        """This is the heatmap """
+
         dic_res = {}
         all_lostp, prob, lostp = self.find_data(l_scattered_pos, scrap, vchamber)
         n_scat = _np.round(l_scattered_pos, 2)
@@ -509,37 +576,47 @@ class Tous_analysis():
 
             scat_data = []
             bool_array = _np.isin(all_lostp, lostp[idx])
-            
+
             for j, boolean in enumerate(bool_array):
                 if boolean:
-                    index = _np.intp(_np.where(lostp[idx] == all_lostp[j])[0][0])
+                    index = \
+                        _np.intp(_np.where(lostp[idx] == all_lostp[j])[0][0])
                     scat_data.append(prob[idx][index])
                 else:
                     scat_data.append(0)
 
             if not idx:
                 dic_res['lost_positions'] = all_lostp
-                dic_res['{}'.format(scattered_pos)] = scat_data
+                stri = f'{scattered_pos:s}'
+                dic_res[stri] = scat_data
             else:
-                dic_res['{}'.format(scattered_pos)] = scat_data
+                stri = f'{scattered_pos}'
+                dic_res[stri] = scat_data
 
             # df = _pd.DataFrame(dic_res)
 
         return dic_res
-    
-    def get_reordered_dict(self, l_scattered_pos, reording_key, scrap, vchamber): # chatgpt code to reorder the dictionary
+
+    def get_reordered_dict(self, l_scattered_pos,
+                            reording_key, scrap, vchamber):
+        # chatgpt code to reorder the dictionary
+        """Get the reordered dictionary"""
 
         dic = self.get_table(l_scattered_pos, scrap, vchamber)
 
         zip_tuples = zip(*[dic[chave] for chave in dic])
-        new_tuples = sorted(zip_tuples, key=lambda x: x[list(dic.keys()).index(reording_key)])
+        new_tuples = sorted(zip_tuples,
+                    key=lambda x: x[list(dic.keys()).index(reording_key)])
         zip_ordered = zip(*new_tuples)
 
-        new_dict = {chave: list(valores) for chave, valores in zip(dic.keys(), zip_ordered)}
+        new_dict = \
+    {chave: list(valores) for chave, valores in zip(dic.keys(), zip_ordered)}
 
         return new_dict
-    
-    def get_lost_profile(self, dic, filename):
+
+    def get_loss_profile(self, dic, filename):
+        """Integrates the lost positions for all s positions,
+        generating the loss profile along the ring."""
 
         # dic = self.get_reordered_dict(l_scattered_pos, reording_key)
         spos = self.spos
@@ -548,7 +625,7 @@ class Tous_analysis():
         a = df.set_index('lost_positions')
 
         scat_pos = _np.array(a.columns, dtype=float)
-        
+
         indices = []
         for iten in scat_pos:
             ind =  _np.argmin(_np.abs(spos-iten))
@@ -571,18 +648,22 @@ class Tous_analysis():
                                        offset=-1e-6, height=1e-6, gca=True)
         fig.savefig(filename,dpi=150)
 
-    def get_lost_profilel(self, l_dic):
+    def get_loss_profilel(self, l_dic):
+        """Comparing distinct loss profiles, could be used to compare with
+        the insertion of scrapers or not.
+
+        l_dic: list of dictionaries of loss profiles"""
 
         # dic = self.get_reordered_dict(l_scattered_pos, reording_key)
         l = []
-        for dic in l_dic:    
+        for dic in l_dic:
             s = self.spos
 
             df = _pd.DataFrame(dic)
             a = df.set_index('lost_positions')
 
             scat_pos = _np.array(a.columns, dtype=float)
-            
+
             indices = []
             for iten in scat_pos:
                 ind =  _np.argmin(_np.abs(s-iten))
@@ -594,10 +675,10 @@ class Tous_analysis():
                 summed.append(sum_row)
 
             l.append((a.index, summed))
-        
+
         return l
 
-    
+
     def plot_scat_table(self, l_scattered_pos, new_dic, n_r,filename, n_c=1):
         s = self.spos
 
@@ -635,9 +716,9 @@ class Tous_analysis():
 
         y = _np.linspace(0,s[-1],df.shape[0]+1)
         x = _np.linspace(0,s[-1],df.shape[1]+1)
-        X,Y = _np.meshgrid(x,y)
+        x_mesh,y_mesh = _np.meshgrid(x,y)
 
-        heatmp = ax.pcolor(X,Y,val, cmap='jet',shading='flat')
+        heatmp = ax.pcolor(x_mesh,y_mesh,val, cmap='jet',shading='flat')
 
         cbar = _plt.colorbar(heatmp)
         cbar.set_label('Loss rate [1/s] in logarithmic scale', rotation=90)
@@ -649,6 +730,5 @@ class Tous_analysis():
 
         fig.tight_layout()
         _plt.gca().set_aspect('equal')
-        # fig.savefig(filename, dpi=150)
+        # fig.savefig(filename, dpi=300)
         _plt.show()
-

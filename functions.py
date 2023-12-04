@@ -34,39 +34,39 @@ def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
 
     orb = _pyaccel.tracking.find_orbit6(model, indices=[0, element_idx])
     orb = orb[:, 1]
-    
+
     rin = _np.zeros((6, deltas.size))
     rin += orb[:, None]
     rin[0] += pos_x
     rin[2] += pos_y
     rin[4] += deltas
-    
+
     track = _pyaccel.tracking.ring_pass(
         model, rin, nr_turns=n_turn, turn_by_turn=True,
         element_offset=element_idx, parallel=True)
-    
+
     par_out, flag, turn_lost, element_lost, plane_lost = track
-    
+
     turnl_element = []
 
     for i,item in enumerate(turn_lost):
-        if item == n_turn and element_lost[i] == element_idx: 
+        if item == n_turn and element_lost[i] == element_idx:
             pass
         else:
             turnl_element.append((item, element_lost[i], deltas[i]))
-    
+
     return turnl_element
 
 def trackm_elec(acc,deltas, n_turn, lspos):
     results = []
     spos = _pyaccel.lattice.find_spos(acc, indices='open')
-    
+
     for k, iten in enumerate(lspos):
-        
+
         el_idx = _np.argmin(_np.abs(spos-iten)) # selecting the index to shift the tracking simulation
         turnl = track_eletrons(deltas, n_turn, el_idx, acc)
-        results.append(turnl) # 
-        
+        results.append(turnl) #
+
     return results
 
 def el_idx_collector(acc, lname):
@@ -96,13 +96,13 @@ def el_idx_collector(acc, lname):
                 try:
                     ind = int(length/2 + 1)
                     element_index.append(lista[ind])
-                
+
                 except IndexError:
                     ind = int(length/2 - 1)
                     element_index.append(lista[ind])
-                    
+
         all_index.append(element_index)
-    
+
     return all_index
 
 def char_check(elmnt):
@@ -115,13 +115,13 @@ def char_check(elmnt):
 
 def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep, delt, f_dens, filename):
     # ----------------
-    
+
     cm = 1/2.54 # 'poster'
 
     twi0,*_ = _pyaccel.optics.calc_twiss(acc,indices='open')
     betax = twi0.betax
     betax = betax*(1/5)
-    
+
     spos = _pyaccel.lattice.find_spos(acc)
 
     fig = _plt.figure(figsize=(38.5*cm,18*cm))
@@ -131,7 +131,7 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     a3 = fig.add_subplot(gs[0, 2], sharey=a1)
     a2.tick_params(axis='y', which='both', left=False, right=False, labelleft=False)
     a3.tick_params(axis='y', which='both', left=False, right=False, labelleft=False)
-    
+
     # defining the form that graphic will be plotted, trying to amplify the best I can the letters to see it in a easier way
     a1.grid(True, alpha=0.5, ls='--', color='k')
     a1.tick_params(axis='both', labelsize=18)
@@ -144,67 +144,66 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     a3.xaxis.grid(False)
     _plt.subplots_adjust(wspace=0.1)
 
-    if 'pos' in param: 
+    if 'pos' in param:
         a1.set_ylabel(r'positive $\delta$ [%]', fontsize=25)
-        
+
         a3.plot(spos[int(lista_resul[1][-1])], lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
-        acp_s = accep[1][element_idx] 
+        acp_s = accep[1][element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
         for item in lista_resul:
             a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
     elif'neg' in param:
         a1.set_ylabel(r'negative $\delta$ [%]', fontsize=25)
         a3.plot(spos[int(lista_resul[1][-1])], -lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
-        acp_s = accep[0][element_idx] 
+        acp_s = accep[0][element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
         for item in lista_resul:
             a3.plot(spos[int(item[1])], -item[2]*1e2, 'r.')
-            
+
     a1.set_title(r'$\delta \times scat. rate$', fontsize=20) # setting the title of the first graphic
     a1.set_xlabel(r'$\tau _T$ [1/s]', fontsize=25)
 
     a1.plot(f_dens, delt, label='Scattering touschek rate', color='black')
-    
+
 
     a2.set_title(r'$\delta \times$ lost turn', fontsize=20) # setting the tilte of the second graphic
     a2.set_xlabel(r'number of turns', fontsize=25)
     for iten in lista_resul:
         a2.plot(iten[0], iten[2]*1e2, 'k.', label = '')
 
-    
+
     a3.set_title(r'tracking ', fontsize=20) # setting the title of the third graphic
     a3.plot(spos[lista_idx][:indx], lista_off[:indx]*1e2,'b.', label=r'accep. limit', alpha=0.25)
-    
+
     _plt.hlines(1e2*acp_s, spos[0], spos[-1], color='black', linestyles='dashed', alpha=0.5) # acceptance cutoff
     a3.plot(spos, _np.sqrt(betax),color='orange', label=r'$ \sqrt{\beta_x}  $') # beta function
     _pyaccel.graphics.draw_lattice(acc, offset=-0.5, height=0.5, gca=True) #magnetic lattice
-    
+
     a3.plot(spos[element_idx], 0, 'ko', label='{}, ({} m)'.format(
         acc[element_idx].fam_name, "%.2f" % spos[element_idx])) # initial position where tracking begins
-    
+
     a3.set_xlabel(r'$s$ [m]', fontsize=25) # setting configurations of the graphic
     a3.legend(loc='upper right', ncol=1, fontsize=15)
 
     # fig.tight_layout()
     fig.savefig(filename, dpi=150)
     fig.show()
-    
+
 def select_idx(list_, param1, param2):
     arr = _np.array(list_)
-    
+
     n_arr = arr[param1:param2+1]
-    
+
     return n_arr
 
 def t_list(elmnt):
-    #this condition significates that if the input is only a number, then 
-    #the fucntion transforms it into a list to avoid errors. Actually, I will delete this function,
-    # so just forget this bulshit 
+    #this condition significates that if the input is only a number, then
+    #the fucntion transforms it into a list to avoid errors. Actually, I will delete this function
     if type(elmnt) == float or type(elmnt) ==  int:
         return [elmnt]
     else:
         return list(elmnt)
-        
+
 
 def f_function_arg_mod(kappa, kappam, b1_, b2_, norm):
 
@@ -229,7 +228,7 @@ def f_function_arg_mod(kappa, kappam, b1_, b2_, norm):
         arg *= 2*_np.sqrt(_np.pi*(b1_**2-b2_**2))*taum
 
     return arg * bessel
-        
+
 
 def f_integral_simps_l_mod(taum, b1_, b2_):
     kappam = _np.arctan(_np.sqrt(taum))
@@ -262,12 +261,12 @@ def norm_d(acc, lsps, scalc,_npt, norm=True):
     indices, indices_model= [], []
 
     for _, s in enumerate(lsps):
-        
+
         idx = _np.argmin(_np.abs(scalc - s))
         indices.append(idx)
         idx_model = _np.argmin(_np.abs(spos - s))
         indices_model.append(idx_model)
-        
+
         kappam_p0 = 0.00001 # teste sugerido pelo ximenes
         kappam_n0 = 0.00001
 
@@ -290,7 +289,7 @@ def norm_d(acc, lsps, scalc,_npt, norm=True):
         calc_dn.append(y_n)
         deltasp.append(deltap)
         deltasn.append(deltan)
-        
+
     calc_dp = _np.array(calc_dp)
     calc_dn = _np.array(calc_dn)
     deltasp = _np.array(deltasp)
@@ -309,7 +308,7 @@ def get_scaccep(acc, accep):
     daccpn = _np.interp(scalc, spos, accep[0])
 
     return scalc, daccpp, daccpn
-    
+
 def n_norm_d(acc, lsps, _npt, cutoff, accep, norm=False):
 
     scalc, daccpp, daccpn = get_scaccep(acc, accep)
@@ -319,7 +318,7 @@ def n_norm_d(acc, lsps, _npt, cutoff, accep, norm=False):
     taum_n = (beta*daccpn)**2
     kappam_p = _np.arctan(_np.sqrt(taum_p))
     kappam_n = _np.arctan(_np.sqrt(taum_n))
-    
+
     ltime = _pyaccel.lifetime.Lifetime(acc)
     b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
 
@@ -327,12 +326,12 @@ def n_norm_d(acc, lsps, _npt, cutoff, accep, norm=False):
     deltasp, deltasn = [], []
 
     for _, s in enumerate(lsps):
-        
+
         idx = _np.argmin(_np.abs(scalc - s))
 
         kappam_p0 = kappam_p[idx]
         kappam_n0 = kappam_n[idx]
-        
+
         kappam_p0x = cutoff # teste sugerido pelo Ximenes
         kappam_n0x = cutoff
 
@@ -358,7 +357,7 @@ def n_norm_d(acc, lsps, _npt, cutoff, accep, norm=False):
 
     return calc_dp, calc_dn, deltasp, deltasn
 
-# Como discutido no dia 23.08.2023 a primeira abordagem para a realizaçao da pesagem vai 
+# Como discutido no dia 23.08.2023 a primeira abordagem para a realizaçao da pesagem vai
 # vai ser feita definindo o corte como sendo a aceitancia de energia, isso foi deinido com base
 # no cálculo já implementados para o tempo de vida touschek que é coerente com o tempo do SIRIUS
 # futuramente isso pode ser alterado e redefinido
@@ -373,7 +372,7 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
     taum_n = (beta*daccpn)**2
     kappam_p = _np.arctan(_np.sqrt(taum_p))
     kappam_n = _np.arctan(_np.sqrt(taum_n))
-    
+
     ltime = _pyaccel.lifetime.Lifetime(acc)
     b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
 
@@ -381,7 +380,7 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
     deltasp, deltasn = [], []
 
     for _, s in enumerate(lsps):
-        
+
         idx = _np.argmin(_np.abs(scalc - s))
         kappam_p0 = kappam_p[idx]
         kappam_n0 = kappam_n[idx]
@@ -398,13 +397,13 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
 
         y_p /= norm_facp
         y_n /= norm_facn
-        
+
         # eliminating the negative values from array
         indp = _np.where(y_p<0)[0]
         indn = _np.where(y_n<0)[0]
         y_p[indp] = 0
         y_n[indn] = 0
-        
+
         fdens_p.append(y_p)
         fdens_n.append(y_n)
         deltasp.append(deltap)
@@ -424,7 +423,7 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
 
 
 def plot_hdis(acc, l_index, deltp, f_densp, deltn, f_densn, hp, hn):
-    
+
     fig, axis = _plt.subplots(1,l_index.squeeze().size, figsize=(10,6))
     _plt.suptitle('Comparação entre densidade de probabilidade analítica e de M.C.', fontsize=15)
     spos = _pyaccel.lattice.find_spos(acc, indices='closed')
@@ -433,7 +432,7 @@ def plot_hdis(acc, l_index, deltp, f_densp, deltn, f_densn, hp, hn):
 
     for c,iten in enumerate(l_index):
         ax = axis[c]
-        
+
         if c == 0:
             ax.set_ylabel(r'PDF normalizada', fontsize=15)
 
@@ -441,7 +440,7 @@ def plot_hdis(acc, l_index, deltp, f_densp, deltn, f_densn, hp, hn):
 
         ax.set_title('{}'.format(acc[iten].fam_name))
         ax.plot(deltp[idx], f_densp[idx], color='blue', label='Analytic ({:.2f} [m])'.format(scalc[idx]))
-        
+
         ax.tick_params(axis='both', labelsize=14)
 
         ax.hist(hn[idx], density=True, bins=200, color='lightgrey', label='Monte-Carlo')
@@ -458,27 +457,27 @@ def plot_hdis(acc, l_index, deltp, f_densp, deltn, f_densn, hp, hn):
         ax.grid(axis='y', ls='--', alpha=0.5)
     #     fig.tight_layout()
         _plt.show
-    
+
     return idx
 
 def create_particles(cov_matrix, num_part):
-    
+
     # permute indices to change the order of the columns:
     # [rx, px, ry, py, de, dl]^T -> [px, py, de, rx, ry, dl]^T
     idcs = [1, 3, 4, 0, 2, 5]
     # [px, py, de, rx, ry, dl]^T -> [rx, px, ry, py, de, dl]^T
     idcs_r = [3, 0, 4, 1, 2, 5]
-    
+
     cov_matrix = cov_matrix[:, idcs][idcs, :]
-    
+
     sig_xx = cov_matrix[:3, :3]
     sig_xy = cov_matrix[:3, 3:]
     sig_yx = cov_matrix[3:, :3]
     sig_yy = cov_matrix[3:, 3:]
     inv_yy = _np.linalg.inv(sig_yy)
-    
+
     part1 = _np.random.multivariate_normal(_np.zeros(6), cov_matrix, num_part).T
-    # changing the matrices' columns order 
+    # changing the matrices' columns order
     part2 = part1.copy()
 
     vec_a = part2[3:]
@@ -487,7 +486,7 @@ def create_particles(cov_matrix, num_part):
 
     part2[:3] = _np.random.multivariate_normal(_np.zeros(3), new_cov, num_part).T
     part2[:3] += new_mean
-        
+
     part2 = part2[idcs_r, :]
     part1 = part1[idcs_r, :]
 
@@ -498,10 +497,10 @@ def get_cross_section_distribution(psim, _npts=3000):
     beta_bar = 0
     psi = _np.logspace(_np.log10(_np.pi/2 - psim), 0, _npts)
     psi = _np.pi/2 - psi
-    psi = psi[::-1] 
+    psi = psi[::-1]
     cpsi = _np.cos(psi)
     cross = _np.zeros(cpsi.size)
-    if beta_bar > 1e-19: 
+    if beta_bar > 1e-19:
         cross += (1 + 1/beta_bar**2)**2 * (2*(1 + cpsi**2)/cpsi**3 - 3/cpsi)
     cross += 4/cpsi + 1
     cross *= _np.sin(psi)
@@ -527,11 +526,11 @@ def scatter_particles(part1, part2, de_min):
     # calculating the changing base matrix for every particle
     pz1 = _np.sqrt((1+de1)**2 - xl1*xl1 - yl1*yl1)
     pz2 = _np.sqrt((1+de2)**2 - xl2*xl2 - yl2*yl2)
-        
+
     # desired vectors to construct the transformation matrix
     p_1 = _np.vstack([xl1, yl1, pz1])
     p_2 = _np.vstack([xl2, yl2, pz2])
-        
+
     # new coordinate system
     p_j = p_1 + p_2
     p_j /= _np.linalg.norm(p_j, axis=0) # sum
@@ -543,9 +542,9 @@ def scatter_particles(part1, part2, de_min):
     jkl2xyz[:, :, 0] = p_j.T
     jkl2xyz[:, :, 1] = p_k.T
     jkl2xyz[:, :, 2] = p_l.T
-    
+
     # calculating theta and zeta
-    theta = xl1 - xl2 
+    theta = xl1 - xl2
     zeta = yl1 - yl2
     # defining the value of the scattering angle chi
     chi = _np.sqrt(zeta**2 + theta**2)/2
@@ -553,14 +552,14 @@ def scatter_particles(part1, part2, de_min):
     # draw the scattering angles from uniform distribution:
     phi = _np.random.rand(num_part)* 2*_np.pi
     psi = _np.random.rand(num_part)* _np.pi/2
-    
+
     # draw the psi angle from the cross section probability density:
     # we need to define a maximum angle to normalize the cross section
     # distribution because it diverges when the full interval [0, pi/2]
     # is considered.
     # To estimate this angle we define a threshold for the minimum energy
     # deviation we care about (de_min) and consider the worst case scenario
-    # in terms of chi that could create such scattering. 
+    # in terms of chi that could create such scattering.
     # The worst case happens when chi is maximum, because in this way a small
     # scattering angle would create a larger energy deviation.
     # We considered here a chi twice as large as the maximum chi draw from
@@ -571,7 +570,7 @@ def scatter_particles(part1, part2, de_min):
     fact=psim*2/_np.pi
     print(psim*2/_np.pi)
     psi = cross_section_draw_samples(psim, num_part)
-    
+
     # new momentum in j,k,l (eq. 16 of Piwinski paper)
     gammat = gamma/_np.sqrt(1 + beta*beta*gamma*gamma*chi*chi)
     dp_ = _np.sin(chi[None, :]) * _np.vstack([
@@ -590,12 +589,12 @@ def scatter_particles(part1, part2, de_min):
 
     delta1 = _np.linalg.norm(pnew_1, axis=0) - 1
     delta2 = _np.linalg.norm(pnew_2, axis=0) - 1
-        
+
     part1_new = part1.copy()
     part1_new[1] = pnew_1[0]
     part1_new[3] = pnew_1[1]
     part1_new[4] = delta1
-            
+
     part2_new = part2.copy()
     part2_new[1] = pnew_2[0]
     part2_new[3] = pnew_2[1]
@@ -607,18 +606,18 @@ def histgms(acc,l_spos,num_part, accep, de_min, cutaccep):
 
     envelopes = _pyaccel.optics.calc_beamenvelope(acc)
     spos=_pyaccel.lattice.find_spos(acc, indices='closed')
-    
+
     scalc, daccpp, daccpn = get_scaccep(acc, accep)
 
     histsp1, histsp2, indices=[],[],[]
-    
+
     for iten in l_spos:
-        
+
         idx_model = _np.argmin(_np.abs(spos - iten))
         idx = _np.argmin(_np.abs(scalc - iten))
         indices.append(idx_model)
 
-        # this index is necessary to the s position indices from analitically calculated PDF 
+        # this index is necessary to the s position indices from analitically calculated PDF
         # match with monte carlo simulation s position indices
         env = envelopes[idx_model]
 
@@ -634,19 +633,19 @@ def histgms(acc,l_spos,num_part, accep, de_min, cutaccep):
 
             ind1 = _np.intp(_np.where(check1<0)[0])
             ind2 = _np.intp(_np.where(check2<0)[0])
-                    
+
             histsp1.append(part1_new[4][ind1]*1e2)
             histsp2.append(part2_new[4][ind2]*1e2)
 
-        else:        
+        else:
             ind1 = _np.intp(_np.where(part1_new[4]>=0.01)[0]) # teste sugerido pelo ximenes
             ind2 = _np.intp(_np.where(part2_new[4]<=-0.01)[0])
 
             histsp1.append(part1_new[4][ind1]*1e2)
             histsp2.append(part2_new[4][ind2]*1e2)
-        
+
     # hist1=_np.array(histsp1, dtype='object')
     # hist2=_np.array(histsp2, dtype='object')
     indices=_np.array(indices)
-    
+
     return histsp1, histsp2, indices
