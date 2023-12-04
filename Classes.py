@@ -1,3 +1,4 @@
+"""tous_analysis."""
 from pyaccel.lifetime import Lifetime
 from pyaccel.lattice import get_attribute, find_indices, find_spos
 import touschek_pack.functions as tousfunc
@@ -679,7 +680,8 @@ class Tous_analysis():
         return l
 
 
-    def plot_scat_table(self, l_scattered_pos, new_dic, n_r,filename, n_c=1):
+    def plot_scat_table(self, new_dic):
+        """ Heatmap plot indicating the heat points of loss along the ring """
         s = self.spos
 
         # new_dic = self.get_reordered_dict(l_scattered_pos, 'lost_positions')
