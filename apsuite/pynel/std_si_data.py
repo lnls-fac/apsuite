@@ -50,26 +50,6 @@ def BPMIDX():
     """Get the default SIRIUS BPM's indices"""
     return _deepcopy(__bpmidx)
 
-def STD_ELEMS_HALB():
-    """Get the default SIRIUS names of the elements in the 'HA-LB' or 'LB-HA' sectors"""
-    return ['SFA0', 'QFA', 'SDA0', 'QDA', 'B1',
-            'SDA1', 'Q1', 'SFA1', 'Q2', 'SDA2','B2',
-            'SDA3', 'Q3', 'SFA2', 'Q4', 
-            'BC',
-            'Q4', 'SFB2', 'Q3', 'SDB3', 
-            'B2','SDB2', 'Q2', 'SFB1', 'Q1', 'SDB1', 
-            'B1','QDB1', 'SDB0', 'QFB', 'SFB0', 'QDB2']
-
-def STD_ELEMS_LBLP():
-    """Get the default SIRIUS names of the elements in the 'LB-LP' or 'LP-LB' sectors"""
-    return ['QDB2', 'SFB0', 'QFB', 'SDB0', 'QDB1', 'B1',
-            'SDB1', 'Q1', 'SFB1', 'Q2', 'SDB2', 'B2',
-            'SDB3', 'Q3', 'SFB2', 'Q4',
-            'BC',
-            'Q4', 'SFP2', 'Q3', 'SDP3', 
-            'B2','SDP2', 'Q2', 'SFP1', 'Q1', 'SDP1', 
-            'B1','QDP1', 'SDP0', 'QFP', 'SFP0', 'QDP2']
-
 def STD_TYPES():
     """Returns the default modification types: 
     'dr'  : Rotation roll misalignment (theta)
@@ -96,22 +76,6 @@ def STD_ELEMS():
             'SDB0','SDB1','SDB2','SDB3','SFB0','SFB1','SFB2',
             'SDP0','SDP1','SDP2','SDP3','SFP0','SFP1','SFP2']
 
-__sect_spos = __spos[__mi_idx]
-def SI_SECT_SPOS():
-    """Get the longitudinal coordinates at the start of each sector"""
-    return _deepcopy(__sect_spos)
-
-def SI_SECT_INDICES():
-    """Get the indices at the start of each sector"""
-    return _deepcopy(__mi_idx)
-
-def SI_SECTOR_TYPES():
-    """Get the default SIRIUS sector types"""
-    return ['HighBetaA -> LowBetaB', 
-            'LowBetaB -> LowBetaP', 
-            'LowBetaP -> LowBetaB', 
-            'LowBetaB -> HighBetaA']
-
 __deltas = {
     'dx':  {'B':40e-6, 'Q':40e-6, 'S':40e-6}, 
     'dy':  {'B':40e-6, 'Q':40e-6, 'S':40e-6}, 
@@ -122,6 +86,3 @@ __deltas = {
 def STD_ERROR_DELTAS():
     """Default misalignment and rotation expected error"""
     return _deepcopy(__deltas)
-
-def ELEMS_ALL_INDICES():
-    return dict((fam, _np.array(_latt.find_indices(__model, 'fam_name', fam))) for fam in STD_ELEMS())

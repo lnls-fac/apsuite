@@ -1,21 +1,10 @@
 """Module 'buttons' for the class Object Button"""
-
-from .std_si_data import MODEL_BASE, SI_SPOS, SI_SECT_SPOS, \
-    STD_SECTS, STD_TYPES, STD_ELEMS_HALB, STD_ELEMS_LBLP, \
-    SI_SECTOR_TYPES, STD_ERROR_DELTAS, STD_ELEMS, \
-    SI_SECT_INDICES, ELEMS_ALL_INDICES
+from apsuite.pynel.std_si_data import MODEL_BASE, STD_ERROR_DELTAS, STD_TYPES, SI_FAMDATA, STD_ELEMS, SI_SPOS
 from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 import numpy as _np
 from copy import deepcopy as _deepcopy
-from .functions import calc_vdisp as _calc_vdisp, _SET_FUNCS, rmk_correct_orbit
+from apsuite.pynel.functions import calc_vdisp as _calc_vdisp, _SET_FUNCS, rmk_correct_orbit
 
-_SI_SPOS          = SI_SPOS()
-_SI_SECT_SPOS     = SI_SECT_SPOS()
-_STD_SECTS        = STD_SECTS()       
-_STD_TYPES        = STD_TYPES()       
-_STD_ELEMS        = STD_ELEMS()
-_STD_ELEMS_HALB   = STD_ELEMS_HALB() 
-_STD_ELEMS_LBLP   = STD_ELEMS_LBLP() 
 _OC_MODEL = MODEL_BASE()
 _OC = _OrbitCorr(_OC_MODEL, 'SI')
 _OC.params.maxnriters = 30
@@ -23,271 +12,77 @@ _OC.params.convergencetol = 1e-9
 _OC.params.use6dorb = True
 _INIT_KICKS = _OC.get_kicks()
 _JAC = _OC.get_jacobian_matrix()
-_STD_SECT_TYPES = SI_SECTOR_TYPES()
-_SI_SECT_INDICES = SI_SECT_INDICES()
 _DELTAS = STD_ERROR_DELTAS()
-_FAMS_INDICES = ELEMS_ALL_INDICES()
+_STD_TYPES = STD_TYPES()
+_fam = SI_FAMDATA()
+_STD_ELEMS = STD_ELEMS()
+_sects_dict = {fam_name:[int(s[:2]) for i,s in enumerate(_fam[fam_name]['subsection'])] for fam_name in _STD_ELEMS}
+_SI_SPOS = SI_SPOS()
 
 class Button:
     """Button object for storing a magnet, it's sector (sect), it's indices 
        and it's vertical dispersion signature due to an misaligment (dtype)"""
-    def __init__(self, sect=None, dtype=None, elem=None, func='testfunc', indices='auto', default_valids='std'):
-        self.func = func
-        default_valids = self.__process_valids(default_valids)
-        if indices == 'auto':
-            if (sect is None) and (elem is None) and (dtype is None):
-                raise ValueError('Some parameters are missing "sect, elem, dtype" (OR) "indices"')
+    def __init__(self, dtype=None, **kwargs):
+        self._elem = None
+        self._sect = None
+        self._indices = None
+
+        if dtype in _STD_TYPES:
+            self._dtype = dtype
+        else: raise ValueError('Invalid dtype')
+
+        if 'func' not in kwargs:
+            self._func = 'vertical_disp'
+        elif 'func' in kwargs and kwargs['func'] in ['vertical_disp', 'testfunc']:
+            self._func = kwargs['func']
+        else: 
+            raise ValueError('Invalid func')
+
+        if 'indices' in kwargs:
+            if any([k in kwargs for k in ('elem', 'sect')]) and any(kwargs[k] is not None for k in ('elem', 'sect')):
+                raise ValueError('Too much args')
             else:
-                self.__init_by_default(sect=sect, dtype=dtype, elem=elem, func=func, default_valids=default_valids)
-        elif isinstance(indices, (list, _np.ndarray)):
-            if all(isinstance(i, (int, _np.integer)) for i in indices):
-                self.__init_by_indices(indices=indices, dtype=dtype, func=func, default_valids=default_valids)
-            else:
-                raise ValueError('indices with invalid values')
-        elif isinstance(indices, (int, _np.integer)):
-            self.__init_by_indices(indices=[indices], dtype=dtype, func=func, default_valids=default_valids)
-        else:
-            raise ValueError('Indices passed in wrong format')
+                self._indices = kwargs['indices']
 
-    def __init_by_indices(self, indices, dtype, func, default_valids):
-        self.indices = indices
-        elem = _OC_MODEL[indices[0]].elem
-        sect = list({j + 1 for i in indices for j in range(20) if (_SI_SECT_SPOS[j] < _SI_SPOS[i]) and (_SI_SPOS[i] < _SI_SECT_SPOS[j + 1])})
-        if len(sect) > 1:
-            raise ValueError(f'some elements passed are from different sectors: {sect}')
-        self.sect = sect[-1]
-        self.elem = elem
-        self.fantasy_name = elem
-        self.dtype = dtype
-        self.sectype = self.__sector_type()
+        elif all([k in kwargs for k in ('elem', 'sect')]):
+            self._sect = kwargs['sect']
+            self._elem = kwargs['elem']
+        else: raise ValueError('Missing input args')
 
-        if default_valids[0] == 'off':
-            self.__validsects = 'off'
-        elif default_valids[0] == 'std':
-            self.__validsects = _STD_SECTS 
-
-        if default_valids[1] == 'off':
-            self.__validtypes = 'off'
-        elif default_valids[1] == 'std':
-            self.__validtypes = _STD_TYPES
-
-        if default_valids[2] == 'off':
-            self.__validnames = 'off'
-        elif default_valids[2] == 'std':
-            self.__validnames = _STD_ELEMS
-
-        self.signature = _np.array([0.0 for _ in range(160)])
-        if self.check_isvalid():
-            if func == 'vertical_disp':
-                temp = self.__calc_vertical_dispersion_signature()
-            elif func == 'testfunc':
-                temp = self.__calc_test_func_signature()
-            elif func == 'twiss':
-                temp = self.__calc_twiss_signatures()
-            else:
-                raise KeyError('Invalid signature function. Try "vertical_disp", "testfunc" or "twiss"')
-            if isinstance(temp, list) and len(temp) == 1:
-                if len(temp[0]) == 160:
-                    self.signature = temp[0]
-                else:
-                    raise ValueError('Error calculating signature')
-            else:
-                self.signature = temp
-
-    def __init_by_default(self, sect, dtype, elem, func, default_valids):
-        #print('init by default', default_valids)
-        self.elem = elem.rsplit('_')[0]
-        self.fantasy_name = elem
-        self.dtype = dtype
-        self.sect = sect
-        self.sectype = self.__sector_type()
-
-        if default_valids[0] == 'std':
-            self.__validsects = _STD_SECTS
-        if default_valids[0] == 'off':
-            self.__validsects = 'off'
-
-        if default_valids[1] == 'std':
-            self.__validtypes = _STD_TYPES
-        if default_valids[1] == 'off':
-            self.__validtypes = 'off'
-
-        if default_valids[2] == 'std':
-            if self.sectype in ['HighBetaA -> LowBetaB', 'LowBetaB -> HighBetaA']:
-                self.__validnames = _STD_ELEMS_HALB
-            elif self.sectype in ['LowBetaP -> LowBetaB', 'LowBetaB -> LowBetaP']:
-                self.__validnames = _STD_ELEMS_LBLP
-            else:
-                self.__validnames = []
-        if default_valids[2] == 'off':
-            self.__validnames = 'off'
-
-        self.indices = []
-        self.signature = _np.zeros(160)
-        temp = [0.0 for _ in range(160)]
-
-        if self.check_isvalid():
-            self.indices = self.__find_indices()
-
-            if func == 'vertical_disp':
-                temp = self.__calc_vertical_dispersion_signature()
-            elif func == 'testfunc':
-                temp = self.__calc_test_func_signature()
-            elif func == 'twiss':
-                temp = self.__calc_twiss_signatures()
-            else:
-                raise KeyError('Invalid signature function. Try "vertical_disp", "testfunc" or "twiss"')
+        self.__force_init__()
             
-        if all(isinstance(l, list) for l in self.indices):
-            if len(self.indices) == 1:
-                if all(isinstance(i, (int, _np.integer)) for i in self.indices[0]):
-                    self.indices = self.indices[0]
-                    self.signature = temp[0]
-            elif all(all(isinstance(i, (int, _np.integer)) for i in self.indices[k]) for k in range(len(self.indices))):
-                self.signature = temp
-            else:
-                raise ValueError('indices has lists, but not lists of ints')
-
-        elif all(isinstance(i, (int, _np.integer)) for i in self.indices):
-            if len(temp) == 1:
-                if len(temp[0]) == 160:
-                    self.signature = temp[0]
-                else:
-                    raise ValueError('error with signature')
-                
-            elif len(temp) == 160:
-                self.signature = temp
-            else:
-                raise ValueError('error with signature')
-        else:
-            raise ValueError('indices error')
-
-    def check_isflat(self):
-        if self.indices == []:
-            return True
-        elif isinstance(self.indices, list):
-            if all(isinstance(idx, (int, _np.integer)) for idx in self.indices):
-                return True
-            elif all(isinstance(idx, list) for idx in self.indices):
-                return False
-        else:
-            raise ValueError('flat error: problem with indices')
+        self._signature = self.__calc_signature()
 
     def __str__(self) -> str:
-        return '('+str(self.sect)+','+str(self.dtype)+','+str(self.fantasy_name)+')'
+        return '('+str(self._sect)+','+str(self._dtype)+','+str(self._fantasy_name)+')'
 
     def __repr__(self) -> str:
-        return '('+str(self.sect)+','+str(self.dtype)+','+str(self.fantasy_name)+')'
+        return '('+str(self._sect)+','+str(self._dtype)+','+str(self._fantasy_name)+')'
 
     def __eq__(self, other):
-        try: # cant use "isinstance" because "full_buttons" pickle was generated with package "pynel", not "apsuite.pynel" ! 
-            if (self.dtype == other.dtype) and (self.indices == other.indices) and (self.fantasy_name == other.fantasy_name):
+        try:
+            if (self._dtype == other.dtype) and (self._indices == other.indices) and (self._fantasy_name == other.fantasy_name):
                 return True
             return False
         except:
             return False
 
-    def check_isvalid(self):
-        validify = [False, False, False]
-        if self.__validsects == 'off':
-            validify[0] = True
-        elif (self.sect in self.__validsects):
-            validify[0] = True
-        if self.__validtypes == 'off':
-            validify[1] = True
-        elif (self.dtype in self.__validtypes):
-            validify[1] = True
-        if self.__validnames == 'off':
-            validify[2] = True
-        elif (self.elem in self.__validnames):
-            validify[2] = True
-        return all(validify)
-    
-    def __check_isvalid_for_printing(self):
-        validify = [False, False, False]
-        if self.__validsects == 'off':
-            validify[0] = True
-        elif (self.sect in self.__validsects):
-            validify[0] = True
-        if self.__validtypes == 'off':
-            validify[1] = True
-        elif (self.dtype in self.__validtypes):
-            validify[1] = True
-        if self.__validnames == 'off':
-            validify[2] = True
-        elif (self.elem in self.__validnames):
-            validify[2] = True
-        return validify
-        
-    def show_invalid_parameters(self):
-        valids = self.__check_isvalid_for_printing()
-        invalid = []
-        strings = ['sector', 'dtype', 'elem']
-        for i, v in enumerate(valids):
-            if not v:
-                invalid.append(strings[i])
-        if len(invalid) == 0:
-            print('(%d, %s, %s) ---> valid button' % (self.sect,self.dtype, self.elem))
-        if len(invalid) == 1:
-            print('(%d, %s, %s) ---> invalid %s' % (self.sect, self.dtype, self.elem,  invalid[0]))
-        if len(invalid) == 2:
-            print('(%d, %s, %s) ---> invalid %s & %s' % (self.sect, self.dtype, self.elem, invalid[0], invalid[1]))
-        if len(invalid) == 3:
-            print('(%d, %s, %s) ---> completely invalid' % (self.sect, self.dtype, self.elem))
-
-    def __find_indices(self):
-        famidx = _FAMS_INDICES[self.elem]
-        idx = _np.where((famidx > _SI_SECT_INDICES[self.sect-1]) & (famidx < _SI_SECT_INDICES[self.sect]))
-        idx = list(famidx[idx])
-        if '_' in self.fantasy_name:
-            number = int(self.fantasy_name.rsplit('_')[-1])
-            if number == 1:
-                return idx[:int(len(idx)/2)]
-            return idx[int(len(idx)/2):]
-        elif self.elem in ['Q1', 'Q2', 'Q3', 'Q4']:
-            return [[idx[0]], [idx[1]]]
-        elif self.elem in ['B2', 'B1']:
-            return [idx[:int(len(idx)/2)], idx[int(len(idx)/2):]]
-        return [idx]
-
-    def __sector_type(self):
-        if self.sect in [2, 6, 10, 14, 18]:
-            return _STD_SECT_TYPES[1]
-        elif self.sect in [3, 7, 11, 15, 19]:
-            return _STD_SECT_TYPES[2]
-        elif self.sect in [4, 8, 12, 16, 20]:
-            return _STD_SECT_TYPES[3]
-        elif self.sect in [1, 5, 9, 13, 17]:
-            return _STD_SECT_TYPES[0]
-        else:
-            return 'Not_Sirius_Sector'
-
-    def __calc_test_func_signature(self):
-        disp = []
-        if all(isinstance(i, list) for i in self.indices):
-            #print('list of lists')
-            for ind in self.indices:
-                _disp = _np.array([i for i in range(160)])
-                disp.append(_disp.ravel())
-        elif all(isinstance(i, (int, _np.integer)) for i in self.indices):
-            #print('list of ints')
-            _disp = _np.array([i for i in range(160)])
-            disp.append(_disp.ravel())
-        else:
-            raise ValueError('Indices with format problem')
-        return disp
-    
-    def __calc_vertical_dispersion_signature(self):
-        func = _SET_FUNCS[self.dtype]
-        if all(isinstance(i, list) for i in self.indices): # list of list of ints
-            indices = self.indices
-        elif all(isinstance(i, (int, _np.integer)) for i in self.indices): # list of ints
-            indices = [self.indices]  
+    def __calc_signature(self):
+        if self._func == 'testfunc':
+            if isinstance(self._fantasy_name, list):
+                return [_np.zeros(160) for i in self._fantasy_name]
+            else:
+                return _np.zeros(160) 
+        func = _SET_FUNCS[self._dtype]
+        if all(isinstance(i, list) for i in self._indices): # list of list of ints
+            indices = self._indices
+        elif all(isinstance(i, (int, _np.integer)) for i in self._indices): # list of ints
+            indices = [self._indices]  
         else:
             raise ValueError('Indices with format problem')
         # the calculation:
         disp = []
-        delta = _DELTAS[self.dtype][self.elem[0]]
+        delta = _DELTAS[self._dtype][self._elem[0]]
         for ind in indices:
             disp_0 = _calc_vdisp(_OC_MODEL)
             func(_OC_MODEL, indices=ind, values=delta) # applying (SETTING) positive delta
@@ -296,109 +91,117 @@ class Button:
             disp.append(((disp_p-disp_0)/delta).ravel())
             func(_OC_MODEL, indices=ind, values=0.0)
             _OC.set_kicks(_INIT_KICKS)
-        return disp
+        return disp        
+
+    def __force_init__(self):
+        elem = self._elem
+        fixpos = -1
+        if elem is not None:
+            if isinstance(elem, str):
+                elem = elem.rsplit('_')
+            if len(elem) == 1:
+                elem = elem[0]
+            else:
+                elem, fixpos = elem[0], int(elem[1])
+        
+        sect = self._sect
+        if sect is not None:
+            if not isinstance(sect, (_np.integer, int)) or sect < 1 or sect > 20:
+                raise ValueError('problem with sect')
+            
+        indices = self._indices
+        split_flag = False
+        if indices is not None:
+            if isinstance(indices, (int, _np.integer)):
+                indices = [indices]
+            elif isinstance(indices, (_np.ndarray, list, tuple)) and all(isinstance(i, (_np.integer, int)) for i in indices):
+                pass
+            else:
+                ValueError('indices passed in wrong format')
+            found_elems = [fname for fname in list(set([_OC_MODEL[int(idx)].fam_name for idx in indices])) if fname in _STD_ELEMS]
+            if len(found_elems) != 1:
+                raise ValueError('invalid indices')
+            elem = found_elems.pop()
+            indices = [f for f in _fam[elem]['index'] if indices[0] in f]
+            if len(indices) == 1:
+                indices = indices[0]
+        if indices is None:
+            indices = [_fam[elem]['index'][i] for i,s in enumerate(_sects_dict[elem]) if s == sect]
+            if len(indices) == 1:
+                if isinstance(indices[0], (list, tuple, _np.ndarray)) and len(indices[0]) > 1:
+                    indices = indices[0]
+            else:
+                split_flag = True
+        
+        spos = [_SI_SPOS[i[0]] for i in indices] if split_flag else _SI_SPOS[indices[0]]
+        if len(set(_sects_dict[elem])) != len(_sects_dict[elem]) and split_flag == False:
+            pos = 0
+            for i, s in enumerate(_sects_dict[elem]):
+                if s == sect:
+                    pos += 1
+                    if indices[0] in _fam[elem]['index'][i]:
+                        break
+            fantasy_name = elem+'_'+str(pos)
+        elif len(set(_sects_dict[elem])) != len(_sects_dict[elem]) and split_flag == True:
+            fantasy_name = [elem+'_'+str(i+1) for i in range(len(indices))]
+        else:
+            fantasy_name = elem
+        if fixpos == -1:
+            self._fantasy_name = fantasy_name
+            self._sect = sect
+            self._spos = spos
+            self._indices = indices
+        else:
+            self._fantasy_name = fantasy_name[fixpos-1]
+            self._sect = sect
+            self._spos = spos[fixpos-1]
+            self._indices = indices[fixpos-1]
+
+    @property
+    def func(self):
+        return self._func
+    
+    @property
+    def dtype(self):
+        return self._dtype
+    
+    @property
+    def elem(self):
+        return self._elem
+    
+    @property
+    def sect(self):
+        return self._sect
+    
+    @property
+    def indices(self):
+        return self._indices
+    
+    @property
+    def signature(self):
+        return self._signature
+    
+    @property
+    def spos(self):
+        return self._spos
+    
+    @property
+    def fantasy_name(self):
+        return self._fantasy_name
 
     def flatten(self):
-        """Split the button if its contains two or more magnets"""
-        if not isinstance(self.indices, list):
-            raise ValueError('indices error')
-        elif self.indices != []:
-            if isinstance(self.indices[0], list):
-                # Split the button into multiple buttons
-                buttons = []
-                for i in range(len(self.indices)):
-                    sub_button = _deepcopy(self)
-                    sub_button.indices = self.indices[i]
-                    sub_button.signature = self.signature[i]
-                    sub_button.fantasy_name = self.fantasy_name+'_'+str(i+1)
-                    buttons.append(sub_button)
-                return buttons
-            else:
-                # Return the button as a single-item list
-                return [self]
-        else:
-            return [self] # flat button, but propably is invalid
-        
-    def __process_valids(self, arg):
-        #print('arg = ', arg)
-        if arg == 'std':
-            return ['std', 'std', 'std']
-        elif arg == 'off':
-            return ['off', 'off', 'off']
-        elif isinstance(arg, (tuple, list)):
-            if len(arg) == 3:
-                if any((d not in ['off', 'std']) for d in arg):
-                    raise ValueError('the "default_valids should contain only "std" of "off" strings"')
-                else:
-                    return arg
-            else:
-                raise ValueError('"default_valids" parameter should be a list of 3 strings: "off" and/or "std"')
-        else:
-            raise ValueError('"default_valids" parameter should be "off", "std" or a list/tuple')
-        
-
-########################################
-# FUTURE FIZ FOR INIT FUNCTION OF BUTTONS
-
-#init button
-# def init(elem=None, sect=None, indices=None):
-#     split_flag = False
-#     fixpos = -1
-#     # check if elem+sect is passed
-#     if elem is not None and sect is not None and indices is None:
-#         if isinstance(elem, str):
-#             elem = elem.rsplit('_')
-#             if len(elem) == 1:
-#                 elem = elem[0]
-#             else:
-#                 elem, fixpos = elem[0], int(elem[1])
-#         else:
-#             raise ValueError('problem with arg elem')
-#         if not isinstance(sect, (int, np.integer)):
-#             raise ValueError('arg sect passed in wrong format')
-#         if sect > 20 or sect < 1: 
-#             raise ValueError('sect should be an integer between 1 and 20 (inclusive 1 and 20)')
-#     elif indices is not None and elem is None:
-#         if isinstance(indices, (int, np.integer)):
-#             indices = [indices]
-#         elif isinstance(indices, (np.ndarray, list, tuple)):
-#             pass
-#         else:
-#             ValueError('indices passed in wrong format')
-#         found_elems = [fname for fname in list(set([model[int(idx)].fam_name for idx in indices])) if fname in valid_fam_names]
-#         if len(found_elems) != 1:
-#             raise ValueError('invalid indices')
-#         elem = found_elems.pop()
-#     else:
-#         raise ValueError('("elem" + "sect") OR ("indices") must be passed!')
-#     if indices is not None:
-#         indices = [f for f in fam[elem]['index'] if indices[0] in f]
-#         if len(indices) == 1:
-#             indices = indices[0]
-#     if sect is None:
-#         sect = [int(fam[elem]['subsection'][i][:2]) for i,f in enumerate(fam[elem]['index']) if indices[0] in f].pop()
-#     sects = sects_dict[elem]
-#     if indices is None:
-#         indices = [fam[elem]['index'][i] for i,s in enumerate(sects) if s == sect]
-#         if len(indices) == 1:
-#             if isinstance(indices[0], (list, tuple, np.ndarray)) and len(indices[0]) > 1:
-#                 indices = indices[0]
-#         else:
-#             split_flag = True
-#     spos = [sposS[i[0]] for i in indices] if split_flag else sposS[indices[0]]
-#     if len(set(sects)) != len(sects) and split_flag == False:
-#         pos = 0
-#         for i, s in enumerate(sects):
-#             if s == sect:
-#                 pos += 1
-#                 if indices[0] in fam[elem]['index'][i]:
-#                     break
-#         fantasy_name = elem+'_'+str(pos)
-#     elif len(set(sects)) != len(sects) and split_flag == True:
-#         fantasy_name = [elem+'_'+str(i+1) for i in range(len(indices))]
-#     else:
-#         fantasy_name = elem
-#     if fixpos == -1:
-#         return fantasy_name, sect, spos, indices
-#     else:
-#         return fantasy_name[fixpos-1], sect, spos[fixpos-1], indices[fixpos-1]
+        if not isinstance(self, Button):
+            print('arg is not a Button object')
+            return
+        if isinstance(self.fantasy_name, list):
+            buttons = []
+            for i in range(len(self.fantasy_name)):
+                print(f'spliting {i+1} {self}')
+                b = _deepcopy(self)
+                b._signature = self.signature[i]
+                b._fantasy_name = self.fantasy_name[i]
+                b._indices = self.indices[i]
+                buttons.append(b)
+            return buttons
+        else: 
+            return self
