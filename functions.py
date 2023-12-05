@@ -7,13 +7,16 @@ import scipy.special as _special
 from mathphys.beam_optics import beam_rigidity as _beam_rigidity
 
 def calc_amp(acc,energy_offsets, hmax, hmin):
+
+    """Calculates the amplitudes and gets the physical
+    limitants"""
+
     a_def = _np.zeros(energy_offsets.size)
     indices = _np.zeros(energy_offsets.size)
     try:
         for idx,delta in enumerate(energy_offsets):
-            twi,*_ = _pyaccel.optics.calc_twiss(accelerator=acc,
-                                              energy_offset=delta,
-                                              indices='closed')
+            twi,*_ = _pyaccel.optics.calc_twiss(
+                accelerator=acc, energy_offset=delta, indices='closed')
             if _np.any(_np.isnan(twi[0].betax)):
                 raise _pyaccel.optics.OpticsException('error')
             rx = twi.rx
@@ -31,6 +34,7 @@ def calc_amp(acc,energy_offsets, hmax, hmin):
     return _np.sqrt(a_def), indices
 
 def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
+    """ This function finds the lost electrons by tracking """
 
     orb = _pyaccel.tracking.find_orbit6(model, indices=[0, element_idx])
     orb = orb[:, 1]
@@ -45,7 +49,10 @@ def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
         model, rin, nr_turns=n_turn, turn_by_turn=True,
         element_offset=element_idx, parallel=True)
 
-    par_out, flag, turn_lost, element_lost, plane_lost = track
+    _, _, turn_lost, element_lost, _ = track
+    # oculted variables/ part_out: final coordinates of electrons
+    # flag: indicates if there is any loss
+    # plane_lost: plane that electron was lost(x or y)
 
     turnl_element = []
 
@@ -58,26 +65,28 @@ def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
     return turnl_element
 
 def trackm_elec(acc,deltas, n_turn, lspos):
+    """Run the tracking simulation for a list of s positions """
     results = []
     spos = _pyaccel.lattice.find_spos(acc, indices='open')
 
-    for k, iten in enumerate(lspos):
+    for _, iten in enumerate(lspos):
 
-        el_idx = _np.argmin(_np.abs(spos-iten)) # selecting the index to shift the tracking simulation
+        el_idx = _np.argmin(_np.abs(spos-iten)) # initial condition element
         turnl = track_eletrons(deltas, n_turn, el_idx, acc)
         results.append(turnl) #
 
     return results
 
 def el_idx_collector(acc, lname):
+    """."""
     all_index = []
 
     if 'mia' in lname:
-        all_index.append(_pyaccel.optics.find_indices(acc, 'fam_name', 'mia'))
+        all_index.append(_pyaccel.lattice.find_indices(acc, 'fam_name', 'mia'))
     elif'mib' in lname:
-        all_index.append(_pyaccel.optics.find_indices(acc, 'fam_name', 'mib'))
+        all_index.append(_pyaccel.lattice.find_indices(acc, 'fam_name', 'mib'))
     elif 'mip' in lname:
-        all_index.append(_pyaccel.optics.find_indices(acc, 'fam_name', 'mip'))
+        all_index.append(_pyaccel.lattice.find_indices(acc, 'fam_name', 'mip'))
 
     fam_data = _pymodels.si.get_family_data(acc)
 
@@ -85,7 +94,7 @@ def el_idx_collector(acc, lname):
         element_index = []
         array_idx = _np.array(fam_data[string]['index'], dtype=object)
 
-        for k, lista in enumerate(array_idx):
+        for _, lista in enumerate(array_idx):
             length = len(lista)
 
             if length % 2 != 0:
@@ -105,15 +114,15 @@ def el_idx_collector(acc, lname):
 
     return all_index
 
-def char_check(elmnt):
-    for char in elmnt:
-        returnval = type(char)
-        if returnval is str:
-            return str
-        elif returnval is float or returnval is int:
-            return float
-
-def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep, delt, f_dens, filename):
+def plot_track(acc, lista_resul, lista_idx,
+               lista_off, param, element_idx, accep, delt, f_dens, filename):
+    """ This function shows the touschek scattering density for s,
+    the number of turns before electron loss and a graphic
+    containing the magnetic lattice with the lost positions
+    of the electrons obtained by tracking simulation, the limit
+    energy acceptance in a determined point s and the physical
+    limitants calculated by a linear approach of the dependencies
+    of beta and eta functions"""
     # ----------------
 
     cm = 1/2.54 # 'poster'
@@ -125,14 +134,16 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
     spos = _pyaccel.lattice.find_spos(acc)
 
     fig = _plt.figure(figsize=(38.5*cm,18*cm))
-    gs = _plt.GridSpec(1, 3, left=0.1, right=0.98, wspace=0.03, top=0.95, bottom=0.1, width_ratios=[2, 3, 8])
+    gs = _plt.GridSpec(1, 3, left=0.1,
+        right=0.98, wspace=0.03, top=0.95, bottom=0.1, width_ratios=[2, 3, 8])
     a1 = fig.add_subplot(gs[0, 0])
     a2 = fig.add_subplot(gs[0, 1], sharey=a1)
     a3 = fig.add_subplot(gs[0, 2], sharey=a1)
-    a2.tick_params(axis='y', which='both', left=False, right=False, labelleft=False)
-    a3.tick_params(axis='y', which='both', left=False, right=False, labelleft=False)
+    a2.tick_params(axis='y', which='both',
+                   left=False, right=False, labelleft=False)
+    a3.tick_params(axis='y', which='both',
+                   left=False, right=False, labelleft=False)
 
-    # defining the form that graphic will be plotted, trying to amplify the best I can the letters to see it in a easier way
     a1.grid(True, alpha=0.5, ls='--', color='k')
     a1.tick_params(axis='both', labelsize=18)
     a2.grid(True, alpha=0.5, ls='--', color='k')
@@ -160,55 +171,53 @@ def plot_track(acc, lista_resul, lista_idx, lista_off, param, element_idx, accep
         for item in lista_resul:
             a3.plot(spos[int(item[1])], -item[2]*1e2, 'r.')
 
-    a1.set_title(r'$\delta \times scat. rate$', fontsize=20) # setting the title of the first graphic
+    a1.set_title(r'$\delta \times scat. rate$', fontsize=20)
     a1.set_xlabel(r'$\tau _T$ [1/s]', fontsize=25)
 
     a1.plot(f_dens, delt, label='Scattering touschek rate', color='black')
 
 
-    a2.set_title(r'$\delta \times$ lost turn', fontsize=20) # setting the tilte of the second graphic
+    a2.set_title(r'$\delta \times$ lost turn', fontsize=20)
     a2.set_xlabel(r'number of turns', fontsize=25)
     for iten in lista_resul:
         a2.plot(iten[0], iten[2]*1e2, 'k.', label = '')
 
 
-    a3.set_title(r'tracking ', fontsize=20) # setting the title of the third graphic
+    a3.set_title(r'tracking ', fontsize=20)
     a3.plot(spos[lista_idx][:indx], lista_off[:indx]*1e2,'b.', label=r'accep. limit', alpha=0.25)
 
-    _plt.hlines(1e2*acp_s, spos[0], spos[-1], color='black', linestyles='dashed', alpha=0.5) # acceptance cutoff
-    a3.plot(spos, _np.sqrt(betax),color='orange', label=r'$ \sqrt{\beta_x}  $') # beta function
-    _pyaccel.graphics.draw_lattice(acc, offset=-0.5, height=0.5, gca=True) #magnetic lattice
+    _plt.hlines(1e2*acp_s, spos[0],
+                spos[-1], color='black', linestyles='dashed', alpha=0.5)
+    #hlines -> shows accep. limit
 
-    a3.plot(spos[element_idx], 0, 'ko', label='{}, ({} m)'.format(
-        acc[element_idx].fam_name, "%.2f" % spos[element_idx])) # initial position where tracking begins
+    a3.plot(spos, _np.sqrt(betax),
+            color='orange', label=r'$ \sqrt{\beta_x}  $') # beta function
+    _pyaccel.graphics.draw_lattice(acc, offset=-0.5, height=0.5, gca=True)
 
-    a3.set_xlabel(r'$s$ [m]', fontsize=25) # setting configurations of the graphic
+    stri = f'{acc[element_idx].fam_name}, ({spos[element_idx]:.2f} m)'
+    a3.plot(spos[element_idx], 0, 'ko', label=stri)
+    a3.set_xlabel(r'$s$ [m]', fontsize=25)
     a3.legend(loc='upper right', ncol=1, fontsize=15)
 
     # fig.tight_layout()
     fig.savefig(filename, dpi=150)
     fig.show()
 
-def select_idx(list_, param1, param2):
-    arr = _np.array(list_)
-
-    n_arr = arr[param1:param2+1]
-
-    return n_arr
-
 def t_list(elmnt):
+    """."""
     #this condition significates that if the input is only a number, then
-    #the fucntion transforms it into a list to avoid errors. Actually, I will delete this function
-    if type(elmnt) == float or type(elmnt) ==  int:
+    #the fucntion transforms it into a list to avoid errors.
+    if isinstance(elmnt,(float,int)):
         return [elmnt]
     else:
         return list(elmnt)
 
 
 def f_function_arg_mod(kappa, kappam, b1_, b2_, norm):
+    """."""
 
     tau = (_np.tan(kappa)**2)[:, None]
-    taum = (_np.tan(kappam)**2)
+    taum = _np.tan(kappam)**2
     beta = _beam_rigidity(energy=3)[2]
     ratio = tau/taum/(1+tau)
     arg = (2*tau+1)**2 * (ratio - 1)/tau
@@ -230,76 +239,8 @@ def f_function_arg_mod(kappa, kappam, b1_, b2_, norm):
     return arg * bessel
 
 
-def f_integral_simps_l_mod(taum, b1_, b2_):
-    kappam = _np.arctan(_np.sqrt(taum))
-    _npts = int(9*1000)
-    dkappa = (_np.pi/2-kappam)/_npts
-    kappa = _np.linspace(kappam, _np.pi/2, _npts+1)
-    func = f_function_arg_mod(kappa, kappam, b1_, b2_)
-
-    # Simpson's 3/8 Rule - N must be mod(N, 3) = 0
-    val1 = func[0:-1:3, :] + func[3::3, :]
-    val2 = func[1::3, :] + func[2::3, :]
-    f_int = 3*dkappa/8*_np.sum(val1 + 3*val2, axis=0)
-
-    # # Simpson's 1/3 Rule - N must be mod(N, 2) = 0
-    # val1 = func[0::2, :] + func[2::2, :]
-    # val2 = func[1::2, :]
-    # f_int = dkappa/3*_np.sum(val1+4*val2, axis=0)
-    f_int *= 2*_np.sqrt(_np.pi*(b1_**2-b2_**2))*taum
-    return f_int
-
-def norm_d(acc, lsps, scalc,_npt, norm=True):
-
-    spos = _pyaccel.lattice.find_spos(acc, indices='closed')
-    beta = _beam_rigidity(energy=3)[2]
-    ltime = _pyaccel.lifetime.Lifetime(acc)
-    b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
-
-    calc_dp, calc_dn = [], []
-    deltasp, deltasn = [], []
-    indices, indices_model= [], []
-
-    for _, s in enumerate(lsps):
-
-        idx = _np.argmin(_np.abs(scalc - s))
-        indices.append(idx)
-        idx_model = _np.argmin(_np.abs(spos - s))
-        indices_model.append(idx_model)
-
-        kappam_p0 = 0.00001 # teste sugerido pelo ximenes
-        kappam_n0 = 0.00001
-
-        kappap = _np.linspace(kappam_p0, _np.pi/2, _npt)
-        deltap = 1/beta * _np.tan(kappap)
-        kappan = _np.linspace(kappam_n0, _np.pi/2, _npt)
-        deltan = 1/beta * _np.tan(kappan)
-
-        y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
-        y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
-        norm_facp = _scyint.trapz(y_p, deltap)
-        norm_facn = _scyint.trapz(y_n, deltan)
-
-#         Normalizing to obtain the probability density function
-
-        y_p /= (norm_facp)
-        y_n /= (norm_facn)
-
-        calc_dp.append(y_p)
-        calc_dn.append(y_n)
-        deltasp.append(deltap)
-        deltasn.append(deltan)
-
-    calc_dp = _np.array(calc_dp)
-    calc_dn = _np.array(calc_dn)
-    deltasp = _np.array(deltasp)
-    deltasn = _np.array(deltasn)
-    indices = _np.array(indices)
-    indices_model = _np.array(indices_model)
-
-    return calc_dp, calc_dn, deltasp, deltasn, indices, indices_model
-
 def get_scaccep(acc, accep):
+    """."""
     spos = _pyaccel.lattice.find_spos(acc, indices='closed')
 
     npt = int((spos[-1]-spos[0])/0.1)
@@ -309,60 +250,12 @@ def get_scaccep(acc, accep):
 
     return scalc, daccpp, daccpn
 
-def n_norm_d(acc, lsps, _npt, cutoff, accep, norm=False):
-
-    scalc, daccpp, daccpn = get_scaccep(acc, accep)
-    beta = _beam_rigidity(energy=3)[2]
-
-    taum_p = (beta*daccpp)**2
-    taum_n = (beta*daccpn)**2
-    kappam_p = _np.arctan(_np.sqrt(taum_p))
-    kappam_n = _np.arctan(_np.sqrt(taum_n))
-
-    ltime = _pyaccel.lifetime.Lifetime(acc)
-    b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
-
-    calc_dp, calc_dn = [], []
-    deltasp, deltasn = [], []
-
-    for _, s in enumerate(lsps):
-
-        idx = _np.argmin(_np.abs(scalc - s))
-
-        kappam_p0 = kappam_p[idx]
-        kappam_n0 = kappam_n[idx]
-
-        kappam_p0x = cutoff # teste sugerido pelo Ximenes
-        kappam_n0x = cutoff
-
-        kappap = _np.linspace(kappam_p0x, _np.pi/2, _npt)
-        deltap = 1/beta * _np.tan(kappap)
-        kappan = _np.linspace(kappam_n0x, _np.pi/2, _npt)
-        deltan = 1/beta * _np.tan(kappan)
-
-        y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0x,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
-        y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0x,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
-        indp = _np.argmin(_np.abs(deltap- 1/beta * _np.tan(kappam_p0)))
-        indn = _np.argmin(_np.abs(deltan- 1/beta * _np.tan(kappam_n0)))
-
-        calc_dp.append(y_p[indp:])
-        calc_dn.append(y_n[indn:])
-        deltasp.append(deltap[indp:])
-        deltasn.append(deltan[indn:])
-
-    calc_dp = _np.array(calc_dp, dtype=object)
-    calc_dn = _np.array(calc_dn, dtype=object)
-    deltasp = _np.array(deltasp, dtype=object)
-    deltasn = _np.array(deltasn, dtype=object)
-
-    return calc_dp, calc_dn, deltasp, deltasn
-
-# Como discutido no dia 23.08.2023 a primeira abordagem para a realizaçao da pesagem vai
-# vai ser feita definindo o corte como sendo a aceitancia de energia, isso foi deinido com base
-# no cálculo já implementados para o tempo de vida touschek que é coerente com o tempo do SIRIUS
-# futuramente isso pode ser alterado e redefinido
+# Como discutido no dia 23.08.2023 corte para a definição da densidade
+# de espalhamento Touschek ocorre na aceitância de energia para deter
+# minado ponto.
 
 def norm_cutacp(acc, lsps, _npt, accep, norm=False):
+    """."""
     dic = {}
 
     scalc, daccpp, daccpn = get_scaccep(acc, accep)
@@ -374,7 +267,8 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
     kappam_n = _np.arctan(_np.sqrt(taum_n))
 
     ltime = _pyaccel.lifetime.Lifetime(acc)
-    b1, b2 = ltime.touschek_data['touschek_coeffs']['b1'],ltime.touschek_data['touschek_coeffs']['b2']
+    b1 = ltime.touschek_data['touschek_coeffs']['b1']
+    b2 = ltime.touschek_data['touschek_coeffs']['b2']
 
     fdens_p, fdens_n = [], []
     deltasp, deltasn = [], []
@@ -390,8 +284,10 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
         kappan = _np.linspace(kappam_n0, _np.pi/2, _npt)
         deltan = 1/beta * _np.tan(kappan)
 
-        y_p = f_function_arg_mod(kappa=kappap,kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
-        y_n = f_function_arg_mod(kappa=kappan,kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
+        y_p = f_function_arg_mod(kappa=kappap,
+            kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
+        y_n = f_function_arg_mod(kappa=kappan,
+            kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
         norm_facp = _scyint.trapz(y_p, deltap)
         norm_facn = _scyint.trapz(y_n, deltan)
 
@@ -421,46 +317,8 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
 
     return dic
 
-
-def plot_hdis(acc, l_index, deltp, f_densp, deltn, f_densn, hp, hn):
-
-    fig, axis = _plt.subplots(1,l_index.squeeze().size, figsize=(10,6))
-    _plt.suptitle('Comparação entre densidade de probabilidade analítica e de M.C.', fontsize=15)
-    spos = _pyaccel.lattice.find_spos(acc, indices='closed')
-    nb = int((spos[-1] - spos[0])/0.1)
-    scalc = _np.linspace(spos[0],spos[-1], nb)
-
-    for c,iten in enumerate(l_index):
-        ax = axis[c]
-
-        if c == 0:
-            ax.set_ylabel(r'PDF normalizada', fontsize=15)
-
-        idx = _np.argmin(_np.abs(spos[iten] - scalc))
-
-        ax.set_title('{}'.format(acc[iten].fam_name))
-        ax.plot(deltp[idx], f_densp[idx], color='blue', label='Analytic ({:.2f} [m])'.format(scalc[idx]))
-
-        ax.tick_params(axis='both', labelsize=14)
-
-        ax.hist(hn[idx], density=True, bins=200, color='lightgrey', label='Monte-Carlo')
-        ax.plot(-deltn[idx], f_densn[idx], color='blue')
-    #     ax.set_yscale('log')
-
-        ax.hist(hp[idx],density=True, bins=200,color='lightgrey')
-    #     ax.set_ylim(1e-1,1e3)
-        ax.set_xlim(-0.3,0.3)
-
-        ax.set_xlabel(r'$\delta$ [%]', fontsize=15)
-        ax.legend()
-
-        ax.grid(axis='y', ls='--', alpha=0.5)
-    #     fig.tight_layout()
-        _plt.show
-
-    return idx
-
 def create_particles(cov_matrix, num_part):
+    """ Creates the beam to realize the Monte-Carlo simulation """
 
     # permute indices to change the order of the columns:
     # [rx, px, ry, py, de, dl]^T -> [px, py, de, rx, ry, dl]^T
@@ -494,6 +352,7 @@ def create_particles(cov_matrix, num_part):
 
 
 def get_cross_section_distribution(psim, _npts=3000):
+    """."""
     beta_bar = 0
     psi = _np.logspace(_np.log10(_np.pi/2 - psim), 0, _npts)
     psi = _np.pi/2 - psi
@@ -510,12 +369,14 @@ def get_cross_section_distribution(psim, _npts=3000):
 
 
 def cross_section_draw_samples(psim, num_part):
+    """."""
     psi, cross = get_cross_section_distribution(psim)
     crs = _np.random.rand(num_part)
     return _np.interp(crs, cross, psi)
 
 
 def scatter_particles(part1, part2, de_min):
+    """."""
     gamma = 3e9 / 0.510e6
     beta = _np.sqrt(1 - 1/gamma/gamma)
     num_part = part1.shape[1]
@@ -603,6 +464,7 @@ def scatter_particles(part1, part2, de_min):
     return part1_new, part2_new, fact
 
 def histgms(acc,l_spos,num_part, accep, de_min, cutaccep):
+    """."""
 
     envelopes = _pyaccel.optics.calc_beamenvelope(acc)
     spos=_pyaccel.lattice.find_spos(acc, indices='closed')

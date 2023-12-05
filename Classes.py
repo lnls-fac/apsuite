@@ -194,22 +194,6 @@ class Tous_analysis():
 
         return res
 
-
-    def return_compos_track(self, lspos, par):
-        """."""
-        self.nom_model.cavity_on = True
-        self.nom_model.radiation_on = True
-        self.nom_model.vchamber_on = True
-
-        if 'pos' in par:
-            res = tousfunc.trackm_elec(
-                self.nom_model, self.deltas,self.nturns, lspos)
-        elif 'neg' in par:
-            res = tousfunc.trackm_elec(
-                self.nom_model, -self.deltas,self.nturns, lspos)
-        return res
-
-
     def get_weighting_tous(self, single_spos, npt=5000):
         """."""
 
@@ -280,36 +264,6 @@ class Tous_analysis():
             return res, fn*delta_, deltn*1e2
         else:
             return res, fp*delta_, fn*delta_, deltp*1e2, deltn*1e2
-
-
-    # def complete_aquisition(self, lname_or_spos, par):
-    #     """."""
-    #     param = tousfunc.char_check(lname_or_spos)
-    #     getsacp = tousfunc.get_scaccep(self._model_fit, self._accep)
-    #     s = self.spos
-
-    #     if issubclass(param, str): # if user pass a list of element names
-
-    #         all_indices = tousfunc.el_idx_collector(self._model_fit, lname_or_spos)
-    #         all_indices = _np.array(all_indices, dtype=object)
-    #         ress = []
-    #         scatsdis = []
-
-    #         for indices in all_indices:
-
-    #             res = self.return_compos_track(s[indices], par)
-    #             scat_dis = tousfunc.nnorm_cutacp(self._model_fit, s[indices],
-    #                                              npt=5000, getsacp=getsacp)
-    #             ress.append(res)
-    #             scatsdis.append(scat_dis)
-
-    #     # if user pass a list of positions (it can be all s posistions if the user desires)
-    #     elif issubclass(param, float):
-    #         ress = self.return_compos_track(lname_or_spos, par)
-    #         scat_dis = tousfunc.nnorm_cutacp(self._model_fit, s[indices],
-    #                                          npt=5000, getsacp=getsacp)
-
-        # return ress, scat_dis
 
     # this function plot the graphic of tracking and the touschek scattering
     # distribution for one single position
