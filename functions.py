@@ -121,7 +121,7 @@ def el_idx_collector(acc, lname):
 
     return all_index
 
-def plot_track(acc, tracked, lista_idx,
+def plot_track(acc, dic_track, lista_idx,
                lista_off, param, element_idx, accep, delt, f_dens, filename):
     """ This function shows the touschek scattering density for s,
     the number of turns before electron loss and a graphic
@@ -133,7 +133,10 @@ def plot_track(acc, tracked, lista_idx,
     # ----------------
 
     cm = 1/2.54 # 'poster'
-    turn_lost, element_lost, delta =
+
+    turn_lost = dic_track['turn_lost']
+    element_lost = dic_track['element_lost']
+    delta = dic_track['en_dev']
 
     twi0,*_ = _pyaccel.optics.calc_twiss(acc,indices='open')
     betax = twi0.betax
@@ -164,9 +167,12 @@ def plot_track(acc, tracked, lista_idx,
     if 'pos' in param:
         a1.set_ylabel(r'positive $\delta$ [%]', fontsize=25)
 
-        a3.plot(spos[int(tracked[1][-1])], tracked[2][-1]*1e2, 'r.', label='lost pos. (track)')
+        a3.plot(spos[int(element_lost[-1])],
+                 delta[-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[1][element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
+        a3.plot(spos[int(element_lost)], delta*1e2, 'r.')
+
         for item in tracked:
             a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
     elif'neg' in param:
