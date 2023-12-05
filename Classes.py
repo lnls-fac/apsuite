@@ -408,7 +408,7 @@ class Tous_analysis():
         return all_track, indices
 
     def find_data(self, l_scattered_pos, scrap, vchamber):
-        """obtaining the graphic"""
+        """Get the data for touschek losses along the ring"""
 
         all_track, indices = self.get_track(l_scattered_pos, scrap, vchamber)
         spos = self.spos

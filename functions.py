@@ -33,10 +33,10 @@ def calc_amp(acc,energy_offsets, hmax, hmin):
         pass
     return _np.sqrt(a_def), indices
 
-def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
+def track_eletrons(model, deltas, n_turn, initial_idx, pos_x=1e-5, pos_y=3e-6):
     """ This function finds the lost electrons by tracking """
 
-    orb = _pyaccel.tracking.find_orbit6(model, indices=[0, element_idx])
+    orb = _pyaccel.tracking.find_orbit6(model, indices=[0, initial_idx])
     orb = orb[:, 1]
 
     rin = _np.zeros((6, deltas.size))
@@ -47,22 +47,29 @@ def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
 
     track = _pyaccel.tracking.ring_pass(
         model, rin, nr_turns=n_turn, turn_by_turn=True,
-        element_offset=element_idx, parallel=True)
+        element_offset=initial_idx, parallel=True)
 
     _, _, turn_lost, element_lost, _ = track
     # oculted variables/ part_out: final coordinates of electrons
     # flag: indicates if there is any loss
     # plane_lost: plane that electron was lost(x or y)
 
-    turnl_element = []
+    dic_track = {}
+    t_lost, e_lost, delta = [], [], []
 
-    for i,item in enumerate(turn_lost):
-        if item == n_turn and element_lost[i] == element_idx:
+    for idx ,item in enumerate(turn_lost):
+        if item == n_turn and element_lost[idx] == initial_idx:
             pass
         else:
-            turnl_element.append((item, element_lost[i], deltas[i]))
+            t_lost.append(item)
+            e_lost.append(element_lost[idx])
+            delta.append(deltas[idx])
 
-    return turnl_element
+    dic_track['turn_lost'] = t_lost
+    dic_track['element_lost'] = e_lost
+    dic_track['en_dev'] = delta
+
+    return dic_track
 
 def trackm_elec(acc,deltas, n_turn, lspos):
     """Run the tracking simulation for a list of s positions """
@@ -114,7 +121,7 @@ def el_idx_collector(acc, lname):
 
     return all_index
 
-def plot_track(acc, lista_resul, lista_idx,
+def plot_track(acc, tracked, lista_idx,
                lista_off, param, element_idx, accep, delt, f_dens, filename):
     """ This function shows the touschek scattering density for s,
     the number of turns before electron loss and a graphic
@@ -126,6 +133,7 @@ def plot_track(acc, lista_resul, lista_idx,
     # ----------------
 
     cm = 1/2.54 # 'poster'
+    turn_lost, element_lost, delta =
 
     twi0,*_ = _pyaccel.optics.calc_twiss(acc,indices='open')
     betax = twi0.betax
@@ -145,30 +153,28 @@ def plot_track(acc, lista_resul, lista_idx,
                    left=False, right=False, labelleft=False)
 
     a1.grid(True, alpha=0.5, ls='--', color='k')
-    a1.tick_params(axis='both', labelsize=18)
+    a1.tick_params(axis='y', labelsize=18)
     a2.grid(True, alpha=0.5, ls='--', color='k')
-    a2.tick_params(axis='both', labelsize=18)
+    a2.tick_params(axis='y', labelsize=18)
     a3.grid(True, alpha=0.5, ls='--', color='k')
-    a3.tick_params(axis='both', labelsize=18)
-    a1.xaxis.grid(False)
-    a2.xaxis.grid(False)
-    a3.xaxis.grid(False)
+    a3.tick_params(axis='y', labelsize=18)
+
     _plt.subplots_adjust(wspace=0.1)
 
     if 'pos' in param:
         a1.set_ylabel(r'positive $\delta$ [%]', fontsize=25)
 
-        a3.plot(spos[int(lista_resul[1][-1])], lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
+        a3.plot(spos[int(tracked[1][-1])], tracked[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[1][element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
-        for item in lista_resul:
+        for item in tracked:
             a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
     elif'neg' in param:
         a1.set_ylabel(r'negative $\delta$ [%]', fontsize=25)
-        a3.plot(spos[int(lista_resul[1][-1])], -lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
+        a3.plot(spos[int(tracked[1][-1])], -tracked[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[0][element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
-        for item in lista_resul:
+        for item in tracked:
             a3.plot(spos[int(item[1])], -item[2]*1e2, 'r.')
 
     a1.set_title(r'$\delta \times scat. rate$', fontsize=20)
@@ -179,7 +185,7 @@ def plot_track(acc, lista_resul, lista_idx,
 
     a2.set_title(r'$\delta \times$ lost turn', fontsize=20)
     a2.set_xlabel(r'number of turns', fontsize=25)
-    for iten in lista_resul:
+    for iten in tracked:
         a2.plot(iten[0], iten[2]*1e2, 'k.', label = '')
 
 
