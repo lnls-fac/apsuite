@@ -124,19 +124,19 @@ def el_idx_collector(acc, lname):
 def plot_track(acc, dic_track, lista_idx,
                lista_off, param, element_idx, accep, delt, f_dens, filename):
     """ This function shows the touschek scattering density for s,
-    the number of turns before electron loss and a graphic
+    the number of turns before an electron loss and a graphic
     containing the magnetic lattice with the lost positions
     of the electrons obtained by tracking simulation, the limit
     energy acceptance in a determined point s and the physical
     limitants calculated by a linear approach of the dependencies
-    of beta and eta functions"""
+    of beta and eta functions with the energy deviation."""
     # ----------------
 
-    cm = 1/2.54 # 'poster'
-
+    # cm = 1/2.54 # 'poster'
+    accep_neg, accep_pos = accep[0], accep[1]
     turn_lost = dic_track['turn_lost']
     element_lost = dic_track['element_lost']
-    delta = dic_track['en_dev']
+    delta = dic_track['en_dev']*1e2
 
     twi0,*_ = _pyaccel.optics.calc_twiss(acc,indices='open')
     betax = twi0.betax
@@ -144,7 +144,8 @@ def plot_track(acc, dic_track, lista_idx,
 
     spos = _pyaccel.lattice.find_spos(acc)
 
-    fig = _plt.figure(figsize=(38.5*cm,18*cm))
+    # fig = _plt.figure(figsize=(38.5*cm,18*cm)) 'poster'
+    fig = _plt.figure(figsize=(13,7))
     gs = _plt.GridSpec(1, 3, left=0.1,
         right=0.98, wspace=0.03, top=0.95, bottom=0.1, width_ratios=[2, 3, 8])
     a1 = fig.add_subplot(gs[0, 0])
@@ -168,20 +169,18 @@ def plot_track(acc, dic_track, lista_idx,
         a1.set_ylabel(r'positive $\delta$ [%]', fontsize=25)
 
         a3.plot(spos[int(element_lost[-1])],
-                 delta[-1]*1e2, 'r.', label='lost pos. (track)')
-        acp_s = accep[1][element_idx]
+                 delta[-1], 'r.', label='lost pos. (track)')
+        acp_s = accep_pos[element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
         a3.plot(spos[int(element_lost)], delta*1e2, 'r.')
 
-        for item in tracked:
-            a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
     elif'neg' in param:
         a1.set_ylabel(r'negative $\delta$ [%]', fontsize=25)
-        a3.plot(spos[int(tracked[1][-1])], -tracked[2][-1]*1e2, 'r.', label='lost pos. (track)')
-        acp_s = accep[0][element_idx]
+        a3.plot(spos[int(element_lost[-1])],
+                 -delta[-1], 'r.', label='lost pos. (track)')
+        acp_s = accep_neg[element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
-        for item in tracked:
-            a3.plot(spos[int(item[1])], -item[2]*1e2, 'r.')
+        a3.plot(spos[int(element_lost)], -delta*1e2, 'r.')
 
     a1.set_title(r'$\delta \times scat. rate$', fontsize=20)
     a1.set_xlabel(r'$\tau _T$ [1/s]', fontsize=25)
@@ -191,8 +190,7 @@ def plot_track(acc, dic_track, lista_idx,
 
     a2.set_title(r'$\delta \times$ lost turn', fontsize=20)
     a2.set_xlabel(r'number of turns', fontsize=25)
-    for iten in tracked:
-        a2.plot(iten[0], iten[2]*1e2, 'k.', label = '')
+    a2.plot(turn_lost, delta, 'k.')
 
 
     a3.set_title(r'tracking ', fontsize=20)
