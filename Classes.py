@@ -249,31 +249,34 @@ class Tous_analysis():
         fp = fdensp.squeeze()
         fn = fdensn.squeeze()
 
-        res = self.return_sinpos_track(single_spos, par)
-        delta = _np.zeros(len(res))
+        dic_track = self.return_sinpos_track(single_spos, par)
 
-        for index, iten in enumerate(res):
-            _, _, delt = iten
-            delta[index] = delt
-
+        delta = dic_track['en_dev']
         delta_ = _np.diff(delta)[0]
 
         if 'pos' in par:
-            return res, fp*delta_, deltp *1e2
+            return dic_track, fp*delta_, deltp *1e2
         elif 'neg' in par:
-            return res, fn*delta_, deltn*1e2
+            return dic_track, fn*delta_, deltn*1e2
         else:
-            return res, fp*delta_, fn*delta_, deltp*1e2, deltn*1e2
+            return dic_track, fp*delta_, fn*delta_, deltp*1e2, deltn*1e2
 
     # this function plot the graphic of tracking and the touschek scattering
     # distribution for one single position
     def plot_analysis_at_position(self, single_spos, par, accep,filename):
         """."""
-        res, fp, dp = self.fast_aquisition(single_spos, par)
+        dic_track, fp, dp = self.fast_aquisition(single_spos, par)
         s = self.spos
         index = _np.argmin(_np.abs(s-single_spos))
-        tousfunc.plot_track(self.accelerator, res, _np.intp(self.inds_pos),
-                            self.off_energy, par, index, accep, dp, fp, filename)
+        en = self.off_energy
+
+        if 'pos' in par:
+            inds = self.inds_pos
+        elif 'neg' in par:
+            inds = self.inds_neg
+
+        tousfunc.plot_track(self.accelerator, dic_track,
+                    _np.intp(inds), en , par, index, accep, dp, fp, filename)
 
     def plot_normtousd(self, spos, filename): # user must provide a list of s positions
         """touschek scattering density"""
