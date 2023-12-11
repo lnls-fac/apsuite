@@ -327,7 +327,8 @@ class MeasACORM(_ThreadBaseClass):
         return corr
 
     def save_loco_input_data(
-            self, respmat_name: str, overwrite=False, save2servconf=False):
+            self, respmat_name: str, overwrite=False, save2servconf=False,
+            extra_kwargs=None):
         """Save in `.pickle` format a dictionary with all LOCO input data.
 
         Args:
@@ -337,6 +338,8 @@ class MeasACORM(_ThreadBaseClass):
                 Defaults to False.
             save2servconf (bool, optional): whether to save response matrix to
                 configDB server. Defaults to False.
+            extra_kwargs (dict, optional): extra keyword arguments to save to
+                loco input file. Defaults to None:
 
         """
         bpms_anly = self.analysis['bpms_noise']
@@ -351,6 +354,7 @@ class MeasACORM(_ThreadBaseClass):
         data['bpm_variation'] = bpms_anly['bpm_variation']
         mat = self.build_respmat()
         data['respmat'] = mat
+        data.update(extra_kwargs or dict())
         if save2servconf:
             data['orbmat_name'] = respmat_name
             mat = self.save_respmat_to_configdb(respmat_name, mat=mat)
@@ -1156,7 +1160,7 @@ class MeasACORM(_ThreadBaseClass):
         self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
-        _time.sleep(0.1)
+        _time.sleep(0.5)
         data = self.get_general_data()
         data.update(self.get_bpms_data())
         data['ch_freqs'] = par.corrs_ch_freqs
@@ -1238,7 +1242,7 @@ class MeasACORM(_ThreadBaseClass):
             self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
-        _time.sleep(0.1)
+        _time.sleep(0.5)
         data.update(self.get_general_data())
         data.update(self.get_bpms_data())
         data['mode'] = par.rf_mode
@@ -1406,7 +1410,7 @@ class MeasACORM(_ThreadBaseClass):
                     f'Error code: {ret:d}')
                 self._meas_finished_ok = False
                 break
-            _time.sleep(0.1)
+            _time.sleep(0.5)
             self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # get data for each sector separately:
