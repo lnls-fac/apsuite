@@ -249,34 +249,31 @@ class Tous_analysis():
         fp = fdensp.squeeze()
         fn = fdensn.squeeze()
 
-        dic_track = self.return_sinpos_track(single_spos, par)
+        res = self.return_sinpos_track(single_spos, par)
+        delta = _np.zeros(len(res))
 
-        delta = dic_track['en_dev']
+        for index, iten in enumerate(res):
+            _, _, delt = iten
+            delta[index] = delt
+
         delta_ = _np.diff(delta)[0]
 
         if 'pos' in par:
-            return dic_track, fp*delta_, deltp *1e2
+            return res, fp*delta_, deltp *1e2
         elif 'neg' in par:
-            return dic_track, fn*delta_, deltn*1e2
+            return res, fn*delta_, deltn*1e2
         else:
-            return dic_track, fp*delta_, fn*delta_, deltp*1e2, deltn*1e2
+            return res, fp*delta_, fn*delta_, deltp*1e2, deltn*1e2
 
     # this function plot the graphic of tracking and the touschek scattering
     # distribution for one single position
     def plot_analysis_at_position(self, single_spos, par, accep,filename):
         """."""
-        dic_track, fp, dp = self.fast_aquisition(single_spos, par)
+        res, fp, dp = self.fast_aquisition(single_spos, par)
         s = self.spos
         index = _np.argmin(_np.abs(s-single_spos))
-        en = self.off_energy
-
-        if 'pos' in par:
-            inds = self.inds_pos
-        elif 'neg' in par:
-            inds = self.inds_neg
-
-        tousfunc.plot_track(self.accelerator, dic_track,
-                    _np.intp(inds), en , par, index, accep, dp, fp, filename)
+        tousfunc.plot_track(self.accelerator, res, _np.intp(self.inds_pos),
+                            self.off_energy, par, index, accep, dp, fp, filename)
 
     def plot_normtousd(self, spos, filename): # user must provide a list of s positions
         """touschek scattering density"""
@@ -411,7 +408,7 @@ class Tous_analysis():
         return all_track, indices
 
     def find_data(self, l_scattered_pos, scrap, vchamber):
-        """Get the data for touschek losses along the ring"""
+        """obtaining the graphic"""
 
         all_track, indices = self.get_track(l_scattered_pos, scrap, vchamber)
         spos = self.spos
