@@ -231,7 +231,8 @@ class Tous_analysis():
         return fdensp, fdensn, deltp, deltn
 
     def fast_aquisition(self, single_spos, par):
-        """"""
+        """get the tracked loss positions, number of turns and
+        the touschek loss density"""
         if len(tousfunc.t_list(single_spos)) != 1:
             raise ValueError('This function suports only one s position')
 
@@ -629,7 +630,7 @@ class Tous_analysis():
 
 
     def plot_scat_table(self, new_dic):
-        """ Heatmap plot indicating the heat points of loss along the ring """
+        """ Heatmap plot indicating the warm points of loss along the ring """
         s = self.spos
 
         df = _pd.DataFrame(new_dic)
