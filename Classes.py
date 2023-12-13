@@ -632,28 +632,6 @@ class Tous_analysis():
         """ Heatmap plot indicating the heat points of loss along the ring """
         s = self.spos
 
-        # new_dic = self.get_reordered_dict(l_scattered_pos, 'lost_positions')
-
-        # if len(l_scattered_pos)%2 == 0:
-        #     array = _np.arange(l_scattered_pos.size)
-        #     j = _np.intp(_np.where(array == int((len(l_scattered_pos)/2 + 1)))[0])
-        #     array_j = l_scattered_pos[j]
-        #     index = _np.argmin(_np.abs(spos-array_j))
-
-        #     lists = list(find_dict(self._model_fit, 'fam_name').values())
-
-        # else:
-        #     array = _np.arange(l_scattered_pos.size)
-        #     j = _np.where(array == int((len(l_scattered_pos)+1)/2))[0]
-        #     array_j = l_scattered_pos[j]
-        #     index = _np.argmin(_np.abs(spos-array_j))
-
-        #     lists = list(find_dict(self._model_fit, 'fam_name').values())
-
-        # for i, l in enumerate(lists):
-        #     if _np.isin(index, l).item():
-        #         fam_name = list(find_dict(self._model_fit, 'fam_name').keys())[i]
-
         df = _pd.DataFrame(new_dic)
         df = df.set_index('lost_positions')
 
