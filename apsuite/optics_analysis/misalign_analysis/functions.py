@@ -2,9 +2,9 @@
 
 import pyaccel as _pyaccel
 import numpy as _np
-from .std_si_data import BPMIDX as _BPMIDX_
+from .si_data import si_bpmidx
 
-_BPMIDX = _BPMIDX_()
+_BPMIDX = si_bpmidx()
 
 _SET_FUNCS = {
         'dx':  _pyaccel.lattice.set_error_misalignment_x ,
@@ -47,18 +47,20 @@ def set_error(model, button, error):
         _SET_FUNCS[button.dtype](model, indices=button.indices, values=error)
     else:
         raise ValueError('problem with deltas')
-    
+
 def set_errors(model, base, errors):
     if len(errors) != len(base):
         raise ValueError('"errors" size is incompatible with "base" size')
     for i, button in enumerate(base.buttons):
-        set_error(model, button, errors[i])    
-         
+        set_error(model, button, errors[i])
+
 def add_delta_error(model, button, delta):
     if isinstance(delta, (_np.int_, _np.float_, float, int)):
-        _ADD_FUNCS[button.dtype](model, indices=button.indices, values=delta)
+        _ADD_FUNCS[button.dtype](model, indices=button.indices,
+                                 values=delta)
     elif len(delta) == len(button.indices):
-        _ADD_FUNCS[button.dtype](model, indices=button.indices, values=delta)
+        _ADD_FUNCS[button.dtype](model, indices=button.indices,
+                                 values=delta)
     else:
         raise ValueError('problem with delta')
 
@@ -66,11 +68,12 @@ def add_delta_errors(model, base, deltas):
     if len(deltas) != len(base):
         raise ValueError('"deltas" size is incompatible with "base" size')
     for i, button in enumerate(base.buttons):
-        add_delta_error(model, button, deltas[i])    
+        add_delta_error(model, button, deltas[i])
 
 def remove_delta_errors(model, base, deltas):
     for i, button in enumerate(base.buttons):
-        _ADD_FUNCS[button.dtype](model, indices=button.indices, values=-deltas[i])
+        _ADD_FUNCS[button.dtype](model, indices=button.indices,
+                                  values=-deltas[i])
 
 def add_error_ksl(lattice, indices, values):
     if isinstance(values, list):
@@ -95,24 +98,44 @@ def calc_hdisp(model, indices='bpm'):
 
 def calc_disp(model, indices='bpm'):
     if indices not in ['bpm','closed','open']:
-        raise ValueError('Invalid indices parameter: should be "bpm" or "open" or "closed"!')
+        raise ValueError('Invalid indices parameter: \
+                         should be "bpm" or "open" or "closed"!')
     if indices == 'bpm':
         indices = _BPMIDX
-    orbp = _pyaccel.tracking.find_orbit4(model, indices=indices, energy_offset=+1e-6) 
-    orbn = _pyaccel.tracking.find_orbit4(model, indices=indices, energy_offset=-1e-6)
-    return _np.hstack([(orbp[0,:] - orbn[0,:])/(2e-6), (orbp[2,:] - orbn[2,:])/(2e-6)])
+    orbp = _pyaccel.tracking.find_orbit4(model, indices=indices,
+                                         energy_offset=+1e-6)
+    orbn = _pyaccel.tracking.find_orbit4(model, indices=indices,
+                                         energy_offset=-1e-6)
+    return _np.hstack([(orbp[0,:] - orbn[0,:])/\
+                       (2e-6), (orbp[2,:] - orbn[2,:])/(2e-6)])
 
-def calc_pinv(matrix, **kwargs):
-    """**kwargs: svals, cut, return_svd
+"""**kwargs: svals, cut, return_svd
         > svals: integer or strings ("auto" or "all") to limit the quantity of singular values
         > cut: floating point to limit the quantity of singular values related to the max singular value -> min_sval =  max_sval * cut
         > return_svd: bool (True or False) to return elements of the SVD decomposition
 
-        >>> 
+        >>>
         if return_svd=True:
             return: inverse_matrix, u_matrix, s_matriz, v.T_matrix, number_of_svals
         if return_svd=False:
             return: inverse_matrix
+    """
+def calc_pinv(matrix, **kwargs):
+    """Calculate Pseudo-Inverse Matrix.
+
+    Args:
+        matrix (numpy array)
+        svals (integer or string): limit the quantity of singular values\
+        -> Strings can be "all" or "auto".
+        cut (float): limit the quantity of singular values related\
+            to the max singular value -> min_sval =  max_sval * cut
+        return_svd (boolean): returns all elements of the SVD decomposition
+
+    Returns:
+        numpy array: pseudo-inverse of matrix
+        or
+        tuple: (pseudo-inverse of matrix, U matrix, S matrix, \
+            V transpose matrix, number of svals)
     """
     svals="auto"; cut=5e-3; return_svd=False
     if "svals" in kwargs:
@@ -132,14 +155,14 @@ def calc_pinv(matrix, **kwargs):
         if svals == 'auto':
             ismat = _np.array([1/s if s >= cut*smat[0] else 0 for s in smat])
     else:
-        raise ValueError('"svals" arg should be integer or string ("all" or "auto")!')
+        raise ValueError('"svals" should be int or string: "all" or "auto"')
     imat = vh.T @ _np.diag(ismat) @ u.T
     if return_svd:
         return imat, u, smat, vh, len(_np.nonzero(ismat)[0])
     else:
         return imat
-    
-def rmk_correct_orbit(OrbitCorr_obj, jacobian_matrix=None, goal_orbit=None):
+
+def rmk_orbit_corr(OrbitCorr_obj, jacobian_matrix=None, goal_orbit=None):
     """
     Orbit correction\\
     0 = Succes\\
@@ -184,7 +207,7 @@ def rmk_correct_orbit(OrbitCorr_obj, jacobian_matrix=None, goal_orbit=None):
             ismat = OrbitCorr_obj.get_inverse_matrix(jmat)
     return OrbitCorr_obj.CORR_STATUS.ConvergenceFail, maxit
 
-__all__ = ('calc_pinv', 'calc_rms', 
+__all__ = ('calc_pinv', 'calc_rms',
            'calc_disp', 'calc_vdisp', 'calc_hdisp',
            'get_error', 'get_errors',
            'set_error','set_errors',
