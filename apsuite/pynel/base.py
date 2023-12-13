@@ -1,5 +1,4 @@
-"""Module 'base' for the class object 'Base': a collection of 'Button'(s)"""
-
+"""Module 'base' for the class object 'Base': a collection of 'Button'(s)"""  
 from .std_si_data import STD_ELEMS, STD_SECTS, \
     STD_TYPES, BPMIDX,  SI_SECTOR_TYPES
 from .buttons import Button as _Button
