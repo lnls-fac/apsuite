@@ -13,11 +13,12 @@ _STD_SEXTUPOLES     = si_sextupoles()
 _STD_QUADRUPOLES    = si_quadrupoles()
 _STD_DIPOLES        = si_dipoles()
 
-path = '/'.join(__file__.split('/')[:-1])
+default_buttons_path = '/'.join(__file__.split('/')[:-1])
+default_buttons_path +='/Default_Pynel_Base_Buttons.pickle'
 
 DEFAULT_BUTTONS = None
 def load_default_base_button():
-    globals()['DEFAULT_BUTTONS'] = load_pickle(path+'/Default_Pynel_Base_Buttonsaaaaaaaaaaaa.pickle')
+    globals()['DEFAULT_BUTTONS'] = load_pickle(default_buttons_path)
 try:
     load_default_base_button()
 except FileNotFoundError:
@@ -43,8 +44,7 @@ class Base:
 
         if 'buttons' not in kwargs:
             # reading dtypes arg
-            self._dtypes = kwargs.get('dtypes', sorted(list(set(_STD_TYPES)),
-                                                       reverse=True))
+            self._dtypes = kwargs.get('dtypes', _STD_TYPES)
             if self._dtypes is not None:
                 if isinstance(self._dtypes, (list, tuple)) and \
                     all(i in _STD_TYPES for i in self._dtypes):
@@ -88,7 +88,7 @@ class Base:
 
         else:
             # reading buttons
-            self._buttons = kwargs.get('buttons', None)
+            self._buttons = kwargs.get('buttons')
             if self._buttons is not None:
                 if isinstance(self._buttons, (list, tuple)) and \
                     all(isinstance(i, _Button) for i in self._buttons):
@@ -111,11 +111,13 @@ class Base:
             self._dtypes = sorted(list(set(self._dtypes)),
                                   key=lambda x: _STD_TYPES.index(x))
 
+        self._matrix = self.__make_matrix()
+
     def __generate_buttons(self):
         all_buttons = []
-        for dtype in self._TYPES:
-            for sect in self._SECTS:
-                for elem in self._ELEMS:
+        for dtype in self._dtypes:
+            for sect in self._sects:
+                for elem in self._elems:
                     sig_flag = 0
                     for bt in DEFAULT_BUTTONS:
                         if (sect,dtype,elem) == (bt.sect,bt.dtype,bt.elem):
@@ -123,7 +125,7 @@ class Base:
                             sig_flag = 1
                     if sig_flag == 0:
                         temp_Button = _Button(elem=elem, dtype=dtype,
-                                              sect=sect, func='vertical_disp')
+                                              sect=sect, func=self._func)
                     else:
                         temp_Button = _Button(elem=elem, dtype=dtype,
                                               sect=sect, func='testfunc')
@@ -131,51 +133,48 @@ class Base:
                     all_buttons.append(temp_Button)
         flat_buttons = []
         for button in all_buttons:
-            b = button.flatten()
-            flat_buttons += b if isinstance(b, (list, tuple, _np.ndarray))\
-                else [b]
+            if button.is_valid:
+                b = button.flatten()
+                flat_buttons += b if isinstance(b, (list,tuple,_np.ndarray))\
+                    else [b]
         return flat_buttons
+
+    def __make_matrix(self):
+        matrix = _np.zeros(shape=(160, self.__len__()))
+        return matrix
 
     @property
     def buttons(self):
         """Returns the Base buttons list"""
-        return self.__buttons_list
+        return self._buttons
+
+    @property
+    def resp_mat(self):
+        """Returns the Base response matrix"""
+        return self._matrix
 
     @property
     def sectors(self):
         """Returns the sectors presents in the Base"""
-        return self._SECTS
+        return self._sects
 
     @property
     def magnets(self):
         """Returns the magnets (elements) presents in the Base"""
-        return self._ELEMS
-
-    @property
-    def named_magnets(self):
-        _SPLIT_ELEMS = []
-        for b in self.buttons:
-            if b.fantasy_name not in _SPLIT_ELEMS:
-                _SPLIT_ELEMS.append(b.fantasy_name)
-        return _SPLIT_ELEMS
+        return self._elems
 
     @property
     def dtypes(self):
         """Returns the modification types used to construct the Base"""
-        return self._TYPES
-
-    @property
-    def sector_types(self):
-        """Returns the sector-types presents in the Base"""
-        return self._SECT_TYPES
+        return self._dtypes
 
     @property
     def resp_mat(self):
         """Returns the Base Response Matrix"""
-        return self.__matrix
+        return self._matrix
 
     def __len__(self):
-        return len(self.__buttons_list)
+        return len(self._buttons)
 
     def __eq__(self, other) -> bool:
         if isinstance(other, Base):
@@ -186,10 +185,13 @@ class Base:
         return False
 
     def set_default_base_buttons(self):
-        if self.__func == 'vertical_disp':
-            save_pickle(self.buttons, path+'/Default_Pynel_Base_Buttons.pickle', overwrite=True)
+        if self.__func == 'vertical_disp' and\
+            len(DEFAULT_BUTTONS) < self.__len__():
+            save_pickle(self.buttons, default_buttons_path, overwrite=True)
             load_default_base_button()
+            print('Saved Base/Buttons!')
         else:
-            raise ValueError('Only "vertical dispersion" Bases can be set as default Pynel Base and Buttons')
+            print('Base not saved.')
+            pass
 
 __all__ = ("Base")

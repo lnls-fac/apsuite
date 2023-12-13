@@ -55,6 +55,10 @@ class Button:
 
         self.__force_init__()
 
+        self._isvalid = True
+        if self.fantasy_name == []:
+            self._isvalid = False
+
         self._signature = self.__calc_signature()
 
     def __str__(self) -> str:
@@ -74,6 +78,8 @@ class Button:
             return False
 
     def __calc_signature(self):
+        if not self._isvalid:
+            return _np.zeros(160)
         if self._func == 'testfunc':
             if isinstance(self._fantasy_name, list):
                 return [_np.zeros(160) for i in self._fantasy_name]
@@ -109,14 +115,15 @@ class Button:
                 elem = elem[0]
             else:
                 elem, fixpos = elem[0], int(elem[1])
-
         sect = self._sect
+
         if sect is not None:
             if not isinstance(sect, (_np.integer, int)) or \
                 sect < 1 or sect > 20:
                 raise ValueError('problem with sect')
 
         indices = self._indices
+        # print(elem, fixpos, sect, indices)
         split_flag = False
         if indices is not None:
             if isinstance(indices, (int, _np.integer)):
@@ -177,6 +184,10 @@ class Button:
         return self._func
 
     @property
+    def is_valid(self):
+        return self._isvalid
+
+    @property
     def dtype(self):
         return self._dtype
 
@@ -215,13 +226,15 @@ class Button:
             return
         if isinstance(self.fantasy_name, list):
             buttons = []
+            # print(f'spliting: {self}', end=' ')
             for i in range(len(self.fantasy_name)):
-                print(f'spliting {i+1} {self}')
                 b = _deepcopy(self)
                 b._signature = self.signature[i]
                 b._fantasy_name = self.fantasy_name[i]
                 b._indices = self.indices[i]
                 buttons.append(b)
+            # print(buttons)
             return buttons
         else:
+            # print('already individual:', self)
             return self
