@@ -13,7 +13,7 @@ import scipy.integrate as scyint
 import pyaccel as _pyaccel
 
 class Tous_analysis():
-    """Class for related with Touschek loss rate along the ring."""
+    """Class for the analyses of electron losses along the ring"""
 
     def __init__(self, accelerator,
                  energies_off=None, beam_energy=None, n_turns=7):
@@ -42,10 +42,7 @@ class Tous_analysis():
         self.h_pos = get_attribute(self._model_fit, 'hmax', indices='closed')
         self.h_neg = get_attribute(self._model_fit, 'hmin', indices='closed')
         self.ltime = Lifetime(self._model_fit)
-        # self._lname = ['BC', 'Q1', 'SDA0'] # it can be modified as the users
-        #desires
-        self._off_energy = energy_off # (linear model) en_dev to
-        # amplitudes
+        self._off_energy = energy_off # (linear model) en_dev to amplitudes
         self.nturns = n_turns
         self._deltas = deltas
         self.spos = find_spos(self._model_fit, indices='closed')
@@ -54,46 +51,53 @@ class Tous_analysis():
 
     @property
     def accelerator(self):
-        """."""
+        """Recieves fitted accelerator model"""
         return self._model_fit
 
     @accelerator.setter
     def accelerator(self, new_model):
+        """If requeried to change the accelerator model"""
         self._model_fit = new_model
 
     @property
     def nom_model(self):
-        """."""
+        """Some calculus involves nominal model without coupling
+        and vertical dispersion corretion"""
         return self._model
 
     @property
     def accep(self):
-        """."""
+        """Defines Touschek energy acceptance"""
         if self._accep is None:
             self._accep = py_op.calc_touschek_energy_acceptance(self.accelerator)
         return self._accep
 
-    # Defining the s position, positive and negative accptances along the ring at each 10 meters.
-    # the description above is actually the returns of the function
     @property
     def s_calc(self):
-        """."""
+        """Defines s position and get the
+        energy accpetance both at each 10
+        meters"""
         if self._sc_accps is None:
             self._sc_accps = tousfunc.get_scaccep(self.accelerator, self.accep)
         return self._sc_accps
 
-    # This property calculates the physical limitants by the prediction of the linear model
     @property
     def amp_and_limidx(self):
-        """."""
+        """Defines 4 properties:
+        Positive and negative amplitudes
+        Indices where positive and nega-
+        tive amp(energy deviation depen-
+        dence) are minimum
+        """
         if self._amp_and_limidx is None:
-            self.nom_model.cavity_on = False # this step is necessary to define if the
-            self.nom_model.radiation_on = False
+            self._model.cavity_on = False
+            self._model.radiation_on = False
+
             self._amps_pos, self._inds_pos = tousfunc.calc_amp(
-                self.nom_model,self.off_energy, self.h_pos, self.h_neg)
+                self._model,self.off_energy, self.h_pos, self.h_neg)
 
             self._amps_neg, self._inds_neg = tousfunc.calc_amp(
-                self.nom_model,-self.off_energy, self.h_pos, self.h_neg)
+                self._model,-self.off_energy, self.h_pos, self.h_neg)
 
             self._amp_and_limidx =  True
 
@@ -104,10 +108,10 @@ class Tous_analysis():
         """."""
         return self._off_energy
 
-    # the cutoff for energy deviation is the energy acceptance limit
     @off_energy.setter
-    def off_energy(self, accep): # pass a new energy acceptance tuple of arrays if the user desire
-        """."""
+    def off_energy(self, accep):
+        """the cutoff for energy deviation is the energy acceptance limit/
+        pass a new energy acceptance tuple of arrays"""
         accep_pos, accep_neg = accep
         accep_lim = _np.max(_np.maximum(accep_pos, _np.abs(accep_neg)))
         steps = int(accep_lim*10000) # choosen to be the number of steps
@@ -119,22 +123,12 @@ class Tous_analysis():
         return self._deltas
 
     @deltas.setter
-    def deltas(self, dev_percent,steps=400): # dev_percent input-> [%]
+    def deltas(self, dev_percent,steps=400):
+        """dev_percent is energy deviation in percents [%]
+        If the user desires to change the sample of energy
+        deviation"""
         dev_percent /= 100
-        self._deltas = _np.linspace(0,dev_percent, steps) # if the user
-        # desires to make a change in the quantity of energ. dev. in tracking
-        #  simulation
-
-    @property
-    def lname(self):
-        """."""
-        return self._lname
-
-    @lname.setter
-    def lname(self, call_lname): # input: list of element names
-        # used in tracking to define the elements' list
-        """."""
-        self._lname = call_lname
+        self._deltas = _np.linspace(0,dev_percent, steps)
 
     # the four properties defining below are to be static
     @property
@@ -149,20 +143,20 @@ class Tous_analysis():
 
     @property
     def amp_pos(self):
-        '''positive amplitudes from linear model'''
+        '''.'''
         return self._amps_pos
 
     @property # negative amplitudes from linear model
     def amp_neg(self):
-        """negative amplitudes from linear model"""
+        """."""
         return self._amps_neg
 
     def get_amps_idxs(self): # Defines various parameters
-        """."""
+        """Defines 3 self params at same time"""
         return self.amp_and_limidx, self.accep, self.s_calc
 
     def set_vchamber_scraper(self, vchamber):
-        """."""
+        """Function for setting the vchamber apperture"""
         model = self._model
         scph_inds = self.scraph_inds
         scpv_inds = self.scrapv_inds
@@ -175,7 +169,7 @@ class Tous_analysis():
             model[iten].vmax = vchamber[3]
 
     def return_sinpos_track(self,single_spos, par):
-        """."""
+        """Single position tracking"""
 
         self._model.cavity_on = True
         self._model.radiation_on = True
@@ -184,13 +178,11 @@ class Tous_analysis():
 
         index = _np.argmin(_np.abs(s-single_spos))
         if 'pos' in par:
-            res = tousfunc.track_eletrons(
-                self.deltas,self.nturns,index,
-                self.nom_model, pos_x=1e-5, pos_y=3e-6)
+            res = tousfunc.track_eletrons(self.deltas,self.nturns,index,
+                                          self._model, pos_x=1e-5, pos_y=3e-6)
         elif 'neg' in par:
-            res = tousfunc.track_eletrons(
-                -self.deltas,self.nturns,index,
-                self.nom_model, pos_x=1e-5, pos_y=3e-6)
+            res = tousfunc.track_eletrons(-self.deltas,self.nturns,index,
+                                          self._model, pos_x=1e-5, pos_y=3e-6)
 
         return res
 
@@ -215,32 +207,31 @@ class Tous_analysis():
 
         deltp = _np.tan(kappa_pos)/bf
         deltn = _np.tan(kappa_neg)/bf
-        getdp = tousfunc.f_function_arg_mod(
+        fdensp = tousfunc.f_function_arg_mod(
             kappa_pos, kappap_0, b1[idx], b2[idx],norm=False)
 
-        getdn = tousfunc.f_function_arg_mod(
+        fdensn = tousfunc.f_function_arg_mod(
             kappa_neg, kappan_0, b1[idx], b2[idx],norm=False)
 
         # eliminating negative values
-        indp = _np.where(getdp<0)[0]
-        indn = _np.where(getdn<0)[0]
-        getdp[indp] = 0
-        getdn[indn] = 0
+        indp = _np.where(fdensp<0)[0]
+        indn = _np.where(fdensn<0)[0]
+        fdensp[indp] = 0
+        fdensn[indn] = 0
 
-        ind = _np.intp(_np.where(getdp>1e-2)[0])
-        getdp = getdp[ind]
+        ind = _np.intp(_np.where(fdensp>1e-2)[0])
+        fdensp = fdensp[ind]
         deltp = deltp[ind]
-        ind = _np.intp(_np.where(getdn>1e-2)[0])
-        getdn = getdn[ind]
+        ind = _np.intp(_np.where(fdensn>1e-2)[0])
+        fdensn = fdensn[ind]
         deltn = deltn[ind]
 
         self.deltas = deltp[-1]*1e2
 
-        return getdp, getdn, deltp, deltn
+        return fdensp, fdensn, deltp, deltn
 
     def fast_aquisition(self, single_spos, par):
-        # this raise blocks to runing the program if the list of s position has more than 1 element
-        """."""
+        """"""
         if len(tousfunc.t_list(single_spos)) != 1:
             raise ValueError('This function suports only one s position')
 
@@ -268,15 +259,18 @@ class Tous_analysis():
     # this function plot the graphic of tracking and the touschek scattering
     # distribution for one single position
     def plot_analysis_at_position(self, single_spos, par, accep,filename):
-        """."""
+        """Plot the graphic of the positions electrons are lost
+        the number of turns electrons realize before the loss,
+        and the touschek loss density."""
         res, fp, dp = self.fast_aquisition(single_spos, par)
         s = self.spos
         index = _np.argmin(_np.abs(s-single_spos))
         tousfunc.plot_track(self.accelerator, res, _np.intp(self.inds_pos),
                             self.off_energy, par, index, accep, dp, fp, filename)
 
-    def plot_normtousd(self, spos, filename): # user must provide a list of s positions
-        """touschek scattering density"""
+    def plot_normtousd(self, spos, filename):
+        """User must provide a list of s positions to
+        calculate the loss density for each point"""
         spos_ring = self.spos
         dic = tousfunc.norm_cutacp(self._model_fit,
                              spos, 5000, self._accep, norm=True)
@@ -414,23 +408,20 @@ class Tous_analysis():
         spos = self.spos
 
         fact = 0.03
+        # toushcek scattering rate
         tous_rate = self.ltime.touschek_data['rate']
+        prob, lostp, all_lostp = [], [], []
 
-        prob = []
-        lostp = []
-        all_lostp = []
-
-        for j, iten in enumerate(all_track):
+        for j, single_track in enumerate(all_track):
 
             index = indices[j]
             # scattered_pos = l_scattered_pos[j]
 
             lostinds, deltas = _np.zeros(len(iten)), _np.zeros(len(iten))
-            for idx,iten in enumerate(iten):
+            for idx,iten in enumerate(single_track):
                 _, ellost, delta = iten
                 lostinds[idx] = ellost
-                deltas[idx] = delta # alguns elétrons possuem desvio de
-                # energia abaixo da aceitancia e acabam não sendo perdidos
+                deltas[idx] = delta
 
             lostinds = _np.intp(lostinds)
             lost_positions = _np.round(spos[lostinds], 2)
@@ -445,9 +436,6 @@ class Tous_analysis():
             data = _pd.DataFrame({'lost_pos_by_tracking':lost_pos_column})
             # this step agroups the lost_positions
 
-            # scat_lost_df = pd.DataFrame(f'{s}':) # dataframe will contain
-            # the scattered positions and the lost positions after scattering
-
             itv_delta = []
             for current, next_iten in zip(itv_track, itv_track[1:]):
                 stri = f'{current*1e2:.2f} % < delta < {next_iten*1e2:.2f} %'
@@ -459,8 +447,7 @@ class Tous_analysis():
                 # dataframe
 
             var = list(data.index)
-            # quando as duas variáveis são iguais isso acab resultando em um
-            # erro então estou colocando essa condição.
+            #
             if var == lost_pos_column:
                 pass
             else:
@@ -474,7 +461,7 @@ class Tous_analysis():
                 delta = deltas[idx]
                 # lps = []
                 for i, interval in enumerate(itv_delta):
-                    if i == 0:
+                    if not i: # subtle difference: <= in first iteraction
                         if interval[0]<= delta <= interval[1]:
                             stri = \
                 f'{interval[0]*1e2:.2f} % < delta < {interval[1]*1e2:.2f} %'
@@ -495,20 +482,27 @@ class Tous_analysis():
 
             lost_pos_df = []
             part_prob = []
+            # Calculates the loss probablity by tracking
             for indx, iten in data.iterrows():
                 t_prob = 0
                 for idx, m in enumerate(iten):
                     t_prob += m
                     if idx == iten.count()-1:
+                        # appends the probability after sum
                         part_prob.append(t_prob)
                         lost_pos_df.append(indx)
 
             lost_pos_df = _np.array(lost_pos_df)
             part_prob = _np.array(part_prob)
 
+            # Calculates the absolute probability for electron loss
+            # by touschek scattering rate
             prob.append(part_prob * rate_nom_lattice[index])
             lostp.append(lost_pos_df)
 
+            # Aqui eu pego as posições em que os elétrons foram perdidos
+            # e armazeno todas em uma grande lista sem repetição de qualquer
+            # posição perdida
             if not j:
                 all_lostp = lost_pos_df
             else:
@@ -521,7 +515,7 @@ class Tous_analysis():
             # dataframe = _pd.DataFrame(dic_res)
 
     def get_table(self,l_scattered_pos, scrap, vchamber):
-        """This is the heatmap """
+        """Generates the heat map of loss positions"""
 
         dic_res = {}
         all_lostp, prob, lostp = self.find_data(l_scattered_pos, scrap, vchamber)

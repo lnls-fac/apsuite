@@ -158,14 +158,16 @@ def plot_track(acc, lista_resul, lista_idx,
     if 'pos' in param:
         a1.set_ylabel(r'positive $\delta$ [%]', fontsize=25)
 
-        a3.plot(spos[int(lista_resul[1][-1])], lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
+        a3.plot(spos[int(lista_resul[1][-1])],
+                 lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[1][element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
         for item in lista_resul:
             a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
     elif'neg' in param:
         a1.set_ylabel(r'negative $\delta$ [%]', fontsize=25)
-        a3.plot(spos[int(lista_resul[1][-1])], -lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
+        a3.plot(spos[int(lista_resul[1][-1])],
+                 -lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[0][element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
         for item in lista_resul:
@@ -318,7 +320,7 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
     return dic
 
 def create_particles(cov_matrix, num_part):
-    """ Creates the beam to realize the Monte-Carlo simulation """
+    """ Creates the beam to realize the Monte-Carlo simulation"""
 
     # permute indices to change the order of the columns:
     # [rx, px, ry, py, de, dl]^T -> [px, py, de, rx, ry, dl]^T
@@ -334,8 +336,9 @@ def create_particles(cov_matrix, num_part):
     sig_yy = cov_matrix[3:, 3:]
     inv_yy = _np.linalg.inv(sig_yy)
 
-    part1 = _np.random.multivariate_normal(_np.zeros(6), cov_matrix, num_part).T
-    # changing the matrices' columns order
+    part1 = _np.random.multivariate_normal(_np.zeros(6),
+                                           cov_matrix, num_part).T
+
     part2 = part1.copy()
 
     vec_a = part2[3:]
@@ -350,9 +353,8 @@ def create_particles(cov_matrix, num_part):
 
     return part1, part2
 
-
 def get_cross_section_distribution(psim, _npts=3000):
-    """."""
+    """Calculates the Moller's cross section"""
     beta_bar = 0
     psi = _np.logspace(_np.log10(_np.pi/2 - psim), 0, _npts)
     psi = _np.pi/2 - psi
@@ -369,14 +371,15 @@ def get_cross_section_distribution(psim, _npts=3000):
 
 
 def cross_section_draw_samples(psim, num_part):
-    """."""
+    """Introduces the effect of the moller's cross section
+    in the M.C. simulation"""
     psi, cross = get_cross_section_distribution(psim)
     crs = _np.random.rand(num_part)
     return _np.interp(crs, cross, psi)
 
 
 def scatter_particles(part1, part2, de_min):
-    """."""
+    """M.C. simulation of a Touschek scattering process"""
     gamma = 3e9 / 0.510e6
     beta = _np.sqrt(1 - 1/gamma/gamma)
     num_part = part1.shape[1]
@@ -464,11 +467,11 @@ def scatter_particles(part1, part2, de_min):
     return part1_new, part2_new, fact
 
 def histgms(acc,l_spos,num_part, accep, de_min, cutaccep):
-    """."""
+    """Calculates the touschek scattering densities for an array
+    of s positions"""
 
     envelopes = _pyaccel.optics.calc_beamenvelope(acc)
     spos=_pyaccel.lattice.find_spos(acc, indices='closed')
-
     scalc, daccpp, daccpn = get_scaccep(acc, accep)
 
     histsp1, histsp2, indices=[],[],[]
@@ -487,7 +490,7 @@ def histgms(acc,l_spos,num_part, accep, de_min, cutaccep):
         part1, part2 = create_particles(env, num_part)
         part1_new, part2_new, _ = scatter_particles(part1, part2, de_min)
 
-        if cutaccep: # if True selects the energy acceptance as the cutoof of the graphic
+        if cutaccep: # if true the cutoff is the accp at the s
 
             acpp, acpn = daccpp[idx], daccpn[idx]
             check1 = acpp - part1_new[4]
@@ -499,15 +502,13 @@ def histgms(acc,l_spos,num_part, accep, de_min, cutaccep):
             histsp1.append(part1_new[4][ind1]*1e2)
             histsp2.append(part2_new[4][ind2]*1e2)
 
-        else:
-            ind1 = _np.intp(_np.where(part1_new[4]>=0.01)[0]) # teste sugerido pelo ximenes
+        else: # ximenes cutoff
+            ind1 = _np.intp(_np.where(part1_new[4]>=0.01)[0])
             ind2 = _np.intp(_np.where(part2_new[4]<=-0.01)[0])
 
             histsp1.append(part1_new[4][ind1]*1e2)
             histsp2.append(part2_new[4][ind2]*1e2)
 
-    # hist1=_np.array(histsp1, dtype='object')
-    # hist2=_np.array(histsp2, dtype='object')
     indices=_np.array(indices)
 
     return histsp1, histsp2, indices
