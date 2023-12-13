@@ -162,22 +162,25 @@ def plot_track(acc, lista_resul, lista_idx,
                  lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[1][element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
+        a3.plot(spos[lista_idx][:indx], lista_off[:indx]*1e2,'b.',
+            label=r'accep. limit', alpha=0.25)
         for item in lista_resul:
             a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
-    elif'neg' in param:
+    elif 'neg' in param:
         a1.set_ylabel(r'negative $\delta$ [%]', fontsize=25)
         a3.plot(spos[int(lista_resul[1][-1])],
-                 -lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
+                 lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[0][element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
+        a3.plot(spos[lista_idx][indx:], -lista_off[indx:]*1e2,'b.',
+            label=r'accep. limit', alpha=0.25)
         for item in lista_resul:
-            a3.plot(spos[int(item[1])], -item[2]*1e2, 'r.')
+            a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
 
     a1.set_title(r'$\delta \times scat. rate$', fontsize=20)
     a1.set_xlabel(r'$\tau _T$ [1/s]', fontsize=25)
 
     a1.plot(f_dens, delt, label='Scattering touschek rate', color='black')
-
 
     a2.set_title(r'$\delta \times$ lost turn', fontsize=20)
     a2.set_xlabel(r'number of turns', fontsize=25)
@@ -186,7 +189,9 @@ def plot_track(acc, lista_resul, lista_idx,
 
 
     a3.set_title(r'tracking ', fontsize=20)
-    a3.plot(spos[lista_idx][:indx], lista_off[:indx]*1e2,'b.', label=r'accep. limit', alpha=0.25)
+    # plot the physical limitant untill the acceptance limit
+    # a3.plot(spos[lista_idx][:indx], lista_off[:indx]*1e2,'b.',
+    #         label=r'accep. limit', alpha=0.25)
 
     _plt.hlines(1e2*acp_s, spos[0],
                 spos[-1], color='black', linestyles='dashed', alpha=0.5)

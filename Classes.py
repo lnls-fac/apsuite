@@ -1,7 +1,7 @@
 """tous_analysis."""
 from pyaccel.lifetime import Lifetime
 from pyaccel.lattice import get_attribute, find_indices, find_spos
-import touschek_pack.functions as tousfunc
+import touschek_pack.functions as to_fu
 import pymodels
 import pyaccel.optics as py_op
 import numpy as _np
@@ -13,7 +13,7 @@ import scipy.integrate as scyint
 import pyaccel as _pyaccel
 
 class Tous_analysis():
-    """Class for the analyses of electron losses along the ring"""
+    """Class for the analysis of electron losses along the ring"""
 
     def __init__(self, accelerator,
                  energies_off=None, beam_energy=None, n_turns=7):
@@ -78,7 +78,7 @@ class Tous_analysis():
         energy accpetance both at each 10
         meters"""
         if self._sc_accps is None:
-            self._sc_accps = tousfunc.get_scaccep(self.accelerator, self.accep)
+            self._sc_accps = to_fu.get_scaccep(self.accelerator, self.accep)
         return self._sc_accps
 
     @property
@@ -93,10 +93,10 @@ class Tous_analysis():
             self._model.cavity_on = False
             self._model.radiation_on = False
 
-            self._amps_pos, self._inds_pos = tousfunc.calc_amp(
+            self._amps_pos, self._inds_pos = to_fu.calc_amp(
                 self._model,self.off_energy, self.h_pos, self.h_neg)
 
-            self._amps_neg, self._inds_neg = tousfunc.calc_amp(
+            self._amps_neg, self._inds_neg = to_fu.calc_amp(
                 self._model,-self.off_energy, self.h_pos, self.h_neg)
 
             self._amp_and_limidx =  True
@@ -168,7 +168,7 @@ class Tous_analysis():
             model[iten].vmin = vchamber[2]
             model[iten].vmax = vchamber[3]
 
-    def return_sinpos_track(self,single_spos, par):
+    def single_pos_track(self,single_spos, par):
         """Single position tracking"""
 
         self._model.cavity_on = True
@@ -178,10 +178,10 @@ class Tous_analysis():
 
         index = _np.argmin(_np.abs(s-single_spos))
         if 'pos' in par:
-            res = tousfunc.track_eletrons(self.deltas,self.nturns,index,
+            res = to_fu.track_eletrons(self.deltas,self.nturns,index,
                                           self._model, pos_x=1e-5, pos_y=3e-6)
         elif 'neg' in par:
-            res = tousfunc.track_eletrons(-self.deltas,self.nturns,index,
+            res = to_fu.track_eletrons(-self.deltas,self.nturns,index,
                                           self._model, pos_x=1e-5, pos_y=3e-6)
 
         return res
@@ -189,7 +189,7 @@ class Tous_analysis():
     def get_weighting_tous(self, single_spos, npt=5000):
         """."""
 
-        scalc, daccp, daccn  = tousfunc.get_scaccep(
+        scalc, daccp, daccn  = to_fu.get_scaccep(
             self.accelerator, self.accep)
         bf = self.beta # bf:beta factor
         lt = self.ltime
@@ -207,10 +207,10 @@ class Tous_analysis():
 
         deltp = _np.tan(kappa_pos)/bf
         deltn = _np.tan(kappa_neg)/bf
-        fdensp = tousfunc.f_function_arg_mod(
+        fdensp = to_fu.f_function_arg_mod(
             kappa_pos, kappap_0, b1[idx], b2[idx],norm=False)
 
-        fdensn = tousfunc.f_function_arg_mod(
+        fdensn = to_fu.f_function_arg_mod(
             kappa_neg, kappan_0, b1[idx], b2[idx],norm=False)
 
         # eliminating negative values
@@ -230,10 +230,10 @@ class Tous_analysis():
 
         return fdensp, fdensn, deltp, deltn
 
-    def fast_aquisition(self, single_spos, par):
+    def get_trackndens(self, single_spos, par):
         """get the tracked loss positions, number of turns and
         the touschek loss density"""
-        if len(tousfunc.t_list(single_spos)) != 1:
+        if len(to_fu.t_list(single_spos)) != 1:
             raise ValueError('This function suports only one s position')
 
         fdensp, fdensn, deltp, deltn = self.get_weighting_tous(single_spos)
@@ -241,39 +241,44 @@ class Tous_analysis():
         fp = fdensp.squeeze()
         fn = fdensn.squeeze()
 
-        res = self.return_sinpos_track(single_spos, par)
+        res = self.single_pos_track(single_spos, par)
         delta = _np.zeros(len(res))
 
         for index, iten in enumerate(res):
             _, _, delt = iten
             delta[index] = delt
 
-        delta_ = _np.diff(delta)[0]
+        delta_ = _np.abs(_np.diff(delta)[0])
 
         if 'pos' in par:
             return res, fp*delta_, deltp *1e2
         elif 'neg' in par:
-            return res, fn*delta_, deltn*1e2
+            return res, fn*delta_, -deltn*1e2
         else:
-            return res, fp*delta_, fn*delta_, deltp*1e2, deltn*1e2
+            return res, fp*delta_, fn*delta_, deltp*1e2, -deltn*1e2
 
     # this function plot the graphic of tracking and the touschek scattering
     # distribution for one single position
-    def plot_analysis_at_position(self, single_spos, par, accep,filename):
+    def plot_track_tousdens(self, single_spos, par, accep,filename):
         """Plot the graphic of the positions electrons are lost
         the number of turns electrons realize before the loss,
         and the touschek loss density."""
-        res, fp, dp = self.fast_aquisition(single_spos, par)
+        res, fp, dp = self.get_trackndens(single_spos, par)
         s = self.spos
+
+        if 'pos' in par:
+            inds = _np.intp(self.inds_pos)
+        elif 'neg' in par:
+            inds = _np.intp(self.inds_neg)
         index = _np.argmin(_np.abs(s-single_spos))
-        tousfunc.plot_track(self.accelerator, res, _np.intp(self.inds_pos),
-                            self.off_energy, par, index, accep, dp, fp, filename)
+        to_fu.plot_track(self.accelerator, res, inds,
+                self.off_energy, par, index, accep, dp, fp,filename)
 
     def plot_normtousd(self, spos, filename):
         """User must provide a list of s positions to
         calculate the loss density for each point"""
         spos_ring = self.spos
-        dic = tousfunc.norm_cutacp(self._model_fit,
+        dic = to_fu.norm_cutacp(self._model_fit,
                              spos, 5000, self._accep, norm=True)
 
         fdensp, fdensn = dic['fdensp'], dic['fdensn']
@@ -338,7 +343,7 @@ class Tous_analysis():
         accep = self.accep
         model = self._model_fit
 
-        tup = tousfunc.histgms(self._model_fit, l_spos, self.num_part, accep,
+        tup = to_fu.histgms(self._model_fit, l_spos, self.num_part, accep,
                                self.energy_dev_min,cutaccep=False)
 
         hp, hn, idx_model = tup
@@ -389,7 +394,7 @@ class Tous_analysis():
 
             index = _np.argmin(_np.abs(scattered_pos-spos))
             indices.append(index)
-            res = tousfunc.track_eletrons(self._deltas, self.nturns, index, self._model)
+            res = to_fu.track_eletrons(self._deltas, self.nturns, index, self._model)
             all_track.append(res)
 
         hx = self._model_fit[self.scraph_inds[0]].hmax
