@@ -1,3 +1,4 @@
+"""Functions_for_TousAnalysis."""
 import pymodels as _pymodels
 import pyaccel as _pyaccel
 import matplotlib.pyplot as _plt
@@ -6,16 +7,19 @@ import scipy.integrate as _scyint
 import scipy.special as _special
 from mathphys.beam_optics import beam_rigidity as _beam_rigidity
 
-def calc_amp(acc,energy_offsets, hmax, hmin):
+def calc_amp(acc, energy_offsets, hmax, hmin):
+    """Calculates the amplitudes and gets the physical limitants.
 
-    """Calculates the amplitudes and gets the physical
-    limitants"""
-
+    acc = accelerator.
+    energy_offsets = e_dev for calculate physical limitants.
+    hmax = horizontal max apperture.
+    hmin = horizontal min apperture.
+    """
     a_def = _np.zeros(energy_offsets.size)
     indices = _np.zeros(energy_offsets.size)
     try:
-        for idx,delta in enumerate(energy_offsets):
-            twi,*_ = _pyaccel.optics.calc_twiss(
+        for idx, delta in enumerate(energy_offsets):
+            twi, *_ = _pyaccel.optics.calc_twiss(
                 accelerator=acc, energy_offset=delta, indices='closed')
             if _np.any(_np.isnan(twi[0].betax)):
                 raise _pyaccel.optics.OpticsException('error')
@@ -25,17 +29,24 @@ def calc_amp(acc,energy_offsets, hmax, hmin):
             a_sup = (hmax - rx)**2 /betax
             a_inf = (hmin - rx)**2 /betax
 
-            a_max = _np.minimum(a_sup,a_inf)
+            a_max = _np.minimum(a_sup, a_inf)
             idx_min = _np.argmin(a_max)
             indices[idx] = idx_min
             a_def[idx] = a_max[idx_min]
-    except (_pyaccel.optics.OpticsException, _pyaccel.tracking.TrackingException):
+    except (_pyaccel.optics.OpticsException,
+            _pyaccel.tracking.TrackingException):
         pass
     return _np.sqrt(a_def), indices
 
 def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
-    """ This function finds the lost electrons by tracking """
+    """Tracking simulation for touschek scattering that ocorred in element_idx.
 
+    model = accelerator.
+    deltas = e_dev
+    n_turn = number of turns desired.
+    pos_x = small shake in x
+    pos_y =   ||    ||  || y
+    """
     orb = _pyaccel.tracking.find_orbit6(model, indices=[0, element_idx])
     orb = orb[:, 1]
 
@@ -56,7 +67,7 @@ def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
 
     turnl_element = []
 
-    for i,item in enumerate(turn_lost):
+    for i, item in enumerate(turn_lost):
         if item == n_turn and element_lost[i] == element_idx:
             pass
         else:
@@ -64,29 +75,24 @@ def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
 
     return turnl_element
 
-def trackm_elec(acc,deltas, n_turn, lspos):
-    """Run the tracking simulation for a list of s positions """
-    results = []
-    spos = _pyaccel.lattice.find_spos(acc, indices='open')
-
-    for _, iten in enumerate(lspos):
-
-        el_idx = _np.argmin(_np.abs(spos-iten)) # initial condition element
-        turnl = track_eletrons(deltas, n_turn, el_idx, acc)
-        results.append(turnl) #
-
-    return results
 
 def el_idx_collector(acc, lname):
-    """."""
+    """Selects the index of an especific element.
+
+    acc = accelerator.
+    lname = list of names
+    """
     all_index = []
 
     if 'mia' in lname:
-        all_index.append(_pyaccel.lattice.find_indices(acc, 'fam_name', 'mia'))
-    elif'mib' in lname:
-        all_index.append(_pyaccel.lattice.find_indices(acc, 'fam_name', 'mib'))
+        all_index.append(
+            _pyaccel.lattice.find_indices(acc, 'fam_name', 'mia'))
+    elif 'mib' in lname:
+        all_index.append(
+            _pyaccel.lattice.find_indices(acc, 'fam_name', 'mib'))
     elif 'mip' in lname:
-        all_index.append(_pyaccel.lattice.find_indices(acc, 'fam_name', 'mip'))
+        all_index.append(
+            _pyaccel.lattice.find_indices(acc, 'fam_name', 'mip'))
 
     fam_data = _pymodels.si.get_family_data(acc)
 
@@ -115,25 +121,30 @@ def el_idx_collector(acc, lname):
     return all_index
 
 def plot_track(acc, lista_resul, lista_idx,
-               lista_off, param, element_idx, accep, delt, f_dens):
-    """ This function shows the touschek scattering density for s,
-    the number of turns before electron loss and a graphic
-    containing the magnetic lattice with the lost positions
-    of the electrons obtained by tracking simulation, the limit
-    energy acceptance in a determined point s and the physical
-    limitants calculated by a linear approach of the dependencies
-    of beta and eta functions"""
+               lista_off, par, element_idx, accep, delt, f_dens):
+    """Plot the tracking results for a given s position.
+
+    acc =  accelerator.
+    lista_resul = list of information provided by tracking.
+    lista_idx = e_dev for calculating the physical limitants.
+    lista_off = list of e_dev used in tracking.
+    par = defines the analysis for positive or negative e_dev.
+    element_idx = defines initial conditions for tracking.
+    accep = touschek energy acceptance.
+    delt = e_dev for calculating the touschek loss rate density.
+    fdens = touschek loss rate density.
+    """
     # ----------------
 
     cm = 1/2.54  # 'poster'
 
-    twi0,*_ = _pyaccel.optics.calc_twiss(acc, indices='open')
+    twi0, *_ = _pyaccel.optics.calc_twiss(acc, indices='open')
     betax = twi0.betax
     betax = betax*(1/5)
 
     spos = _pyaccel.lattice.find_spos(acc)
 
-    fig = _plt.figure(figsize=(38.5*cm,18*cm))
+    fig = _plt.figure(figsize=(38.5*cm, 18*cm))
     gs = _plt.GridSpec(1, 3, left=0.1,
         right=0.98, wspace=0.03, top=0.95, bottom=0.1, width_ratios=[2, 3, 8])
     a1 = fig.add_subplot(gs[0, 0])
@@ -155,7 +166,7 @@ def plot_track(acc, lista_resul, lista_idx,
     a3.xaxis.grid(False)
     _plt.subplots_adjust(wspace=0.1)
 
-    if 'pos' in param:
+    if 'pos' in par:
         a1.set_ylabel(r'positive $\delta$ [%]', fontsize=25)
 
         a3.plot(spos[int(lista_resul[1][-1])],
@@ -166,7 +177,7 @@ def plot_track(acc, lista_resul, lista_idx,
             label=r'accep. limit', alpha=0.25)
         for item in lista_resul:
             a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
-    elif 'neg' in param:
+    elif 'neg' in par:
         a1.set_ylabel(r'negative $\delta$ [%]', fontsize=25)
         a3.plot(spos[int(lista_resul[1][-1])],
                  lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
@@ -221,7 +232,6 @@ def plot_track(acc, lista_resul, lista_idx,
 
 def f_function_arg_mod(kappa, kappam, b1_, b2_, norm):
     """."""
-
     tau = (_np.tan(kappa)**2)[:, None]
     taum = _np.tan(kappam)**2
     beta = _beam_rigidity(energy=3)[2]
@@ -250,7 +260,7 @@ def get_scaccep(acc, accep):
     spos = _pyaccel.lattice.find_spos(acc, indices='closed')
 
     npt = int((spos[-1]-spos[0])/0.1)
-    scalc = _np.linspace(spos[0],spos[-1], npt)
+    scalc = _np.linspace(spos[0], spos[-1], npt)
     daccpp = _np.interp(scalc, spos, accep[1])
     daccpn = _np.interp(scalc, spos, accep[0])
 
@@ -291,9 +301,9 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
         deltan = 1/beta * _np.tan(kappan)
 
         y_p = f_function_arg_mod(kappa=kappap,
-            kappam=kappam_p0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
+            kappam=kappam_p0, b1_=b1[idx], b2_=b2[idx], norm=norm).squeeze()
         y_n = f_function_arg_mod(kappa=kappan,
-            kappam=kappam_n0,b1_=b1[idx],b2_=b2[idx], norm=norm).squeeze()
+            kappam=kappam_n0, b1_=b1[idx], b2_=b2[idx], norm=norm).squeeze()
         norm_facp = _scyint.trapz(y_p, deltap)
         norm_facn = _scyint.trapz(y_n, deltan)
 
@@ -301,8 +311,8 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
         y_n /= norm_facn
 
         # eliminating the negative values from array
-        indp = _np.where(y_p<0)[0]
-        indn = _np.where(y_n<0)[0]
+        indp = _np.where(y_p < 0)[0]
+        indn = _np.where(y_n < 0)[0]
         y_p[indp] = 0
         y_n[indn] = 0
 
@@ -324,8 +334,7 @@ def norm_cutacp(acc, lsps, _npt, accep, norm=False):
     return dic
 
 def create_particles(cov_matrix, num_part):
-    """ Creates the beam to realize the Monte-Carlo simulation"""
-
+    """Creates the beam to realize the Monte-Carlo simulation."""
     # permute indices to change the order of the columns:
     # [rx, px, ry, py, de, dl]^T -> [px, py, de, rx, ry, dl]^T
     idcs = [1, 3, 4, 0, 2, 5]
@@ -349,7 +358,8 @@ def create_particles(cov_matrix, num_part):
     new_mean = (sig_xy @ inv_yy) @ vec_a
     new_cov = sig_xx - sig_xy @ inv_yy @ sig_yx
 
-    part2[:3] = _np.random.multivariate_normal(_np.zeros(3), new_cov, num_part).T
+    part2[:3] = _np.random.multivariate_normal(_np.zeros(3),
+                                                new_cov, num_part).T
     part2[:3] += new_mean
 
     part2 = part2[idcs_r, :]
@@ -358,7 +368,7 @@ def create_particles(cov_matrix, num_part):
     return part1, part2
 
 def get_cross_section_distribution(psim, _npts=3000):
-    """Calculates the Moller's cross section"""
+    """Calculates the Moller's cross section."""
     beta_bar = 0
     psi = _np.logspace(_np.log10(_np.pi/2 - psim), 0, _npts)
     psi = _np.pi/2 - psi
@@ -375,15 +385,21 @@ def get_cross_section_distribution(psim, _npts=3000):
 
 
 def cross_section_draw_samples(psim, num_part):
-    """Introduces the effect of the moller's cross section
-    in the M.C. simulation"""
+    """Interpolates the cross section effect.
+
+    psim = Defines the maximum e_dev that remains the electrons' orbit stable.
+    num_part = The number of particles to simulate.
+    """
     psi, cross = get_cross_section_distribution(psim)
     crs = _np.random.rand(num_part)
     return _np.interp(crs, cross, psi)
 
 
 def scatter_particles(part1, part2, de_min):
-    """M.C. simulation of a Touschek scattering process"""
+    """M.C. simulation of the Touschek scattering process.
+
+    docstring.
+    """
     gamma = 3e9 / 0.510e6
     beta = _np.sqrt(1 - 1/gamma/gamma)
     num_part = part1.shape[1]
@@ -401,9 +417,9 @@ def scatter_particles(part1, part2, de_min):
 
     # new coordinate system
     p_j = p_1 + p_2
-    p_j /= _np.linalg.norm(p_j, axis=0) # sum
+    p_j /= _np.linalg.norm(p_j, axis=0)  # sum
     p_k = _np.cross(p_1.T, p_2.T).T
-    p_k /= _np.linalg.norm(p_k, axis=0) # cross product
+    p_k /= _np.linalg.norm(p_k, axis=0)  # cross product
     p_l = _np.cross(p_j.T, p_k.T).T
 
     jkl2xyz = _np.zeros([num_part, 3, 3])
@@ -411,10 +427,8 @@ def scatter_particles(part1, part2, de_min):
     jkl2xyz[:, :, 1] = p_k.T
     jkl2xyz[:, :, 2] = p_l.T
 
-    # calculating theta and zeta
     theta = xl1 - xl2
     zeta = yl1 - yl2
-    # defining the value of the scattering angle chi
     chi = _np.sqrt(zeta**2 + theta**2)/2
 
     # draw the scattering angles from uniform distribution:
@@ -435,7 +449,7 @@ def scatter_particles(part1, part2, de_min):
     # This method of doing things should be tested and thought about very
     # carefully, though.
     psim = _np.arccos(de_min/gamma/(chi.max()*2))
-    fact=psim*2/_np.pi
+    fact = psim*2/_np.pi
     print(psim*2/_np.pi)
     psi = cross_section_draw_samples(psim, num_part)
 
@@ -470,15 +484,20 @@ def scatter_particles(part1, part2, de_min):
 
     return part1_new, part2_new, fact
 
-def histgms(acc,l_spos,num_part, accep, de_min, cutaccep):
-    """Calculates the touschek scattering densities for an array
-    of s positions"""
+def histgms(acc, l_spos, num_part, accep, de_min, cutaccep):
+    """Calculates the touschek scattering densities.
 
+    l_spos   =                           list of positions.
+    num_part =            number of particles for M.C. sim.
+    accep    =                  touschek energy acceptance.
+    de_min   =                minimum energy deviation for.
+    cutaccep = defines the cutoff on the energy acceptance.
+    """
     envelopes = _pyaccel.optics.calc_beamenvelope(acc)
-    spos=_pyaccel.lattice.find_spos(acc, indices='closed')
+    spos = _pyaccel.lattice.find_spos(acc, indices='closed')
     scalc, daccpp, daccpn = get_scaccep(acc, accep)
 
-    histsp1, histsp2, indices=[],[],[]
+    histsp1, histsp2, indices = [], [], []
 
     for iten in l_spos:
 
@@ -486,33 +505,33 @@ def histgms(acc,l_spos,num_part, accep, de_min, cutaccep):
         idx = _np.argmin(_np.abs(scalc - iten))
         indices.append(idx_model)
 
-        # this index is necessary to the s position indices from analitically calculated PDF
+        # this index is necessary to the s position indices
+        # from analitically calculated PDF
         # match with monte carlo simulation s position indices
         env = envelopes[idx_model]
 
-        # this two lines of code are the monte-carlo simulation
         part1, part2 = create_particles(env, num_part)
         part1_new, part2_new, _ = scatter_particles(part1, part2, de_min)
 
-        if cutaccep: # if true the cutoff is the accp at the s
+        if cutaccep:  # if true the cutoff is the accp at the s
 
             acpp, acpn = daccpp[idx], daccpn[idx]
             check1 = acpp - part1_new[4]
             check2 = -(acpn - part2_new[4])
 
-            ind1 = _np.intp(_np.where(check1<0)[0])
-            ind2 = _np.intp(_np.where(check2<0)[0])
+            ind1 = _np.intp(_np.where(check1 < 0)[0])
+            ind2 = _np.intp(_np.where(check2 < 0)[0])
 
             histsp1.append(part1_new[4][ind1]*1e2)
             histsp2.append(part2_new[4][ind2]*1e2)
 
-        else: # ximenes cutoff
-            ind1 = _np.intp(_np.where(part1_new[4]>=0.01)[0])
-            ind2 = _np.intp(_np.where(part2_new[4]<=-0.01)[0])
+        else:  # ximenes cutoff
+            ind1 = _np.intp(_np.where(part1_new[4] >= 0.01)[0])
+            ind2 = _np.intp(_np.where(part2_new[4] <= -0.01)[0])
 
             histsp1.append(part1_new[4][ind1]*1e2)
             histsp2.append(part2_new[4][ind2]*1e2)
 
-    indices=_np.array(indices)
+    indices = _np.array(indices)
 
     return histsp1, histsp2, indices
