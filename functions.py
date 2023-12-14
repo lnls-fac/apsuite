@@ -349,7 +349,7 @@ def create_particles(cov_matrix, num_part):
     sig_yy = cov_matrix[3:, 3:]
     inv_yy = _np.linalg.inv(sig_yy)
 
-    part1 = _np.random.multivariate_normal(_np.zeros(6),
+    part1 = _np.random.Generator.multivariate_normal(_np.zeros(6),
                                            cov_matrix, num_part).T
 
     part2 = part1.copy()
@@ -358,7 +358,7 @@ def create_particles(cov_matrix, num_part):
     new_mean = (sig_xy @ inv_yy) @ vec_a
     new_cov = sig_xx - sig_xy @ inv_yy @ sig_yx
 
-    part2[:3] = _np.random.multivariate_normal(_np.zeros(3),
+    part2[:3] = _np.random.Generator.multivariate_normal(_np.zeros(3),
                                                 new_cov, num_part).T
     part2[:3] += new_mean
 
@@ -391,7 +391,7 @@ def cross_section_draw_samples(psim, num_part):
     num_part = The number of particles to simulate.
     """
     psi, cross = get_cross_section_distribution(psim)
-    crs = _np.random.rand(num_part)
+    crs = _np.random.Generator.rand(num_part)
     return _np.interp(crs, cross, psi)
 
 
@@ -432,8 +432,8 @@ def scatter_particles(part1, part2, de_min):
     chi = _np.sqrt(zeta**2 + theta**2)/2
 
     # draw the scattering angles from uniform distribution:
-    phi = _np.random.rand(num_part)* 2*_np.pi
-    psi = _np.random.rand(num_part)* _np.pi/2
+    phi = _np.random.Generator.rand(num_part)* 2*_np.pi
+    psi = _np.random.Generator.rand(num_part)* _np.pi/2
 
     # draw the psi angle from the cross section probability density:
     # we need to define a maximum angle to normalize the cross section
