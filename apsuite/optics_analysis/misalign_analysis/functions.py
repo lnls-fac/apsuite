@@ -1,7 +1,8 @@
-"""Miscellaneous functions to work with 'Button' and 'Base' objects"""
+"""Miscellaneous functions to work with 'Button' and 'Base' objects."""
 
-import pyaccel as _pyaccel
 import numpy as _np
+import pyaccel as _pyaccel
+
 from .si_data import si_bpmidx
 
 _BPMIDX = si_bpmidx()
@@ -32,10 +33,12 @@ _ADD_FUNCS = {
 
 
 def get_error(model, button):
+    """."""
     return _GET_FUNCS[button.dtype](model, indices=[button.indices[0]])
 
 
 def get_errors(model, base):
+    """."""
     errors = []
     for button in base.buttons:
         errors.append(get_error(model, button))
@@ -43,7 +46,8 @@ def get_errors(model, base):
 
 
 def set_error(model, button, error):
-    if isinstance(error, (_np.int_, _np.float_, float, int)):
+    """."""
+    if isinstance(error, (_np.int_, _np.float64, float, int)):
         _SET_FUNCS[button.dtype](model, indices=button.indices, values=error)
     elif len(error) == len(button.indices):
         _SET_FUNCS[button.dtype](model, indices=button.indices, values=error)
@@ -52,6 +56,7 @@ def set_error(model, button, error):
 
 
 def set_errors(model, base, errors):
+    """."""
     if len(errors) != len(base):
         raise ValueError('"errors" size is incompatible with "base" size')
     for i, button in enumerate(base.buttons):
@@ -59,7 +64,8 @@ def set_errors(model, base, errors):
 
 
 def add_delta_error(model, button, delta):
-    if isinstance(delta, (_np.int_, _np.float_, float, int)):
+    """."""
+    if isinstance(delta, (_np.int_, _np.float64, float, int)):
         _ADD_FUNCS[button.dtype](model, indices=button.indices, values=delta)
     elif len(delta) == len(button.indices):
         _ADD_FUNCS[button.dtype](model, indices=button.indices, values=delta)
@@ -68,6 +74,7 @@ def add_delta_error(model, button, delta):
 
 
 def add_delta_errors(model, base, deltas):
+    """."""
     if len(deltas) != len(base):
         raise ValueError('"deltas" size is incompatible with "base" size')
     for i, button in enumerate(base.buttons):
@@ -75,6 +82,7 @@ def add_delta_errors(model, base, deltas):
 
 
 def remove_delta_errors(model, base, deltas):
+    """."""
     for i, button in enumerate(base.buttons):
         _ADD_FUNCS[button.dtype](
             model, indices=button.indices, values=-deltas[i]
@@ -82,6 +90,7 @@ def remove_delta_errors(model, base, deltas):
 
 
 def add_error_ksl(lattice, indices, values):
+    """."""
     if isinstance(values, list):
         pass
     elif isinstance(values, (int, float)):
@@ -93,20 +102,24 @@ def add_error_ksl(lattice, indices, values):
 
 
 def calc_rms(vec):
+    """."""
     return float((_np.mean(vec * vec)) ** 0.5)
 
 
 def calc_vdisp(model, indices="bpm"):
+    """."""
     disp = calc_disp(model=model, indices=indices)
     return disp[int(len(disp) / 2) :]
 
 
 def calc_hdisp(model, indices="bpm"):
+    """."""
     disp = calc_disp(model=model, indices=indices)
     return disp[: int(len(disp) / 2)]
 
 
 def calc_disp(model, indices="bpm"):
+    """."""
     if indices not in ["bpm", "closed", "open"]:
         raise ValueError(
             'Invalid indices parameter: \
@@ -128,36 +141,8 @@ def calc_disp(model, indices="bpm"):
     )
 
 
-"""**kwargs: svals, cut, return_svd
-        > svals: integer or strings ("auto" or "all") to limit the quantity of singular values
-        > cut: floating point to limit the quantity of singular values related to the max singular value -> min_sval =  max_sval * cut
-        > return_svd: bool (True or False) to return elements of the SVD decomposition
-
-        >>>
-        if return_svd=True:
-            return: inverse_matrix, u_matrix, s_matriz, v.T_matrix, number_of_svals
-        if return_svd=False:
-            return: inverse_matrix
-    """
-
-
 def calc_pinv(matrix, **kwargs):
-    """Calculate Pseudo-Inverse Matrix.
-
-    Args:
-        matrix (numpy array)
-        svals (integer or string): limit the quantity of singular values\
-        -> Strings can be "all" or "auto".
-        cut (float): limit the quantity of singular values related\
-            to the max singular value -> min_sval =  max_sval * cut
-        return_svd (boolean): returns all elements of the SVD decomposition
-
-    Returns:
-        numpy array: pseudo-inverse of matrix
-        or
-        tuple: (pseudo-inverse of matrix, U matrix, S matrix, \
-            V transpose matrix, number of svals)
-    """
+    """."""
     svals = "auto"
     cut = 5e-3
     return_svd = False
@@ -188,50 +173,44 @@ def calc_pinv(matrix, **kwargs):
         return imat
 
 
-def rmk_orbit_corr(OrbitCorr_obj, jacobian_matrix=None, goal_orbit=None):
-    """
-    Orbit correction\\
-    0 = Succes\\
-    1 = Orb RMS Warning\\
-    2 = Convergence Fail\\
-    3 = Saturation Fail
-    """
+def rmk_orbit_corr(orbcorr_obj, jacobian_matrix=None, goal_orbit=None):
+    """."""
     if goal_orbit is None:
-        nbpm = len(OrbitCorr_obj.respm.bpm_idx)
+        nbpm = len(orbcorr_obj.respm.bpm_idx)
         goal_orbit = _np.zeros(2 * nbpm, dtype=float)
 
     jmat = jacobian_matrix
     if jmat is None:
-        jmat = OrbitCorr_obj.get_jacobian_matrix()
+        jmat = orbcorr_obj.get_jacobian_matrix()
 
-    ismat = OrbitCorr_obj.get_inverse_matrix(jmat)
+    ismat = orbcorr_obj.get_inverse_matrix(jmat)
 
-    orb = OrbitCorr_obj.get_orbit()
+    orb = orbcorr_obj.get_orbit()
     dorb = orb - goal_orbit
-    bestfigm = OrbitCorr_obj.get_figm(dorb)
+    bestfigm = orbcorr_obj.get_figm(dorb)
     maxit = 0
-    for _ in range(OrbitCorr_obj.params.maxnriters):
+    for _ in range(orbcorr_obj.params.maxnriters):
         dkicks = -1 * _np.dot(ismat, dorb)
-        kicks, saturation_flag = OrbitCorr_obj._process_kicks(dkicks)
+        kicks, saturation_flag = orbcorr_obj._process_kicks(dkicks)
         if saturation_flag:
-            return OrbitCorr_obj.CORR_STATUS.SaturationFail, maxit
-        OrbitCorr_obj.set_kicks(kicks)
+            return orbcorr_obj.CORR_STATUS.SaturationFail, maxit
+        orbcorr_obj.set_kicks(kicks)
         maxit += 1
-        orb = OrbitCorr_obj.get_orbit()
+        orb = orbcorr_obj.get_orbit()
         dorb = orb - goal_orbit
-        figm = OrbitCorr_obj.get_figm(dorb)
+        figm = orbcorr_obj.get_figm(dorb)
         diff_figm = _np.abs(bestfigm - figm)
         if figm < bestfigm:
             bestfigm = figm
-        if diff_figm < OrbitCorr_obj.params.convergencetol:
-            if bestfigm <= OrbitCorr_obj.params.orbrmswarnthres:
-                return OrbitCorr_obj.CORR_STATUS.Sucess, maxit
+        if diff_figm < orbcorr_obj.params.convergencetol:
+            if bestfigm <= orbcorr_obj.params.orbrmswarnthres:
+                return orbcorr_obj.CORR_STATUS.Sucess, maxit
             else:
-                return OrbitCorr_obj.CORR_STATUS.OrbRMSWarning, maxit
-        if OrbitCorr_obj.params.updatejacobian:
-            jmat = OrbitCorr_obj.get_jacobian_matrix()
-            ismat = OrbitCorr_obj.get_inverse_matrix(jmat)
-    return OrbitCorr_obj.CORR_STATUS.ConvergenceFail, maxit
+                return orbcorr_obj.CORR_STATUS.OrbRMSWarning, maxit
+        if orbcorr_obj.params.updatejacobian:
+            jmat = orbcorr_obj.get_jacobian_matrix()
+            ismat = orbcorr_obj.get_inverse_matrix(jmat)
+    return orbcorr_obj.CORR_STATUS.ConvergenceFail, maxit
 
 
 __all__ = (
@@ -246,5 +225,4 @@ __all__ = (
     "set_errors",
     "add_delta_error",
     "add_delta_errors",
-    "rmk_correct_orbit",
 )

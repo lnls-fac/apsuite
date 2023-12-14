@@ -6,15 +6,8 @@ import numpy as _np
 from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 
 from .functions import _SET_FUNCS, calc_vdisp as _vdisp, rmk_orbit_corr
-from .si_data import (
-    model_base,
-    si_elems,
-    si_famdata,
-    si_spos,
-    std_misaligment_tolerance,
-    std_misaligment_types,
-)
-
+from .si_data import model_base, si_elems, si_famdata, si_spos, \
+    std_misaligment_tolerance, std_misaligment_types
 
 _OC_MODEL = model_base()
 _OC = _OrbitCorr(_OC_MODEL, "SI")

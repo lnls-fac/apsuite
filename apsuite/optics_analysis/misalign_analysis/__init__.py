@@ -1,7 +1,6 @@
 """Misalign_analysis package."""
 
-from . import fitting, si_data
-from . import functions as functions
+from . import fitting, functions as functions, si_data
 from .base import Base
 from .buttons import Button
 

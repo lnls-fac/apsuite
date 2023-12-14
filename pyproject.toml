@@ -9,36 +9,37 @@
 [tool.ruff]
 fix = false
 line-length = 79
-select = ["W", "E", "A", "B", "C90", "D", "I002", "N", "F", "G","ARG", "S", "NPY",]
-ignore = ["D203", "D204", "D213", 'D215', "D400", "D401", 'D404', "D406", "D407", "D408", "D409", "D413", "E226",]
+select = [
+    "W",
+    "E",
+    "A",
+    "B",
+    "C90",
+    "D",
+    "N",
+    "F",
+    "G",
+    "ARG",
+    "S",
+    "NPY",
+]
+ignore = [
+    "D203",
+    "D204",
+    "D213",
+    'D215',
+    "D400",
+    "D401",
+    'D404',
+    "D406",
+    "D407",
+    "D408",
+    "D409",
+    "D413",
+    "E226",
+    "I",
+]
 indent-width = 4
 
 [tool.ruff.format]
 quote-style = "double"
-
-[tool.ruff.lint.isort]
-case-sensitive = true
-combine-as-imports = true
-# constants = ["constant"]
-# detect-same-package = true
-# force-single-line = true
-# force-sort-within-sections = true
-# force-to-top = ["src"]
-# force-wrap-aliases = true
-# forced-separate = ["tests"]
-# from-first = true
-# known-first-party = ["src"]
-# known-local-folder = ["src"]
-# known-third-party = ["src"]
-# length-sort = true
-lines-after-imports = 2
-lines-between-types = 1
-# no-lines-before = ["future", "standard-library"]
-# no-sections = true
-order-by-type = true
-# relative-imports-order = "closest-to-furthest"
-# required-imports = ["from __future__ import annotations"]
-# section-order = ["future", "standard-library", "first-party", "local-folder", "third-party"]
-# single-line-exclusions = ["os", "json"]
-# split-on-trailing-comma = false
-# variables = ["VAR"]
