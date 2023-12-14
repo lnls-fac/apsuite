@@ -7,32 +7,33 @@ from .si_data import si_bpmidx
 _BPMIDX = si_bpmidx()
 
 _SET_FUNCS = {
-        'dx':  _pyaccel.lattice.set_error_misalignment_x ,
-        'dy':  _pyaccel.lattice.set_error_misalignment_y ,
-        'dr':  _pyaccel.lattice.set_error_rotation_roll ,
-        'drp': _pyaccel.lattice.set_error_rotation_pitch ,
-        'dry': _pyaccel.lattice.set_error_rotation_yaw
-        }
+    "dx": _pyaccel.lattice.set_error_misalignment_x,
+    "dy": _pyaccel.lattice.set_error_misalignment_y,
+    "dr": _pyaccel.lattice.set_error_rotation_roll,
+    "drp": _pyaccel.lattice.set_error_rotation_pitch,
+    "dry": _pyaccel.lattice.set_error_rotation_yaw,
+}
 
 _GET_FUNCS = {
-        'dx':  _pyaccel.lattice.get_error_misalignment_x ,
-        'dy':  _pyaccel.lattice.get_error_misalignment_y ,
-        'dr':  _pyaccel.lattice.get_error_rotation_roll ,
-        'drp': _pyaccel.lattice.get_error_rotation_pitch ,
-        'dry': _pyaccel.lattice.get_error_rotation_yaw
-        }
+    "dx": _pyaccel.lattice.get_error_misalignment_x,
+    "dy": _pyaccel.lattice.get_error_misalignment_y,
+    "dr": _pyaccel.lattice.get_error_rotation_roll,
+    "drp": _pyaccel.lattice.get_error_rotation_pitch,
+    "dry": _pyaccel.lattice.get_error_rotation_yaw,
+}
 
 _ADD_FUNCS = {
-        'dx':  _pyaccel.lattice.add_error_misalignment_x ,
-        'dy':  _pyaccel.lattice.add_error_misalignment_y ,
-        'dr':  _pyaccel.lattice.add_error_rotation_roll ,
-        'drp': _pyaccel.lattice.add_error_rotation_pitch ,
-        'dry': _pyaccel.lattice.add_error_rotation_yaw
-        }
+    "dx": _pyaccel.lattice.add_error_misalignment_x,
+    "dy": _pyaccel.lattice.add_error_misalignment_y,
+    "dr": _pyaccel.lattice.add_error_rotation_roll,
+    "drp": _pyaccel.lattice.add_error_rotation_pitch,
+    "dry": _pyaccel.lattice.add_error_rotation_yaw,
+}
 
 
 def get_error(model, button):
     return _GET_FUNCS[button.dtype](model, indices=[button.indices[0]])
+
 
 def get_errors(model, base):
     errors = []
@@ -40,13 +41,15 @@ def get_errors(model, base):
         errors.append(get_error(model, button))
     return _np.array(errors)
 
+
 def set_error(model, button, error):
     if isinstance(error, (_np.int_, _np.float_, float, int)):
         _SET_FUNCS[button.dtype](model, indices=button.indices, values=error)
     elif len(error) == len(button.indices):
         _SET_FUNCS[button.dtype](model, indices=button.indices, values=error)
     else:
-        raise ValueError('problem with deltas')
+        raise ValueError("problem with deltas")
+
 
 def set_errors(model, base, errors):
     if len(errors) != len(base):
@@ -54,15 +57,15 @@ def set_errors(model, base, errors):
     for i, button in enumerate(base.buttons):
         set_error(model, button, errors[i])
 
+
 def add_delta_error(model, button, delta):
     if isinstance(delta, (_np.int_, _np.float_, float, int)):
-        _ADD_FUNCS[button.dtype](model, indices=button.indices,
-                                 values=delta)
+        _ADD_FUNCS[button.dtype](model, indices=button.indices, values=delta)
     elif len(delta) == len(button.indices):
-        _ADD_FUNCS[button.dtype](model, indices=button.indices,
-                                 values=delta)
+        _ADD_FUNCS[button.dtype](model, indices=button.indices, values=delta)
     else:
-        raise ValueError('problem with delta')
+        raise ValueError("problem with delta")
+
 
 def add_delta_errors(model, base, deltas):
     if len(deltas) != len(base):
@@ -70,10 +73,13 @@ def add_delta_errors(model, base, deltas):
     for i, button in enumerate(base.buttons):
         add_delta_error(model, button, deltas[i])
 
+
 def remove_delta_errors(model, base, deltas):
     for i, button in enumerate(base.buttons):
-        _ADD_FUNCS[button.dtype](model, indices=button.indices,
-                                  values=-deltas[i])
+        _ADD_FUNCS[button.dtype](
+            model, indices=button.indices, values=-deltas[i]
+        )
+
 
 def add_error_ksl(lattice, indices, values):
     if isinstance(values, list):
@@ -81,33 +87,46 @@ def add_error_ksl(lattice, indices, values):
     elif isinstance(values, (int, float)):
         values = [values]
     else:
-        raise ValueError('values in wrong format')
+        raise ValueError("values in wrong format")
     for i, ind in enumerate(indices):
         lattice[ind].KsL += values[i]
 
+
 def calc_rms(vec):
-    return float((_np.mean(vec*vec))**0.5)
+    return float((_np.mean(vec * vec)) ** 0.5)
 
-def calc_vdisp(model, indices='bpm'):
+
+def calc_vdisp(model, indices="bpm"):
     disp = calc_disp(model=model, indices=indices)
-    return disp[int(len(disp)/2):]
+    return disp[int(len(disp) / 2) :]
 
-def calc_hdisp(model, indices='bpm'):
+
+def calc_hdisp(model, indices="bpm"):
     disp = calc_disp(model=model, indices=indices)
-    return disp[:int(len(disp)/2)]
+    return disp[: int(len(disp) / 2)]
 
-def calc_disp(model, indices='bpm'):
-    if indices not in ['bpm','closed','open']:
-        raise ValueError('Invalid indices parameter: \
-                         should be "bpm" or "open" or "closed"!')
-    if indices == 'bpm':
+
+def calc_disp(model, indices="bpm"):
+    if indices not in ["bpm", "closed", "open"]:
+        raise ValueError(
+            'Invalid indices parameter: \
+                         should be "bpm" or "open" or "closed"!'
+        )
+    if indices == "bpm":
         indices = _BPMIDX
-    orbp = _pyaccel.tracking.find_orbit4(model, indices=indices,
-                                         energy_offset=+1e-6)
-    orbn = _pyaccel.tracking.find_orbit4(model, indices=indices,
-                                         energy_offset=-1e-6)
-    return _np.hstack([(orbp[0,:] - orbn[0,:])/\
-                       (2e-6), (orbp[2,:] - orbn[2,:])/(2e-6)])
+    orbp = _pyaccel.tracking.find_orbit4(
+        model, indices=indices, energy_offset=+1e-6
+    )
+    orbn = _pyaccel.tracking.find_orbit4(
+        model, indices=indices, energy_offset=-1e-6
+    )
+    return _np.hstack(
+        [
+            (orbp[0, :] - orbn[0, :]) / (2e-6),
+            (orbp[2, :] - orbn[2, :]) / (2e-6),
+        ]
+    )
+
 
 """**kwargs: svals, cut, return_svd
         > svals: integer or strings ("auto" or "all") to limit the quantity of singular values
@@ -120,6 +139,8 @@ def calc_disp(model, indices='bpm'):
         if return_svd=False:
             return: inverse_matrix
     """
+
+
 def calc_pinv(matrix, **kwargs):
     """Calculate Pseudo-Inverse Matrix.
 
@@ -137,23 +158,27 @@ def calc_pinv(matrix, **kwargs):
         tuple: (pseudo-inverse of matrix, U matrix, S matrix, \
             V transpose matrix, number of svals)
     """
-    svals="auto"; cut=5e-3; return_svd=False
+    svals = "auto"
+    cut = 5e-3
+    return_svd = False
     if "svals" in kwargs:
-        svals = kwargs['svals']
+        svals = kwargs["svals"]
     if "cut" in kwargs:
-        cut = kwargs['cut']
+        cut = kwargs["cut"]
     if "return_svd" in kwargs:
-        return_svd = kwargs['return_svd']
+        return_svd = kwargs["return_svd"]
     u, smat, vh = _np.linalg.svd(matrix, full_matrices=False)
     if isinstance(svals, (_np.integer, int)):
-        ismat =  _np.zeros_like(smat)
-        ismat += 1/smat
+        ismat = _np.zeros_like(smat)
+        ismat += 1 / smat
         ismat[svals:] = 0
     elif isinstance(svals, str):
-        if svals == 'all':
-            ismat = 1/smat
-        if svals == 'auto':
-            ismat = _np.array([1/s if s >= cut*smat[0] else 0 for s in smat])
+        if svals == "all":
+            ismat = 1 / smat
+        if svals == "auto":
+            ismat = _np.array(
+                [1 / s if s >= cut * smat[0] else 0 for s in smat]
+            )
     else:
         raise ValueError('"svals" should be int or string: "all" or "auto"')
     imat = vh.T @ _np.diag(ismat) @ u.T
@@ -161,6 +186,7 @@ def calc_pinv(matrix, **kwargs):
         return imat, u, smat, vh, len(_np.nonzero(ismat)[0])
     else:
         return imat
+
 
 def rmk_orbit_corr(OrbitCorr_obj, jacobian_matrix=None, goal_orbit=None):
     """
@@ -185,7 +211,7 @@ def rmk_orbit_corr(OrbitCorr_obj, jacobian_matrix=None, goal_orbit=None):
     bestfigm = OrbitCorr_obj.get_figm(dorb)
     maxit = 0
     for _ in range(OrbitCorr_obj.params.maxnriters):
-        dkicks = -1*_np.dot(ismat, dorb)
+        dkicks = -1 * _np.dot(ismat, dorb)
         kicks, saturation_flag = OrbitCorr_obj._process_kicks(dkicks)
         if saturation_flag:
             return OrbitCorr_obj.CORR_STATUS.SaturationFail, maxit
@@ -207,9 +233,18 @@ def rmk_orbit_corr(OrbitCorr_obj, jacobian_matrix=None, goal_orbit=None):
             ismat = OrbitCorr_obj.get_inverse_matrix(jmat)
     return OrbitCorr_obj.CORR_STATUS.ConvergenceFail, maxit
 
-__all__ = ('calc_pinv', 'calc_rms',
-           'calc_disp', 'calc_vdisp', 'calc_hdisp',
-           'get_error', 'get_errors',
-           'set_error','set_errors',
-           'add_delta_error','add_delta_errors',
-           'rmk_correct_orbit')
+
+__all__ = (
+    "calc_pinv",
+    "calc_rms",
+    "calc_disp",
+    "calc_vdisp",
+    "calc_hdisp",
+    "get_error",
+    "get_errors",
+    "set_error",
+    "set_errors",
+    "add_delta_error",
+    "add_delta_errors",
+    "rmk_correct_orbit",
+)
