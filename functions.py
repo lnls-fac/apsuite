@@ -115,7 +115,7 @@ def el_idx_collector(acc, lname):
     return all_index
 
 def plot_track(acc, lista_resul, lista_idx,
-               lista_off, param, element_idx, accep, delt, f_dens, filename):
+               lista_off, param, element_idx, accep, delt, f_dens):
     """ This function shows the touschek scattering density for s,
     the number of turns before electron loss and a graphic
     containing the magnetic lattice with the lost positions
@@ -125,9 +125,9 @@ def plot_track(acc, lista_resul, lista_idx,
     of beta and eta functions"""
     # ----------------
 
-    cm = 1/2.54 # 'poster'
+    cm = 1/2.54  # 'poster'
 
-    twi0,*_ = _pyaccel.optics.calc_twiss(acc,indices='open')
+    twi0,*_ = _pyaccel.optics.calc_twiss(acc, indices='open')
     betax = twi0.betax
     betax = betax*(1/5)
 
@@ -162,7 +162,7 @@ def plot_track(acc, lista_resul, lista_idx,
                  lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[1][element_idx]
         indx = _np.argmin(_np.abs(lista_off-acp_s))
-        a3.plot(spos[lista_idx][:indx], lista_off[:indx]*1e2,'b.',
+        a3.plot(spos[lista_idx][:indx], lista_off[:indx]*1e2, 'b.',
             label=r'accep. limit', alpha=0.25)
         for item in lista_resul:
             a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
@@ -171,8 +171,8 @@ def plot_track(acc, lista_resul, lista_idx,
         a3.plot(spos[int(lista_resul[1][-1])],
                  lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
         acp_s = accep[0][element_idx]
-        indx = _np.argmin(_np.abs(lista_off-acp_s))
-        a3.plot(spos[lista_idx][indx:], -lista_off[indx:]*1e2,'b.',
+        indx = _np.argmin(_np.abs(lista_off+acp_s))
+        a3.plot(spos[lista_idx][:indx], -lista_off[:indx]*1e2, 'b.',
             label=r'accep. limit', alpha=0.25)
         for item in lista_resul:
             a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
@@ -185,7 +185,7 @@ def plot_track(acc, lista_resul, lista_idx,
     a2.set_title(r'$\delta \times$ lost turn', fontsize=20)
     a2.set_xlabel(r'number of turns', fontsize=25)
     for iten in lista_resul:
-        a2.plot(iten[0], iten[2]*1e2, 'k.', label = '')
+        a2.plot(iten[0], iten[2]*1e2, 'k.')
 
 
     a3.set_title(r'tracking ', fontsize=20)
@@ -195,10 +195,10 @@ def plot_track(acc, lista_resul, lista_idx,
 
     _plt.hlines(1e2*acp_s, spos[0],
                 spos[-1], color='black', linestyles='dashed', alpha=0.5)
-    #hlines -> shows accep. limit
+    # hlines -> shows accep. limit
 
     a3.plot(spos, _np.sqrt(betax),
-            color='orange', label=r'$ \sqrt{\beta_x}  $') # beta function
+            color='orange', label=r'$ \sqrt{\beta_x}  $')  # beta function
     _pyaccel.graphics.draw_lattice(acc, offset=-0.5, height=0.5, gca=True)
 
     stri = f'{acc[element_idx].fam_name}, ({spos[element_idx]:.2f} m)'
@@ -207,17 +207,16 @@ def plot_track(acc, lista_resul, lista_idx,
     a3.legend(loc='upper right', ncol=1, fontsize=15)
 
     # fig.tight_layout()
-    fig.savefig(filename, dpi=150)
     fig.show()
 
-def t_list(elmnt):
-    """."""
-    #this condition significates that if the input is only a number, then
-    #the fucntion transforms it into a list to avoid errors.
-    if isinstance(elmnt,(float,int)):
-        return [elmnt]
-    else:
-        return list(elmnt)
+# def t_list(elmnt): # não sei se isso é útil
+#     """."""
+#     #this condition significates that if the input is only a number, then
+#     #the fucntion transforms it into a list to avoid errors.
+#     if isinstance(elmnt,(float,int)):
+#         return [elmnt]
+#     else:
+#         return list(elmnt)
 
 
 def f_function_arg_mod(kappa, kappam, b1_, b2_, norm):
