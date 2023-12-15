@@ -11,6 +11,7 @@ from mathphys.beam_optics import beam_rigidity as _beam_rigidity
 import pandas as _pd
 import scipy.integrate as scyint
 import pyaccel as _pyaccel
+from mathphys.functions import load_pickle
 
 class TousAnalysis():
     """Class for the analysis of electron losses along the ring."""
@@ -30,8 +31,10 @@ class TousAnalysis():
         self._amp_and_limidx = None
         self._sc_accps = None
         self._accep = None
-        self._inds_pos = None
-        self._inds_neg = None
+        self._inds_pos = load_pickle("/".join(__file__.split('/')[:-1])
+                                    + '/ph_lim.pickle')
+        self._inds_neg = load_pickle("/".join(__file__.split('/')[:-1])
+                                    + '/ph_lim_neg.pickle')
         self._amps_pos = None
         self._amps_neg = None
         self.num_part = 50000
@@ -193,6 +196,23 @@ class TousAnalysis():
 
         return res
 
+    def single_pos_track_d(self, single_spos, par):
+        """Single position tracking."""
+        self._model.cavity_on = True
+        self._model.radiation_on = True
+        self._model.vchamber_on = True
+        s = self.spos
+
+        index = _np.argmin(_np.abs(s-single_spos))
+        if 'pos' in par:
+            res = to_fu.track_eletrons_d(self.deltas, self.nturns, index,
+                                          self._model, pos_x=1e-5, pos_y=3e-6)
+        elif 'neg' in par:
+            res = to_fu.track_eletrons_d(-self.deltas, self.nturns, index,
+                                          self._model, pos_x=1e-5, pos_y=3e-6)
+
+        return res
+
     def get_weighting_tous(self, single_spos, npt=5000):
         """."""
         scalc, daccp, daccn = to_fu.get_scaccep(
@@ -260,16 +280,36 @@ class TousAnalysis():
         elif 'neg' in par:
             return res, fn*delta_, -deltn*1e2
 
+    def get_trackndens_new(self, single_spos, par):
+        """Concatenates tracking and touschek loss dens."""
+        # if len(to_fu.t_list(single_spos)) != 1: # Não sei se isso é útil
+        #     raise ValueError('This function suports only one s position')
+
+        fdensp, fdensn, deltp, deltn = self.get_weighting_tous(single_spos)
+
+        fp = fdensp.squeeze()
+        fn = fdensn.squeeze()
+
+        dic = self.single_pos_track_d(single_spos, par)
+        deltas = dic['energy_deviation']
+        delta_ = _np.abs(_np.diff(deltas)[0])
+
+        if 'pos' in par:
+            return dic, fp*delta_, deltp *1e2
+        elif 'neg' in par:
+            return dic, fn*delta_, -deltn*1e2
+
     # this function plot the graphic of tracking and the touschek scattering
     # distribution for one single position
-    def plot_track_tousdens(self, single_spos, par, accep):
+
+    def plot_track_tousdens_def(self, single_spos, par, accep):
         """Plot the results of tracking and the tous. scat. loss density.
 
         single_spos = single possition.
         par = defines the analysis (positive or negative).
         accep = touschek scattering acceptance.
         """
-        res, fp, dp = self.get_trackndens(single_spos, par)
+        dic, fp, dp = self.get_trackndens_new(single_spos, par)
         s = self.spos
 
         if 'pos' in par:
@@ -277,7 +317,8 @@ class TousAnalysis():
         elif 'neg' in par:
             inds = _np.intp(self.inds_neg)
         index = _np.argmin(_np.abs(s-single_spos))
-        to_fu.plot_track(self.accelerator, res, inds,
+
+        to_fu.plot_track_d(self.accelerator, dic, inds,
                 self.off_energy, par, index, accep, dp, fp)
 
     def plot_normtousd(self, spos):
@@ -416,29 +457,71 @@ class TousAnalysis():
 
         return all_track, indices
 
+    def get_track_def(self, l_scattered_pos, scrap, vchamber):
+        """Tracking for getting the loss profile along the ring.
+
+        l_scattered_pos = scattered positions (list or numpy.array).
+        scrap = if True, the vchamber's height will be changed.
+        vchmaber = defines the new vchamber's apperture.
+        """
+        all_track = []
+        indices = []
+        spos = self.spos
+
+        self._model.radiation_on = True
+        self._model.cavity_on = True
+        self._model.vchamber_on = True
+
+        if scrap:
+            self.set_vchamber_scraper(vchamber)
+
+        for _, scattered_pos in enumerate(l_scattered_pos):
+
+            index = _np.argmin(_np.abs(scattered_pos-spos))
+            indices.append(index)
+            dic = to_fu.track_eletrons_d(self._deltas, self.nturns,
+                                        index, self._model)
+            all_track.append(dic)
+
+        hx = self._model_fit[self.scraph_inds[0]].hmax
+        hn = self._model_fit[self.scraph_inds[0]].hmin
+        vx = self._model_fit[self.scrapv_inds[0]].vmax
+        vn = self._model_fit[self.scrapv_inds[0]].vmin
+        vchamber = [hx, hn, vx, vn]
+
+        self.set_vchamber_scraper(vchamber)
+
+        return all_track, indices
+
     def find_data(self, l_scattered_pos, scrap, vchamber):
         # não consegui resolvero erro que o ruff indicou nessa função
         """Generating the data for the plot."""
-        all_track, indices = self.get_track(l_scattered_pos, scrap, vchamber)
+        all_track, indices = self.get_track_def(l_scattered_pos,
+                                                scrap, vchamber)
         spos = self.spos
-
         fact = 0.03
-        # toushcek scattering rate
-        tous_rate = self.ltime.touschek_data['rate']
+
+        tous_rate = self.ltime.touschek_data['rate']  # scattering rate
         prob, lostp, all_lostp = [], [], []
 
-        for j, single_track in enumerate(all_track):
+        # comentar os dois métodos implementados.
+        # um deles parece ser mais rápido.
+        # for j, single_track in enumerate(all_track):
+        for j, dic in enumerate(all_track):
 
             index = indices[j]
 
-            lostinds = _np.zeros(len(single_track))
-            deltas = _np.zeros(len(single_track))
-            for idx, iten in enumerate(single_track):
-                _, ellost, delta = iten
-                lostinds[idx] = ellost
-                deltas[idx] = delta
+            lostinds = dic['element_lost']
+            deltas = dic['energy_deviation']
 
-            lostinds = _np.intp(lostinds)
+            # lostinds = _np.zeros(len(single_track))
+            # deltas = _np.zeros(len(single_track))
+            # for idx, iten in enumerate(single_track):
+            #     _, ellost, delta = iten
+            #     lostinds[idx] = ellost
+            #     deltas[idx] = delta
+            # lostinds = _np.intp(lostinds)
+
             lost_positions = _np.round(spos[lostinds], 2)
 
             step = int((deltas[0]+deltas[-1])/fact)
@@ -549,7 +632,7 @@ class TousAnalysis():
 
             if not idx:
                 dic_res['lost_positions'] = all_lostp
-                stri = f'{scattered_pos:s}'
+                stri = f'{scattered_pos}'
                 dic_res[stri] = scat_data
             else:
                 stri = f'{scattered_pos}'

@@ -75,6 +75,127 @@ def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
 
     return turnl_element
 
+def track_eletrons_d(deltas, n_turn, element_idx,
+                   model, pos_x=1e-5, pos_y=3e-6):
+    """Tracking simulation for touschek scattering that ocorred in element_idx.
+
+    model = accelerator.
+    deltas = e_dev
+    n_turn = number of turns desired.
+    pos_x = small shake in x
+    pos_y =   ||    ||  || y
+    """
+    orb = _pyaccel.tracking.find_orbit6(model, indices=[0, element_idx])
+    orb = orb[:, 1]
+
+    rin = _np.zeros((6, deltas.size))
+    rin += orb[:, None]
+    rin[0] += pos_x
+    rin[2] += pos_y
+    rin[4] += deltas
+
+    track = _pyaccel.tracking.ring_pass(
+        model, rin, nr_turns=n_turn, turn_by_turn=True,
+        element_offset=element_idx, parallel=True)
+
+    _, _, turn_lost, element_lost, _ = track
+
+    dic = {}
+    t_lost, e_lost, delta = [], [], []
+
+    for i, item in enumerate(turn_lost):
+        if item == n_turn and element_lost[i] == element_idx:
+            pass
+        else:
+            t_lost.append(item)
+            e_lost.append(element_lost[i])
+            delta.append(deltas[i])
+
+    dic['turn_lost'] = _np.array(t_lost)
+    dic['element_lost'] = _np.intp(e_lost)
+    dic['energy_deviation'] = _np.array(delta)
+
+    return dic
+
+def plot_track_d(acc, dic_tracked, index_list,
+               offs_list, par, element_idx, accep, delt, f_dens):
+    """Plot the tracking results for a given s position.
+
+    acc =  accelerator.
+    dic_tracked = dictionary of informations provided by tracking.
+    index_list = e_dev for calculating the physical limitants.
+    offs_list = list of e_dev used in tracking.
+    par = defines the analysis for positive or negative e_dev.
+    element_idx = defines initial conditions for tracking.
+    accep = touschek energy acceptance.
+    delt = e_dev for calculating the touschek loss rate density.
+    fdens = touschek loss rate density.
+    """
+    # ----------------
+
+    turn_lost = dic_tracked['turn_lost']
+    element_lost = dic_tracked['element_lost']
+    deltas = dic_tracked['energy_deviation']*1e2
+
+    cm = 1/2.54  # 'poster'
+    twi0, *_ = _pyaccel.optics.calc_twiss(acc, indices='open')
+    betax = twi0.betax
+    betax = betax*(1/5)
+    spos = _pyaccel.lattice.find_spos(acc)
+
+    fig = _plt.figure(figsize=(38.5*cm, 18*cm))
+    gs = _plt.GridSpec(1, 3, left=0.1,
+        right=0.98, wspace=0.03, top=0.95, bottom=0.1, width_ratios=[2, 3, 8])
+    a1 = fig.add_subplot(gs[0, 0])
+    a2 = fig.add_subplot(gs[0, 1], sharey=a1)
+    a3 = fig.add_subplot(gs[0, 2], sharey=a1)
+    a1.tick_params(axis='both', labelsize=18)
+    a2.tick_params(axis='y', which='both',
+                   left=False, right=False, labelleft=False, labelsize=18)
+    a3.tick_params(axis='y', which='both',
+                   left=False, right=False, labelleft=False, labelsize=18)
+    a2.tick_params(axis='both', labelsize=18)
+    a3.tick_params(axis='both', labelsize=18)
+    a1.set_title(r'$\delta \times scat. rate$', fontsize=20)
+    a2.set_title(r'$\delta \times$ lost turn', fontsize=20)
+    a3.set_title(r'tracking ', fontsize=20)
+
+    a1.set_xlabel(r'$\tau _T$ [1/s]', fontsize=25)
+    a2.set_xlabel(r'number of turns', fontsize=25)
+    a3.set_xlabel(r'$s$ [m]', fontsize=25)
+
+    a1.grid(True, alpha=0.5, ls='--', color='k', axis='y')
+    a2.grid(True, alpha=0.5, ls='--', color='k', axis='y')
+    a3.grid(True, alpha=0.5, ls='--', color='k', axis='y')
+    _plt.subplots_adjust(wspace=0.1)
+
+    if 'pos' in par:
+        a1.set_ylabel(r'positive $\delta$ [%]', fontsize=25)
+        a3.plot(spos[element_lost], deltas, 'r.', label='lost pos. (track)')
+        acp_s = accep[1][element_idx]
+        indx = _np.argmin(_np.abs(offs_list-acp_s))
+        a3.plot(spos[index_list][:indx], offs_list[:indx]*1e2, 'b.',
+            label=r'accep. limit', alpha=0.25)
+
+    elif 'neg' in par:
+        a1.set_ylabel(r'negative $\delta$ [%]', fontsize=25)
+        a3.plot(spos[element_lost], deltas, 'r.', label='lost pos. (track)')
+        acp_s = accep[0][element_idx]
+        indx = _np.argmin(_np.abs(offs_list+acp_s))
+        a3.plot(spos[index_list][:indx], -offs_list[:indx]*1e2, 'b.',
+            label=r'accep. limit', alpha=0.25)
+
+    a1.plot(f_dens, delt, label='Scattering touschek rate', color='black')
+    a2.plot(turn_lost, deltas, 'k.')
+    stri = f'{acc[element_idx].fam_name}, ({spos[element_idx]:.2f} m)'
+    a3.plot(spos[element_idx], 0, 'ko', label=stri)
+    a3.plot(spos, _np.sqrt(betax),
+            color='orange', label=r'$ \sqrt{\beta_x}  $')
+    _plt.hlines(acp_s*1e2, spos[0],
+            spos[-1], color='black', linestyles='dashed', alpha=0.5)
+    _pyaccel.graphics.draw_lattice(acc, offset=-0.5, height=0.5, gca=True)
+    a3.legend(loc='upper right', ncol=1, fontsize=15)
+    fig.show()
 
 def el_idx_collector(acc, lname):
     """Selects the index of an especific element.
@@ -119,106 +240,6 @@ def el_idx_collector(acc, lname):
         all_index.append(element_index)
 
     return all_index
-
-def plot_track(acc, lista_resul, lista_idx,
-               lista_off, par, element_idx, accep, delt, f_dens):
-    """Plot the tracking results for a given s position.
-
-    acc =  accelerator.
-    lista_resul = list of information provided by tracking.
-    lista_idx = e_dev for calculating the physical limitants.
-    lista_off = list of e_dev used in tracking.
-    par = defines the analysis for positive or negative e_dev.
-    element_idx = defines initial conditions for tracking.
-    accep = touschek energy acceptance.
-    delt = e_dev for calculating the touschek loss rate density.
-    fdens = touschek loss rate density.
-    """
-    # ----------------
-
-    cm = 1/2.54  # 'poster'
-
-    twi0, *_ = _pyaccel.optics.calc_twiss(acc, indices='open')
-    betax = twi0.betax
-    betax = betax*(1/5)
-
-    spos = _pyaccel.lattice.find_spos(acc)
-
-    fig = _plt.figure(figsize=(38.5*cm, 18*cm))
-    gs = _plt.GridSpec(1, 3, left=0.1,
-        right=0.98, wspace=0.03, top=0.95, bottom=0.1, width_ratios=[2, 3, 8])
-    a1 = fig.add_subplot(gs[0, 0])
-    a2 = fig.add_subplot(gs[0, 1], sharey=a1)
-    a3 = fig.add_subplot(gs[0, 2], sharey=a1)
-    a2.tick_params(axis='y', which='both',
-                   left=False, right=False, labelleft=False)
-    a3.tick_params(axis='y', which='both',
-                   left=False, right=False, labelleft=False)
-
-    a1.grid(True, alpha=0.5, ls='--', color='k')
-    a1.tick_params(axis='both', labelsize=18)
-    a2.grid(True, alpha=0.5, ls='--', color='k')
-    a2.tick_params(axis='both', labelsize=18)
-    a3.grid(True, alpha=0.5, ls='--', color='k')
-    a3.tick_params(axis='both', labelsize=18)
-    a1.xaxis.grid(False)
-    a2.xaxis.grid(False)
-    a3.xaxis.grid(False)
-    _plt.subplots_adjust(wspace=0.1)
-
-    if 'pos' in par:
-        a1.set_ylabel(r'positive $\delta$ [%]', fontsize=25)
-
-        a3.plot(spos[int(lista_resul[1][-1])],
-                 lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
-        acp_s = accep[1][element_idx]
-        indx = _np.argmin(_np.abs(lista_off-acp_s))
-        a3.plot(spos[lista_idx][:indx], lista_off[:indx]*1e2, 'b.',
-            label=r'accep. limit', alpha=0.25)
-        for item in lista_resul:
-            a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
-    elif 'neg' in par:
-        a1.set_ylabel(r'negative $\delta$ [%]', fontsize=25)
-        a3.plot(spos[int(lista_resul[1][-1])],
-                 lista_resul[2][-1]*1e2, 'r.', label='lost pos. (track)')
-        acp_s = accep[0][element_idx]
-        indx = _np.argmin(_np.abs(lista_off+acp_s))
-        a3.plot(spos[lista_idx][:indx], -lista_off[:indx]*1e2, 'b.',
-            label=r'accep. limit', alpha=0.25)
-        for item in lista_resul:
-            a3.plot(spos[int(item[1])], item[2]*1e2, 'r.')
-
-    a1.set_title(r'$\delta \times scat. rate$', fontsize=20)
-    a1.set_xlabel(r'$\tau _T$ [1/s]', fontsize=25)
-
-    a1.plot(f_dens, delt, label='Scattering touschek rate', color='black')
-
-    a2.set_title(r'$\delta \times$ lost turn', fontsize=20)
-    a2.set_xlabel(r'number of turns', fontsize=25)
-    for iten in lista_resul:
-        a2.plot(iten[0], iten[2]*1e2, 'k.')
-
-
-    a3.set_title(r'tracking ', fontsize=20)
-    # plot the physical limitant untill the acceptance limit
-    # a3.plot(spos[lista_idx][:indx], lista_off[:indx]*1e2,'b.',
-    #         label=r'accep. limit', alpha=0.25)
-
-    _plt.hlines(1e2*acp_s, spos[0],
-                spos[-1], color='black', linestyles='dashed', alpha=0.5)
-    # hlines -> shows accep. limit
-
-    a3.plot(spos, _np.sqrt(betax),
-            color='orange', label=r'$ \sqrt{\beta_x}  $')  # beta function
-    _pyaccel.graphics.draw_lattice(acc, offset=-0.5, height=0.5, gca=True)
-
-    stri = f'{acc[element_idx].fam_name}, ({spos[element_idx]:.2f} m)'
-    a3.plot(spos[element_idx], 0, 'ko', label=stri)
-    a3.set_xlabel(r'$s$ [m]', fontsize=25)
-    a3.legend(loc='upper right', ncol=1, fontsize=15)
-
-    # fig.tight_layout()
-    fig.show()
 
 # def t_list(elmnt): # não sei se isso é útil
 #     """."""
