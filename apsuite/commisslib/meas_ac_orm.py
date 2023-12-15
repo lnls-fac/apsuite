@@ -180,6 +180,10 @@ class MeasACORM(_ThreadBaseClass):
             freqs (numpy.ndarray): array with frequencies to fit.
             num_cycles (numpy.ndarray, optional): number of cycles of each
                 frequency. If not provided, all data range will be considered.
+            idx_ini (int|list|tuple|numpy.ndarray, optional): starting index
+                for fitting. If it is an iterable, must have the same size as
+                freqs. Defaults to None, which means the first index will be
+                the starting point.
 
         Returns:
             numpy.ndarray: fitting matrix (len(tim), 2*len(freqs))
@@ -229,14 +233,22 @@ class MeasACORM(_ThreadBaseClass):
                 columns of data.
             freqs (numpy.ndarray, K): K frequencies to fit Fourier components.
             dtim (numpy.ndarray, N): time vector for data columns.
-            num_cycles (num.ndarray, K): number of cycles of each frequency.
-                If not provided, all data range will be considered.
+            num_cycles (num.ndarray, K, optional): number of cycles of each
+                frequency. If not provided, all data range will be considered.
+                Not used if pinv is not None.
+            idx_ini (int|list|tuple|numpy.ndarray, optional): starting index
+                for fitting. If it is an iterable, must have the same size as
+                freqs. Defaults to None, which means the first index will be
+                the starting point. Not used if pinv is not None.
+            pinv (numpy.ndarray, Mx2K, optional): if provided must be the
+                pseudo inverve of the fitting matrix. Defaults to None, which
+                means the fitting matrix and its pseudo-inverse will be
+                calculated.
 
         Returns:
-            numpy.ndarray, KxM: Fourier amplitudes.
-            numpy.ndarray, KxM: Fourier phases (phase==0 means pure sine).
-            numpy.ndarray, KxM: Fourier cosine coefficients.
-            numpy.ndarray, KxM: Fourier sine coefficients.
+            cos (numpy.ndarray, KxM): Fourier cosine coefficients.
+            sin (numpy.ndarray, KxM): Fourier sine coefficients.
+            pinv (numpy.ndarray, Mx2K): pseudo-inverse of fitting matrix.
 
         """
         if pinv is None:
@@ -442,15 +454,18 @@ class MeasACORM(_ThreadBaseClass):
         Args:
             mag_idx_ini ([type], optional): initial index of orbit waveform
                 where magnets excitation start. Defaults to None.
-            mag_min_freq ([type], optional): Frequencies below this value will
-                be filtered out before fitting of magnets excitation.`None`
-                means no high pass filter will be applied. Defaults to `None`.
-            mag_max_freq ([type], optional): Frequencies above this value will
-                be filtered out before fitting of magnets excitation. `None`
-                means no low pass filter will be applied. Defaults to `None`.
-            rf_transition_length (int, optional): Number of indices to ignore
+            rf_step_trans_len (int, optional): Number of indices to ignore
                 right before or after RF frequency changes in RF line
-                measurements. Defaults to 10.
+                measurements. Defaults to 10. Only used if step mode was used
+                as RFMode in measurement.
+            rf_phase_central_freq (float, optional): central frequency around
+                which data will be filtered in RF line analysis. Defaults to
+                None, which means the peak frequency in the range [1700, 2300]
+                Hz will be used. Only used if phase mode was used as RFMode in
+                measurement.
+            rf_phase_window (float, optional): frequency width of the filter
+                in RF line analysis. Defaults to 10Hz. Only used if phase mode
+                was used as RFMode in measurement.
 
         """
         self.analysis['magnets'] = self._process_magnets(
