@@ -10,6 +10,8 @@ __model = _pymodels.si.create_accelerator()
 __model.radiation_on = True
 __model.vchamber_on = True
 __model.cavity_on = True
+__spos = _find_spos(__model, indices="closed")
+__bpmidx = _find_indices(__model, "fam_name", "BPM")
 
 
 def model_base():
@@ -19,16 +21,6 @@ def model_base():
         pyaccel.accelerator: standart SIRIUS model
     """
     return _deepcopy(__model)
-
-
-__mi_idx = sorted(
-    _find_indices(__model, "fam_name", "mib")
-    + _find_indices(__model, "fam_name", "mip")
-    + _find_indices(__model, "fam_name", "mia")
-    + [len(__model)]
-)
-
-__spos = _find_spos(__model, indices="closed")
 
 
 def si_spos():
@@ -86,17 +78,35 @@ def si_quadrupoles():
     ]
 
 
+def si_elems():
+    """Default SIRIUS elements families."""
+    return si_dipoles() + si_quadrupoles() + si_sextupoles()
+
+
 def si_famdata():
     """Default SIRIUS families data."""
     return _deepcopy(_pymodels.si.families.get_family_data(__model))
 
 
-__bpmidx = _find_indices(__model, "fam_name", "BPM")
-
-
 def si_bpmidx():
     """Default SIRIUS BPM's indices."""
     return _deepcopy(__bpmidx)
+
+
+def si_sectors():
+    """Default sectors of SIRIUS ring."""
+    return list(range(1, 21))
+
+
+def std_misaligment_tolerance():
+    """Default misalignment and rotation expected error."""
+    return {
+        "dx": {"B": 40e-6, "Q": 40e-6, "S": 40e-6},
+        "dy": {"B": 40e-6, "Q": 40e-6, "S": 40e-6},
+        "dr": {"B": 0.3e-3, "Q": 0.3e-3, "S": 0.3e-3},
+        "drp": {"B": 0.3e-3, "Q": 0.3e-3, "S": 0.3e-3},
+        "dry": {"B": 0.3e-3, "Q": 0.3e-3, "S": 0.3e-3},
+    }
 
 
 def std_misaligment_types():
@@ -108,68 +118,4 @@ def std_misaligment_types():
     'drp' : Rotation pitch misalignment
     'dry' : Rotation yaw misalignment
     """
-    return ["dx", "dy", "dr", "drp", "dry"]  # , 'dksl'])
-
-
-__all_sects = list(range(1, 21))
-
-
-def si_sectors():
-    """Default sectors of SIRIUS ring."""
-    return _deepcopy(__all_sects)
-
-
-def si_elems():
-    """Default SIRIUS elements families."""
-    return [
-        "B1",
-        "B2",
-        "BC",
-        "QFA",
-        "QDA",
-        "QFB",
-        "QDB1",
-        "QDB2",
-        "QFP",
-        "QDP1",
-        "QDP2",
-        "Q1",
-        "Q2",
-        "Q3",
-        "Q4",
-        "SDA0",
-        "SDA1",
-        "SDA2",
-        "SDA3",
-        "SFA0",
-        "SFA1",
-        "SFA2",
-        "SDB0",
-        "SDB1",
-        "SDB2",
-        "SDB3",
-        "SFB0",
-        "SFB1",
-        "SFB2",
-        "SDP0",
-        "SDP1",
-        "SDP2",
-        "SDP3",
-        "SFP0",
-        "SFP1",
-        "SFP2",
-    ]
-
-
-__deltas = {
-    "dx": {"B": 40e-6, "Q": 40e-6, "S": 40e-6},
-    "dy": {"B": 40e-6, "Q": 40e-6, "S": 40e-6},
-    "dr": {"B": 0.3e-3, "Q": 0.3e-3, "S": 0.3e-3},
-    "drp": {"B": 0.3e-3, "Q": 0.3e-3, "S": 0.3e-3},
-    "dry": {"B": 0.3e-3, "Q": 0.3e-3, "S": 0.3e-3},
-}
-
-
-def std_misaligment_tolerance():
-    """Default misalignment and rotation expected error."""
-    return _deepcopy(__deltas)
+    return ["dx", "dy", "dr", "drp", "dry"]

@@ -1,4 +1,5 @@
 """Module 'buttons' for the class Object Button."""
+
 from copy import deepcopy as _deepcopy
 
 import numpy as _np
@@ -120,105 +121,6 @@ class Button:
             _OC.set_kicks(_INIT_KICKS)
         return disp
 
-    def __force_init_old__(self):
-        """."""
-        elem = self._elem
-        fixpos = -1
-        if elem is not None:
-            if isinstance(elem, str):
-                elem = elem.rsplit("_")
-            if len(elem) == 1:
-                elem = elem[0]
-            else:
-                elem, fixpos = elem[0], int(elem[1])
-
-        sect = self._sect
-
-        if sect is not None:
-            if (
-                not isinstance(sect, (_np.integer, int))
-                or sect < 1
-                or sect > 20
-            ):
-                raise ValueError("problem with sect")
-
-        indices = self._indices
-        # print(elem, fixpos, sect, indices)
-        split_flag = False
-        if indices is not None:
-            if isinstance(indices, (int, _np.integer)):
-                indices = [indices]
-            elif isinstance(indices, (_np.ndarray, list, tuple)) and all(
-                isinstance(i, (_np.integer, int)) for i in indices
-            ):
-                pass
-            else:
-                ValueError("indices passed in wrong format")
-
-            found_elems = [
-                fname
-                for fname in list(
-                    set([_OC_MODEL[int(idx)].fam_name for idx in indices])
-                )
-                if fname in _STD_ELEMS
-            ]
-            if len(found_elems) != 1:
-                raise ValueError("invalid indices")
-            elem = found_elems.pop()
-            indices = [f for f in _fam[elem]["index"] if indices[0] in f]
-            if len(indices) == 1:
-                indices = indices[0]
-        if indices is None:
-            indices = [
-                _fam[elem]["index"][i]
-                for i, s in enumerate(_sects_dict[elem])
-                if s == sect
-            ]
-            if len(indices) == 1:
-                if (
-                    isinstance(indices[0], (list, tuple, _np.ndarray))
-                    and len(indices[0]) > 1
-                ):
-                    indices = indices[0]
-            else:
-                split_flag = True
-
-        spos = (
-            [_SI_SPOS[i[0]] for i in indices]
-            if split_flag
-            else _SI_SPOS[indices[0]]
-        )
-        if (
-            len(set(_sects_dict[elem])) != len(_sects_dict[elem])
-            and split_flag is False
-        ):
-            pos = 0
-            for i, s in enumerate(_sects_dict[elem]):
-                if s == sect:
-                    pos += 1
-                    if indices[0] in _fam[elem]["index"][i]:
-                        break
-            fantasy_name = elem + "_" + str(pos)
-        elif (
-            len(set(_sects_dict[elem])) != len(_sects_dict[elem])
-            and split_flag is True
-        ):
-            fantasy_name = [
-                elem + "_" + str(i + 1) for i in range(len(indices))
-            ]
-        else:
-            fantasy_name = elem
-        if fixpos == -1:
-            self._fantasy_name = fantasy_name
-            self._sect = sect
-            self._spos = spos
-            self._indices = indices
-        else:
-            self._fantasy_name = fantasy_name[fixpos - 1]
-            self._sect = sect
-            self._spos = spos[fixpos - 1]
-            self._indices = indices[fixpos - 1]
-
     @property
     def func(self):
         """."""
@@ -291,15 +193,13 @@ class Button:
     def __force_init__(self):
         """."""
         # Extract elements
-        elem, fixpos, sect, indices = (
-            self._elem,
-            -1,
-            self._sect,
-            self._indices,
-        )
+        elem, sect, indices = (self._elem, self._sect, self._indices)
 
         # Handle sector
         sect = self._handle_sector(sect)
+
+        # Handle elem
+        elem, fixpos = self._handle_elem(elem, sect)
 
         # Handle indices
         elem, sect, indices, split_flag = self._handle_indices(
@@ -307,14 +207,27 @@ class Button:
         )
 
         # Handle fantasy name
-        fantasy_name = self._handle_fantasy_name(
-            elem, sect, indices, split_flag, fixpos
-        )
+        fantasy_name = self._handle_fantasy_name(elem, indices, split_flag)
 
         # Update attributes
         self._update_attributes(
-            fantasy_name, sect, indices, split_flag, fixpos
+            elem, sect, fantasy_name, indices, fixpos
         )
+
+    def _handle_elem(self, elem, sect):
+        """."""
+        fixpos = -1
+        elem = elem.split("_")
+        if len(elem) == 1:
+            elem = elem[0]
+            fixpos = -1
+        else:
+            fixpos = int(elem[1])
+            elem = elem[0]
+            if fixpos > _sects_dict[elem].count(sect) or fixpos <= 0:
+                raise ValueError("invalid postfix number")
+
+        return elem, fixpos
 
     def _handle_sector(self, sect) -> int:
         """."""
@@ -331,7 +244,7 @@ class Button:
             return int(sect)
 
     def _handle_indices(self, elem, sect, indices):
-        """Handle indices logic."""
+        """."""
         split_flag = False
 
         if indices is None:
@@ -348,7 +261,6 @@ class Button:
                     indices = indices[0]
             else:
                 split_flag = True
-
         else:
             if isinstance(indices, (int, _np.integer)):
                 indices = [indices]
@@ -359,13 +271,12 @@ class Button:
             else:
                 raise ValueError("indices passed in wrong format")
 
-            # Logic for handling indices
             elem, indices, split_flag = self._process_indices(elem, indices)
 
         return elem, sect, indices, split_flag
 
     def _process_indices(self, elem, indices):
-        """Process indices logic."""
+        """."""
         found_elems = [
             fname
             for fname in list(
@@ -386,37 +297,9 @@ class Button:
 
         return elem, indices, True if len(indices) != 1 else False
 
-    def _handle_fantasy_name(self, elem, sect, indices, split_flag, fixpos):
+    def _handle_fantasy_name(self, elem, indices, split_flag):
         """Handle fantasy name logic."""
-        # Logic for generating fantasy name
-        fantasy_name = self._generate_fantasy_name(
-            elem, sect, indices, split_flag
-        )
-
-        # Logic for fixing position if necessary
-        if fixpos != -1:
-            fantasy_name = (
-                fantasy_name[fixpos - 1] if split_flag else fantasy_name
-            )
-        return fantasy_name
-
-    def _generate_fantasy_name(self, elem, sect, indices, split_flag):
-        """Generate fantasy name logic."""
-        if (
-            len(set(_sects_dict[elem])) != len(_sects_dict[elem])
-            and split_flag is False
-        ):
-            pos = 0
-            for i, s in enumerate(_sects_dict[elem]):
-                if s == sect:
-                    pos += 1
-                    if indices[0] in _fam[elem]["index"][i]:
-                        break
-            fantasy_name = elem + "_" + str(pos)
-        elif (
-            len(set(_sects_dict[elem])) != len(_sects_dict[elem])
-            and split_flag is True
-        ):
+        if split_flag is True:
             fantasy_name = [
                 elem + "_" + str(i + 1) for i in range(len(indices))
             ]
@@ -425,20 +308,16 @@ class Button:
         return fantasy_name
 
     def _update_attributes(
-        self, fantasy_name, sect, indices, split_flag, fixpos
+        self, elem, sect, fantasy_name, indices, fixpos
     ):
         """Update instance attributes."""
-        if fixpos == -1:
-            self._fantasy_name = fantasy_name
-            self._sect = sect
-            self._spos = (
-                [_SI_SPOS[i[0]] for i in indices]
-                if split_flag
-                else _SI_SPOS[indices[0]]
-            )
-            self._indices = indices
-        else:
-            self._fantasy_name = fantasy_name
-            self._sect = sect
-            self._spos = [_SI_SPOS[i[0]] for i in [indices[fixpos - 1]]]
-            self._indices = [indices[fixpos - 1]]
+        self._elem = elem
+        self._sect = sect
+        self._fantasy_name = fantasy_name
+        self._indices = indices
+        self._spos = [_SI_SPOS[i] for i in indices]
+
+        if fixpos != -1:
+            self._fantasy_name = self._fantasy_name[fixpos - 1]
+            self._indices = self._indices[fixpos - 1]
+            self._spos = self._spos[fixpos - 1]
