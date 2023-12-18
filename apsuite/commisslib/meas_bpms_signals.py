@@ -192,7 +192,7 @@ class AcqBPMsSignals(_BaseClass):
         fambpms = self.devices['fambpms']
         prms = self.params
         fambpms.mturn_signals2acq = self.params.signals2acq
-        return fambpms.mturn_config_acquisition(
+        return fambpms.config_mturn_acquisition(
             nr_points_after=prms.nrpoints_after,
             nr_points_before=prms.nrpoints_before,
             acq_rate=prms.acq_rate, repeat=prms.acq_repeat)
@@ -201,25 +201,28 @@ class AcqBPMsSignals(_BaseClass):
         """."""
         fambpms = self.devices['fambpms']
         ret = self.prepare_bpms_acquisition()
-        tag = self._bpm_tag(idx=abs(ret)-1)
+        tag = self._bpm_tag(idx=abs(int(ret))-1)
         if ret < 0:
             print(tag + ' did not finish last acquisition.')
         elif ret > 0:
             print(tag + ' is not ready for acquisition.')
 
-        fambpms.mturn_reset_flags_and_update_initial_timestamps()
+        fambpms.reset_mturn_initial_state()
         self.trigger_timing_signal()
 
         time0 = _time.time()
-        ret = fambpms.mturn_wait_update(timeout=self.params.timeout)
+        ret = fambpms.wait_update_mturn(timeout=self.params.timeout)
         print(f'it took {_time.time()-time0:02f}s to update bpms')
         if ret != 0:
             print('There was a problem with acquisition')
             if ret > 0:
-                tag = self._bpm_tag(idx=ret-1)
-                print('This BPM did not update: ' + tag)
+                tag = self._bpm_tag(idx=int(ret)-1)
+                pos = fambpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                print('This BPM did not update: ' + tag + ', signal ' + pos)
             elif ret == -1:
                 print('Initial timestamps were not defined')
+            elif ret == -2:
+                print('Signals size changed.')
             return
         self.data = self.get_data()
 

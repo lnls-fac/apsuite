@@ -1132,7 +1132,7 @@ class MeasACORM(_ThreadBaseClass):
 
         self.data['magnets'] = self._do_measure_magnets()
         self._set_timing_state(tim_state)
-        self._log(f'All measurements finished!!')
+        self._log('All measurements finished!!')
 
     def _do_measure_bpms_noise(self):
         self._meas_finished_ok = True
@@ -1149,9 +1149,11 @@ class MeasACORM(_ThreadBaseClass):
         nr_points = int(_np.ceil(nr_points))
         ret = self._config_bpms(nr_points, rate='FAcq')
         if ret < 0:
-            self._log(f'BPM {-ret-1:d} did not finish last acquisition.')
+            idx = -int(ret)-1
+            self._log(f'BPM {idx:d} did not finish last acquisition.')
         elif ret > 0:
-            self._log(f'BPM {ret-1:d} is not ready for acquisition.')
+            idx = int(ret)-1
+            self._log(f'BPM {idx:d} is not ready for acquisition.')
         if ret:
             self._meas_finished_ok = False
         self._config_timing()
@@ -1159,18 +1161,25 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         self._log('    Sending Trigger signal...', end='')
-        self.bpms.mturn_reset_flags_and_update_initial_timestamps()
+        self.bpms.reset_mturn_initial_state()
         self.devices['evt_study'].cmd_external_trigger()
         self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         self._log('    Waiting BPMs to update...', end='')
-        ret = self.bpms.mturn_wait_update(timeout=par.timeout_bpms)
-        if ret:
-            self._log(
-                'Problem: timed out waiting BPMs update. '
-                f'Error code: {ret:d}')
+        ret = self.bpms.wait_update_mturn(timeout=par.timeout_bpms)
+        if ret != 0:
+            if ret > 0:
+                tag = self.bpms.bpm_names[int(ret)-1]
+                pos = self.bpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                self._log(
+                    'Problem: This BPM did not update: ' + tag
+                    + ', signal ' + pos)
+            elif ret == -1:
+                self._log('Problem: Initial timestamps were not defined.')
+            elif ret == -2:
+                self._log('Problem: signals size changed.')
             self._meas_finished_ok = False
         self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -1218,7 +1227,7 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         self._log('    Sending Trigger signal...', end='')
-        self.bpms.mturn_reset_flags_and_update_initial_timestamps()
+        self.bpms.reset_mturn_initial_state()
         self.devices['evt_study'].cmd_external_trigger()
         self._log(f'    Done! ET: {_time.time()-t00:.2f}s')
 
@@ -1233,11 +1242,18 @@ class MeasACORM(_ThreadBaseClass):
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         self._log('    Waiting BPMs to update...', end='')
-        ret = self.bpms.mturn_wait_update(timeout=par.timeout_bpms)
-        if ret:
-            self._log(
-                'Problem: timed out waiting BPMs update. '
-                f'Error code: {ret:d}')
+        ret = self.bpms.wait_update_mturn(timeout=par.timeout_bpms)
+        if ret != 0:
+            if ret > 0:
+                tag = self.bpms.bpm_names[int(ret)-1]
+                pos = self.bpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                self._log(
+                    'Problem: This BPM did not update: ' + tag
+                    + ', signal ' + pos)
+            elif ret == -1:
+                self._log('Problem: Initial timestamps were not defined.')
+            elif ret == -2:
+                self._log('Problem: signals size changed.')
             self._meas_finished_ok = False
         self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -1411,18 +1427,25 @@ class MeasACORM(_ThreadBaseClass):
             # send event through timing system to start acquisitions
             t00 = _time.time()
             self._log('    Sending Timing signal...', end='')
-            self.bpms.mturn_reset_flags_and_update_initial_timestamps()
+            self.bpms.reset_mturn_initial_state()
             self.devices['evt_study'].cmd_external_trigger()
             self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # Wait BPMs PV to update with new data
             t00 = _time.time()
             self._log('    Waiting BPMs to update...', end='')
-            ret = self.bpms.mturn_wait_update(timeout=self.params.timeout_bpms)
-            if ret:
-                self._log(
-                    'Problem: timed out waiting BPMs update. '
-                    f'Error code: {ret:d}')
+            ret = self.bpms.wait_update_mturn(timeout=self.params.timeout_bpms)
+            if ret != 0:
+                if ret > 0:
+                    tag = self.bpms.bpm_names[int(ret)-1]
+                    pos = self.bpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                    self._log(
+                        'Problem: This BPM did not update: ' + tag
+                        + ', signal ' + pos)
+                elif ret == -1:
+                    self._log('Problem: Initial timestamps were not defined.')
+                elif ret == -2:
+                    self._log('Problem: signals size changed.')
                 self._meas_finished_ok = False
                 break
             _time.sleep(0.5)
@@ -1891,7 +1914,7 @@ class MeasACORM(_ThreadBaseClass):
     # ----------------- BPMs related methods -----------------------
 
     def _config_bpms(self, nr_points, rate='FAcq'):
-        return self.bpms.mturn_config_acquisition(
+        return self.bpms.config_mturn_acquisition(
             acq_rate=rate, nr_points_before=0, nr_points_after=nr_points,
             repeat=False, external=True)
 
