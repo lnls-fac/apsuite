@@ -1,5 +1,6 @@
 """Module 'base' for the class object 'Base': a collection of 'Button'(s)."""
 
+import os as _os
 from copy import deepcopy as _dpcopy
 
 import numpy as _np
@@ -12,20 +13,19 @@ _STD_ELEMS = si_elems()
 _STD_TYPES = std_misaligment_types()
 _STD_SECTS = si_sectors()
 
-default_buttons_path = "/".join(__file__.split("/")[:-1])
-default_buttons_path += "/Default_Pynel_Base_Buttons.pickle"
-
-DEFAULT_BUTTONS = None
+_D_BUTTONS_FILE = _os.path.join(
+    _os.path.dirname(__file__), "Default_Buttons.pickle"
+)
 
 
 def load_default_base_button():
-    globals()["DEFAULT_BUTTONS"] = load_pickle(default_buttons_path)
+    globals()["_DEFAULT_BUTTONS"] = load_pickle(_D_BUTTONS_FILE)
 
 
 try:
     load_default_base_button()
 except FileNotFoundError:
-    DEFAULT_BUTTONS = []
+    _DEFAULT_BUTTONS = []
 
 
 class Base:
@@ -40,6 +40,9 @@ class Base:
         func="vertical_disp",
         use_root_buttons=True,
     ):
+        self._func = None
+        self._use_root = None
+
         self._func, self._use_root = self.__handle_input(
             elems, sects, buttons, func, use_root_buttons
         )
@@ -48,16 +51,16 @@ class Base:
             self.__force_init(elems, sects, dtypes)
 
         else:
-            self.__read_buttons(buttons)
+            self.__handle_buttons(buttons)
 
         self._matrix = self.__make_matrix()
 
-    def _handle_input(self, elems, sects, buttons, func, use_root_buttons):
+    def __handle_input(self, elems, sects, buttons, func, use_root_buttons):
         """."""
         if func not in ("testfunc", "vertical_disp"):
             raise ValueError("invalid arg: func")
 
-        if self._use_root not in (True, False):
+        if use_root_buttons not in (True, False):
             raise ValueError("invalid arg: use_root_Buttons")
 
         if any(f is not None for f in [elems, sects]) and buttons is not None:
@@ -65,7 +68,7 @@ class Base:
 
         return func, use_root_buttons
 
-    def _force_init(self, elems, sects, dtypes):
+    def __force_init(self, elems, sects, dtypes):
         """."""
         # reading dtypes
         self._dtypes = dtypes
@@ -78,7 +81,7 @@ class Base:
         elif self._dtypes in _STD_TYPES:
             self._dtypes = [self._dtypes]
         elif self._dtypes == "all":
-            self.dtypes = _STD_TYPES
+            self._dtypes = _STD_TYPES
         else:
             raise ValueError("invalid arg: dtypes")
 
@@ -116,36 +119,22 @@ class Base:
         # gen buttons
         self._buttons = self.__generate_buttons()
 
-    def _generate_buttons(self):
+    def __generate_buttons(self):
         all_buttons = []
         for dtype in self._dtypes:
             for sect in self._sects:
                 for elem in self._elems:
-                    sig_flag = 0
-                    for bt in DEFAULT_BUTTONS:
-                        if (sect, dtype, elem) == (bt.sect, bt.dtype, bt.elem):
-                            sig = bt.signature
-                            sig_flag = 1
-                    if sig_flag == 0:
-                        temp_button = _Button(
-                            elem=elem, dtype=dtype, sect=sect, func=self._func
-                        )
-                    else:
-                        temp_button = _Button(
-                            elem=elem, dtype=dtype, sect=sect, func="testfunc"
-                        )
-                        temp_button.signature = _dpcopy(sig)
-                    all_buttons.append(temp_button)
-        flat_buttons = []
-        for button in all_buttons:
-            if button.is_valid:
-                b = button.flatten()
-                flat_buttons += (
-                    b if isinstance(b, (list, tuple, _np.ndarray)) else [b]
-                )
-        return flat_buttons
+                    temp_button = _Button(
+                        elem=elem, dtype=dtype, sect=sect, func=self._func
+                    ).flatten()
+                    all_buttons += (
+                        temp_button
+                        if isinstance(temp_button, (list, tuple, _np.ndarray))
+                        else [temp_button]
+                    )
+        return all_buttons
 
-    def _handle_buttons(self, buttons):
+    def __handle_buttons(self, buttons):
         # reading buttons
         self._buttons = buttons
 
@@ -173,7 +162,7 @@ class Base:
             list(set(self._dtypes)), key=lambda x: _STD_TYPES.index(x)
         )
 
-    def _make_matrix(self):
+    def __make_matrix(self):
         matrix = _np.zeros(shape=(160, self.__len__()))
         return matrix
 
@@ -214,16 +203,22 @@ class Base:
         return False
 
     def set_default_base_buttons(self):
-        if (
-            self.__func == "vertical_disp"
-            and len(DEFAULT_BUTTONS) < self.__len__()
-        ):
-            save_pickle(self.buttons, default_buttons_path, overwrite=True)
+        if self._func == "vertical_disp":
+            for b in self._buttons:
+                if b not in _DEFAULT_BUTTONS:
+                    _DEFAULT_BUTTONS.append(b)
+
+            save_pickle(_DEFAULT_BUTTONS, _D_BUTTONS_FILE, overwrite=True)
             load_default_base_button()
             print("Saved Base/Buttons!")
         else:
             print("Base not saved.")
             pass
+
+
+def delete_default_base_buttons():
+    save_pickle([], _D_BUTTONS_FILE, overwrite=True)
+    load_default_base_button()
 
 
 __all__ = "Base"

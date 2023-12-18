@@ -66,9 +66,7 @@ class Button:
 
         self.__force_init__()
 
-        self._isvalid = True
-        if self.fantasy_name == []:
-            self._isvalid = False
+        self._is_valid = True   # if self.fantasy_name == [] else False
 
         self._signature = self.__calc_signature()
 
@@ -94,32 +92,36 @@ class Button:
             return False
 
     def __calc_signature(self):
-        if not self._isvalid:
-            return _np.zeros(160)
         if self._func == "testfunc":
             if isinstance(self._fantasy_name, list):
                 return [_np.zeros(160) for i in self._fantasy_name]
             else:
                 return _np.zeros(160)
-        func = _SET_FUNCS[self._dtype]
-        if all(isinstance(i, list) for i in self._indices):
-            indices = self._indices
-        elif all(isinstance(i, (int, _np.integer)) for i in self._indices):
-            indices = [self._indices]
+
         else:
-            raise ValueError("Indices with format problem")
-        # the calculation:
-        disp = []
-        delta = _DELTAS[self._dtype][self._elem[0]]
-        for ind in indices:
-            disp_0 = _vdisp(_OC_MODEL)
-            func(_OC_MODEL, indices=ind, values=delta)
-            rmk_orbit_corr(_OC, _JAC)
-            disp_p = _vdisp(_OC_MODEL)
-            disp.append(((disp_p - disp_0) / delta).ravel())
-            func(_OC_MODEL, indices=ind, values=0.0)
-            _OC.set_kicks(_INIT_KICKS)
-        return disp
+            func = _SET_FUNCS[self._dtype]
+            disp = []
+            delta = _DELTAS[self._dtype][self._elem[0]]
+            if isinstance(self._fantasy_name, list):
+                loop = self.indices
+                flag = -1
+            else:
+                loop = [self.indices]
+                flag = 1
+
+            for ind in loop:
+                disp_0 = _vdisp(_OC_MODEL)
+                func(_OC_MODEL, indices=ind, values=delta)
+                rmk_orbit_corr(_OC, _JAC)
+                disp_p = _vdisp(_OC_MODEL)
+                disp.append(((disp_p - disp_0) / delta).ravel())
+                func(_OC_MODEL, indices=ind, values=0.0)
+                _OC.set_kicks(_INIT_KICKS)
+
+            if flag == 1:
+                return disp[0]
+            else:
+                return disp
 
     @property
     def func(self):
@@ -129,7 +131,7 @@ class Button:
     @property
     def is_valid(self):
         """."""
-        return self._isvalid
+        return self._is_valid
 
     @property
     def dtype(self):

@@ -6,8 +6,9 @@ from pymodels import si as _si
 from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 
 from .functions import calc_disp as _disp, calc_pinv as _pinv, \
-    rmk_orbit_corr as _correct_orbit, set_errors as _set_errors \
-    # get_errors as _get_errors,
+    rmk_orbit_corr as _correct_orbit, set_errors as _set_errors
+
+# get_errors as _get_errors,
 
 
 def fit(
