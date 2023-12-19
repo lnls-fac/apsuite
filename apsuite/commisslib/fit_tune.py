@@ -3,12 +3,14 @@ import matplotlib.pyplot as plt
 import scipy.optimize as opt
 
 
+from .. import asparams as _asparams
+
 class CalcTune():
 
-    TUNEX = 19.20433
-    TUNEY = 7.31417
-    NBPM = 50
-    RING_LEN = 495.7045
+    TUNEX = _asparams.BO_TUNEX
+    TUNEY = _asparams.BO_TUNEY
+    NUM_BPMS = _asparams.BO_NUM_BPMS
+    RING_LEN = _asparams.BO_RING_LEN
 
     def __init__(self, file=None, plane=None, corr_num=None):
         self._file = file
@@ -61,7 +63,7 @@ class CalcTune():
             if np.sign(line[0]) != np.sign(line[-1]):
                 nz[k] += 1
 
-            for i in range(self.NBPM-1):
+            for i in range(self.NUM_BPMS-1):
                 if np.sign(line[i]) != np.sign(line[i+1]):
                     nz[k] += 1
 
@@ -158,7 +160,7 @@ class CalcTune():
 
     def _find_bpm_49(self, data, bpm, spos):
         idx = bpm.tolist().index('49')
-        if idx < self.NBPM/2:
+        if idx < self.NUM_BPMS/2:
             new_bpm = bpm[idx+1:]
             new_spos = spos[idx+1:]
             new_data = data[idx+1:]
@@ -169,7 +171,7 @@ class CalcTune():
         return new_data, new_bpm, new_spos
 
     def define_bpms(self):
-        self.bpms = list(range(2, self.NBPM+1))
+        self.bpms = list(range(2, self.NUM_BPMS+1))
         self.bpms.append(1)
         self.bpms = [str(b).zfill(2) for b in self.bpms]
 

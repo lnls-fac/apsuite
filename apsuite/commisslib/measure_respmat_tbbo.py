@@ -146,7 +146,7 @@ def calc_model_respmatTBBO(
     """."""
     bpms = np.array(pyaccel.lattice.find_indices(model, 'fam_name', 'BPM'))[1:]
     _, cumulmat = pyaccel.tracking.find_m44(
-        model, indices='open', closed_orbit=[0, 0, 0, 0])
+        model, indices='open', fixed_point=[0, 0, 0, 0])
 
     matrix = np.zeros((len(corr_names), 2*bpms.size))
     for idx, corr in enumerate(corr_names):
@@ -179,8 +179,8 @@ def calc_model_respmatTBBO(
 
 
 def _get_respmat_line(
-    cumul_mat, indcs, bpms, length, kxl=0, kyl=0, ksxl=0, ksyl=0,
-    cortype='vertical', meth='middle'):
+        cumul_mat, indcs, bpms, length, kxl=0, kyl=0, ksxl=0, ksyl=0,
+        cortype='vertical', meth='middle'):
 
     idx = 3 if cortype.startswith('vertical') else 1
     cor = indcs[0]

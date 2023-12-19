@@ -11,6 +11,9 @@ from . import OrbitCorr
 
 def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6):
     """."""
+    bpm1_sec_index = 3
+    bpm2_sec_index = 4
+
     mod = si.create_accelerator()
     orbcorr = OrbitCorr(mod, 'SI')
     orbcorr.params.tolerance = 1e-9
@@ -23,7 +26,9 @@ def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6):
     orb0 = orbcorr.get_orbit()
     kicks0 = orbcorr.get_kicks()
 
-    idcs = np.array([3, 4, 160+3, 160+4])
+    idcs = np.array(
+        [bpm1_sec_index, bpm2_sec_index,
+        160+bpm1_sec_index, 160+bpm2_sec_index])
     idcs += 8*mcidx
 
     matbc = np.zeros((4, 4), dtype=float)
@@ -31,17 +36,21 @@ def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6):
     for i, idx in enumerate(idcs):
         gorb = orb0.copy()
         orbcorr.set_kicks(kicks0)
-        gorb[idx] = deltax/2
+
+        gorb[idx] += deltax/2
         orbcorr.correct_orbit(goal_orbit=gorb)
         orbp = orbcorr.get_orbit()[idcs]
         bcp = pyaccel.tracking.find_orbit6(
-            orbcorr.respm.model, indices='open')[0:4, mci]
+            orbcorr.respm.model, indices='open')
+        bcp = bcp[0:4, mci]
 
-        gorb[idx] = -deltax/2
+        gorb[idx] -= deltax
         orbcorr.correct_orbit(goal_orbit=gorb)
         orbn = orbcorr.get_orbit()[idcs]
         bcn = pyaccel.tracking.find_orbit6(
-            orbcorr.respm.model, indices='open')[0:4, mci]
+            orbcorr.respm.model, indices='open')
+        bcn = bcn[0:4, mci]
+
         matbc[:, i] = (bcp - bcn) / deltax
         mator[:, i] = (orbp - orbn) / deltax
 
@@ -114,8 +123,8 @@ def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0):
     ay = fig.add_subplot(gs[1, 0])
     az = fig.add_subplot(gs[2, 0])
 
-    ax.plot(vec, '-o')
-    ax.plot(xres, '-o')
+    ax.plot(1e6*vec, '-o')
+    ax.plot(1e6*xres, '-o')
 
     ay.plot(orbcorr.get_kicks()[:-1]*1e6)
     az.plot(orbcorr.get_orbit()*1e6)

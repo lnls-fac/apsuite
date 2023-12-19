@@ -70,10 +70,18 @@ class MeasureRespMat(_BaseClass):
         self._get_loco_setup(self.params.respmat_name)
         if self._stopevt.is_set():
             return
+
+        tune = self.devices['tune']
+        self.data['tunex_before'] = tune.tunex
+        self.data['tuney_before'] = tune.tuney
+
         respmat = self._measure_respm()
         respmat = respmat.reshape((-1, self.devices['sofb'].data.nr_corrs))
         self.data['respmat'] = respmat
         self.confdb.insert_config(self.params.respmat_name, respmat)
+
+        self.data['tunex_after'] = tune.tunex
+        self.data['tuney_after'] = tune.tuney
 
         sofb.nr_points = init_nr
         sofb.measrespmat_kickch = init_kickx
@@ -139,7 +147,8 @@ class MeasureRespMat(_BaseClass):
 
         orbx = np.array(orbx_mon)
         orby = np.array(orby_mon)
-        orb_var = np.array([np.std(orbx, axis=0), np.std(orby, axis=0)])
+        orb_var = np.r_[np.std(orbx, axis=0), np.std(orby, axis=0)]
+        orb_var = np.tile(orb_var[:, None], 281)
         return orb_var
 
     @staticmethod
