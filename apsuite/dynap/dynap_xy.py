@@ -10,9 +10,10 @@ import matplotlib.text as _mtext
 import pyaccel.tracking as _pytrack
 
 from .base import BaseClass as _BaseClass
+from ..utils import ParamsBaseClass as _ParamsBaseClass
 
 
-class DynapXYParams():
+class DynapXYParams(_ParamsBaseClass):
     """."""
 
     def __init__(self):
@@ -97,7 +98,7 @@ class DynapXY(_BaseClass):
 
         out = _pytrack.ring_pass(
             self._acc, rin, nr_turns=self.params.nrturns,
-            turn_by_turn=self.params.turn_by_turn)
+            turn_by_turn=self.params.turn_by_turn, parallel=True)
 
         self.data['x_in'] = x_in
         self.data['y_in'] = y_in
@@ -146,7 +147,9 @@ class DynapXY(_BaseClass):
     # Make figures
     def make_figure_diffusion(
             self, contour=True, resons=None, orders=3, symmetry=1,
-            maxdist=1e-5, min_diffusion=1e-3):
+            maxdist=1e-5, min_diffusion=1e-3,
+            nux_bounds=None, nuy_bounds=None,
+            ):
         """."""
         fig = _mpyplot.figure(figsize=(7, 7))
         grid = _mgridspec.GridSpec(2, 20)
@@ -184,6 +187,10 @@ class DynapXY(_BaseClass):
             freqx, freqy, c=diff, norm=norm, cmap='jet')
         ayy.set_xlabel(r'$\nu_x$')
         ayy.set_ylabel(r'$\nu_y$')
+        if nux_bounds:
+            ayy.set_xlim(*nux_bounds)
+        if nuy_bounds:
+            ayy.set_ylim(*nuy_bounds)
 
         if resons is None:
             bounds = ayy.axis()

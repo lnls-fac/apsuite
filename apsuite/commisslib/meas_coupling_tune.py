@@ -8,9 +8,9 @@ import logging as _log
 import numpy as _np
 from scipy.optimize import least_squares
 import matplotlib.pyplot as _plt
-import matplotlib.gridspec as _mpl_gs
 
 from siriuspy.devices import PowerSupply, Tune
+from siriuspy.search import PSSearch as _PSSearch
 
 from ..utils import ThreadedMeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
@@ -40,8 +40,8 @@ class CouplingParams(_ParamsBaseClass):
         self._quadfam_name = 'Q3'
         self.nr_points = 21
         self.time_wait = 5  # [s]
-        self.neg_percent = 0.1/100
-        self.pos_percent = 0.1/100
+        self._lower_percent = 0.0/100
+        self._upper_percent = 0.15/100
         self.coupling_resolution = 0.02/100
 
     @property
@@ -55,6 +55,26 @@ class CouplingParams(_ParamsBaseClass):
         if isinstance(val, str) and val.upper() in self.QUADS:
             self._quadfam_name = val.upper()
 
+    @property
+    def lower_percent(self):
+        """."""
+        return self._lower_percent
+
+    @lower_percent.setter
+    def lower_percent(self, val):
+        """."""
+        self._lower_percent = val
+
+    @property
+    def upper_percent(self):
+        """."""
+        return self._upper_percent
+
+    @upper_percent.setter
+    def upper_percent(self, val):
+        """."""
+        self._upper_percent = val
+
     def __str__(self):
         """."""
         stmp = '{0:22s} = {1:4s}  {2:s}\n'.format
@@ -63,8 +83,8 @@ class CouplingParams(_ParamsBaseClass):
         stg = stmp('quadfam_name', self.quadfam_name, '')
         stg += dtmp('nr_points', self.nr_points, '')
         stg += ftmp('time_wait [s]', self.time_wait, '')
-        stg += ftmp('neg_percent', self.neg_percent, '')
-        stg += ftmp('pos_percent', self.pos_percent, '')
+        stg += ftmp('lower_percent', self.lower_percent, '')
+        stg += ftmp('upper_percent', self.upper_percent, '')
         stg += ftmp('coupling_resolution', self.coupling_resolution, '')
         return stg
 
@@ -83,23 +103,91 @@ class MeasCoupling(_BaseClass):
           dependency for tunes!
     """
 
+    # Achromatic skew quadrupole variations to adjust betatron coupling,
+    # it is -(v1 + v4)/np.sqrt(2) where v1 and v4 are the first and fourth
+    # left-singular vectors of jacobian matrix calculated with
+    # apsuite.optics.coupling_correction.calc_jacobian_matrix()
+    ACHROM_QS_ADJ = 1e-4 * _np.array(
+        [0.53393553, -1.83813959, -1.98690077, -1.75364868, -1.56156276,
+         0.88701644,  1.14972317,  2.1831073,  0.53393553, -1.83813959,
+         -1.98690077, -1.75364868, -1.56156276,  0.88701644,  1.14972317,
+         2.1831073,  0.53393553, -1.83813959, -1.98690077, -1.75364868,
+         -1.56156276,  0.88701644,  1.14972317,  2.1831073,  0.53393553,
+         -1.83813959, -1.98690077, -1.75364868, -1.56156276,  0.88701644,
+         1.14972317,  2.1831073,  0.53393553, -1.83813959, -1.98690077,
+         -1.75364868, -1.56156276,  0.88701644,  1.14972317,  2.1831073])
+
+    # Tune variation matrix for a relative change in quadrupole family strength
+    # The values correspond to beta*KL/4\pi
+    REL_DELTATUNE_QUADFAM = {
+        'QFA': (10.298780521514438, -4.514923875173607),
+        'QDA': (-1.0348691702091177, 3.5708035590970915),
+        'QFB': (32.033111510608165, -17.107818311318557),
+        'QDB1': (-1.8347622371355026, 9.987845128027336),
+        'QDB2': (-7.368996560722064, 6.66243378337252),
+        'QFP': (16.018344106829602, -8.554003388210424),
+        'QDP1': (-0.9174526696494403, 4.993981381524282),
+        'QDP2': (-3.68498307753575, 3.3312470390351985),
+        'Q1': (12.603211153382881, -17.641037941914114),
+        'Q2': (30.31621119877737, -21.69158623632497),
+        'Q3': (11.519837506608473, -13.38406923471411),
+        'Q4': (19.108756971042833, -7.102168831998462)}
+
     def __init__(self, isonline=True):
         """."""
         super().__init__(
             params=CouplingParams(), target=self._do_meas, isonline=isonline)
+        self.qs_names = None
+        self.apply_factor = 0
+        self.initial_strengths = None
         if self.isonline:
-            self.devices['quad'] = PowerSupply(
+            self._create_devices()
+
+    def get_initial_strengths(self):
+        """."""
+        ini_stren = [self.devices[name].strength for name in self.qs_names]
+        return _np.array(ini_stren)
+
+    def _create_skews(self):
+        qs_names = _PSSearch.get_psnames(
+            {'sec': 'SI', 'dis': 'PS', 'dev': 'QS'})
+        qs_idx = [idx for idx, name in enumerate(qs_names) if 'M' in name]
+        achrom_qs_names = [qs_names[idx] for idx in qs_idx]
+        self.qs_names = achrom_qs_names
+        for name in self.qs_names:
+            self.devices[name] = PowerSupply(name)
+
+    def _create_devices(self):
+        self.devices['quad'] = PowerSupply(
                 'SI-Fam:PS-' + self.params.quadfam_name)
-            self.devices['tune'] = Tune(Tune.DEVICES.SI)
+        self.devices['tune'] = Tune(Tune.DEVICES.SI)
+        self._create_skews()
 
     def load_and_apply_old_data(self, fname):
-        """."""
+        """Load and apply `data` and `params` from pickle or HDF5 file.
+
+        Args:
+            fname (str): name of the pickle file. If extension is not provided,
+                '.pickle' will be added and a pickle file will be assumed.
+                If provided, must be '.pickle' for pickle files or
+                {'.h5', '.hdf5', '.hdf', '.hd5'} for HDF5 files.
+
+        """
         data = self.load_data(fname)
         if 'data' in data:
             self.load_and_apply(fname)
+            self._rename_old_params()
             return
         data['timestamp'] = _os.path.getmtime(fname)
         self.data = data
+
+    def _rename_old_params(self):
+        for attr, new_attr in \
+            [('neg_percent', 'lower_percent'),
+             ('pos_percent', 'upper_percent')]:
+            if hasattr(self.params, attr):
+                setattr(self.params, new_attr, getattr(self.params, attr))
+                delattr(self.params, attr)
 
     def _do_meas(self):
         if not self.isonline:
@@ -117,8 +205,8 @@ class MeasCoupling(_BaseClass):
 
         curr0 = quad.current
         curr_vec = curr0 * _np.linspace(
-            1-self.params.neg_percent,
-            1+self.params.pos_percent,
+            1+self.params.lower_percent,
+            1+self.params.upper_percent,
             self.params.nr_points)
         tunes_vec = _np.zeros((len(curr_vec), 2))
 
@@ -138,6 +226,7 @@ class MeasCoupling(_BaseClass):
         quad.current = curr0
         self.data['timestamp'] = _time.time()
         self.data['qname'] = quad.devname
+        self.data['initial_current'] = curr0
         self.data['current'] = curr_vec
         self.data['tunes'] = tunes_vec
 
@@ -173,12 +262,7 @@ class MeasCoupling(_BaseClass):
         fittune1, fittune2, qcurr_interp = self.get_normal_modes(
             params=fit_vec, curr=qcurr, oversampling=oversampling)
 
-        fig = _plt.figure(figsize=(8, 6))
-        grid = _mpl_gs.GridSpec(1, 1)
-        grid.update(
-            left=0.12, right=0.95, bottom=0.15, top=0.9,
-            hspace=0.5, wspace=0.35)
-        axi = _plt.subplot(grid[0, 0])
+        fig, axi = _plt.subplots(1, 1, figsize=(8, 6))
 
         axi.set_xlabel(f'{self.data["qname"]} Current [A]')
         axi.set_ylabel('Transverse Tunes')
@@ -198,7 +282,36 @@ class MeasCoupling(_BaseClass):
                 date_string = _time.strftime("%Y-%m-%d-%H:%M")
                 fname = 'coupling_fitting_{}.png'.format(date_string)
             fig.savefig(fname, format='png', dpi=300)
+        fig.tight_layout()
         return fig, axi
+
+    def apply_achromatic_delta_ksl(self, factor=0):
+        """Change machine betatron coupling with achromatic QS.
+
+        The variation is at the direction -(v1 + v4)/np.sqrt(2) where v1 and v4
+        are the first and fourth left-singular vectors of the coupling
+        jacobian matrix.
+
+        Args:
+            factor (int, optional): Scalar factor that sets the strenght of
+            variation in the direction. The relation is typically 1:1 with
+            respect to betatron coupling. Defaults to None.
+
+        """
+        dksl = factor * MeasCoupling.ACHROM_QS_ADJ
+
+        if self.initial_strengths is None:
+            self.initial_strengths = self.get_initial_strengths()
+
+        for idx, name in enumerate(self.qs_names):
+            ksl0 = self.initial_strengths[idx]
+            self.devices[name].strength = ksl0 + dksl[idx]
+
+    @staticmethod
+    def calc_expected_delta_tunes(relative_dkl, quadfam='Q3'):
+        """."""
+        rel_dnux, rel_dnuy = MeasCoupling.REL_DELTATUNE_QUADFAM[quadfam]
+        return (rel_dnux*relative_dkl, rel_dnuy*relative_dkl)
 
     @staticmethod
     def get_normal_modes(params, curr, oversampling=1):

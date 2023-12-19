@@ -10,9 +10,10 @@ import matplotlib.text as _mtext
 import pyaccel.tracking as _pytrack
 
 from .base import BaseClass as _BaseClass
+from ..utils import ParamsBaseClass as _ParamsBaseClass
 
 
-class DynapEXParams():
+class DynapEXParams(_ParamsBaseClass):
     """."""
 
     def __init__(self):
@@ -97,7 +98,7 @@ class DynapEX(_BaseClass):
 
         out = _pytrack.ring_pass(
             self._acc, rin, nr_turns=self.params.nrturns,
-            turn_by_turn=self.params.turn_by_turn)
+            turn_by_turn=self.params.turn_by_turn, parallel=True)
 
         self.data['x_in'] = x_in
         self.data['de_in'] = de_in

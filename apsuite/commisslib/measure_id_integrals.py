@@ -38,7 +38,7 @@ class IDParams(_ParamsBaseClass):
             self.sofb_mode = sofb.data.SOFBMode._fields[
                 sofb.data.SOFBMode.MultiTurn]
             self.sofb_rate = sofb.data.TrigAcqChan._fields[
-                sofb.data.TrigAcqChan.Monit1]
+                sofb.data.TrigAcqChan.FAcq]
             self.sofb_buffer = 1
             self.sofb_nr_samples_post = 4000
             self.wait_sofb = 10

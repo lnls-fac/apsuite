@@ -37,7 +37,7 @@ del(_BEAMPARAMS_HIGH, _BEAMPARAMS_LOW)
 
 # --- RF GENERAL ---
 
-RF_FREQ = 499663824.380981 # [Hz] -- compatible with SI nominal model length
+RF_FREQ = 499663824.380981  # [Hz] -- compatible with SI nominal model length
 # RF_FREQ = 499666862 - 150  # [Hz] -- compatible with BO nominal model @ 3 Gev
 # RF_FREQ = 499666862        # [Hz] -- in use 2022-04-10
 
@@ -54,11 +54,6 @@ SI_TUNEY = 14.15194  # NOTE: this is the nominal model value!
 SI_MOM_COMPACT = 1.636e-04
 SI_ENERGY_SPREAD = 0.085  # [%]
 
-# --- BPMS ---
-
-BPM_FOFB_DOWNSAMPLING = 23
-BPM_SWITCHING_FREQ = RF_FREQ / SI_HARM_NUM / BPM_FOFB_DOWNSAMPLING / 2 # [Hz]
-BPM_MONIT1_DOWNSAMPLING = 25*BPM_FOFB_DOWNSAMPLING
 
 # --- BO LATTICE ---
 
