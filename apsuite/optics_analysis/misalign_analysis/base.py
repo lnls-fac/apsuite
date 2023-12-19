@@ -170,9 +170,7 @@ class Base:
                         temp_button = buttons.Button(
                             elem=elem, dtype=dtype, sect=sect, func="testfunc"
                         ).flatten()
-                        print(temp_button, end=" | ")
                         for tb in temp_button:
-                            print(tb, tb.indices, end=" | ")
                             if tb in _DEFAULT_BUTTONS:
                                 sig = _DEFAULT_BUTTONS[
                                     _DEFAULT_BUTTONS.index(tb)
@@ -223,7 +221,7 @@ class Base:
         )
 
     def __make_matrix(self):
-        matrix = _np.zeros(shape=(160, self.__len__()))
+        matrix = _np.array([b.signature for b in self._buttons]).T
         return matrix
 
     @property
@@ -276,7 +274,7 @@ def save_default_base(base):
         new and unsaved Buttons will be saved. Only Buttons with vertical_disp\
         signatures will be saved.
     """
-    if base.func == "vertical_disp":
+    if base._func == "vertical_disp":
         for b in base.buttons:
             if b not in _DEFAULT_BUTTONS:
                 _DEFAULT_BUTTONS.append(b)
