@@ -3,6 +3,7 @@ import time as _time
 
 import numpy as _np
 import scipy.fft as _sp_fft
+import scipy.signal as _sp_sig
 from siriuspy.devices import CurrInfoSI, Event, EVG, FamBPMs, RFGen, Trigger, \
     Tune
 from siriuspy.search import HLTimeSearch as _HLTimeSearch
@@ -328,6 +329,24 @@ class AcqBPMsSignals(_BaseClass):
             sw_pert = _np.hstack([sw_pert, sw_sig[:, :osiz-siz]])
         # Subtract the replicated switching signature from the original data
         return orb - sw_pert.T
+
+    @staticmethod
+    def simulate_data_decimation(orb, downsampling=12*8):
+        """Simulate data decimation by application of moving average filter.
+
+        Args:
+            orb (numpy.ndarray, (Nsamples, Nbpms)): Target matrix.
+            downsampling (int, optional): Size of the decimation filter.
+                Defaults to 12 (from TbT to FAcq).
+
+        Returns:
+            orb (numpy.ndarray, (Nsamples, Nbpms)): Input matrix filtered
+                along rows.
+
+        """
+        ds = downsampling
+        fil = _np.ones(ds)/ds
+        return _sp_sig.convolve(orb, fil[:, None], mode='same')
 
     @staticmethod
     def calc_spectrum(data, fs=1):
