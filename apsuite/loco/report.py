@@ -1,6 +1,10 @@
+"""Create LOCO Report."""
+
 from apsuite.loco.analysis import LOCOAnalysis
 from fpdf import FPDF
 import datetime
+
+TIME_FMT = '%Y-%m-%d %H:%M:%S'
 
 
 class LOCOReport(FPDF):
@@ -27,8 +31,8 @@ class LOCOReport(FPDF):
         self.set_font('Arial', 'B', 14)
         self.cell(0, 6, 'SIRIUS LOCO Report', 0, 0, 'C')
         self.set_font('Arial', '', 11)
-        today = datetime.date.today()
-        stg = '{:s}'.format(today.strftime("%Y-%m-%d"))
+        now = datetime.datetime.now()
+        stg = '{:s}'.format(now.strftime(TIME_FMT))
         self.cell(0, 6, stg, 0, 0, 'R')
         self.ln(10)
 
@@ -58,17 +62,20 @@ class LOCOReport(FPDF):
 
         self.set_font('Arial', '', 10)
         tstamp = datetime.datetime.fromtimestamp(setup['timestamp'])
-        tstamp = tstamp.strftime('%Y-%m-%d %H:%M:%S')
-        data = (
-            ('Measurement timestamp', tstamp),
+        tstamp = tstamp.strftime(TIME_FMT)
+        data = (('Measurement timestamp', tstamp), )
+        if 'method' in setup:
+            data += (('Measurement method', setup['method']), )
+        if 'sofb_nr_points' in setup:
+            data += (('SOFB buffer average', f"{setup['sofb_nr_points']:d}"), )
+        if 'orbmat_name' in setup:
+            data += (('Orbit response matrix on ServConf',
+                     setup['orbmat_name']),)
+        data += (
             ('Stored current', f"{setup['stored_current']:.2f} mA"),
-            ('Orbit response matrix on ServConf', setup['orbmat_name']),
             ('RF Frequency', f"{setup['rf_frequency']/1e6:.6f} MHz"),
             ('Measured frac. tune x', f"{setup['tunex']:.4f}"),
-            ('Measured frac. tune y', f"{setup['tuney']:.4f}"),
-            ('SOFB buffer average', f"{setup['sofb_nr_points']:d}"),
-            )
-
+            ('Measured frac. tune y', f"{setup['tuney']:.4f}"),)
         _xp = (self.WIDTH - table_cell_width*len(data[0])) / 2
         for idx, row in enumerate(data):
             self.set_x(_xp)
@@ -114,8 +121,8 @@ class LOCOReport(FPDF):
             ('Lambda LM',  f'{cfg.lambda_lm:.2e}'),
             ('Fixed lambda LM', f'{cfg.fixed_lambda:.2e}'),
             ('Jacobian manipulation', cfg.inv_method_str),
-            ('Constraint delta KL total', cfg.constraint_deltak_total),
-            ('Constraint delta KL step', cfg.constraint_deltak_step),
+            ('Constraint delta KL total', cfg.constraint_deltakl_total),
+            ('Constraint delta KL step', cfg.constraint_deltakl_step),
             ('Nr. of BPMs', cfg.nr_bpm),
             ('Nr. of CHs', cfg.nr_ch),
             ('Nr. of CVs', cfg.nr_cv),
@@ -170,6 +177,15 @@ class LOCOReport(FPDF):
         self.add_page()
         self.page_body(images)
 
+    def add_histogram(self):
+        """."""
+        self.add_page()
+        self.page_title('Fitting indicators')
+        img_w = self.WIDTH - 30
+        _xp = (self.WIDTH - img_w) / 2
+        self.image('3dplot.png', x=_xp, y=40, w=img_w)
+        self.image('histogram.png', x=_xp-5, y=140, w=img_w)
+
     def add_quadfit(self):
         """."""
         self.add_page()
@@ -190,7 +206,6 @@ class LOCOReport(FPDF):
         self.page_title('Gains: BPMs and correctors', loc_y=90)
         img_w = self.WIDTH - 30
         _xp = (self.WIDTH - img_w) / 2
-        img_h = self.HEIGHT*0.55
         self.image('gains.png', x=_xp, y=100, w=img_w)
 
     def add_tune_emit_and_optics(self):
@@ -198,7 +213,7 @@ class LOCOReport(FPDF):
         self.add_page()
         self.page_title('Global parameters: tunes and emittances')
         self.df_to_table(self._df_tunes, nr_tables=2, idx_table=0)
-        self.set_y(30)
+        self.set_y(28)
         self.df_to_table(self._df_emits, nr_tables=2, idx_table=1)
         self.set_y(60)
         self.page_title('Optics: beta-beating')
@@ -274,17 +289,24 @@ class LOCOReport(FPDF):
         dnomi = config.matrix - config.goalmat
         dloco = orm_fit - config.goalmat
 
+        label = fname_report
         loco_anly.plot_histogram(
-            dnomi, dloco, save=True, fname='histogram')
+            dnomi, dloco, save=True, fname='histogram' + label)
+        loco_anly.plot_3d_fitting(dnomi, dloco, fname='3dplot' + label)
+
         df_quad_stats = loco_anly.plot_quadrupoles_gradients_by_family(
-            mod, loco_data['fit_model'], save=True, fname='quad_by_family')
+            nom_model=mod, fit_model=loco_data['fit_model'],
+            save=True, fname='quad_by_family' + label)
         self._df_quad_stats = df_quad_stats
         loco_anly.plot_quadrupoles_gradients_by_s(
-            mod, loco_data['fit_model'], save=True, fname='quad_by_s')
+            nom_model=mod,
+            fit_model=loco_data['fit_model'],
+            save=True, fname='quad_by_s' + label)
         loco_anly.plot_skew_quadrupoles(
-            mod, loco_data['fit_model'], save=True, fname='skewquad_by_s')
-        loco_anly.plot_gain(save=True, fname='gains')
-        self._df_emits = loco_anly.emittance()
+            mod, loco_data['fit_model'], save=True,
+            fname='skewquad_by_s' + label)
+        loco_anly.plot_gain(save=True, fname='gains' + label)
+        self._df_emits = loco_anly.emittance_and_coupling()
 
         loco_anly.calc_twiss()
         self._df_tunes, self._df_betabeat = loco_anly.beta_and_tune(twiss=True)
@@ -295,12 +317,18 @@ class LOCOReport(FPDF):
         #   loco_anly.beta_and_tune(twiss=False)
         # self._df_disp = loco_anly.dispersion(twiss=False)
 
+        loco_anly.save_quadrupoles_variations(
+            mod, loco_data['fit_model'], fname=label)
+        loco_anly.save_skew_quadrupoles_variations(
+            mod, loco_data['fit_model'], fname=label)
+
         self.loco_data = loco_data
         self.loco_analysis = loco_anly
 
         self.add_fingerprint_and_config()
+        self.add_histogram()
         self.add_quadfit()
         self.add_skewquadfit_ang_gains()
         self.add_tune_emit_and_optics()
 
-        self.output(fname_report + '.pdf', 'F')
+        self.output('report_' + label + '.pdf', 'F')

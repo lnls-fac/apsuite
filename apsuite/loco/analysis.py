@@ -1,7 +1,7 @@
 """."""
 import numpy as np
 import pandas as pd
-from mathphys.functions import load_pickle
+from mathphys.functions import save as _save, load as _load
 
 import pyaccel
 from pymodels import si
@@ -13,9 +13,14 @@ from apsuite.optics_analysis.tune_correction import TuneCorr
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as mpl_gs
+import matplotlib.cm as cm
 from matplotlib import rc
+from mpl_toolkits.mplot3d import Axes3D
 
 rc('font', **{'size': 14})
+
+# difference between sector 20 B1 end and model start marker
+SECTOR_SHIFT = -5.017  # [m]
 
 
 class LOCOAnalysis():
@@ -33,10 +38,11 @@ class LOCOAnalysis():
         self.edteng_nom = None
         self.edteng_fit = None
         self.disp_meas = None
+        self.famdata = None
 
     def get_setup(self):
         """."""
-        loco_setup = load_pickle(self.fname_setup)
+        loco_setup = _load(self.fname_setup)
         if 'data' in loco_setup:
             loco_setup = loco_setup['data']
         self.loco_setup = loco_setup
@@ -98,11 +104,13 @@ class LOCOAnalysis():
         rfline = matrix_nominal[:, -1]
         disp_nominal = self._get_dispersion(rfline, alpha0, rf_freq)
         self.nom_model = simod
+
+        self.famdata = si.get_family_data(simod)
         return simod, disp_nominal
 
     def get_loco_results(self):
         """."""
-        loco_data = load_pickle(self.fname_fit)
+        loco_data = _load(self.fname_fit)
 
         config = loco_data['config']
         model_fitting = loco_data['fit_model']
@@ -131,33 +139,28 @@ class LOCOAnalysis():
 
 # ============= static methods =============
 
-    @staticmethod
-    def get_famidx_quad(model):
+    def get_famidx_quad(self, model):
         """."""
         famidx = []
         famlist = [
             'QFA', 'QDA', 'QFB', 'QDB1', 'QDB2', 'QFP', 'QDP1', 'QDP2',
             'Q1', 'Q2', 'Q3', 'Q4']
-        famdata = si.get_family_data(model)
         for fam_name in famlist:
-            famidx.append(famdata[fam_name]['index'])
+            famidx.append(self.famdata[fam_name]['index'])
         return famidx
 
-    @staticmethod
-    def get_famidx_sext(model):
+    def get_famidx_sext(self, model):
         """."""
         famidx = []
-        famdata = si.get_family_data(model)
         for fam_name in si.families.families_sextupoles:
-            famidx.append(famdata[fam_name]['index'])
+            famidx.append(self.famdata[fam_name]['index'])
         return famidx
 
-    @staticmethod
-    def get_attribute_quad(model):
+    def get_attribute_quad(self, model):
         """."""
         kl_strength = []
         ksl_strength = []
-        famidx = LOCOAnalysis.get_famidx_quad(model)
+        famidx = self.get_famidx_quad(model)
         for q in famidx:
             kl_strength.append(pyaccel.lattice.get_attribute(model, 'KL', q))
             ksl_strength.append(pyaccel.lattice.get_attribute(model, 'KsL', q))
@@ -165,13 +168,12 @@ class LOCOAnalysis():
         ksl_strength = np.array(ksl_strength, dtype=list)
         return kl_strength, ksl_strength
 
-    @staticmethod
-    def get_attribute_sext(model):
+    def get_attribute_sext(self, model):
         """."""
         kl_strength = []
         sl_strength = []
         ksl_strength = []
-        famidx = LOCOAnalysis.get_famidx_sext(model)
+        famidx = self.get_famidx_sext(model)
         for q in famidx:
             kl_strength.append(pyaccel.lattice.get_attribute(model, 'KL', q))
             sl_strength.append(pyaccel.lattice.get_attribute(model, 'SL', q))
@@ -216,60 +218,102 @@ class LOCOAnalysis():
         rmslocxx = np.sqrt(np.mean(dloc[:nbpm, :nch]**2))
         rmslocyy = np.sqrt(np.mean(dloc[nbpm:, nch:-1]**2))
 
+        bins = 200
         ayx.hist(
-            dnom[nbpm:, :nch].flatten(), bins=100*2,
+            dnom[nbpm:, :nch].flatten(), bins=bins,
             label=r'nom. $\sigma_{{yx}} = {:.2f}\mu$m'.format(rmsnomyx),
             density=True)
         ayx.hist(
-            dloc[nbpm:, :nch].flatten(), bins=100*2,
+            dloc[nbpm:, :nch].flatten(), bins=bins,
             label=r'fit. $\sigma_{{yx}} = {:.2f}\mu$m'.format(rmslocyx),
-            density=True)
+            density=True, alpha=0.7)
         ayx.set_xlabel(r'$\Delta y$ [$\mu$m]')
-        ayx.set_ylabel(r'# of $M_{yx}$ elements')
+        ayx.set_ylabel(r'$M_{yx}$')
 
         axy.hist(
-            dnom[:nbpm, nch:-1].flatten(), bins=90*2,
+            dnom[:nbpm, nch:-1].flatten(), bins=bins,
             label=r'nom. $\sigma_{{xy}} = {:.2f}\mu$m'.format(rmsnomxy),
             density=True)
         axy.hist(
-            dloc[:160, nch:-1].flatten(), bins=90*2,
+            dloc[:160, nch:-1].flatten(), bins=bins,
             label=r'fit. $\sigma_{{xy}} = {:.2f}\mu$m'.format(rmslocxy),
-            density=True)
+            density=True, alpha=0.7)
         axy.set_xlabel(r'$\Delta x$ [$\mu$m]')
-        axy.set_ylabel(r'# of $M_{xy}$ elements')
+        axy.set_ylabel(r'$M_{xy}$')
 
         axx.hist(
-            dnom[:nbpm, :nch].flatten(), bins=100*2,
+            dnom[:nbpm, :nch].flatten(), bins=bins,
             label=r'nom. $\sigma_{{xx}} = {:.2f}\mu$m'.format(rmsnomxx),
             density=True)
         axx.hist(
-            dloc[:nbpm, :nch].flatten(), bins=100*2,
+            dloc[:nbpm, :nch].flatten(), bins=bins,
             label=r'fit. $\sigma_{{xx}} = {:.2f}\mu$m'.format(rmslocxx),
-            density=True)
+            density=True, alpha=0.7)
         axx.set_xlabel(r'$\Delta x$ [$\mu$m]')
-        axx.set_ylabel(r'# of $M_{xx}$ elements')
+        axx.set_ylabel(r'$M_{xx}$')
 
         ayy.hist(
-            dnom[nbpm:, nch:-1].flatten(), bins=90*2,
+            dnom[nbpm:, nch:-1].flatten(), bins=bins,
             label=r'nom. $\sigma_{{yy}} = {:.2f}\mu$m'.format(rmsnomyy),
             density=True)
         ayy.hist(
-            dloc[nbpm:, nch:-1].flatten(), bins=90*2,
+            dloc[nbpm:, nch:-1].flatten(), bins=bins,
             label=r'fit. $\sigma_{{yy}} = {:.2f}\mu$m'.format(rmslocyy),
-            density=True)
+            density=True, alpha=0.7)
         ayy.set_xlabel(r'$\Delta y$ [$\mu$m]')
-        ayy.set_ylabel(r'# of $M_{yy}$ elements')
+        ayy.set_ylabel(r'$M_{yy}$')
 
-        axx.legend(loc='upper right')
-        axy.legend(loc='upper right')
-        ayx.legend(loc='upper right')
-        ayy.legend(loc='upper right')
+        axx.legend(loc='upper right', fontsize=11)
+        axy.legend(loc='upper right', fontsize=11)
+        ayx.legend(loc='upper right', fontsize=11)
+        ayy.legend(loc='upper right', fontsize=11)
         if save:
             fig.savefig(fname + '.png', dpi=300, format='png')
 
-    @staticmethod
+    def plot_3d_fitting(self, diff1, diff2, fname):
+        """."""
+        nbpm, ncorr = 2*160, 120 + 160 + 1
+        idxbpm = np.linspace(0, nbpm-1, nbpm)
+        idxcorr = np.linspace(0, ncorr-1, ncorr)
+        corrs, bpms = np.meshgrid(idxcorr, idxbpm)
+
+        fig = plt.figure(figsize=(14, 6))
+        ax1 = fig.add_subplot(121, projection='3d')
+
+        diff1[:, :120] *= 15e-6
+        diff1[:, 120:280] *= 1.5*15e-6
+        diff1[:, -1] *= 5*15
+        ax1.plot_surface(
+            bpms, corrs, np.abs(diff1) * 1e6,
+            cmap=cm.coolwarm, linewidth=0, antialiased=False);
+        diff1[:, :120] /= 15e-6
+        diff1[:, 120:280] /= 1.5*15e-6
+        diff1[:, -1] /= 5*15
+        ax1.set_xlabel('BPM index', fontsize=10, labelpad=15)
+        ax1.set_ylabel('Corr. index', fontsize=10, labelpad=15)
+        ax1.set_zlabel(r'$|\chi|$ [$\mu$m]', labelpad=15)
+        ax1.set_title('Measured - Nominal')
+
+        ax2 = fig.add_subplot(122, projection='3d')
+        diff2[:, :120] *= 15e-6
+        diff2[:, 120:280] *= 1.5*15e-6
+        diff2[:, -1] *= 5*15
+        ax2.plot_surface(
+            bpms, corrs, np.abs(diff2) * 1e6,
+            cmap=cm.coolwarm, linewidth=0, antialiased=False);
+        diff2[:, :120] /= 15e-6
+        diff2[:, 120:280] /= 1.5*15e-6
+        diff2[:, -1] /= 5*15
+
+        ax2.set_xlabel('BPM index', fontsize=10, labelpad=15)
+        ax2.set_ylabel('Corr. index', fontsize=10, labelpad=15)
+        ax2.set_zlabel(r'$|\chi|$ [$\mu$m]', labelpad=15)
+        ax2.set_title('Measured - LOCO Fit')
+        plt.tight_layout()
+        fig.savefig(fname+'.png', format='png', dpi=300)
+
     def plot_quadrupoles_gradients_by_family(
-            nom_model, fit_model, save=False, fname=None):
+            self, nom_model, fit_model, save=False, fname=None):
         """."""
         fig = plt.figure(figsize=(12, 5))
         gs = mpl_gs.GridSpec(1, 1)
@@ -279,8 +323,8 @@ class LOCOAnalysis():
         knom_mean = []
         kfit_std = []
         maxmin = []
-        kfit, *_ = LOCOAnalysis.get_attribute_quad(fit_model)
-        knom, *_ = LOCOAnalysis.get_attribute_quad(nom_model)
+        kfit, *_ = self.get_attribute_quad(fit_model)
+        knom, *_ = self.get_attribute_quad(nom_model)
         count = 0
         famlist = [
             'QFA', 'QDA', 'QFB', 'QDB1', 'QDB2', 'QFP', 'QDP1', 'QDP2',
@@ -330,16 +374,61 @@ class LOCOAnalysis():
                 fig.savefig(fname+'.png', format='png', dpi=300)
         return df_stats
 
-    @staticmethod
+    def save_quadrupoles_variations(self, nom_model, fit_model, fname=''):
+        """."""
+        fam = self.famdata
+        qn = np.array(fam['QN']['index']).ravel()
+        kl = np.array(pyaccel.lattice.get_attribute(
+            fit_model, 'KL', indices=qn)).flatten()
+        kl_nom = np.array(pyaccel.lattice.get_attribute(
+            nom_model, 'KL', indices=qn)).ravel()
+        dkl = kl - kl_nom
+
+        quad_families = si.families.families_quadrupoles()
+        quadfam_idx = dict()
+        qn = fam['QN']['index']
+        for famname in quad_families:
+            qfam = fam[famname]['index']
+            quadfam_idx[famname] = [qn.index(qidx) for qidx in qfam]
+
+        quadfam_averages = dict()
+        for famname in quad_families:
+            quadfam_averages[famname] = np.mean(dkl[quadfam_idx[famname]])
+
+        _save(
+            data=quadfam_averages,
+            fname='quad_family_average' + fname, overwrite=True)
+
+        dkl_no_average = dkl
+        for qnames in quad_families:
+            idx_list = quadfam_idx[qnames]
+            dkl_no_average[idx_list] -= quadfam_averages[qnames]
+
+        np.savetxt(
+            'quad_trims_deltakl_no_average_' + fname + '_.txt', dkl_no_average)
+
+    def save_skew_quadrupoles_variations(self, nom_model, fit_model, fname=''):
+        """."""
+        fam = self.famdata
+        qs = np.array(fam['QS']['index']).flatten()
+        ksl_fit = np.array(pyaccel.lattice.get_attribute(
+            fit_model, 'KsL', indices=qs)).flatten()
+        ksl_nom = np.array(pyaccel.lattice.get_attribute(
+            nom_model, 'KsL', indices=qs)).flatten()
+        dksl = ksl_fit - ksl_nom
+
+        np.savetxt(
+            'skewquad_deltaksl_' + fname + '_.txt', dksl)
+
     def plot_quadrupoles_gradients_by_s(
-            nom_model, fit_model, save=False, fname=None):
+            self, nom_model, fit_model, save=False, fname=None):
         """."""
         fig = plt.figure(figsize=(12, 4))
         gs = mpl_gs.GridSpec(1, 1)
         ax1 = plt.subplot(gs[0, 0])
 
         spos = pyaccel.lattice.find_spos(nom_model)
-        fam_nom = si.get_family_data(nom_model)
+        fam_nom = self.famdata
         qnlist_nom = fam_nom['QN']['index']
         qnidx = np.array(qnlist_nom).flatten()
         knom = np.array(pyaccel.lattice.get_attribute(
@@ -354,12 +443,9 @@ class LOCOAnalysis():
             spos[qnidx], perc, '.-',
             label='deviation', color='tab:orange')
 
-        for idx in range(20):
-            ax1.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            ax1.annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), perc.max()*0.90))
-
+        xdelta = spos[-1]/20
+        ax1 = self._create_sectors_vlines(
+            ax1, xdelta=xdelta, yloc=perc.max()*0.9)
         ax1.set_xlabel('s [m]')
         ax1.set_ylabel('$\Delta K/K_0$ [%]')
         ax1.set_title('Quadrupoles changes along the ring')
@@ -371,16 +457,15 @@ class LOCOAnalysis():
                 fig.savefig(fname+'.png', format='png', dpi=300)
         return kfit, knom, perc
 
-    @staticmethod
     def plot_skew_quadrupoles(
-            nom_model, fit_model, save=False, fname=None):
+            self, nom_model, fit_model, save=False, fname=None):
         """."""
         _ = plt.figure(figsize=(12, 4))
         gs = mpl_gs.GridSpec(1, 1)
         ax1 = plt.subplot(gs[0, 0])
 
         spos = pyaccel.lattice.find_spos(nom_model)
-        fam_nom = si.get_family_data(nom_model)
+        fam_nom = self.famdata
         qslist_nom = fam_nom['QS']['index']
         qsidx = np.array(qslist_nom).flatten()
         knom = np.array(pyaccel.lattice.get_attribute(
@@ -397,11 +482,9 @@ class LOCOAnalysis():
         ax1.plot(
             spos[qsidx], percentage, '.-', color='tab:green')
 
-        for idx in range(20):
-            ax1.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            ax1.annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), percentage.max()*0.90))
+        xdelta = spos[-1]/20
+        ax1 = self._create_sectors_vlines(
+            ax1, xdelta=xdelta, yloc=percentage.max()*0.9)
         ax1.set_xlabel('s [m]')
         ax1.set_ylabel('$\Delta$KsL [1/m]')
         ax1.set_title('Skew quadrupoles changes along the ring')
@@ -423,7 +506,7 @@ class LOCOAnalysis():
             self.nom_model, _ = self.get_nominal_model()
 
         spos = pyaccel.lattice.find_spos(self.nom_model)
-        fam = si.get_family_data(self.nom_model)
+        fam = self.famdata
         bpm_idx = np.array(fam['BPM']['index']).ravel()
         ch_idx = np.array(fam['CH']['index']).ravel()
         cv_idx = np.array(fam['CV']['index']).ravel()
@@ -447,22 +530,15 @@ class LOCOAnalysis():
         axs[0].grid(alpha=0.5, linestyle='--')
         axs[0].set_ylabel('gain')
         axs[0].set_title('BPM Gains')
-        for idx in range(20):
-            axs[0].axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            axs[0].annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), gain_bpm.max()*1.04))
 
         axs[1].plot(spos[bpm_idx], roll_bpm*1e3, '.-', color=color_roll_bpm)
         axs[1].grid(alpha=0.5, linestyle='--')
         axs[1].set_xlabel('index')
         axs[1].set_ylabel('roll [mrad]')
         axs[1].set_title('BPM Roll')
-        for idx in range(20):
-            axs[1].axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            axs[1].annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3),  roll_bpm.max()*1e3*0.95))
+        xdelta = spos[-1]/20
+        axs[1] = self._create_sectors_vlines(
+            axs[1], xdelta=xdelta, yloc=roll_bpm.max()*0.95*1e3)
 
         axs[2].plot(
             spos[ch_idx], gain_corr[:120], '.-', color=color_ch, label='CH')
@@ -473,11 +549,9 @@ class LOCOAnalysis():
         axs[2].set_xlabel('s [m]')
         axs[2].set_ylabel('gain')
         axs[2].set_title('Corrector Gains')
-        for idx in range(20):
-            axs[2].axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            axs[2].annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), gain_corr.max()))
+        xdelta = spos[-1]/20
+        axs[2] = self._create_sectors_vlines(
+            axs[2], xdelta=xdelta, yloc=gain_corr.max())
         plt.tight_layout()
         if save:
             if fname is None:
@@ -524,13 +598,9 @@ class LOCOAnalysis():
         ax.plot(spos, beta_beatx, label='Horizontal', color='tab:blue')
         ax.plot(spos, beta_beaty, label='Vertical', color='tab:red')
 
-        for idx in range(20):
-            ax.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            max_val = np.max([beta_beatx.max(), beta_beaty.max()])
-            ax.annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), max_val*0.90))
-
+        xdelta = spos[-1]/20
+        max_val = np.max([beta_beatx.max(), beta_beaty.max()])
+        ax = self._create_sectors_vlines(ax, xdelta=xdelta, yloc=max_val*0.9)
         ax.set_xlabel('s [m]')
         ax.set_ylabel(r'$\Delta \beta/\beta$ [%]')
         ax.legend(loc='lower right', fontsize=10)
@@ -657,39 +727,44 @@ class LOCOAnalysis():
         ax2.set_ylabel(r'$\eta_y$ [cm]')
         ax2.grid(alpha=0.5, linestyle='--')
 
-        for idx in range(20):
-            ax1.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            ax2.axvline(spos[-1]/20 * idx, ls='--', color='k', lw=1)
-            diff1 = abs(dispy_meas)
-            diff2 = abs(dispy_fit-dispy_meas)
-            max_val = np.max([diff1.max(), diff2.max()])
-            ax2.annotate(
-                f'{idx+1:02d}', size=10,
-                xy=(spos[-1]/20 * (idx + 1/3), max_val*0.9))
+        diff1 = abs(dispy_meas)
+        diff2 = abs(dispy_fit-dispy_meas)
+        max_val = np.max([diff1.max(), diff2.max()])
+        xdelta = spos[-1]/20
+        self._create_sectors_vlines(ax1, xdelta=xdelta, annotate=False)
+        self._create_sectors_vlines(ax2, xdelta=xdelta, yloc=max_val*0.9)
         plt.tight_layout()
         plt.savefig('dispersion.png', dpi=300)
         return df_disp
 
-    def emittance(self):
+    def emittance_and_coupling(self):
         """."""
         eqnom = pyaccel.optics.EqParamsFromBeamEnvelope(self.nom_model)
         eqfit = pyaccel.optics.EqParamsFromBeamEnvelope(
             self.loco_fit['fit_model'])
 
+        if self.edteng_fit is None or self.edteng_nom is None:
+            self.calc_edteng()
+
+        min_sep_nom, *_ = pyaccel.optics.estimate_coupling_parameters(
+            self.edteng_nom)
+        min_sep_fit, *_ = pyaccel.optics.estimate_coupling_parameters(
+            self.edteng_fit)
+
         m2pm = 1e12
         names = [
-            'x [pm.rad]', 'y [pm.rad]',
-            'ratio [%]']
+            'emit_x [pm.rad]', 'emit_y [pm.rad]',
+            'emit_ratio [%]', 'min_tune_sep [%]']
         emit_nom_list = [
                 eqnom.emit1*m2pm, eqnom.emit2*m2pm,
-                eqnom.emit2/eqnom.emit1*100]
+                eqnom.emit2/eqnom.emit1*100, min_sep_nom*100]
         emit_fit_list = [
                 eqfit.emit1*m2pm, eqfit.emit2*m2pm,
-                eqfit.emit2/eqfit.emit1*100]
+                eqfit.emit2/eqfit.emit1*100, min_sep_fit*100]
         emit_nom_list = [float(abs(val)) for val in emit_nom_list]
         emit_fit_list = [float(abs(val)) for val in emit_fit_list]
         emits = {
-            'emittance': names,
+            'parameter': names,
             'initial nom model': emit_nom_list,
             'LOCO model': emit_fit_list}
         df_emits = pd.DataFrame.from_dict(emits)
@@ -702,3 +777,13 @@ class LOCOAnalysis():
     @staticmethod
     def _get_dispersion(rfline, alpha, rf_freq):
         return - alpha * rf_freq * rfline * 1e2
+
+    @staticmethod
+    def _create_sectors_vlines(ax, xdelta, yloc=0, annotate=True):
+        for idx in range(20):
+            ax.axvline(xdelta*idx + SECTOR_SHIFT, ls='--', color='k', lw=1)
+            if annotate:
+                ax.annotate(
+                    f'{idx+1:02d}', size=10,
+                    xy=(xdelta*(idx + 1/5), yloc))
+        return ax

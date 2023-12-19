@@ -36,7 +36,7 @@ class OrbRespmat:
             self.ch_idx = self._get_idx(self.fam_data['FCH']['index'])
             self.cv_idx = self._get_idx(self.fam_data['FCV']['index'])
         else:
-            raise ValueError('Corretion system must be "SOFB" or "FOFB"')
+            raise ValueError('Correction system must be "SOFB" or "FOFB"')
 
     def get_respm(self):
         """."""
