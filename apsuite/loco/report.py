@@ -31,8 +31,8 @@ class LOCOReport(FPDF):
         self.set_font('Arial', 'B', 14)
         self.cell(0, 6, 'SIRIUS LOCO Report', 0, 0, 'C')
         self.set_font('Arial', '', 11)
-        today = datetime.date.today()
-        stg = '{:s}'.format(today.strftime(TIME_FMT))
+        now = datetime.datetime.now()
+        stg = '{:s}'.format(now.strftime(TIME_FMT))
         self.cell(0, 6, stg, 0, 0, 'R')
         self.ln(10)
 
@@ -63,16 +63,19 @@ class LOCOReport(FPDF):
         self.set_font('Arial', '', 10)
         tstamp = datetime.datetime.fromtimestamp(setup['timestamp'])
         tstamp = tstamp.strftime(TIME_FMT)
-        data = (
-            ('Measurement timestamp', tstamp),
+        data = (('Measurement timestamp', tstamp), )
+        if 'method' in setup:
+            data += (('Measurement method', setup['method']), )
+        if 'sofb_nr_points' in setup:
+            data += (('SOFB buffer average', f"{setup['sofb_nr_points']:d}"), )
+        if 'orbmat_name' in setup:
+            data += (('Orbit response matrix on ServConf',
+                     setup['orbmat_name']),)
+        data += (
             ('Stored current', f"{setup['stored_current']:.2f} mA"),
-            ('Orbit response matrix on ServConf', setup['orbmat_name']),
             ('RF Frequency', f"{setup['rf_frequency']/1e6:.6f} MHz"),
             ('Measured frac. tune x', f"{setup['tunex']:.4f}"),
-            ('Measured frac. tune y', f"{setup['tuney']:.4f}"),
-            ('SOFB buffer average', f"{setup['sofb_nr_points']:d}"),
-            )
-
+            ('Measured frac. tune y', f"{setup['tuney']:.4f}"),)
         _xp = (self.WIDTH - table_cell_width*len(data[0])) / 2
         for idx, row in enumerate(data):
             self.set_x(_xp)
@@ -118,8 +121,8 @@ class LOCOReport(FPDF):
             ('Lambda LM',  f'{cfg.lambda_lm:.2e}'),
             ('Fixed lambda LM', f'{cfg.fixed_lambda:.2e}'),
             ('Jacobian manipulation', cfg.inv_method_str),
-            ('Constraint delta KL total', cfg.constraint_deltak_total),
-            ('Constraint delta KL step', cfg.constraint_deltak_step),
+            ('Constraint delta KL total', cfg.constraint_deltakl_total),
+            ('Constraint delta KL step', cfg.constraint_deltakl_step),
             ('Nr. of BPMs', cfg.nr_bpm),
             ('Nr. of CHs', cfg.nr_ch),
             ('Nr. of CVs', cfg.nr_cv),

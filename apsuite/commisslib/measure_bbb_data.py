@@ -342,7 +342,15 @@ class BbBAcqData(_BaseClass, UtilClass):
         return analysis
 
     def load_and_apply_old_data(self, fname):
-        """."""
+        """Load and apply `data` and `params` from pickle or HDF5 file.
+
+        Args:
+            fname (str): name of the pickle file. If extension is not provided,
+                '.pickle' will be added and a pickle file will be assumed.
+                If provided, must be '.pickle' for pickle files or
+                {'.h5', '.hdf5', '.hdf', '.hd5'} for HDF5 files.
+
+        """
         data = self.load_data(fname)
         if not isinstance(data['data'], _np.ndarray):
             self.load_and_apply(fname)
