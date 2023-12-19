@@ -1,4 +1,4 @@
-"""Module 'base' for the class object 'Base': a collection of 'Button'(s)."""
+"""Module 'base' for the class object 'Base': a collection of 'Buttons'."""
 
 import os as _os
 from copy import deepcopy as _dpcopy
@@ -6,7 +6,7 @@ from copy import deepcopy as _dpcopy
 import numpy as _np
 from mathphys.functions import load_pickle, save_pickle
 
-from .buttons import Button as _Button
+from . import buttons
 from .si_data import si_elems, si_sectors, std_misaligment_types
 
 _STD_ELEMS = si_elems()
@@ -18,18 +18,59 @@ _D_BUTTONS_FILE = _os.path.join(
 )
 
 
-def load_default_base_button():
+def set_model(model=None):
+    """."""
+    # print("entered base set model")
+    buttons.buttons_set_model(model)
+
+
+def __load_default_buttons():
     globals()["_DEFAULT_BUTTONS"] = load_pickle(_D_BUTTONS_FILE)
 
 
+def update_default_base():
+    """Update the Default Base."""
+    __load_default_buttons()
+
+
 try:
-    load_default_base_button()
+    update_default_base()
 except FileNotFoundError:
     _DEFAULT_BUTTONS = []
 
 
 class Base:
-    """I'll rewrite this docstring. Be patience."""
+    """Base object for misalign analysis.
+
+    Args:
+            elems (list[str], str): List of magnets families names.\
+            The valid options are the SIRIUS's dipoles, quadrupoles and\
+            sextupoles.
+
+            sects (list[int], int): List of sectors. Defaults to "all": \
+            list of 1 to 20.
+
+            dtypes (list[str], str): List of misalignmente types. Defaults to \
+            "all": ['dx', 'dy', 'dr', 'drp', 'dry'].
+
+            buttons (list[Button], optional): List of Button objects.
+
+            func (str): The analysis function. Defaults to "vertical_disp". \
+            The valid options are: 'vertical_disp' and 'testfunc'.
+
+            use_root_buttons (bool, optional): Use default pre-saved buttons.
+
+    About:
+            Passing args 'elems' + 'sects' require the arg 'buttons' be None.
+
+            The arg 'elems' can be (str) 'all', that contains all the magnets.
+
+            The arg 'func' can be (str) 'testfunc': the button signature will\
+            be all zero arrays.
+
+            The 'use_root_buttons' arg sets if the Base creation will or not \
+            use pre saved buttons and its signatures.
+    """
 
     def __init__(
         self,
@@ -40,6 +81,7 @@ class Base:
         func="vertical_disp",
         use_root_buttons=True,
     ):
+        """."""
         self._func = None
         self._use_root = None
 
@@ -124,14 +166,32 @@ class Base:
         for dtype in self._dtypes:
             for sect in self._sects:
                 for elem in self._elems:
-                    temp_button = _Button(
-                        elem=elem, dtype=dtype, sect=sect, func=self._func
-                    ).flatten()
-                    all_buttons += (
-                        temp_button
-                        if isinstance(temp_button, (list, tuple, _np.ndarray))
-                        else [temp_button]
-                    )
+                    if self._use_root and self._func == "vertical_disp":
+                        temp_button = buttons.Button(
+                            elem=elem, dtype=dtype, sect=sect, func="testfunc"
+                        ).flatten()
+                        print(temp_button, end=" | ")
+                        for tb in temp_button:
+                            print(tb, tb.indices, end=" | ")
+                            if tb in _DEFAULT_BUTTONS:
+                                sig = _DEFAULT_BUTTONS[
+                                    _DEFAULT_BUTTONS.index(tb)
+                                ].signature
+                                tb._signature = _dpcopy(sig)
+                                all_buttons += [tb]
+                            else:
+                                tb_new = buttons.Button(
+                                    indices=tb.indices,
+                                    dtype=tb.dtype,
+                                    func="vertical_disp",
+                                )
+                                all_buttons += [tb_new]
+                    else:
+                        temp_button = buttons.Button(
+                            elem=elem, dtype=dtype, sect=sect, func=self._func
+                        ).flatten()
+                        all_buttons += temp_button
+
         return all_buttons
 
     def __handle_buttons(self, buttons):
@@ -139,10 +199,10 @@ class Base:
         self._buttons = buttons
 
         if isinstance(self._buttons, (list, tuple)) and all(
-            isinstance(i, _Button) for i in self._buttons
+            isinstance(i, buttons.Button) for i in self._buttons
         ):
             self._buttons = self._buttons
-        elif isinstance(self._buttons, _Button):
+        elif isinstance(self._buttons, buttons.Button):
             self._buttons = [self._buttons]
         else:
             raise ValueError("invalid arg: buttons")
@@ -188,13 +248,15 @@ class Base:
 
     @property
     def dtypes(self):
-        """Returns the modification types used to construct the Base."""
+        """Returns the misalignment types presents in the Base."""
         return self._dtypes
 
     def __len__(self):
+        """Base length (number of Buttons)."""
         return len(self._buttons)
 
     def __eq__(self, other) -> bool:
+        """Comparison method."""
         if isinstance(other, Base):
             for b in other.buttons():
                 if b not in self.buttons():
@@ -202,23 +264,41 @@ class Base:
             return True
         return False
 
-    def set_default_base_buttons(self):
-        if self._func == "vertical_disp":
-            for b in self._buttons:
-                if b not in _DEFAULT_BUTTONS:
-                    _DEFAULT_BUTTONS.append(b)
 
-            save_pickle(_DEFAULT_BUTTONS, _D_BUTTONS_FILE, overwrite=True)
-            load_default_base_button()
-            print("Saved Base/Buttons!")
-        else:
-            print("Base not saved.")
-            pass
+def save_default_base(base):
+    """Save the input Base and its Buttons.
+
+    Args:
+        base (Base): Base object to be saved as Default Base.
+
+    About:
+        The save process only saves the Buttons of the input Base. Only \
+        new and unsaved Buttons will be saved. Only Buttons with vertical_disp\
+        signatures will be saved.
+    """
+    if base.func == "vertical_disp":
+        for b in base.buttons:
+            if b not in _DEFAULT_BUTTONS:
+                _DEFAULT_BUTTONS.append(b)
+
+        save_pickle(_DEFAULT_BUTTONS, _D_BUTTONS_FILE, overwrite=True)
+        update_default_base()
+        print("Saved/Updated default Base and Buttons!")
+    else:
+        print("Nothing saved.")
+        pass
 
 
-def delete_default_base_buttons():
+def delete_default_base():
+    """Restore the Default Base to an empty list."""
     save_pickle([], _D_BUTTONS_FILE, overwrite=True)
-    load_default_base_button()
+    update_default_base()
+    print("Default Base/Buttons deleted!")
 
 
-__all__ = "Base"
+__all__ = (
+    "Base",
+    "save_default_base",
+    "delete_default_base",
+    "update_default_base",
+)

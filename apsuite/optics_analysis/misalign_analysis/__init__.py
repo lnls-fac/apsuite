@@ -1,7 +1,10 @@
-"""Misalign_analysis package."""
+"""Misalign analysis package."""
 
 from . import fitting, functions as functions, si_data
-from .base import Base
+from .base import Base, delete_default_base, save_default_base, set_model
 from .buttons import Button
+from .si_data import get_model
 
-__all__ = ["Base", "Button", "functions", "fitting", "si_data"]
+del base, buttons
+
+__all__ = ["Base", "Button", "functions", "fitting", "si_data", "set_model"]

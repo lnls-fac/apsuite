@@ -8,8 +8,6 @@ from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 from .functions import calc_disp as _disp, calc_pinv as _pinv, \
     rmk_orbit_corr as _correct_orbit, set_errors as _set_errors
 
-# get_errors as _get_errors,
-
 
 def fit(
     base,
@@ -22,7 +20,7 @@ def fit(
     model=None,
 ):
     """."""
-    imat, goal, oc, jac, mod = _handle_input(
+    imat, goal, oc, jac = _handle_input(
         base,
         dispy_meta,
         nr_iters,
@@ -33,9 +31,9 @@ def fit(
         model,
     )
 
-    dispy, deltas = _fitting_loop(base, imat, goal, oc, jac, mod, nr_iters)
+    dispy, deltas = _fitting_loop(base, imat, goal, oc, jac, nr_iters)
 
-    return dispy, deltas, mod
+    return dispy, deltas, oc.respm.model
 
 
 def _handle_input(
@@ -72,11 +70,12 @@ def _handle_input(
     else:
         jac = oc.get_jacobian_matrix()
 
-    return imat, dispy_meta, oc, jac, mod
+    return imat, dispy_meta, oc, jac
 
 
-def _fitting_loop(base, imat, dispy_meta, oc, jac, mod, nr_iters):
+def _fitting_loop(base, imat, dispy_meta, oc, jac, nr_iters):
     count = 0
+    mod = oc.respm.model
     fulldeltas = _np.zeros(len(base))
     for _ in range(nr_iters):
         disp = _disp(mod)

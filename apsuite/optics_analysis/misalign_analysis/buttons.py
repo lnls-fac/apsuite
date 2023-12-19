@@ -1,72 +1,128 @@
 """Module 'buttons' for the class Object Button."""
 
 from copy import deepcopy as _deepcopy
+from importlib import reload
 
 import numpy as _np
 
 from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 
-from .functions import _SET_FUNCS, calc_vdisp as _vdisp, rmk_orbit_corr
-from .si_data import model_base, si_elems, si_famdata, si_spos, \
-    std_misaligment_tolerance, std_misaligment_types
+from . import functions, si_data
 
-_OC_MODEL = model_base()
-_OC = _OrbitCorr(_OC_MODEL, "SI")
-_OC.params.maxnriters = 30
-_OC.params.convergencetol = 1e-9
-_OC.params.use6dorb = True
-_INIT_KICKS = _OC.get_kicks()
-_JAC = _OC.get_jacobian_matrix()
-_DELTAS = std_misaligment_tolerance()
-_STD_TYPES = std_misaligment_types()
-_fam = si_famdata()
-_STD_ELEMS = si_elems()
-_sects_dict = {
-    fam_name: [int(s[:2]) for i, s in enumerate(_fam[fam_name]["subsection"])]
-    for fam_name in _STD_ELEMS
-}
-_SI_SPOS = si_spos()
+_OC_MODEL = None
+_OC = None
+_INIT_KICKS = None
+_JAC = None
+_SI_SPOS = None
+_fam = None
+_sects_dict = None
+
 _anly_funcs = ["vertical_disp", "testfunc"]
+_DELTAS = si_data.std_misaligment_tolerance()
+_STD_TYPES = si_data.std_misaligment_types()
+_STD_ELEMS = si_data.si_elems()
+
+
+def buttons_set_model(model=None):
+    """."""
+    # print("entered buttons set model")
+    si_data.__set_model(model)
+    reload(functions)
+    # print("buttons -> updating model")
+    mod = si_data.get_model()
+    # print("buttons -> model is", type(mod))
+    globals()["_OC_MODEL"] = mod
+    globals()["_OC"] = _OrbitCorr(globals()["_OC_MODEL"], "SI")
+    globals()["_OC"].params.maxnriters = 30
+    globals()["_OC"].params.convergencetol = 1e-9
+    globals()["_OC"].params.use6dorb = True
+    globals()["_JAC"] = globals()["_OC"].get_jacobian_matrix()
+    functions.rmk_orbit_corr(
+        globals()["_OC"], jacobian_matrix=globals()["_JAC"]
+    )
+    globals()["_INIT_KICKS"] = globals()["_OC"].get_kicks()
+    globals()["_SI_SPOS"] = si_data.si_spos()
+    globals()["_fam"] = si_data.si_famdata()
+    globals()["_sects_dict"] = {
+        fam_name: [
+            int(s[:2])
+            for i, s in enumerate(globals()["_fam"][fam_name]["subsection"])
+        ]
+        for fam_name in _STD_ELEMS
+    }
+    # print("sects_dict is", type(_sects_dict))
+    # print("buttons -> model updated")
 
 
 class Button:
-    """Button object for misaligment analysis of a single magnet."""
+    """Button object for misalignment analysis.
 
-    def __init__(self, dtype=None, **kwargs):
+    Args:
+            elem (str): Magnet's family name.\
+            The valid options are the SIRIUS's dipoles, quadrupoles and \
+            sextupoles family names.\
+            The names can be followed by postfixes like: '_1' or '_2' to \
+            specify the magnet.
+
+            sect (int): The magnet sector location.\
+            The valid options are the 1 to 20 sectors of SIRIUS storage ring.
+
+            dtype (str): The misalignmente type.\
+            Valid options are: 'dx'(horizontal), 'dy' (vertical), 'dr' \
+            (rotation roll), 'drp' (rotation pitch) and 'dry' (totation yaw).
+
+            func (str): The analysis function. Defaults to "vertical_disp".\
+            The valid options are: 'vertical_disp' and 'testfunc'.
+
+            indices ((int, list[int])): The index or indices of the magnet in\
+            the SIRIUS pymodels's model. Its important to have the latest\
+            model always up-to-date.
+
+    """
+
+    def __init__(
+        self,
+        elem=None,
+        sect=None,
+        dtype=None,
+        func="vertical_disp",
+        indices=None,
+    ):
         """."""
-        self._elem = None
-        self._sect = None
-        self._indices = None
+        if _OC_MODEL is None:
+            fstr = "Creating new model."
+            fstr += " To switch model, use function:"
+            fstr += " 'apsuite.optics_analysis.misalign_analysis.set_model()'"
+            print(fstr)
+            buttons_set_model()
+
+        self._elem = elem
+        self._sect = sect
+        self._indices = indices
 
         if dtype in _STD_TYPES:
             self._dtype = dtype
         else:
             raise ValueError("Invalid dtype")
 
-        if "func" not in kwargs:
-            self._func = "vertical_disp"
-        elif "func" in kwargs and kwargs["func"] in _anly_funcs:
-            self._func = kwargs["func"]
-        else:
+        if func not in _anly_funcs:
             raise ValueError("Invalid func")
+        self._func = func
 
-        if "indices" in kwargs:
-            if any([k in kwargs for k in ("elem", "sect")]) and any(
-                kwargs[k] is not None for k in ("elem", "sect")
-            ):
+        if indices is not None:
+            if any(f is not None for f in [elem, sect]):
                 raise ValueError("Too much args")
             else:
-                self._indices = kwargs["indices"]
-
-        elif all([k in kwargs for k in ("elem", "sect")]):
-            self._sect = kwargs["sect"]
-            self._elem = kwargs["elem"]
+                self._indices = indices
+        elif indices is None and all(f is not None for f in [elem, sect]):
+            self._sect = sect
+            self._elem = elem
         else:
             raise ValueError("Missing input args")
 
         self.__force_init__()
 
-        self._is_valid = True   # if self.fantasy_name == [] else False
+        self._is_valid = True  # if self.fantasy_name == [] else False
 
         self._signature = self.__calc_signature()
 
@@ -99,7 +155,7 @@ class Button:
                 return _np.zeros(160)
 
         else:
-            func = _SET_FUNCS[self._dtype]
+            func = functions._SET_FUNCS[self._dtype]
             disp = []
             delta = _DELTAS[self._dtype][self._elem[0]]
             if isinstance(self._fantasy_name, list):
@@ -110,10 +166,10 @@ class Button:
                 flag = 1
 
             for ind in loop:
-                disp_0 = _vdisp(_OC_MODEL)
+                disp_0 = functions.calc_vdisp(_OC_MODEL)
                 func(_OC_MODEL, indices=ind, values=delta)
-                rmk_orbit_corr(_OC, _JAC)
-                disp_p = _vdisp(_OC_MODEL)
+                functions.rmk_orbit_corr(_OC, _JAC)
+                disp_p = functions.calc_vdisp(_OC_MODEL)
                 disp.append(((disp_p - disp_0) / delta).ravel())
                 func(_OC_MODEL, indices=ind, values=0.0)
                 _OC.set_kicks(_INIT_KICKS)
@@ -169,28 +225,21 @@ class Button:
         return self._fantasy_name
 
     def flatten(self):
-        """Split button.
-
-        Returns:
-            soon.
-        """
+        """."""
         if not isinstance(self, Button):
             print("arg is not a Button object")
             return
         if isinstance(self.fantasy_name, list):
             buttons = []
-            # print(f'spliting: {self}', end=' ')
             for i in range(len(self.fantasy_name)):
                 b = _deepcopy(self)
                 b._signature = self.signature[i]
                 b._fantasy_name = self.fantasy_name[i]
                 b._indices = self.indices[i]
                 buttons.append(b)
-            # print(buttons)
             return buttons
         else:
-            # print('already individual:', self)
-            return self
+            return [self]
 
     def __force_init__(self):
         """."""
@@ -201,7 +250,9 @@ class Button:
         sect = self._handle_sector(sect)
 
         # Handle elem
-        elem, fixpos = self._handle_elem(elem, sect)
+        elem, fixpos = (
+            self._handle_elem(elem, sect) if elem is not None else (None, -1)
+        )
 
         # Handle indices
         elem, sect, indices, split_flag = self._handle_indices(
@@ -212,9 +263,7 @@ class Button:
         fantasy_name = self._handle_fantasy_name(elem, indices, split_flag)
 
         # Update attributes
-        self._update_attributes(
-            elem, sect, fantasy_name, indices, fixpos
-        )
+        self._update_attributes(elem, sect, fantasy_name, indices, fixpos)
 
     def _handle_elem(self, elem, sect):
         """."""
@@ -243,12 +292,11 @@ class Button:
             else:
                 return int(sect)
         else:
-            return int(sect)
+            return sect
 
     def _handle_indices(self, elem, sect, indices):
         """."""
         split_flag = False
-
         if indices is None:
             indices = [
                 _fam[elem]["index"][i]
@@ -309,9 +357,7 @@ class Button:
             fantasy_name = elem
         return fantasy_name
 
-    def _update_attributes(
-        self, elem, sect, fantasy_name, indices, fixpos
-    ):
+    def _update_attributes(self, elem, sect, fantasy_name, indices, fixpos):
         """Update instance attributes."""
         self._elem = elem
         self._sect = sect

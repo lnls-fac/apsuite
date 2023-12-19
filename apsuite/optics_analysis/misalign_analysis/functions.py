@@ -3,10 +3,6 @@
 import numpy as _np
 import pyaccel as _pyaccel
 
-from .si_data import si_bpmidx
-
-_BPMIDX = si_bpmidx()
-
 _SET_FUNCS = {
     "dx": _pyaccel.lattice.set_error_misalignment_x,
     "dy": _pyaccel.lattice.set_error_misalignment_y,
@@ -126,7 +122,7 @@ def calc_disp(model, indices="bpm"):
                          should be "bpm" or "open" or "closed"!'
         )
     if indices == "bpm":
-        indices = _BPMIDX
+        indices = _pyaccel.lattice.find_indices(model, "fam_name", "BPM")
     orbp = _pyaccel.tracking.find_orbit4(
         model, indices=indices, energy_offset=+1e-6
     )
