@@ -4,7 +4,6 @@ import scipy.fft as _sp_fft
 import matplotlib.pyplot as _plt
 import datetime as _datetime
 
-from mathphys.functions import load_pickle
 import siriuspy.clientconfigdb as _sconf
 
 from .. import asparams as _asparams
@@ -178,13 +177,11 @@ class OrbitAnalysis(_AcqBPMsSignals):
     def get_appropriate_orm_data(self, orm_name=''):
         """Find Orbit Response Matrix measured close to data acquisition."""
         if not orm_name:
-            configs = self.orm_client.find_configs()
-            delays = _np.array([cfg['created'] for cfg in configs])
-            delays -= self.data['timestamp']
-            orm_name = configs[_np.argmin(_np.abs(delays))]['name']
-        orm_meas = _np.array(
-            self.orm_client.get_config_value(name=orm_name))
-        orm_meas = _np.reshape(orm_meas, (2*self.NUM_BPMS, -1))
+            orm_meas = self.find_orm_with_closest_created_time(
+                orm_client=self.orm_client, timestamp=self.data['timestamp'])
+        else:
+            orm_meas = _np.array(
+                self.orm_client.get_config_value(name=orm_name))
         self.rf_freq = self.data['rf_frequency']
         etaxy = orm_meas[:, -1]
         etaxy *= (-self.MOM_COMPACT*self.rf_freq)  # units of [um]
@@ -222,9 +219,9 @@ class OrbitAnalysis(_AcqBPMsSignals):
         fmin = central_freq - window/2
         fmax = central_freq + window/2
         fs = self.sampling_freq
-        fil_orbx = self.filter_orbit_frequencies(
+        fil_orbx = self.filter_data_frequencies(
             orbx, fmin=fmin, fmax=fmax, fsampling=fs)
-        fil_orby = self.filter_orbit_frequencies(
+        fil_orby = self.filter_data_frequencies(
             orby, fmin=fmin, fmax=fmax, fsampling=fs)
         return fil_orbx, fil_orby
 
@@ -263,33 +260,20 @@ class OrbitAnalysis(_AcqBPMsSignals):
             orbx=orbx_ns, orby=orby_ns,
             central_freq=central_freq, window=window)
 
-        orbxy_fil = _np.hstack((orbx, orby))
-        _, _, vhmat = self.calc_svd(orbxy_fil)
-        etaxy = _np.hstack((self.etax, self.etay))
-        etaxy_nm = etaxy - _np.mean(etaxy)
-
-        correls = []
-        for mode in range(vhmat.shape[0]):
-            vech_nm = vhmat[mode] - _np.mean(vhmat[mode])
-            correls.append(abs(self._calc_correlation(vech_nm, etaxy_nm)))
-
-        maxcorr_idx = _np.argmax(correls)
-        vheta = vhmat[maxcorr_idx]
-        vheta_nm = vheta - _np.mean(vheta)
-
-        # Find scale factor via least-squares minimization
-        gamma = _np.dot(etaxy_nm, vheta_nm)/_np.dot(etaxy_nm, etaxy_nm)
-        eta_meas = vheta/gamma
+        if use_eta_meas:
+            eta2use = self.calculate_eta_meas(orbx, orby, self.etax, self.etay)
+        else:
+            eta2use = _np.hstack((self.etax, self.etay))
 
         orbxy = _np.hstack((orbx_ns, orby_ns))
-        eta2use = eta_meas if use_eta_meas else etaxy
         coef = _np.polynomial.polynomial.polyfit(eta2use, orbxy.T, deg=1)
         denergy = coef[1]
 
         energy_spec, freq = self.calc_spectrum(denergy, fs=self.sampling_freq)
         intpsd = self.calc_integrated_spectrum(energy_spec, inverse=inverse)
 
-        self.analysis['measured_dispersion'] = eta_meas
+        self.analysis['measured_dispersion'] = eta2use if use_eta_meas \
+            else None
         self.analysis['energy_freqmax'] = central_freq + window/2
         self.analysis['energy_freqmin'] = central_freq - window/2
         self.analysis['energy_deviation'] = denergy
@@ -581,38 +565,6 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
     # static methods
     @staticmethod
-    def filter_orbit_frequencies(
-            orb, fmin, fmax, fsampling, keep_within_range=True):
-        """Filter acquisition matrix considering a frequency range.
-
-        Args:
-            matrix (numpy.array): 2d-array with timesamples along rows and
-            BPMs indices along columns.
-            fmin (float): minimum frequency in range.
-            fmax (float): maximum frequency in range.
-            fsampling (float): sampling frequency on matrix
-            keep_within_range (bool, optional): Defaults to True.
-
-        Returns:
-            filtered matrix (numpy.array): same structure as matrix.
-
-        """
-        dft = _sp_fft.rfft(orb, axis=0)
-        freq = _sp_fft.rfftfreq(orb.shape[0], d=1/fsampling)
-        if keep_within_range:
-            idcs = (freq < fmin) | (freq > fmax)
-            dft[idcs] = 0
-        else:
-            idcs = (freq > fmin) & (freq < fmax)
-            dft[idcs] = 0
-        return _sp_fft.irfft(dft, axis=0)
-
-    @staticmethod
-    def _calc_correlation(vec1, vec2):
-        """."""
-        return _np.corrcoef(vec1, vec2)[0, 1]
-
-    @staticmethod
     def _calc_ripple_rfjitter_harmonics(freq):
         rfreq = round(_np.max(freq)/60)
         ripple = _np.arange(0, rfreq) * 60
@@ -629,3 +581,30 @@ class OrbitAnalysis(_AcqBPMsSignals):
         for idx, jit in enumerate(rfjitt):
             lab = r'n $\times$ 64Hz' if not idx else ''
             ax.axvline(x=jit, ls='--', lw=2, label=lab, color='tab:red')
+
+    @staticmethod
+    def calculate_eta_meas(orbx, orby, etax, etay):
+        """Calculate the dispersion function from measured orbits."""
+        orbxy_fil = _np.hstack((orbx, orby))
+        _, _, vhmat = _AcqBPMsSignals.calc_svd(orbxy_fil)
+        etaxy = _np.hstack((etax, etay))
+        etaxy -= _np.mean(etaxy)
+
+        vhmat_ = vhmat - vhmat.mean(axis=1)[:, None]
+        correls = _np.abs(_np.dot(vhmat_, etaxy))
+        idx = _np.argmax(correls)
+        vheta = vhmat[idx]
+        vheta_ = vhmat_[idx]
+
+        # Find scale factor via least-squares minimization
+        gamma = _np.dot(etaxy, vheta_)/_np.dot(etaxy, etaxy)
+        return vheta/gamma
+
+    @staticmethod
+    def find_orm_with_closest_created_time(orm_client, timestamp):
+        """Find the measured ORM with created time closest to timestamp."""
+        configs = orm_client.find_configs()
+        delays = _np.array([cfg['created'] for cfg in configs])
+        delays -= timestamp
+        orm_name = configs[_np.argmin(_np.abs(delays))]['name']
+        return _np.array(orm_client.get_config_value(name=orm_name))
