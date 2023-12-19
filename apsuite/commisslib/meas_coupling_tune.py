@@ -200,7 +200,7 @@ class MeasCoupling(_BaseClass):
         qs_names = _PSSearch.get_psnames(
             {"sec": "SI", "dis": "PS", "dev": "QS"}
         )
-        self.qs_names = [n for n in qs_names if n.sub.endswith("M1", "M2")]
+        self.qs_names = [n for n in qs_names if n.sub.endswith(("M1", "M2"))]
         for name in self.qs_names:
             self.devices[name] = PowerSupply(name)
 
