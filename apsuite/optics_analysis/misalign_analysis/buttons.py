@@ -399,11 +399,13 @@ class Button:
             for i, f in enumerate(_fam[elem]["index"])
             if f in indices
         ]
+        flag = True
         if len(indices) == 1:
             indices = indices[0]
             sect = sect[0]
+            flag = False
 
-        return elem, sect, indices, True if len(indices) != 1 else False
+        return elem, sect, indices, flag
 
     def _handle_fantasy_name(self, elem, sect, indices, split_flag):
         """Handle fantasy name logic."""
@@ -414,6 +416,7 @@ class Button:
         elif _sects_dict[elem].count(sect) > 1:
             c = 0
             for ind, sec in zip(_fam[elem]["index"], _fam[elem]["subsection"]):
+                print('ind:', ind, '\nsec:', sec, '\nindices:', indices)
                 if int(sec[:2]) == sect:
                     c += 1
                     if ind == indices:
