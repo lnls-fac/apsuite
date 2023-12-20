@@ -337,7 +337,7 @@ class AcqBPMsSignals(_BaseClass):
         Args:
             orb (numpy.ndarray, (Nsamples, Nbpms)): Target matrix.
             downsampling (int, optional): Size of the decimation filter.
-                Defaults to 12 (from TbT to FAcq).
+                Defaults to 12*8 (from TbT to FAcq).
 
         Returns:
             orb (numpy.ndarray, (Nsamples, Nbpms)): Input matrix filtered
