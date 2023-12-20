@@ -12,11 +12,13 @@ from .si_data import si_elems, si_sectors, std_misaligment_types
 _STD_ELEMS = si_elems()
 _STD_TYPES = std_misaligment_types()
 _STD_SECTS = si_sectors()
-
 _D_BUTTONS_FILE = _os.path.join(
     _os.path.dirname(__file__), "Default_Buttons.pickle"
 )
+_DEFAULT_BUTTONS = []
 
+def get_default_base():
+    return globals()["_DEFAULT_BUTTONS"]
 
 def set_model(model=None):
     """."""
@@ -25,18 +27,18 @@ def set_model(model=None):
 
 
 def __load_default_buttons():
+    try:
+        print("FILEPATH =", _D_BUTTONS_FILE)
+        update_default_base()
+    except FileNotFoundError:
+        print('File Not Found"')
+        globals()["_DEFAULT_BUTTONS"] = []
     globals()["_DEFAULT_BUTTONS"] = load_pickle(_D_BUTTONS_FILE)
 
 
 def update_default_base():
     """Update the Default Base."""
     __load_default_buttons()
-
-
-try:
-    update_default_base()
-except FileNotFoundError:
-    _DEFAULT_BUTTONS = []
 
 
 class Base:
@@ -104,6 +106,9 @@ class Base:
 
         if use_root_buttons not in (True, False):
             raise ValueError("invalid arg: use_root_Buttons")
+
+        if use_root_buttons:
+            update_default_base()
 
         if any(f is not None for f in [elems, sects]) and buttons is not None:
             raise ValueError("too much args: (buttons) and (elems or sects)")
