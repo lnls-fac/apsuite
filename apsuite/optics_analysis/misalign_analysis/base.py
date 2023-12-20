@@ -17,23 +17,23 @@ _D_BUTTONS_FILE = _os.path.join(
 )
 _DEFAULT_BUTTONS = []
 
+
 def get_default_base():
+    """."""
+    __load_default_buttons()
     return globals()["_DEFAULT_BUTTONS"]
+
 
 def set_model(model=None):
     """."""
-    # print("entered base set model")
     buttons.buttons_set_model(model)
 
 
 def __load_default_buttons():
     try:
-        print("FILEPATH =", _D_BUTTONS_FILE)
-        update_default_base()
+        globals()["_DEFAULT_BUTTONS"] = load_pickle(_D_BUTTONS_FILE)
     except FileNotFoundError:
-        print('File Not Found"')
         globals()["_DEFAULT_BUTTONS"] = []
-    globals()["_DEFAULT_BUTTONS"] = load_pickle(_D_BUTTONS_FILE)
 
 
 def update_default_base():
@@ -279,17 +279,23 @@ def save_default_base(base):
         new and unsaved Buttons will be saved. Only Buttons with vertical_disp\
         signatures will be saved.
     """
+    update_default_base()
     if base._func == "vertical_disp":
+        c = 0
         for b in base.buttons:
-            if b not in _DEFAULT_BUTTONS:
-                _DEFAULT_BUTTONS.append(b)
-
-        save_pickle(_DEFAULT_BUTTONS, _D_BUTTONS_FILE, overwrite=True)
+            if b not in globals()["_DEFAULT_BUTTONS"]:
+                c += 1
+                globals()["_DEFAULT_BUTTONS"].append(b)
+        save_pickle(
+            globals()["_DEFAULT_BUTTONS"], _D_BUTTONS_FILE, overwrite=True
+        )
         update_default_base()
-        print("Saved/Updated default Base and Buttons!")
+        if c == 0:
+            print("No new Buttons.")
+        else:
+            print(f"New {c} Buttons added to Default Base.")
     else:
         print("Nothing saved.")
-        pass
 
 
 def delete_default_base():
