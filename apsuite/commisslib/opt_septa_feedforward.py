@@ -9,9 +9,9 @@ import scipy.signal as _scysig
 import matplotlib.pyplot as _mplt
 import pywt as _pywt
 
-from mathphys.functions import load_pickle
+from mathphys.functions import load as _load
 from pymodels import si as _si
-from siriuspy.devices import PowerSupply, SOFB, FamBPMs, Trigger
+from siriuspy.devices import PowerSupply, SOFB, Trigger
 from siriuspy.clientconfigdb import ConfigDBClient as _CDBClient
 from siriuspy.magnet.factory import NormalizerFactory as _Normalizer
 
@@ -104,7 +104,7 @@ class OptSeptaFF(_RCDS):
             return 0.0
 
         res = self.get_residue_vector()
-        objective = res.std()**2
+        objective = _np.sum(res*res)/res.size  # res.std()**2
 
         self.data['obj_funcs'].append(objective)
         return objective
@@ -200,14 +200,15 @@ class OptSeptaFF(_RCDS):
         if 'dly' in self.params.optim_params:
             self.devices['trigger'].delay = pos[-1]
 
-    def measure_multiturn_orbit(self):
+    def measure_multiturn_orbit(self, do_reset=True):
         """."""
         nr_avg = self.params.orbit_nrpulses
         sofb = self.devices['sofb']
-        sofb.cmd_reset()
-        sofb.nr_points = nr_avg
-        _time.sleep(0.2)
-        sofb.wait_buffer(timeout=nr_avg*0.5*2)
+        if do_reset:
+            sofb.cmd_reset()
+            sofb.nr_points = nr_avg
+            _time.sleep(0.2)
+            sofb.wait_buffer(timeout=nr_avg*0.5*2)
         orbx = sofb.mt_trajx.reshape(-1, 160)
         orby = sofb.mt_trajy.reshape(-1, 160)
 
@@ -225,7 +226,7 @@ class OptSeptaFF(_RCDS):
     @staticmethod
     def load_orbit(fname, npts_mean=None):
         """Load orbit data file."""
-        data = load_pickle(fname)
+        data = _load(fname)
         data = data['data']
         if 'bpms_sampling_frequency' in data:
             fs = data['bpms_sampling_frequency']
@@ -505,7 +506,6 @@ class OptSeptaFF(_RCDS):
         self.devices['ps_m1cv'] = PowerSupply('SI-01M1:PS-FFCV')
 
         # Create objects to interact with BPMs
-        # self.devices['fambpms'] = FamBPMs()
         self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
 
 
@@ -565,10 +565,10 @@ class CorrectorModel:
 
     def __str__(self):
         """."""
-        tmps = '{:20s} {:20s} {:10s}'.format
-        tmpf = '{:20s} {:20.3f} {:10s}'.format
-        tmpg = '{:20s} {:20.2g} {:10s}'.format
-        tmpd = '{:20s} {:20d} {:10s}'.format
+        tmps = '{:20s} {:20s} {:10s}\n'.format
+        tmpf = '{:20s} {:20.3f} {:10s}\n'.format
+        tmpg = '{:20s} {:20.2g} {:10s}\n'.format
+        tmpd = '{:20s} {:20d} {:10s}\n'.format
         stg = ''
         stg += tmps('mag_name', self.mag_name, '')
         stg += tmpf('mag_resistence', self.mag_resistence, '[Ohm]')
@@ -577,15 +577,17 @@ class CorrectorModel:
         stg += tmpg('mag_delay', self.mag_delay, '[s]')
         stg += tmps(
             'mag_model_type', self.mag_model_type, "('iir', 'physics')")
-        stg += tmps('mag_model_iir_num', str(self.mag_model_iir_num))
-        stg += tmps('mag_model_iir_den', str(self.mag_model_iir_den))
-        stg += tmps('mag_model_duty_iir_num', str(self.mag_model_duty_iir_num))
-        stg += tmps('mag_model_duty_iir_den', str(self.mag_model_duty_iir_den))
+        stg += tmps('mag_model_iir_num', str(self.mag_model_iir_num), '')
+        stg += tmps('mag_model_iir_den', str(self.mag_model_iir_den), '')
+        stg += tmps(
+            'mag_model_duty_iir_num', str(self.mag_model_duty_iir_num), '')
+        stg += tmps(
+            'mag_model_duty_iir_den', str(self.mag_model_duty_iir_den), '')
         stg += tmpg('loop_period', self.loop_period, '[s]')
         stg += tmpf('loop_kp', self.loop_kp, '[V/A]')
         stg += tmpf('loop_ki', self.loop_ki, '[V/A]')
         stg += tmpg('loop_dac_latency', self.loop_dac_latency, '[s]')
-        stg += tmpd('loop_adc_nrsamples', self.loop_adc_nrsamples)
+        stg += tmpd('loop_adc_nrsamples', self.loop_adc_nrsamples, '')
         stg += tmpg('chamber_conductivity', self.chamber_conductivity, '[S]')
         stg += tmpg('chamber_radius', self.chamber_radius, '[m]')
         stg += tmpg('chamber_thickness', self.chamber_thickness, '[m]')
