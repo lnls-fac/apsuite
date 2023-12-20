@@ -41,50 +41,6 @@ def calc_amp(acc, energy_offsets, hmax, hmin):
         pass
     return _np.sqrt(a_def), indices
 
-
-def track_eletrons(deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6):
-    """Tracking simulation for touschek scattering that ocorred in element_idx.
-
-    model  =       accelerator model.
-    deltas =        energy deviation.
-    n_turn = number of turns desired.
-    pos_x  =  small pertubation in x.
-    pos_y  =  small pertubation in y.
-    """
-    orb = _pyaccel.tracking.find_orbit6(model, indices=[0, element_idx])
-    orb = orb[:, 1]
-
-    rin = _np.zeros((6, deltas.size))
-    rin += orb[:, None]
-    rin[0] += pos_x
-    rin[2] += pos_y
-    rin[4] += deltas
-
-    track = _pyaccel.tracking.ring_pass(
-        model,
-        rin,
-        nr_turns=n_turn,
-        turn_by_turn=True,
-        element_offset=element_idx,
-        parallel=True,
-    )
-
-    _, _, turn_lost, element_lost, _ = track
-    # oculted variables/ part_out: final coordinates of electrons
-    # flag: indicates if there is any loss
-    # plane_lost: plane that electron was lost(x or y)
-
-    turnl_element = []
-
-    for i, item in enumerate(turn_lost):
-        if item == n_turn and element_lost[i] == element_idx:
-            pass
-        else:
-            turnl_element.append((item, element_lost[i], deltas[i]))
-
-    return turnl_element
-
-
 def track_eletrons_d(
     deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6
 ):
