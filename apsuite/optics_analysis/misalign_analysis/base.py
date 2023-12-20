@@ -101,7 +101,7 @@ class Base:
 
     def __handle_input(self, elems, sects, buttons, func, use_root_buttons):
         """."""
-        if func not in ("testfunc", "vertical_disp"):
+        if func not in ("testfunc", "vertical_disp", "twiss"):
             raise ValueError("invalid arg: func")
 
         if use_root_buttons not in (True, False):
@@ -166,27 +166,40 @@ class Base:
         # gen buttons
         self._buttons = self.__generate_buttons()
 
+    def __search_button_in_default_base(self, button):
+        for b in globals()["_DEFAULT_BUTTONS"]:
+            if (
+                (button.dtype == b.dtype)
+                and (button.indices == b.indices)
+                and (button.fantasy_name == b.fantasy_name)
+            ):
+                return True, b
+        return False, None
+
     def __generate_buttons(self):
         all_buttons = []
         for dtype in self._dtypes:
             for sect in self._sects:
                 for elem in self._elems:
-                    if self._use_root and self._func == "vertical_disp":
+                    if self._use_root and self._func in [
+                        "vertical_disp",
+                        "twiss",
+                    ]:
+                        update_default_base()
                         temp_button = buttons.Button(
                             elem=elem, dtype=dtype, sect=sect, func="testfunc"
                         ).flatten()
                         for tb in temp_button:
-                            if tb in _DEFAULT_BUTTONS:
-                                sig = _DEFAULT_BUTTONS[
-                                    _DEFAULT_BUTTONS.index(tb)
-                                ].signature
+                            flag, b = self.__search_button_in_default_base(tb)
+                            if flag:
+                                sig = b.signature
                                 tb._signature = _dpcopy(sig)
                                 all_buttons += [tb]
                             else:
                                 tb_new = buttons.Button(
                                     indices=tb.indices,
                                     dtype=tb.dtype,
-                                    func="vertical_disp",
+                                    func=self._func,
                                 )
                                 all_buttons += [tb_new]
                     else:
@@ -280,7 +293,7 @@ def save_default_base(base):
         signatures will be saved.
     """
     update_default_base()
-    if base._func == "vertical_disp":
+    if base._func in ["vertical_disp", "twiss"]:
         c = 0
         for b in base.buttons:
             if b not in globals()["_DEFAULT_BUTTONS"]:

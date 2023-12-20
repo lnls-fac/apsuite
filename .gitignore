@@ -66,5 +66,5 @@ test/flatfile2.txt
 
 .vscode/
 
-apsuite/pynel/gen_buttons.ipynb
-apsuite/pynel/Default_Pynel_Base_Buttons.pickle
+# Local file: Misalign Analysis sub-module
+apsuite/optics_analysis/misalign_analysis/Default_Buttons.pickle

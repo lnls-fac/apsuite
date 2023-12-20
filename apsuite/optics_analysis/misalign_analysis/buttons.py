@@ -4,6 +4,7 @@ from copy import deepcopy as _deepcopy
 from importlib import reload
 
 import numpy as _np
+import pyaccel.optics as _opt
 
 from apsuite.orbcorr import OrbitCorr as _OrbitCorr
 
@@ -17,7 +18,7 @@ _SI_SPOS = None
 _fam = None
 _sects_dict = None
 
-_anly_funcs = ["vertical_disp", "testfunc"]
+_anly_funcs = ["vertical_disp", "testfunc", "twiss"]
 _DELTAS = si_data.std_misaligment_tolerance()
 _STD_TYPES = si_data.std_misaligment_types()
 _STD_ELEMS = si_data.si_elems()
@@ -141,43 +142,90 @@ class Button:
                 (self._dtype == other.dtype)
                 and (self._indices == other.indices)
                 and (self._fantasy_name == other.fantasy_name)
+                and (self._func == other.func)
             ):
                 return True
             return False
         except Exception:
             return False
 
-    def __calc_signature(self):
-        if self._func == "testfunc":
-            if isinstance(self._fantasy_name, list):
-                return [_np.zeros(160) for i in self._fantasy_name]
-            else:
-                return _np.zeros(160)
-
+    def __calc_test_signature(self):
+        """."""
+        if isinstance(self._fantasy_name, list):
+            return [_np.zeros(160) for i in self._fantasy_name]
         else:
-            func = functions._SET_FUNCS[self._dtype]
-            disp = []
-            delta = _DELTAS[self._dtype][self._elem[0]]
-            if isinstance(self._fantasy_name, list):
-                loop = self.indices
-                flag = -1
-            else:
-                loop = [self.indices]
-                flag = 1
+            return _np.zeros(160)
 
-            for ind in loop:
-                disp_0 = functions.calc_vdisp(_OC_MODEL)
-                func(_OC_MODEL, indices=ind, values=delta)
-                functions.rmk_orbit_corr(_OC, _JAC)
-                disp_p = functions.calc_vdisp(_OC_MODEL)
-                disp.append(((disp_p - disp_0) / delta).ravel())
-                func(_OC_MODEL, indices=ind, values=0.0)
-                _OC.set_kicks(_INIT_KICKS)
+    def __calc_vdisp_signature(self):
+        """."""
+        deltafunc = functions._SET_FUNCS[self._dtype]
+        disp = []
+        delta = _DELTAS[self._dtype][self._elem[0]]
+        loop = [self.indices]
+        flag = 1
+        if isinstance(self._fantasy_name, list):
+            loop = self.indices
+            flag = -1
 
-            if flag == 1:
-                return disp[0]
-            else:
-                return disp
+        for ind in loop:
+            disp_0 = functions.calc_vdisp(_OC_MODEL)
+            deltafunc(_OC_MODEL, indices=ind, values=delta)
+            functions.rmk_orbit_corr(_OC, _JAC)
+            disp_p = functions.calc_vdisp(_OC_MODEL)
+            disp.append(((disp_p - disp_0) / delta).ravel())
+            deltafunc(_OC_MODEL, indices=ind, values=0.0)
+            _OC.set_kicks(_INIT_KICKS)
+
+        if flag == 1:
+            return disp[0]
+        return disp
+
+    def __calc_twiss_signature(self):
+        """."""
+        deltafunc = functions._SET_FUNCS[self._dtype]
+        twiss = []
+        delta = _DELTAS[self._dtype][self._elem[0]]
+        loop = [self.indices]
+        flag = 1
+        if isinstance(self._fantasy_name, list):
+            loop = self.indices
+            flag = -1
+
+        for ind in loop:
+            twisspart = _opt.twiss.TwissArray(len(si_data.si_bpmidx()))
+
+            deltafunc(_OC_MODEL, indices=ind, values=+delta)
+            functions.rmk_orbit_corr(_OC, _JAC)
+            twiss_p = _opt.twiss.calc_twiss(
+                _OC_MODEL, indices=si_data.si_bpmidx()
+            )[0]
+
+            deltafunc(_OC_MODEL, indices=ind, values=-delta)
+            functions.rmk_orbit_corr(_OC, _JAC)
+            twiss_n = _opt.twiss.calc_twiss(
+                _OC_MODEL, indices=si_data.si_bpmidx()
+            )[0]
+
+            for key in twisspart.dtype.fields.keys():
+                twisspart[key] = (twiss_p[key] - twiss_n[key]) / (2 * delta)
+
+            twiss.append(twisspart)
+
+            deltafunc(_OC_MODEL, indices=ind, values=0.0)
+            _OC.set_kicks(_INIT_KICKS)
+
+        if flag == 1:
+            return twiss[0]
+        return twiss
+
+    def __calc_signature(self):
+        """."""
+        if self._func == "testfunc":
+            return self.__calc_test_signature()
+        elif self._func == "vertical_disp":
+            return self.__calc_vdisp_signature()
+        else:
+            return self.__calc_twiss_signature()
 
     @property
     def func(self):
@@ -260,7 +308,9 @@ class Button:
         )
 
         # Handle fantasy name
-        fantasy_name = self._handle_fantasy_name(elem, indices, split_flag)
+        fantasy_name = self._handle_fantasy_name(
+            elem, sect, indices, split_flag
+        )
 
         # Update attributes
         self._update_attributes(elem, sect, fantasy_name, indices, fixpos)
@@ -321,11 +371,13 @@ class Button:
             else:
                 raise ValueError("indices passed in wrong format")
 
-            elem, indices, split_flag = self._process_indices(elem, indices)
+            elem, sect, indices, split_flag = self._process_indices(
+                elem, sect, indices
+            )
 
         return elem, sect, indices, split_flag
 
-    def _process_indices(self, elem, indices):
+    def _process_indices(self, elem, sect, indices):
         """."""
         found_elems = [
             fname
@@ -342,17 +394,31 @@ class Button:
             for ind in _fam[elem]["index"]
             if all(i in ind for i in indices)
         ]
+        sect = [
+            int(_fam[elem]["subsection"][i][:2])
+            for i, f in enumerate(_fam[elem]["index"])
+            if f in indices
+        ]
         if len(indices) == 1:
             indices = indices[0]
+            sect = sect[0]
 
-        return elem, indices, True if len(indices) != 1 else False
+        return elem, sect, indices, True if len(indices) != 1 else False
 
-    def _handle_fantasy_name(self, elem, indices, split_flag):
+    def _handle_fantasy_name(self, elem, sect, indices, split_flag):
         """Handle fantasy name logic."""
         if split_flag is True:
             fantasy_name = [
                 elem + "_" + str(i + 1) for i in range(len(indices))
             ]
+        elif _sects_dict[elem].count(sect) > 1:
+            c = 0
+            for ind, sec in zip(_fam[elem]["index"], _fam[elem]["subsection"]):
+                if int(sec[:2]) == sect:
+                    c += 1
+                    if ind == indices:
+                        break
+            fantasy_name = elem+"_"+str(c)
         else:
             fantasy_name = elem
         return fantasy_name
