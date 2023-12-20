@@ -12,34 +12,54 @@ from .calc_orbcorr_mat import OrbRespmat
 class CorrParams:
     """."""
 
+    RESPMAT_MODE = _get_namedtuple('RespMatMode', ['Full', 'Mxx', 'Myy'])
+
     def __init__(self):
         """."""
+        # The most restrictive of the two below will be the limiting factor:
         self.minsingval = 0.2
+        self.numsingval = 500
+        self.tikhonovregconst = 0  # Tikhonov regularization constant
+        self.respmatmode = self.RESPMAT_MODE.Full
+        self.respmatrflinemult = 1e6  # Mult. factor of RF line in SVD.
+        self.enblrf = True
+        self.enbllistbpm = None
+        self.enbllistch = None
+        self.enbllistcv = None
+
         self.maxkickch = 300e-6  # rad
         self.maxkickcv = 300e-6  # rad
         self.maxkickrf = 500e6  # Hz
         self.maxdeltakickch = 300e-6  # rad
         self.maxdeltakickcv = 300e-6  # rad
         self.maxdeltakickrf = 1000  # Hz
+        self.corrgainch = 1.0  # Gains applied to correctors delta kicks.
+        self.corrgaincv = 1.0
+        self.corrgainrf = 1.0
+
         self.maxnriters = 10
-        self.tolerance = 0.5e-6  # m
-        self.enblrf = True
-        self.enbllistbpm = None
-        self.enbllistch = None
-        self.enbllistcv = None
+        self.convergencetol = 0.5e-6  # m  Define the convergence criteria
+        self.orbrmswarnthres = 1e-6  # m  Orb. threshold to trigger warning.
+        self.useglobalcoef = False  # Use same kick factor for all correctors.
+        self.updatejacobian = False  # jacobian should update in all iterations
+
+        self.use6dorb = False
 
 
 class OrbitCorr:
     """."""
 
-    CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
+    CORR_STATUS = _get_namedtuple(
+        'CorrStatus',
+        ['Sucess', 'OrbRMSWarning', 'ConvergenceFail', 'SaturationFail'])
 
     def __init__(self, model, acc, params=None, corr_system='SOFB'):
         """."""
         self.acc = acc
         self.params = params or CorrParams()
+        dim = '6d' if self.params.use6dorb else '4d'
         self.respm = OrbRespmat(
-            model=model, acc=self.acc, dim='6d', corr_system=corr_system)
+            model=model, acc=self.acc, dim=dim, corr_system=corr_system)
         self.respm.model.cavity_on = True
         self.params.enbllistbpm = _np.ones(
             self.respm.bpm_idx.size*2, dtype=bool)
@@ -78,23 +98,106 @@ class OrbitCorr:
         return _np.sqrt(_np.sum(res*res)/res.size)
 
     def get_inverse_matrix(self, jacobian_matrix, full=False):
-        """."""
-        jmat = _dcopy(jacobian_matrix)
-        jmat[_np.logical_not(self.params.enbllistbpm), :] = 0
-        enblcorrs = _np.r_[
-            self.params.enbllistch, self.params.enbllistcv, self.params.enblrf]
-        jmat[:, ~enblcorrs] = 0
+        """Calculate the pseudo-inverse of jacobian_matrix.
 
-        umat, smat, vmat = _np.linalg.svd(jmat, full_matrices=False)
-        idx = smat > self.params.minsingval
-        ismat = _np.zeros(smat.shape, dtype=float)
-        ismat[idx] = 1/smat[idx]
+        Args:
+            jacobian_matrix (numpy.ndarray, (N, M)): Jacobian matrix.
+            full (bool, optional): Whether or not to return the SVD
+                decomposition with the processed singular values.
+                Defaults to False.
 
-        ismat = _np.dot(vmat.T*ismat, umat.T)
-        if full:
-            return ismat, umat, smat, vmat
-        else:
-            return ismat
+        Raises:
+            ValueError: If there is some problem with the calculation.
+
+        Returns:
+            inv_mat (numpy.ndarray, (M, N)): pseudo inverse.
+            u (numpy.ndarray, (N, min(N, M)), optional): U matrix.
+            s (numpy.ndarray, (min(N, M), ), optional): Processed sing. values.
+            vt (numpy.ndarray, (min(N, M), M), optional): Transpose of V matrix
+
+        """
+        par = self.params
+
+        enblbpms = par.enbllistbpm
+        enblcorrs = _np.r_[par.enbllistch, par.enbllistcv, par.enblrf]
+
+        if not _np.any(enblbpms):
+            raise ValueError('No BPM selected in enbllistbpm')
+        if not _np.any(enblcorrs):
+            raise ValueError('No Corrector selected in enbllist')
+
+        sel_mat = enblbpms[:, None] * enblcorrs[None, :]
+        if sel_mat.size != jacobian_matrix.size:
+            raise ValueError('Incompatible size between jacobian and enbllist')
+
+        mat = jacobian_matrix.copy()
+        mat[:, -1] *= par.respmatrflinemult
+        nr_bpms = len(par.enbllistbpm)
+        nr_ch = len(par.enbllistch)
+        nr_chcv = nr_ch + len(par.enbllistcv)
+        if par.respmatmode != par.RESPMAT_MODE.Full:
+            mat[:nr_bpms, nr_ch:nr_chcv] = 0
+            mat[nr_bpms:, :nr_ch] = 0
+            mat[nr_bpms:, nr_chcv:] = 0
+        if par.respmatmode == par.RESPMAT_MODE.Mxx:
+            mat[nr_bpms:] = 0
+        elif par.respmatmode == par.RESPMAT_MODE.Myy:
+            mat[:nr_bpms] = 0
+
+        mat = mat[sel_mat]
+        mat = _np.reshape(mat, [_np.sum(enblbpms), _np.sum(enblcorrs)])
+        uuu, sing, vvv = self.calc_svd(mat)
+
+        idcs = sing > par.minsingval
+        idcs[par.numsingval:] = False
+        singr = sing[idcs]
+        nr_sv = _np.sum(idcs)
+        if not nr_sv:
+            raise ValueError('All Singular Values below minimum.')
+
+        # Apply Tikhonov regularization:
+        regc = par.tikhonovregconst
+        inv_s = _np.zeros(sing.size, dtype=float)
+        inv_s[idcs] = singr/(singr*singr + regc*regc)
+
+        # Calculate Inverse
+        imat = _np.dot(vvv.T*inv_s, uuu.T)
+        is_nan = _np.any(_np.isnan(imat))
+        is_inf = _np.any(_np.isinf(imat))
+        if is_nan or is_inf:
+            raise ValueError('Inverse contains nan or inf.')
+        inv_mat = _np.zeros(jacobian_matrix.shape[::-1], dtype=float)
+        inv_mat[sel_mat.T] = imat.ravel()
+        inv_mat[-1, :] *= par.respmatrflinemult
+        if not full:
+            return inv_mat
+
+        # Calculate processed singular values
+        singp = _np.zeros(sing.size, dtype=float)
+        singp[idcs] = 1/inv_s[idcs]
+        sing_vals = _np.zeros(min(*inv_mat.shape), dtype=float)
+        sing_vals[:singp.size] = singp
+        return inv_mat, uuu, singp, vvv
+
+    def calc_svd(self, mat):
+        """Calculate truncated SVD of a matrix.
+
+        Args:
+            mat (numpy.ndarray, (N, M)): 2D array to decompose.
+
+        Raises:
+            ValueError: When SVD decomposition is not successful.
+
+        Returns:
+            u (numpy.ndarray, (N, min(N, M))): U matrix of decomposition
+            s (numpy.ndarray, (min(N, M), )): Singular values
+            vt (numpy.ndarray, (min(N, M), M)): Transpose of V matrix
+
+        """
+        try:
+            return _np.linalg.svd(mat, full_matrices=False)
+        except _np.linalg.LinAlgError():
+            raise ValueError('Could not calculate SVD of jacobian')
 
     def correct_orbit(self, jacobian_matrix=None, goal_orbit=None):
         """Orbit correction.
@@ -104,24 +207,22 @@ class OrbitCorr:
         """
         if goal_orbit is None:
             nbpm = len(self.respm.bpm_idx)
-            goal_orbit = _np.zeros(2 * nbpm)
+            goal_orbit = _np.zeros(2 * nbpm, dtype=float)
 
-        if jacobian_matrix is None:
+        jmat = jacobian_matrix
+        if jmat is None:
             jmat = self.get_jacobian_matrix()
-        else:
-            jmat = jacobian_matrix
 
         ismat = self.get_inverse_matrix(jmat)
 
         orb = self.get_orbit()
         dorb = orb - goal_orbit
         bestfigm = OrbitCorr.get_figm(dorb)
-        if bestfigm < self.params.tolerance:
-            return OrbitCorr.CORR_STATUS.Sucess
-
         for _ in range(self.params.maxnriters):
             dkicks = -1*_np.dot(ismat, dorb)
-            kicks = self._process_kicks(dkicks)
+            kicks, saturation_flag = self._process_kicks(dkicks)
+            if saturation_flag:
+                return OrbitCorr.CORR_STATUS.SaturationFail
             self.set_kicks(kicks)
             orb = self.get_orbit()
             dorb = orb - goal_orbit
@@ -129,15 +230,24 @@ class OrbitCorr:
             diff_figm = _np.abs(bestfigm - figm)
             if figm < bestfigm:
                 bestfigm = figm
-            if diff_figm < self.params.tolerance:
-                break
-        else:
-            return OrbitCorr.CORR_STATUS.Fail
-        return OrbitCorr.CORR_STATUS.Sucess
+            if diff_figm < self.params.convergencetol:
+                if bestfigm <= self.params.orbrmswarnthres:
+                    return OrbitCorr.CORR_STATUS.Sucess
+                else:
+                    return OrbitCorr.CORR_STATUS.OrbRMSWarning
+            if self.params.updatejacobian:
+                jmat = self.get_jacobian_matrix()
+                ismat = self.get_inverse_matrix(jmat)
+        return OrbitCorr.CORR_STATUS.ConvergenceFail
 
     def get_orbit(self):
         """."""
-        cod = pyaccel.tracking.find_orbit6(self.respm.model, indices='open')
+        if self.params.use6dorb:
+            cod = pyaccel.tracking.find_orbit6(
+                self.respm.model, indices='open')
+        else:
+            cod = pyaccel.tracking.find_orbit4(
+                self.respm.model, indices='open')
         codx = cod[0, self.respm.bpm_idx].ravel()
         cody = cod[2, self.respm.bpm_idx].ravel()
         res = _np.r_[codx, cody]
@@ -186,10 +296,14 @@ class OrbitCorr:
         dkickrf = dkicks[-1]
 
         # apply factor to dkicks in case they are larger than maximum delta:
-        dkickch *= min(1, par.maxdeltakickch / _np.abs(dkickch).max())
-        dkickcv *= min(1, par.maxdeltakickcv / _np.abs(dkickcv).max())
+        coef_ch = min(
+            par.corrgainch, par.maxdeltakickch/_np.abs(dkickch).max())
+        coef_cv = min(
+            par.corrgaincv, par.maxdeltakickcv/_np.abs(dkickcv).max())
+        coef_rf = 1.0
         if par.enblrf and dkickrf != 0:
-            dkickrf *= min(1, par.maxdeltakickrf / _np.abs(dkickrf))
+            coef_rf = min(
+                par.corrgainrf, par.maxdeltakickrf/_np.abs(dkickrf))
 
         # Do not allow kicks to be larger than maximum after application
         # Algorithm:
@@ -202,20 +316,32 @@ class OrbitCorr:
         que = [(-par.maxkickch - kickch) / dkickch, ]
         que.append((par.maxkickch - kickch) / dkickch)
         que = _np.max(que, axis=0)
-        dkickch *= min(_np.min(que), 1.0)
+        coef_ch = max(min(_np.min(que), coef_ch), 0)
 
         que = [(-par.maxkickcv - kickcv) / dkickcv, ]
         que.append((par.maxkickcv - kickcv) / dkickcv)
         que = _np.max(que, axis=0)
-        dkickcv *= min(_np.min(que), 1.0)
+        coef_cv = max(min(_np.min(que), coef_cv), 0)
 
         if self.params.enblrf and dkickrf != 0:
             que = [(-par.maxkickrf - kickrf) / dkickrf, ]
             que.append((par.maxkickrf - kickrf) / dkickrf)
             que = _np.max(que, axis=0)
-            dkickrf *= min(_np.min(que), 1.0)
+            coef_rf = max(min(_np.min(que), coef_rf), 0)
+
+        min_coef = min(coef_ch, coef_cv, coef_rf)
+
+        if self.params.useglobalcoef:
+            dkickch *= min_coef
+            dkickcv *= min_coef
+            dkickrf *= min_coef
+        else:
+            dkickch *= coef_ch
+            dkickcv *= coef_cv
+            dkickrf *= coef_rf
+        saturation_flag = _np.isclose(min_coef, 0)
 
         kicks[:nch] += dkickch
         kicks[nch:nch+ncv] += dkickcv
         kicks[-1] += dkickrf
-        return kicks
+        return kicks, saturation_flag

@@ -201,10 +201,9 @@ class BBAParams(_ParamsBaseClass):
         self.meas_nrsteps = 8
         self.quad_deltakl = 0.01  # [1/m]
         self.quad_nrcycles = 1
-        self.wait_sofb = 0.3  # [s]
-        self.wait_correctors = 2  # [s]
-        self.wait_quadrupole = 2  # [s]
-        self.timeout_wait_sofb = 3  # [s]
+        self.wait_correctors = 0.3  # [s]
+        self.wait_quadrupole = 0.3  # [s]
+        self.timeout_wait_orbit = 3  # [s]
         self.sofb_nrpoints = 10
         self.sofb_maxcorriter = 5
         self.sofb_maxorberr = 5  # [um]
@@ -218,11 +217,10 @@ class BBAParams(_ParamsBaseClass):
         st += dtmp('meas_nrsteps', self.meas_nrsteps, '')
         st += ftmp('quad_deltakl [1/m]', self.quad_deltakl, '')
         st += ftmp('quad_nrcycles', self.quad_nrcycles, '')
-        st += ftmp('wait_sofb [s]', self.wait_sofb, '(time to process calcs)')
         st += ftmp('wait_correctors [s]', self.wait_correctors, '')
         st += ftmp('wait_quadrupole [s]', self.wait_quadrupole, '')
         st += ftmp(
-            'timeout_wait_sofb [s]', self.timeout_wait_sofb, '(get orbit)')
+            'timeout_wait_orbit [s]', self.timeout_wait_orbit, '(get orbit)')
         st += dtmp('sofb_nrpoints', self.sofb_nrpoints, '')
         st += dtmp('sofb_maxcorriter', self.sofb_maxcorriter, '')
         st += ftmp('sofb_maxorberr [um]', self.sofb_maxorberr, '')
@@ -305,7 +303,7 @@ class DoBBA(_BaseClass):
         """."""
         sofb = self.devices['sofb']
         sofb.cmd_reset()
-        sofb.wait_buffer(self.params.timeout_wait_sofb)
+        sofb.wait_buffer(self.params.timeout_wait_orbit)
         return _np.hstack([sofb.orbx, sofb.orby])
 
     @staticmethod
@@ -319,9 +317,7 @@ class DoBBA(_BaseClass):
         idxx = self.data['bpmnames'].index(bpmname)
         refx, refy = sofb.refx, sofb.refy
         refx[idxx], refy[idxx] = x0, y0
-        sofb.refx = refx
-        sofb.refy = refy
-        _time.sleep(self.params.wait_sofb)
+        sofb.refx, sofb.refy = refx, refy
         idx, resx, resy = sofb.correct_orbit_manually(
             nr_iters=self.params.sofb_maxcorriter,
             residue=self.params.sofb_maxorberr)
@@ -1266,8 +1262,7 @@ class DoBBA(_BaseClass):
         for _ in range(self.params.quad_nrcycles):
             print('.', end='')
             for fac in cycling_curve:
-                newkl = min(
-                    max(korig + deltakl*fac, lowlim), upplim)
+                newkl = min(max(korig + deltakl*fac, lowlim), upplim)
                 quad.strength = newkl
                 _time.sleep(self.params.wait_quadrupole)
         print(' Ok!')
@@ -1283,7 +1278,6 @@ class DoBBA(_BaseClass):
         enblx, enbly = 0*enblx0, 0*enbly0
         enblx[idx], enbly[idx] = 1, 1
         sofb.bpmxenbl, sofb.bpmyenbl = enblx, enbly
-        _time.sleep(self.params.wait_sofb)
 
         orbini, orbpos, orbneg = [], [], []
         npts = 2*(nrsteps//2) + 1
@@ -1298,7 +1292,7 @@ class DoBBA(_BaseClass):
             print('orbit corr: ', end='')
             ret, fmet = self.correct_orbit_at_bpm(
                 bpmname, x0+dorbsx[i], y0+dorbsy[i])
-            if ret >= 0:
+            if fmet <= self.params.sofb_maxorberr:
                 txt = tmpl('Ok! in {:02d} iters'.format(ret))
             else:
                 txt = tmpl('NOT Ok! dorb={:5.1f} um'.format(fmet))
@@ -1307,11 +1301,10 @@ class DoBBA(_BaseClass):
             orbini.append(self.get_orbit())
 
             for j, fac in enumerate(cycling_curve):
-                newkl = min(
-                    max(korig + deltakl*fac, lowlim), upplim)
+                newkl = min(max(korig + deltakl*fac, lowlim), upplim)
                 quad.strength = newkl
                 _time.sleep(self.params.wait_quadrupole)
-                if not j:
+                if j == 0:
                     orbpos.append(self.get_orbit())
                     klpos = quad.strength
                 elif j == 1:
@@ -1343,7 +1336,6 @@ class DoBBA(_BaseClass):
         for i in range(int(nrsteps)):
             sofb.mancorrgainch = (i+1)/nrsteps * 100
             sofb.mancorrgaincv = (i+1)/nrsteps * 100
-            _time.sleep(self.params.wait_sofb)
             sofb.cmd_applycorr_all()
             _time.sleep(self.params.wait_correctors)
         sofb.deltakickch, sofb.deltakickcv = dch*0, dcv*0
