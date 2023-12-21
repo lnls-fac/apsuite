@@ -401,8 +401,9 @@ def get_cross_section_distribution(psim, npts=3000):
 
     beta_bar defined below is the ratio (v/c) and it defines when using the
     ultra-relativistic regime equation for the total cross section.
-    if beta_bar equals zero then is necessary to use the ultra-relativistic
-    equation for the total crooss section.
+    if beta_bar equals zero then the total cross section diverges when using
+    piwinski's relation for the total cross section by the 1/beta_bar
+    dependence. Therefore, is necessary to neglect this factor contribution.
     """
     beta_bar = 0
     psi = _np.logspace(_np.log10(_np.pi / 2 - psim), 0, npts)
