@@ -398,6 +398,11 @@ def get_cross_section_distribution(psim, npts=3000):
 
     psim = minimum scattering angle (lower integration limitant).
     npts =               number of point for a logspace function.
+
+    beta_bar defined below is the ratio (v/c) and it defines when using the
+    ultra-relativistic regime equation for the total cross section.
+    if beta_bar equals zero then is necessary to use the ultra-relativistic
+    equation for the total crooss section.
     """
     beta_bar = 0
     psi = _np.logspace(_np.log10(_np.pi / 2 - psim), 0, npts)
@@ -542,9 +547,6 @@ def histgms(acc, l_spos, num_part, accep, de_min, cutaccep):
         idx = _np.argmin(_np.abs(scalc - iten))
         indices.append(idx_model)
 
-        # this index is necessary to the s position indices
-        # from analitically calculated PDF
-        # match with monte carlo simulation s position indices
         env = envelopes[idx_model]
 
         part1, part2 = create_particles(env, num_part)

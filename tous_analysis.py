@@ -462,7 +462,7 @@ class TousAnalysis:
 
         return all_track, indices
 
-    def _find_data(self, l_scattered_pos, scrap, vchamber):
+    def _concat_track_lossrate(self, l_scattered_pos, scrap, vchamber):
         # não consegui resolvero erro que o ruff indicou nessa função
         """Generating the data for the plot."""
         all_track, indices = self._get_track_def(
@@ -578,10 +578,10 @@ class TousAnalysis:
 
         return all_lostp, prob, lostp
 
-    def _get_table(self, l_scattered_pos, scrap, vchamber):
+    def _f_scat_table(self, l_scattered_pos, scrap, vchamber):
         """Generates the heat map of loss positions."""
         dic_res = {}
-        all_lostp, prob, lostp = self._find_data(
+        all_lostp, prob, lostp = self._concat_track_lossrate(
             l_scattered_pos, scrap, vchamber
         )
         n_scat = _np.round(l_scattered_pos, 2)
@@ -611,11 +611,11 @@ class TousAnalysis:
 
         return dic_res
 
-    def get_reordered_dict(
+    def get_scat_dict(
         self, l_scattered_pos, reording_key, scrap, vchamber
     ):
         """Get the reordered dictionary."""
-        dic = self._get_table(l_scattered_pos, scrap, vchamber)
+        dic = self._f_scat_table(l_scattered_pos, scrap, vchamber)
 
         zip_tuples = zip(*[dic[chave] for chave in dic])
         new_tuples = sorted(
@@ -694,7 +694,7 @@ class TousAnalysis:
 
         return lista
 
-    def plot_scat_table(self, new_dic):
+    def plot_scat_dict(self, new_dic):
         """Heatmap plot indicating the warm points of loss along the ring.
 
         new_dic = contains the reordered dict with lost positions and
