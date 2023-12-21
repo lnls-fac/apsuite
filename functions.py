@@ -399,8 +399,6 @@ def get_cross_section_distribution(psim, npts=3000):
     psim = minimum scattering angle (lower integration limitant).
     npts =               number of point for a logspace function.
 
-    beta_bar defined below is the ratio (v/c) and it defines when using the
-    ultra-relativistic regime equation for the total cross section.
     if beta_bar equals zero then the total cross section diverges when using
     piwinski's relation for the total cross section by the 1/beta_bar
     dependence. Therefore, is necessary to neglect this factor contribution.
