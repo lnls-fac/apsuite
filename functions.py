@@ -436,8 +436,8 @@ def cross_section_draw_samples(psim, num_part):
 def scatter_particles(part1, part2, de_min):
     """M.C. simulation of the Touschek scattering process.
 
-    part1  =   partcile's coordinates.
-    part2  =   partcile's coordinates.
+    part1  =   1st partcile's coordinates.
+    part2  =   2nd partcile's coordinates.
     de_min = mimimum energy deviation.
     """
     gamma = 3e9 / 0.510e6
