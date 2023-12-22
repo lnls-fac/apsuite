@@ -1,6 +1,5 @@
 """Module 'base' for the class object 'Base': a collection of 'Buttons'."""
 
-import os as _os
 from copy import deepcopy as _dpcopy
 from itertools import product
 
@@ -13,9 +12,7 @@ from .si_data import si_elems, si_sectors, std_misaligment_types
 _STD_ELEMS = si_elems()
 _STD_TYPES = std_misaligment_types()
 _STD_SECTS = si_sectors()
-_D_BUTTONS_FILE = _os.path.join(
-    _os.path.dirname(__file__), "Default_Buttons.pickle"
-)
+_D_BUTTONS_FILE = "Default_Buttons.pickle"
 _DEFAULT_BUTTONS = []
 
 
@@ -175,8 +172,9 @@ class Base:
                 (button.dtype == b.dtype)
                 and (button.indices == b.indices)
                 and (button.fantasy_name == b.fantasy_name)
+                and (self._func == b.func)
             ):
-                return True, b
+                return True, _dpcopy(b.signature)
         return False, None
 
     def __generate_buttons(self):
@@ -188,15 +186,14 @@ class Base:
                 "vertical_disp",
                 "twiss",
             ]:
-                update_default_base()
                 temp_button = buttons.Button(
                     elem=elem, dtype=dtype, sect=sect, func="testfunc"
                 ).flatten()
                 for tb in temp_button:
-                    flag, b = self.__search_button_in_default_base(tb)
+                    flag, sig = self.__search_button_in_default_base(tb)
                     if flag:
-                        sig = b.signature
-                        tb._signature = _dpcopy(sig)
+                        tb._func = self._func
+                        tb._signature = sig
                         all_buttons += [tb]
                     else:
                         tb_new = buttons.Button(
@@ -210,7 +207,6 @@ class Base:
                     elem=elem, dtype=dtype, sect=sect, func=self._func
                 ).flatten()
                 all_buttons += temp_button
-
         return all_buttons
 
     def __handle_buttons(self, buttons):

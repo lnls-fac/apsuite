@@ -413,7 +413,7 @@ class Button:
         elif _sects_dict[elem].count(sect) > 1:
             c = 0
             for ind, sec in zip(_fam[elem]["index"], _fam[elem]["subsection"]):
-                print("ind:", ind, "\nsec:", sec, "\nindices:", indices)
+                # print("ind:", ind, "\nsec:", sec, "\nindices:", indices)
                 if int(sec[:2]) == sect:
                     c += 1
                     if ind == indices:

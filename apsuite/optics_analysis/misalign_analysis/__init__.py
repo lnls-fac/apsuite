@@ -8,4 +8,15 @@ from .si_data import get_model
 
 del base, buttons
 
-__all__ = ["Base", "Button", "functions", "fitting", "si_data", "set_model"]
+__all__ = [
+    "Base",
+    "Button",
+    "functions",
+    "fitting",
+    "si_data",
+    "get_model",
+    "set_model",
+    "get_default_base",
+    "save_default_base",
+    "delete_default_base",
+]
