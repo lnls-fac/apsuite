@@ -2,6 +2,7 @@
 
 import os as _os
 from copy import deepcopy as _dpcopy
+from itertools import product
 
 import numpy as _np
 from mathphys.functions import load_pickle, save_pickle
@@ -135,12 +136,14 @@ class Base:
         # reading sects
         self._sects = sects
         if (
+            isinstance(self._sects, (int, _np.integer))
+            and 0 < self._sects <= 20
+        ):
+            self._sects = [self._sects]
+        elif (
             isinstance(self._sects, (list, tuple, _np.ndarray))
             and all(isinstance(i, (int, _np.integer)) for i in self._sects)
             and all(0 < i <= 20 for i in self._sects)
-        ) or (
-            isinstance(self._sects, (int, _np.integer))
-            and 0 < self._sects <= 20
         ):
             self._sects = sorted(list(set(self._sects)))
         elif self._sects == "all":
@@ -178,35 +181,35 @@ class Base:
 
     def __generate_buttons(self):
         all_buttons = []
-        for dtype in self._dtypes:
-            for sect in self._sects:
-                for elem in self._elems:
-                    if self._use_root and self._func in [
-                        "vertical_disp",
-                        "twiss",
-                    ]:
-                        update_default_base()
-                        temp_button = buttons.Button(
-                            elem=elem, dtype=dtype, sect=sect, func="testfunc"
-                        ).flatten()
-                        for tb in temp_button:
-                            flag, b = self.__search_button_in_default_base(tb)
-                            if flag:
-                                sig = b.signature
-                                tb._signature = _dpcopy(sig)
-                                all_buttons += [tb]
-                            else:
-                                tb_new = buttons.Button(
-                                    indices=tb.indices,
-                                    dtype=tb.dtype,
-                                    func=self._func,
-                                )
-                                all_buttons += [tb_new]
+        for dtype, sect, elem in product(
+            self._dtypes, self._sects, self._elems
+        ):
+            if self._use_root and self._func in [
+                "vertical_disp",
+                "twiss",
+            ]:
+                update_default_base()
+                temp_button = buttons.Button(
+                    elem=elem, dtype=dtype, sect=sect, func="testfunc"
+                ).flatten()
+                for tb in temp_button:
+                    flag, b = self.__search_button_in_default_base(tb)
+                    if flag:
+                        sig = b.signature
+                        tb._signature = _dpcopy(sig)
+                        all_buttons += [tb]
                     else:
-                        temp_button = buttons.Button(
-                            elem=elem, dtype=dtype, sect=sect, func=self._func
-                        ).flatten()
-                        all_buttons += temp_button
+                        tb_new = buttons.Button(
+                            indices=tb.indices,
+                            dtype=tb.dtype,
+                            func=self._func,
+                        )
+                        all_buttons += [tb_new]
+            else:
+                temp_button = buttons.Button(
+                    elem=elem, dtype=dtype, sect=sect, func=self._func
+                ).flatten()
+                all_buttons += temp_button
 
         return all_buttons
 

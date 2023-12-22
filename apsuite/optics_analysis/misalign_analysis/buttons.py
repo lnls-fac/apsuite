@@ -354,10 +354,7 @@ class Button:
                 if s == sect
             ]
             if len(indices) == 1:
-                if (
-                    isinstance(indices[0], (list, tuple, _np.ndarray))
-                    and len(indices[0]) > 1
-                ):
+                if isinstance(indices[0], (list, tuple, _np.ndarray)):
                     indices = indices[0]
             else:
                 split_flag = True
@@ -416,12 +413,12 @@ class Button:
         elif _sects_dict[elem].count(sect) > 1:
             c = 0
             for ind, sec in zip(_fam[elem]["index"], _fam[elem]["subsection"]):
-                print('ind:', ind, '\nsec:', sec, '\nindices:', indices)
+                print("ind:", ind, "\nsec:", sec, "\nindices:", indices)
                 if int(sec[:2]) == sect:
                     c += 1
                     if ind == indices:
                         break
-            fantasy_name = elem+"_"+str(c)
+            fantasy_name = elem + "_" + str(c)
         else:
             fantasy_name = elem
         return fantasy_name
