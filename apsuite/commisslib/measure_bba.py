@@ -289,7 +289,7 @@ class DoBBA(_BaseClass):
     @bpms2dobba.setter
     def bpms2dobba(self, bpmlist):
         """."""
-        self._bpms2dobba = sorted([_PVName(bpm) for bpm in bpmlist])
+        self._bpms2dobba = [_PVName(bpm) for bpm in bpmlist]
 
     def connect_to_quadrupoles(self):
         """."""
