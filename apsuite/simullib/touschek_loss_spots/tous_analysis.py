@@ -1,4 +1,5 @@
 """tous_analysis."""
+import os
 from pyaccel.lifetime import Lifetime
 from pyaccel.lattice import get_attribute, find_indices, find_spos
 import touschek_pack.functions as to_fu
@@ -11,15 +12,13 @@ from mathphys.beam_optics import beam_rigidity as _beam_rigidity
 import pandas as _pd
 import scipy.integrate as scyint
 import pyaccel as _pyaccel
-from mathphys.functions import load_pickle
+from mathphys.functions import save_pickle, load_pickle
 
 
 class TousAnalysis:
     """Class for the analysis of electron losses along the ring."""
 
-    def __init__(
-        self, accelerator, energies_off=None, beam_energy=None, n_turns=7
-    ):
+    def __init__(self, accelerator, energies_off=None, beam_energy=None, n_turns=7):
         """Parameters necessary to define the class."""
         if energies_off is None:
             energy_off = _np.linspace(0, 0.046, 460)  # physical limitants
@@ -32,15 +31,10 @@ class TousAnalysis:
         self._model_fit = accelerator
         self._model = pymodels.si.create_accelerator()
 
-        self._amp_and_limidx = None
         self._sc_accps = None
         self._accep = None
-        self._inds_pos = load_pickle(
-            "/".join(__file__.split("/")[:-1]) + "/ph_lim.pickle"
-        )
-        self._inds_neg = load_pickle(
-            "/".join(__file__.split("/")[:-1]) + "/ph_lim_neg.pickle"
-        )
+        self._inds_pos = None
+        self._inds_neg = None
         self._amps_pos = None
         self._amps_neg = None
         self.num_part = 50000
@@ -80,9 +74,7 @@ class TousAnalysis:
     def accep(self):
         """Defines Touschek energy acceptance."""
         if self._accep is None:
-            self._accep = py_op.calc_touschek_energy_acceptance(
-                self.accelerator
-            )
+            self._accep = py_op.calc_touschek_energy_acceptance(self.accelerator)
         return self._accep
 
     @property
@@ -97,13 +89,19 @@ class TousAnalysis:
         return self._sc_accps
 
     @property
-    def amp_and_limidx(self):
+    def linear_lim_indices(self):
         """Defines 4 properties.
 
         Positive and negative amplitudes.
         physical limitants for positive and negative e_dev
         """
-        if self._amp_and_limidx is None:
+
+        try:
+            self._inds_pos = load_pickle("phy_lim_pos.pickle")
+            self._inds_neg = load_pickle("phy_lim_neg.pickle")
+            self._amp_pos = load_pickle("amps_pos.pickle")
+            self._amp_neg = load_pickle("amps_neg.pickle")
+        except Exception:
             self._model.cavity_on = False
             self._model.radiation_on = False
 
@@ -115,9 +113,12 @@ class TousAnalysis:
                 self._model, -self.off_energy, self.h_pos, self.h_neg
             )
 
-            self._amp_and_limidx = True
+            save_pickle(data=self._inds_pos, fname="phy_lim_pos.pickle")
+            save_pickle(data=self._inds_neg, fname="phy_lim_neg.pickle")
+            save_pickle(data=self._amps_pos, fname="amps_pos.pickle")
+            save_pickle(data=self._amps_neg, fname="amps_neg.pickle")
 
-        return self._amp_and_limidx
+        return self._inds_pos, self._inds_neg
 
     @property
     def off_energy(self):
@@ -173,7 +174,7 @@ class TousAnalysis:
 
     def get_amps_idxs(self):  # Defines various parameters
         """Defines 3 self params at same time."""
-        return self.amp_and_limidx, self.accep, self.s_calc
+        return self.linear_lim_indices, self.accep, self.s_calc
 
     def set_vchamber_scraper(self, vchamber):
         """Function for setting the vchamber apperture."""
@@ -317,17 +318,13 @@ class TousAnalysis:
         spos = desired s positions (list or numpy.array)
         """
         spos_ring = self.spos
-        dic = to_fu.norm_cutacp(
-            self._model_fit, spos, 5000, self._accep, norm=True
-        )
+        dic = to_fu.norm_cutacp(self._model_fit, spos, 5000, self._accep, norm=True)
 
         fdensp, fdensn = dic["fdensp"], dic["fdensn"]
         deltasp, deltasn = dic["deltasp"], dic["deltasn"]
 
         _, ax = _plt.subplots(figsize=(10, 5))
-        ax.set_title(
-            "Probability density analytically calculated", fontsize=20
-        )
+        ax.set_title("Probability density analytically calculated", fontsize=20)
         ax.grid(True, alpha=0.5, ls="--", color="k")
         ax.xaxis.grid(False)
         ax.set_xlabel(r"$\delta$ [%]", fontsize=25)
@@ -447,9 +444,7 @@ class TousAnalysis:
         for _, scattered_pos in enumerate(l_scattered_pos):
             index = _np.argmin(_np.abs(scattered_pos - spos))
             indices.append(index)
-            dic = to_fu.track_eletrons_d(
-                self._deltas, self.nturns, index, self._model
-            )
+            dic = to_fu.track_eletrons_d(self._deltas, self.nturns, index, self._model)
             all_track.append(dic)
 
         hx = self._model_fit[self.scraph_inds[0]].hmax
@@ -465,9 +460,7 @@ class TousAnalysis:
     def _concat_track_lossrate(self, l_scattered_pos, scrap, vchamber):
         # não consegui resolvero erro que o ruff indicou nessa função
         """Generating the data for the plot."""
-        all_track, indices = self._get_track_def(
-            l_scattered_pos, scrap, vchamber
-        )
+        all_track, indices = self._get_track_def(l_scattered_pos, scrap, vchamber)
         spos = self.spos
         fact = 0.03
 
@@ -498,9 +491,7 @@ class TousAnalysis:
 
             data = _pd.DataFrame({"lost_pos_by_tracking": lost_positions})
             # dataframe that storages the tracking data
-            lost_pos_column = (
-                data.groupby("lost_pos_by_tracking").groups
-            ).keys()
+            lost_pos_column = (data.groupby("lost_pos_by_tracking").groups).keys()
             data = _pd.DataFrame({"lost_pos_by_tracking": lost_pos_column})
             # this step agroups the lost_positions
 
@@ -592,9 +583,7 @@ class TousAnalysis:
 
             for j, boolean in enumerate(bool_array):
                 if boolean:
-                    index = _np.intp(
-                        _np.where(lostp[idx] == all_lostp[j])[0][0]
-                    )
+                    index = _np.intp(_np.where(lostp[idx] == all_lostp[j])[0][0])
                     scat_data.append(prob[idx][index])
                 else:
                     scat_data.append(0)
@@ -611,9 +600,7 @@ class TousAnalysis:
 
         return dic_res
 
-    def get_scat_dict(
-        self, l_scattered_pos, reording_key, scrap, vchamber
-    ):
+    def get_scat_dict(self, l_scattered_pos, reording_key, scrap, vchamber):
         """Get the reordered dictionary."""
         dic = self._f_scat_table(l_scattered_pos, scrap, vchamber)
 
@@ -624,8 +611,7 @@ class TousAnalysis:
         zip_ordered = zip(*new_tuples)
 
         new_dict = {
-            chave: list(valores)
-            for chave, valores in zip(dic.keys(), zip_ordered)
+            chave: list(valores) for chave, valores in zip(dic.keys(), zip_ordered)
         }
 
         return new_dict
