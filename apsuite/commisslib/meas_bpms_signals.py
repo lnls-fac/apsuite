@@ -1,13 +1,15 @@
 """."""
+import time as _time
+
 import numpy as _np
 import scipy.fft as _sp_fft
-import time as _time
+import scipy.signal as _sp_sig
+from siriuspy.devices import CurrInfoSI, Event, EVG, FamBPMs, RFGen, Trigger, \
+    Tune
+from siriuspy.search import HLTimeSearch as _HLTimeSearch
 
 from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
-from siriuspy.search import HLTimeSearch as _HLTimeSearch
-from siriuspy.devices import Tune, CurrInfoSI, \
-    Trigger, Event, EVG, RFGen, FamBPMs
 
 
 class AcqBPMsSignalsParams(_ParamsBaseClass):
@@ -37,8 +39,7 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
         dly = self.trigbpm_delay
         if dly is None:
             stg += stmp(
-                'trigbpm_delay', 'same',
-                '(script will not change current value)')
+                'trigbpm_delay', 'same', '(current value will not be changed)')
         else:
             stg += ftmp('trigbpm_delay', dly, '[us]')
         stg += dtmp('trigbpm_nrpulses', self.trigbpm_nrpulses, '')
@@ -47,8 +48,7 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
         dly = self.event_delay
         if dly is None:
             stg += stmp(
-                'event_delay', 'same',
-                '(script will not change current value)')
+                'event_delay', 'same', '(current value will not be changed)')
         else:
             stg += ftmp('event_delay', dly, '[us]')
         stg += stmp('event_mode', self.event_mode, '')
@@ -193,7 +193,7 @@ class AcqBPMsSignals(_BaseClass):
         fambpms = self.devices['fambpms']
         prms = self.params
         fambpms.mturn_signals2acq = self.params.signals2acq
-        return fambpms.mturn_config_acquisition(
+        return fambpms.config_mturn_acquisition(
             nr_points_after=prms.nrpoints_after,
             nr_points_before=prms.nrpoints_before,
             acq_rate=prms.acq_rate, repeat=prms.acq_repeat)
@@ -202,25 +202,28 @@ class AcqBPMsSignals(_BaseClass):
         """."""
         fambpms = self.devices['fambpms']
         ret = self.prepare_bpms_acquisition()
-        tag = self._bpm_tag(idx=abs(ret)-1)
+        tag = self._bpm_tag(idx=abs(int(ret))-1)
         if ret < 0:
             print(tag + ' did not finish last acquisition.')
         elif ret > 0:
             print(tag + ' is not ready for acquisition.')
 
-        fambpms.mturn_reset_flags_and_update_initial_timestamps()
+        fambpms.reset_mturn_initial_state()
         self.trigger_timing_signal()
 
         time0 = _time.time()
-        ret = fambpms.mturn_wait_update(timeout=self.params.timeout)
+        ret = fambpms.wait_update_mturn(timeout=self.params.timeout)
         print(f'it took {_time.time()-time0:02f}s to update bpms')
         if ret != 0:
-            print(f'There was a problem with acquisition')
+            print('There was a problem with acquisition')
             if ret > 0:
-                tag = self._bpm_tag(idx=ret-1)
-                print('This BPM did not update: ' + tag)
+                tag = self._bpm_tag(idx=int(ret)-1)
+                pos = fambpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                print('This BPM did not update: ' + tag + ', signal ' + pos)
             elif ret == -1:
                 print('Initial timestamps were not defined')
+            elif ret == -2:
+                print('Signals size changed.')
             return
         self.data = self.get_data()
 
@@ -273,7 +276,7 @@ class AcqBPMsSignals(_BaseClass):
         """Filter acquisition matrix considering a frequency range.
 
         Args:
-            matrix (numpy.array): 2d-array with timesamples along rows and
+            orb (numpy.array): 2d-array with timesamples along rows and
             BPMs indices along columns.
             fmin (float): minimum frequency in range.
             fmax (float): maximum frequency in range.
@@ -296,10 +299,9 @@ class AcqBPMsSignals(_BaseClass):
 
     @staticmethod
     def filter_switching_cycles(orb, freq_sampling, freq_switching):
-        """
-        Filter out the switching frequency from the TbT data.
+        """Filter out the switching frequency from the TbT data.
 
-        Parameters:
+        Args:
             orb (numpy.ndarray): Input signal of shape (Nsamples, Nbpms).
             freq_sampling (float): Sampling frequency of the input signal.
             freq_switching (float): Switching frequency to be filtered out.
@@ -327,6 +329,24 @@ class AcqBPMsSignals(_BaseClass):
             sw_pert = _np.hstack([sw_pert, sw_sig[:, :osiz-siz]])
         # Subtract the replicated switching signature from the original data
         return orb - sw_pert.T
+
+    @staticmethod
+    def simulate_data_decimation(orb, downsampling=12*8):
+        """Simulate data decimation by application of moving average filter.
+
+        Args:
+            orb (numpy.ndarray, (Nsamples, Nbpms)): Target matrix.
+            downsampling (int, optional): Size of the decimation filter.
+                Defaults to 12*8 (from TbT to FAcq).
+
+        Returns:
+            orb (numpy.ndarray, (Nsamples, Nbpms)): Input matrix filtered
+                along rows.
+
+        """
+        ds = downsampling
+        fil = _np.ones(ds)/ds
+        return _sp_sig.convolve(orb, fil[:, None], mode='same')
 
     @staticmethod
     def calc_spectrum(data, fs=1):
