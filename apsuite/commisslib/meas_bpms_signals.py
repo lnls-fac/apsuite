@@ -245,16 +245,15 @@ class AcqBPMsSignals(_BaseClass):
             raise ValueError(
                 'Lenght of signals2acq does not match signals acquired.')
         for i, sig in enumerate(self.params.signals2acq):
-            if sig.upper() == 'X':
-                data['orbx'] = mturn_orbit[i]
-            elif sig.upper() == 'Y':
-                data['orby'] = mturn_orbit[i]
-            elif sig.upper() == 'S':
-                data['sumdata'] = mturn_orbit[i]
-            elif sig.upper() == 'Q':
-                data['posq'] = mturn_orbit[i]
-            else:
-                data['ampl'+sig.lower()] = mturn_orbit[i]
+            sig = sig.lower()
+            name = 'sumdata'
+            if sig in 'xy':
+                name = 'orb' + sig
+            elif sig in 'abcd':
+                name = 'ampl' + sig
+            elif sig == 'q':
+                name = 'posq'
+            data[name] = mturn_orbit[i]
 
         tune = self.devices['tune']
         data['tunex'], data['tuney'] = tune.tunex, tune.tuney
