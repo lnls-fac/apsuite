@@ -368,9 +368,21 @@ class AcqBPMsSignals(_BaseClass):
         return spec, freq
 
     @staticmethod
-    def calc_svd(data):
-        """."""
-        return _np.linalg.svd(data, full_matrices=False)
+    def calc_svd(data, full_matrices=False):
+        """Calculate SVD decomposition of matrix using numpy.linalg.svd.
+
+        Args:
+            data (numpy.ndarray): Target matrix.
+            full_matrices (bool, optional): Whether or not to return full
+                matrices. Defaults to False.
+
+        Returns:
+            U (numpy.ndarray): Left singular vectors.
+            S (numpy.ndarray): Singular values
+            Vt (numpy.ndarray): Right singular vectors.
+
+        """
+        return _np.linalg.svd(data, full_matrices=full_matrices)
 
     def _bpm_tag(self, idx):
         names = self.devices['fambpms'].bpm_names
