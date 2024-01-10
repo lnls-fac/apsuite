@@ -384,6 +384,21 @@ class AcqBPMsSignals(_BaseClass):
         """
         return _np.linalg.svd(data, full_matrices=full_matrices)
 
+    @staticmethod
+    def calc_hilbert_transform(data, axis=0):
+        """Calculate the Hilbert Transform using scipy.signal.hilbert.
+
+        Args:
+            data (numpy.ndarray): Target matrix.
+            axis (int, optional): Dimension index of data along which the
+                transform will be calculated. Defaults to 0.
+
+        Returns:
+            data (numpy.ndarray): Complex Hilbert transform of data.
+
+        """
+        return _sp_sig.hilbert(data, axis=axis)
+
     def _bpm_tag(self, idx):
         names = self.devices['fambpms'].bpm_names
         return f'{names[idx]:s} (idx={idx:d})'
