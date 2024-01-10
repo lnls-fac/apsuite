@@ -349,10 +349,22 @@ class AcqBPMsSignals(_BaseClass):
         return _sp_sig.convolve(orb, fil[:, None], mode='same')
 
     @staticmethod
-    def calc_spectrum(data, fs=1):
-        """."""
-        spec = _sp_fft.rfft(data, axis=0)/data.shape[0]
-        freq = _sp_fft.rfftfreq(data.shape[0], d=1/fs)
+    def calc_spectrum(data, fs=1.0, axis=0):
+        """Calculate the real DFT of data using scipy.fft.rfft.
+
+        Args:
+            data (numpy.ndarray): Target array.
+            fs (float, optional): Sampling frequency of data. Defaults to 1.0.
+            axis (int, optional): Axis along which the DFT will be calculated.
+                Defaults to 0.
+
+        Returns:
+            dft (numpy.ndarray): The complex values of the real DFT of `data`.
+            freq (numpy.ndarray): Frequency for which the DFT was calculated.
+
+        """
+        spec = _sp_fft.rfft(data, axis=axis)/data.shape[axis]
+        freq = _sp_fft.rfftfreq(data.shape[axis], d=1/fs)
         return spec, freq
 
     @staticmethod
