@@ -276,7 +276,7 @@ class AcqBPMsSignals(_BaseClass):
         """Filter acquisition matrix considering a frequency range.
 
         Args:
-            orb (numpy.array): 2d-array with timesamples along rows and
+            orb (numpy.ndarray): 2D array with timesamples along rows and
             BPMs indices along columns.
             fmin (float): minimum frequency in range.
             fmax (float): maximum frequency in range.
