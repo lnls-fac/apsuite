@@ -71,13 +71,11 @@ if __name__ == "__main__":
     random_machines.seed = seed
 
     random_machines.configure_corrections()
-
     nr_steps = 5
 
     deltadata = DELTA52Data()
 
     filenames = [
-
         deltadata.get_kickmap_filename(meas_flag=True, dp=0, dgv=0),
         deltadata.get_kickmap_filename(meas_flag=True, dp=0, dgv=13.125),
         deltadata.get_kickmap_filename(meas_flag=True, dp=0, dgv=26.25),
@@ -85,7 +83,6 @@ if __name__ == "__main__":
         deltadata.get_kickmap_filename(meas_flag=True, dp=-13.125, dgv=26.25),
         deltadata.get_kickmap_filename(meas_flag=True, dp=-26.25, dgv=13.125),
         deltadata.get_kickmap_filename(meas_flag=True, dp=-26.25, dgv=26.25)
-
     ]
 
     for i, kmap_fname in enumerate(filenames):
