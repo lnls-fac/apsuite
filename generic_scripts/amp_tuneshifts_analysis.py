@@ -217,8 +217,7 @@ class TbTData(DataBaseClass):
     def fit_trajectories(self):
         """."""
         for axis in 'xy':
-            traj= self.data['traj'+axis].copy()
-
+            traj = self.data['traj'+axis].copy()
             # calculate analystic singal (hilbert transform)
             traj_a = hilbert(traj, axis=0)
             # identify instantaneous amplitudes (envelopes)
@@ -240,7 +239,7 @@ class TbTData(DataBaseClass):
             traj = _np.vstack([traj[f:t, i] for i, (f, t) in
                               enumerate(zip(from_turn, to_turn))]).T
 
-            amp_guesses = amps.max(axis=0)
+            amp_guesses = amps[20:-19].max(axis=0)
             tune_guesses = _np.array([tunes[idc, col] for col, idc in
                                       enumerate(peaks_idcs)])
             phase_guesses = _np.array([inst_phases[f, i] for i, f in
@@ -280,7 +279,8 @@ class TbTData(DataBaseClass):
             beta = twiss.betax if axis == 'x' else twiss.betay
 
             fitted_tunes = params[:, 1]
-            fitted_J = (params[:, 0]**4).sum() / (beta * params[:, 0]**2).sum()
+            amplitudes = self.data['traj'+axis][:10,:].std(axis=0)
+            fitted_J = (amplitudes**4).sum() / (beta * amplitudes**2).sum()
             # J is calculated as in eq. (9) of the reference X.R. Resende and M.B.
             # Alves and L. Liu and F.H. de Sá. Equilibrium and Nonlinear Beam
             # Dynamics Parameters From Sirius Turn-by-Turn BPM Data. In Proc.
