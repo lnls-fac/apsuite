@@ -95,6 +95,11 @@ class AcqBPMsSignals(_BaseClass):
         if self.isonline:
             self.create_devices()
 
+    calc_positions_from_amplitudes = staticmethod(
+        FamBPMs.calc_positions_from_amplitudes)
+    calc_positions_from_amplitudes.__doc__ = \
+        FamBPMs.calc_positions_from_amplitudes.__doc__
+
     def load_and_apply(self, fname: str):
         """Load and apply `data` and `params` from pickle or HDF5 file.
 
@@ -245,16 +250,15 @@ class AcqBPMsSignals(_BaseClass):
             raise ValueError(
                 'Lenght of signals2acq does not match signals acquired.')
         for i, sig in enumerate(self.params.signals2acq):
-            if sig.upper() == 'X':
-                data['orbx'] = mturn_orbit[i]
-            elif sig.upper() == 'Y':
-                data['orby'] = mturn_orbit[i]
-            elif sig.upper() == 'S':
-                data['sumdata'] = mturn_orbit[i]
-            elif sig.upper() == 'Q':
-                data['posq'] = mturn_orbit[i]
-            else:
-                data['ampl'+sig.lower()] = mturn_orbit[i]
+            sig = sig.lower()
+            name = 'sumdata'
+            if sig in 'xy':
+                name = 'orb' + sig
+            elif sig in 'abcd':
+                name = 'ampl' + sig
+            elif sig == 'q':
+                name = 'posq'
+            data[name] = mturn_orbit[i]
 
         tune = self.devices['tune']
         data['tunex'], data['tuney'] = tune.tunex, tune.tuney
@@ -276,7 +280,7 @@ class AcqBPMsSignals(_BaseClass):
         """Filter acquisition matrix considering a frequency range.
 
         Args:
-            orb (numpy.array): 2d-array with timesamples along rows and
+            orb (numpy.ndarray): 2D array with timesamples along rows and
             BPMs indices along columns.
             fmin (float): minimum frequency in range.
             fmax (float): maximum frequency in range.
@@ -349,16 +353,55 @@ class AcqBPMsSignals(_BaseClass):
         return _sp_sig.convolve(orb, fil[:, None], mode='same')
 
     @staticmethod
-    def calc_spectrum(data, fs=1):
-        """."""
-        spec = _sp_fft.rfft(data, axis=0)/data.shape[0]
-        freq = _sp_fft.rfftfreq(data.shape[0], d=1/fs)
+    def calc_spectrum(data, fs=1.0, axis=0):
+        """Calculate the real DFT of data using scipy.fft.rfft.
+
+        Args:
+            data (numpy.ndarray): Target array.
+            fs (float, optional): Sampling frequency of data. Defaults to 1.0.
+            axis (int, optional): Axis along which the DFT will be calculated.
+                Defaults to 0.
+
+        Returns:
+            dft (numpy.ndarray): The complex values of the real DFT of `data`.
+            freq (numpy.ndarray): Frequency for which the DFT was calculated.
+
+        """
+        spec = _sp_fft.rfft(data, axis=axis)/data.shape[axis]
+        freq = _sp_fft.rfftfreq(data.shape[axis], d=1/fs)
         return spec, freq
 
     @staticmethod
-    def calc_svd(data):
-        """."""
-        return _np.linalg.svd(data, full_matrices=False)
+    def calc_svd(data, full_matrices=False):
+        """Calculate SVD decomposition of matrix using numpy.linalg.svd.
+
+        Args:
+            data (numpy.ndarray): Target matrix.
+            full_matrices (bool, optional): Whether or not to return full
+                matrices. Defaults to False.
+
+        Returns:
+            U (numpy.ndarray): Left singular vectors.
+            S (numpy.ndarray): Singular values
+            Vt (numpy.ndarray): Right singular vectors.
+
+        """
+        return _np.linalg.svd(data, full_matrices=full_matrices)
+
+    @staticmethod
+    def calc_hilbert_transform(data, axis=0):
+        """Calculate the Hilbert Transform using scipy.signal.hilbert.
+
+        Args:
+            data (numpy.ndarray): Target matrix.
+            axis (int, optional): Dimension index of data along which the
+                transform will be calculated. Defaults to 0.
+
+        Returns:
+            data (numpy.ndarray): Complex Hilbert transform of data.
+
+        """
+        return _sp_sig.hilbert(data, axis=axis)
 
     def _bpm_tag(self, idx):
         names = self.devices['fambpms'].bpm_names
