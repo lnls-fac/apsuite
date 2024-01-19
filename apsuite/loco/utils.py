@@ -131,6 +131,7 @@ class LOCOUtils:
     @staticmethod
     def set_quadmag_kldelta(model, idx_mag, klvalues, kldelta):
         """."""
+        klvalues = _np.atleast_1d(klvalues)
         for idx, idx_seg in enumerate(idx_mag):
             _pyaccel.lattice.set_attribute(
                 model, 'KL', idx_seg, klvalues[idx] + kldelta/len(idx_mag))
@@ -308,7 +309,10 @@ class LOCOUtils:
             for fam_name in config.famname_quadset:
                 kl_indices.append(config.respm.fam_data[fam_name]['index'])
         else:
-            kl_indices = config.respm.fam_data['QN']['index']
+            if not len(config.quad_indices_kl):
+                kl_indices = config.respm.fam_data['QN']['index']
+            else:
+                kl_indices = config.quad_indices_kl
         magtype = 'quadrupole'
         klmatrix = LOCOUtils._parallel_base(
             config, model, kl_indices,
@@ -419,7 +423,6 @@ class LOCOUtils:
     @staticmethod
     def jloco_calc_ksl_skewquad(config, model):
         """."""
-        config.update_skew_quad_knobs()
         kslindices = config.skew_quad_indices_ksl
         kslmatrix = LOCOUtils._parallel_base(
             config, model, kslindices,

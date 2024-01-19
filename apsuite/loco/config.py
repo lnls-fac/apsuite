@@ -280,11 +280,13 @@ class LOCOConfig:
         self.update_goalmat(
             self.goalmat, self.use_dispersion, self.use_offdiagonal)
         self.update_gain()
-        self.update_quad_knobs(self.use_quad_families)
+        if self.quad_indices_kl is None:
+            self.update_quad_knobs(self.use_quad_families)
         self.update_sext_knobs(self.use_sext_families)
         self.update_dip_knobs(self.use_dip_families)
         self.update_girder_knobs()
-        self.update_skew_quad_knobs()
+        if self.skew_quad_indices_ksl is None:
+            self.update_skew_quad_knobs()
         self.update_weight()
         self.update_svd(self.svd_method, self.svd_sel, self.svd_thre)
         self.nr_fit_parameters = self.get_nr_fit_parameters()
