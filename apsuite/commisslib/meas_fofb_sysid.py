@@ -247,12 +247,13 @@ class FOFBSysIdAcq(_BaseClass):
         lvls1 = off + amp * vs
         return lvls0[:-1], lvls1[:-1]
 
-    def get_levels_bpms_from_svd(self, lvl0, lvl1, ampmin=0):
+    def get_levels_bpms_from_svd(self, lvl0, lvl1, ampmax):
         """Get levels from SVD for BPMs devices.
 
         Args:
-            lvl0 (int): maximum level for PRBS level 0
-            lvl1 (int): maximum level for PRBS level 1
+            lvl0 (int): minimum level for PRBS level 0
+            lvl1 (int): minimum level for PRBS level 1
+            ampmax (int): maximum level after SV scaling
 
         Returns:
             lvls0x (numpy.ndarray, SI_NUM_BPMS):
@@ -278,12 +279,12 @@ class FOFBSysIdAcq(_BaseClass):
         us = u[:, singval]
         us /= _np.abs(us).max()
         ss = s[singval]
-        ss /= _np.abs(s).max()
+        ss /= _np.abs(s).min()
         amp = (lvl1-lvl0)/2
         off = (lvl1+lvl0)/2
-        # Scales the amplitude with its corresponding singular value
-        # (normalized). The amplitudes are saturated to 'ampmin'.
-        amp = max(amp * ss, ampmin)
+        # Scales the amplitude with its corresponding singular value (normalized
+        # to the lesser one). The amplitudes are saturated to 'ampmax'.
+        amp = min(amp * ss, ampmax)
         lvls0 = off - amp * us
         lvls1 = off + amp * us
         lvls0x, lvls1x = lvls0[:SI_NUM_BPMS], lvls1[:SI_NUM_BPMS]
