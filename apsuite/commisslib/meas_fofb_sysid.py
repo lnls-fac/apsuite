@@ -277,7 +277,6 @@ class FOFBSysIdAcq(_BaseClass):
 
         u, s, _ = self._calc_svd(respm)
         us = u[:, singval]
-        us /= _np.abs(us).max()
         ss = s[singval]
         ss /= _np.abs(s).min()
         amp = (lvl1-lvl0)/2
