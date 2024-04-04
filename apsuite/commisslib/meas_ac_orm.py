@@ -180,6 +180,10 @@ class MeasACORM(_ThreadBaseClass):
             freqs (numpy.ndarray): array with frequencies to fit.
             num_cycles (numpy.ndarray, optional): number of cycles of each
                 frequency. If not provided, all data range will be considered.
+            idx_ini (int|list|tuple|numpy.ndarray, optional): starting index
+                for fitting. If it is an iterable, must have the same size as
+                freqs. Defaults to None, which means the first index will be
+                the starting point.
 
         Returns:
             numpy.ndarray: fitting matrix (len(tim), 2*len(freqs))
@@ -229,14 +233,22 @@ class MeasACORM(_ThreadBaseClass):
                 columns of data.
             freqs (numpy.ndarray, K): K frequencies to fit Fourier components.
             dtim (numpy.ndarray, N): time vector for data columns.
-            num_cycles (num.ndarray, K): number of cycles of each frequency.
-                If not provided, all data range will be considered.
+            num_cycles (num.ndarray, K, optional): number of cycles of each
+                frequency. If not provided, all data range will be considered.
+                Not used if pinv is not None.
+            idx_ini (int|list|tuple|numpy.ndarray, optional): starting index
+                for fitting. If it is an iterable, must have the same size as
+                freqs. Defaults to None, which means the first index will be
+                the starting point. Not used if pinv is not None.
+            pinv (numpy.ndarray, Mx2K, optional): if provided must be the
+                pseudo inverve of the fitting matrix. Defaults to None, which
+                means the fitting matrix and its pseudo-inverse will be
+                calculated.
 
         Returns:
-            numpy.ndarray, KxM: Fourier amplitudes.
-            numpy.ndarray, KxM: Fourier phases (phase==0 means pure sine).
-            numpy.ndarray, KxM: Fourier cosine coefficients.
-            numpy.ndarray, KxM: Fourier sine coefficients.
+            cos (numpy.ndarray, KxM): Fourier cosine coefficients.
+            sin (numpy.ndarray, KxM): Fourier sine coefficients.
+            pinv (numpy.ndarray, Mx2K): pseudo-inverse of fitting matrix.
 
         """
         if pinv is None:
@@ -327,7 +339,8 @@ class MeasACORM(_ThreadBaseClass):
         return corr
 
     def save_loco_input_data(
-            self, respmat_name: str, overwrite=False, save2servconf=False):
+            self, respmat_name: str, overwrite=False, save2servconf=False,
+            extra_kwargs=None):
         """Save in `.pickle` format a dictionary with all LOCO input data.
 
         Args:
@@ -337,6 +350,8 @@ class MeasACORM(_ThreadBaseClass):
                 Defaults to False.
             save2servconf (bool, optional): whether to save response matrix to
                 configDB server. Defaults to False.
+            extra_kwargs (dict, optional): extra keyword arguments to save to
+                loco input file. Defaults to None:
 
         """
         bpms_anly = self.analysis['bpms_noise']
@@ -351,6 +366,7 @@ class MeasACORM(_ThreadBaseClass):
         data['bpm_variation'] = bpms_anly['bpm_variation']
         mat = self.build_respmat()
         data['respmat'] = mat
+        data.update(extra_kwargs or dict())
         if save2servconf:
             data['orbmat_name'] = respmat_name
             mat = self.save_respmat_to_configdb(respmat_name, mat=mat)
@@ -438,15 +454,18 @@ class MeasACORM(_ThreadBaseClass):
         Args:
             mag_idx_ini ([type], optional): initial index of orbit waveform
                 where magnets excitation start. Defaults to None.
-            mag_min_freq ([type], optional): Frequencies below this value will
-                be filtered out before fitting of magnets excitation.`None`
-                means no high pass filter will be applied. Defaults to `None`.
-            mag_max_freq ([type], optional): Frequencies above this value will
-                be filtered out before fitting of magnets excitation. `None`
-                means no low pass filter will be applied. Defaults to `None`.
-            rf_transition_length (int, optional): Number of indices to ignore
+            rf_step_trans_len (int, optional): Number of indices to ignore
                 right before or after RF frequency changes in RF line
-                measurements. Defaults to 10.
+                measurements. Defaults to 10. Only used if step mode was used
+                as RFMode in measurement.
+            rf_phase_central_freq (float, optional): central frequency around
+                which data will be filtered in RF line analysis. Defaults to
+                None, which means the peak frequency in the range [1700, 2300]
+                Hz will be used. Only used if phase mode was used as RFMode in
+                measurement.
+            rf_phase_window (float, optional): frequency width of the filter
+                in RF line analysis. Defaults to 10Hz. Only used if phase mode
+                was used as RFMode in measurement.
 
         """
         self.analysis['magnets'] = self._process_magnets(
@@ -1113,7 +1132,7 @@ class MeasACORM(_ThreadBaseClass):
 
         self.data['magnets'] = self._do_measure_magnets()
         self._set_timing_state(tim_state)
-        self._log(f'All measurements finished!!')
+        self._log('All measurements finished!!')
 
     def _do_measure_bpms_noise(self):
         self._meas_finished_ok = True
@@ -1130,9 +1149,11 @@ class MeasACORM(_ThreadBaseClass):
         nr_points = int(_np.ceil(nr_points))
         ret = self._config_bpms(nr_points, rate='FAcq')
         if ret < 0:
-            self._log(f'BPM {-ret-1:d} did not finish last acquisition.')
+            idx = -int(ret)-1
+            self._log(f'BPM {idx:d} did not finish last acquisition.')
         elif ret > 0:
-            self._log(f'BPM {ret-1:d} is not ready for acquisition.')
+            idx = int(ret)-1
+            self._log(f'BPM {idx:d} is not ready for acquisition.')
         if ret:
             self._meas_finished_ok = False
         self._config_timing()
@@ -1140,23 +1161,30 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         self._log('    Sending Trigger signal...', end='')
-        self.bpms.mturn_reset_flags_and_update_initial_timestamps()
+        self.bpms.reset_mturn_initial_state()
         self.devices['evt_study'].cmd_external_trigger()
         self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         self._log('    Waiting BPMs to update...', end='')
-        ret = self.bpms.mturn_wait_update(timeout=par.timeout_bpms)
-        if ret:
-            self._log(
-                'Problem: timed out waiting BPMs update. '
-                f'Error code: {ret:d}')
+        ret = self.bpms.wait_update_mturn(timeout=par.timeout_bpms)
+        if ret != 0:
+            if ret > 0:
+                tag = self.bpms.bpm_names[int(ret)-1]
+                pos = self.bpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                self._log(
+                    'Problem: This BPM did not update: ' + tag
+                    + ', signal ' + pos)
+            elif ret == -1:
+                self._log('Problem: Initial timestamps were not defined.')
+            elif ret == -2:
+                self._log('Problem: signals size changed.')
             self._meas_finished_ok = False
         self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
-        _time.sleep(0.1)
+        _time.sleep(0.5)
         data = self.get_general_data()
         data.update(self.get_bpms_data())
         data['ch_freqs'] = par.corrs_ch_freqs
@@ -1199,7 +1227,7 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         self._log('    Sending Trigger signal...', end='')
-        self.bpms.mturn_reset_flags_and_update_initial_timestamps()
+        self.bpms.reset_mturn_initial_state()
         self.devices['evt_study'].cmd_external_trigger()
         self._log(f'    Done! ET: {_time.time()-t00:.2f}s')
 
@@ -1214,11 +1242,18 @@ class MeasACORM(_ThreadBaseClass):
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         self._log('    Waiting BPMs to update...', end='')
-        ret = self.bpms.mturn_wait_update(timeout=par.timeout_bpms)
-        if ret:
-            self._log(
-                'Problem: timed out waiting BPMs update. '
-                f'Error code: {ret:d}')
+        ret = self.bpms.wait_update_mturn(timeout=par.timeout_bpms)
+        if ret != 0:
+            if ret > 0:
+                tag = self.bpms.bpm_names[int(ret)-1]
+                pos = self.bpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                self._log(
+                    'Problem: This BPM did not update: ' + tag
+                    + ', signal ' + pos)
+            elif ret == -1:
+                self._log('Problem: Initial timestamps were not defined.')
+            elif ret == -2:
+                self._log('Problem: signals size changed.')
             self._meas_finished_ok = False
         self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -1238,7 +1273,7 @@ class MeasACORM(_ThreadBaseClass):
             self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
-        _time.sleep(0.1)
+        _time.sleep(0.5)
         data.update(self.get_general_data())
         data.update(self.get_bpms_data())
         data['mode'] = par.rf_mode
@@ -1392,21 +1427,28 @@ class MeasACORM(_ThreadBaseClass):
             # send event through timing system to start acquisitions
             t00 = _time.time()
             self._log('    Sending Timing signal...', end='')
-            self.bpms.mturn_reset_flags_and_update_initial_timestamps()
+            self.bpms.reset_mturn_initial_state()
             self.devices['evt_study'].cmd_external_trigger()
             self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # Wait BPMs PV to update with new data
             t00 = _time.time()
             self._log('    Waiting BPMs to update...', end='')
-            ret = self.bpms.mturn_wait_update(timeout=self.params.timeout_bpms)
-            if ret:
-                self._log(
-                    'Problem: timed out waiting BPMs update. '
-                    f'Error code: {ret:d}')
+            ret = self.bpms.wait_update_mturn(timeout=self.params.timeout_bpms)
+            if ret != 0:
+                if ret > 0:
+                    tag = self.bpms.bpm_names[int(ret)-1]
+                    pos = self.bpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                    self._log(
+                        'Problem: This BPM did not update: ' + tag
+                        + ', signal ' + pos)
+                elif ret == -1:
+                    self._log('Problem: Initial timestamps were not defined.')
+                elif ret == -2:
+                    self._log('Problem: signals size changed.')
                 self._meas_finished_ok = False
                 break
-            _time.sleep(0.1)
+            _time.sleep(0.5)
             self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # get data for each sector separately:
@@ -1872,7 +1914,7 @@ class MeasACORM(_ThreadBaseClass):
     # ----------------- BPMs related methods -----------------------
 
     def _config_bpms(self, nr_points, rate='FAcq'):
-        return self.bpms.mturn_config_acquisition(
+        return self.bpms.config_mturn_acquisition(
             acq_rate=rate, nr_points_before=0, nr_points_after=nr_points,
             repeat=False, external=True)
 
