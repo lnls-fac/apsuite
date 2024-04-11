@@ -1,7 +1,7 @@
 """Functions_for_TousAnalysis."""
-import pyaccel as _pyaccel
 import matplotlib.pyplot as _plt
 import numpy as _np
+import pyaccel as _pyaccel
 import scipy.integrate as _scyint
 import scipy.special as _special
 from mathphys.beam_optics import beam_rigidity as _beam_rigidity
@@ -40,6 +40,7 @@ def calc_amp(acc, energy_offsets, hmax, hmin):
     ):
         pass
     return _np.sqrt(a_def), indices
+
 
 def track_eletrons_d(
     deltas, n_turn, element_idx, model, pos_x=1e-5, pos_y=3e-6

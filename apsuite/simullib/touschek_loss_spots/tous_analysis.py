@@ -1,24 +1,23 @@
 """tous_analysis."""
-import os
-from pyaccel.lifetime import Lifetime
-from pyaccel.lattice import get_attribute, find_indices, find_spos
-import touschek_pack.functions as to_fu
-import pymodels
-import pyaccel.optics as py_op
+
+import matplotlib.pyplot as _mplt
 import numpy as _np
-import matplotlib.pyplot as _plt
-import matplotlib.cm as _cm
-from mathphys.beam_optics import beam_rigidity as _beam_rigidity
 import pandas as _pd
-import scipy.integrate as scyint
-import pyaccel as _pyaccel
-from mathphys.functions import save_pickle, load_pickle
+import pyaccel as _pa
+import scipy.integrate as _sp_int
+from mathphys.beam_optics import beam_rigidity as _beam_rigidity
+from mathphys.functions import load as _load, save as _save
+from pymodels import si as _si
+
+from . import functions as _to_fu
 
 
 class TousAnalysis:
     """Class for the analysis of electron losses along the ring."""
 
-    def __init__(self, accelerator, energies_off=None, beam_energy=None, n_turns=7):
+    def __init__(
+        self, accelerator, energies_off=None, beam_energy=None, n_turns=7
+    ):
         """Parameters necessary to define the class."""
         if energies_off is None:
             energy_off = _np.linspace(0, 0.046, 460)  # physical limitants
@@ -29,7 +28,7 @@ class TousAnalysis:
             beta = beam_energy
 
         self._model_fit = accelerator
-        self._model = pymodels.si.create_accelerator()
+        self._model = _si.create_accelerator()
 
         self._sc_accps = None
         self._accep = None
@@ -41,15 +40,23 @@ class TousAnalysis:
         self.energy_dev_min = 1e-4
 
         self.beta = beta  # beta factor
-        self.h_pos = get_attribute(self._model_fit, "hmax", indices="closed")
-        self.h_neg = get_attribute(self._model_fit, "hmin", indices="closed")
-        self.ltime = Lifetime(self._model_fit)
+        self.h_pos = _pa.lattice.get_attribute(
+            self._model_fit, "hmax", indices="closed"
+        )
+        self.h_neg = _pa.lattice.get_attribute(
+            self._model_fit, "hmin", indices="closed"
+        )
+        self.ltime = _pa.lifetime.Lifetime(self._model_fit)
         self._off_energy = energy_off  # (linear model) en_dev to amplitudes
         self.nturns = n_turns
         self._deltas = deltas
-        self.spos = find_spos(self._model_fit, indices="closed")
-        self.scraph_inds = find_indices(self._model, "fam_name", "SHVC")
-        self.scrapv_inds = find_indices(self._model, "fam_name", "SVVC")
+        self.spos = _pa.lattice.find_spos(self._model_fit, indices="closed")
+        self.scraph_inds = _pa.lattice.find_indices(
+            self._model, "fam_name", "SHVC"
+        )
+        self.scrapv_inds = _pa.lattice.find_indices(
+            self._model, "fam_name", "SVVC"
+        )
 
     @property
     def accelerator(self):
@@ -74,7 +81,9 @@ class TousAnalysis:
     def accep(self):
         """Defines Touschek energy acceptance."""
         if self._accep is None:
-            self._accep = py_op.calc_touschek_energy_acceptance(self.accelerator)
+            self._accep = _pa.optics.calc_touschek_energy_acceptance(
+                self.accelerator
+            )
         return self._accep
 
     @property
@@ -85,7 +94,7 @@ class TousAnalysis:
         meters.
         """
         if self._sc_accps is None:
-            self._sc_accps = to_fu.get_scaccep(self.accelerator, self.accep)
+            self._sc_accps = _to_fu.get_scaccep(self.accelerator, self.accep)
         return self._sc_accps
 
     @property
@@ -97,26 +106,26 @@ class TousAnalysis:
         """
 
         try:
-            self._inds_pos = load_pickle("phy_lim_pos.pickle")
-            self._inds_neg = load_pickle("phy_lim_neg.pickle")
-            self._amp_pos = load_pickle("amps_pos.pickle")
-            self._amp_neg = load_pickle("amps_neg.pickle")
+            self._inds_pos = _load("phy_lim_pos.pickle")
+            self._inds_neg = _load("phy_lim_neg.pickle")
+            self._amp_pos = _load("amps_pos.pickle")
+            self._amp_neg = _load("amps_neg.pickle")
         except Exception:
             self._model.cavity_on = False
             self._model.radiation_on = False
 
-            self._amps_pos, self._inds_pos = to_fu.calc_amp(
+            self._amps_pos, self._inds_pos = _to_fu.calc_amp(
                 self._model, self.off_energy, self.h_pos, self.h_neg
             )
 
-            self._amps_neg, self._inds_neg = to_fu.calc_amp(
+            self._amps_neg, self._inds_neg = _to_fu.calc_amp(
                 self._model, -self.off_energy, self.h_pos, self.h_neg
             )
 
-            save_pickle(data=self._inds_pos, fname="phy_lim_pos.pickle")
-            save_pickle(data=self._inds_neg, fname="phy_lim_neg.pickle")
-            save_pickle(data=self._amps_pos, fname="amps_pos.pickle")
-            save_pickle(data=self._amps_neg, fname="amps_neg.pickle")
+            _save(data=self._inds_pos, fname="phy_lim_pos.pickle")
+            _save(data=self._inds_neg, fname="phy_lim_neg.pickle")
+            _save(data=self._amps_pos, fname="amps_pos.pickle")
+            _save(data=self._amps_neg, fname="amps_neg.pickle")
 
         return self._inds_pos, self._inds_neg
 
@@ -198,7 +207,7 @@ class TousAnalysis:
 
         index = _np.argmin(_np.abs(s - single_spos))
         if "pos" in par:
-            res = to_fu.track_eletrons_d(
+            res = _to_fu.track_eletrons_d(
                 self.deltas,
                 self.nturns,
                 index,
@@ -207,7 +216,7 @@ class TousAnalysis:
                 pos_y=3e-6,
             )
         elif "neg" in par:
-            res = to_fu.track_eletrons_d(
+            res = _to_fu.track_eletrons_d(
                 -self.deltas,
                 self.nturns,
                 index,
@@ -220,7 +229,7 @@ class TousAnalysis:
 
     def _get_weighting_tous(self, single_spos, npt=5000):
         """."""
-        scalc, daccp, daccn = to_fu.get_scaccep(self.accelerator, self.accep)
+        scalc, daccp, daccn = _to_fu.get_scaccep(self.accelerator, self.accep)
         bf = self.beta  # bf:beta factor
         lt = self.ltime
         b1 = lt.touschek_data["touschek_coeffs"]["b1"]
@@ -237,11 +246,11 @@ class TousAnalysis:
 
         deltp = _np.tan(kappa_pos) / bf
         deltn = _np.tan(kappa_neg) / bf
-        fdensp = to_fu.f_function_arg_mod(
+        fdensp = _to_fu.f_function_arg_mod(
             kappa_pos, kappap_0, b1[idx], b2[idx], norm=False
         )
 
-        fdensn = to_fu.f_function_arg_mod(
+        fdensn = _to_fu.f_function_arg_mod(
             kappa_neg, kappan_0, b1[idx], b2[idx], norm=False
         )
 
@@ -264,7 +273,7 @@ class TousAnalysis:
 
     def _get_trackndens(self, single_spos, par):
         """Concatenates tracking and touschek loss dens."""
-        # if len(to_fu.t_list(single_spos)) != 1: # Não sei se isso é útil
+        # if len(_to_fu.t_list(single_spos)) != 1: # Não sei se isso é útil
         #     raise ValueError('This function suports only one s position')
 
         fdensp, fdensn, deltp, deltn = self._get_weighting_tous(single_spos)
@@ -300,7 +309,7 @@ class TousAnalysis:
             inds = _np.intp(self.inds_neg)
         index = _np.argmin(_np.abs(s - single_spos))
 
-        to_fu.plot_track_d(
+        _to_fu.plot_track_d(
             self.accelerator,
             dic,
             inds,
@@ -318,13 +327,17 @@ class TousAnalysis:
         spos = desired s positions (list or numpy.array)
         """
         spos_ring = self.spos
-        dic = to_fu.norm_cutacp(self._model_fit, spos, 5000, self._accep, norm=True)
+        dic = _to_fu.norm_cutacp(
+            self._model_fit, spos, 5000, self._accep, norm=True
+        )
 
         fdensp, fdensn = dic["fdensp"], dic["fdensn"]
         deltasp, deltasn = dic["deltasp"], dic["deltasn"]
 
-        _, ax = _plt.subplots(figsize=(10, 5))
-        ax.set_title("Probability density analytically calculated", fontsize=20)
+        _, ax = _mplt.subplots(figsize=(10, 5))
+        ax.set_title(
+            "Probability density analytically calculated", fontsize=20
+        )
         ax.grid(True, alpha=0.5, ls="--", color="k")
         ax.xaxis.grid(False)
         ax.set_xlabel(r"$\delta$ [%]", fontsize=25)
@@ -355,7 +368,7 @@ class TousAnalysis:
             deltaspi = deltasp[idx][:best_index] * 1e2
             deltasni = -deltasn[idx][:best_index] * 1e2
 
-            color = _cm.gist_rainbow(idx / len(spos))
+            color = _mplt.cm.gist_rainbow(idx / len(spos))
             not_desired = [
                 "calc_mom_accep",
                 "mia",
@@ -387,7 +400,7 @@ class TousAnalysis:
         accep = self.accep
         model = self._model_fit
 
-        tup = to_fu.histgms(
+        tup = _to_fu.histgms(
             self._model_fit,
             l_spos,
             self.num_part,
@@ -398,7 +411,7 @@ class TousAnalysis:
 
         hp, hn, idx_model = tup
 
-        fig, ax = _plt.subplots(
+        fig, ax = _mplt.subplots(
             ncols=len(l_spos), nrows=1, figsize=(30, 10), sharey=True
         )
         fig.suptitle(
@@ -407,7 +420,7 @@ class TousAnalysis:
         )
 
         for index, iten in enumerate(idx_model):
-            color = _cm.jet(index / len(idx_model))
+            color = _mplt.cm.jet(index / len(idx_model))
             ay = ax[index]
             if not index:
                 ay.set_ylabel("PDF", fontsize=25)
@@ -420,7 +433,7 @@ class TousAnalysis:
             stri = f"{model[iten].fam_name:s}, {s[iten]:.2f}"
             ay.hist(hp[index], density=True, bins=200, color=color, label=stri)
             ay.hist(hn[index], density=True, bins=200, color=color)
-            _plt.tight_layout()
+            _mplt.tight_layout()
             ay.legend()
 
     def _get_track_def(self, l_scattered_pos, scrap, vchamber):
@@ -444,7 +457,9 @@ class TousAnalysis:
         for _, scattered_pos in enumerate(l_scattered_pos):
             index = _np.argmin(_np.abs(scattered_pos - spos))
             indices.append(index)
-            dic = to_fu.track_eletrons_d(self._deltas, self.nturns, index, self._model)
+            dic = _to_fu.track_eletrons_d(
+                self._deltas, self.nturns, index, self._model
+            )
             all_track.append(dic)
 
         hx = self._model_fit[self.scraph_inds[0]].hmax
@@ -460,7 +475,9 @@ class TousAnalysis:
     def _concat_track_lossrate(self, l_scattered_pos, scrap, vchamber):
         # não consegui resolvero erro que o ruff indicou nessa função
         """Generating the data for the plot."""
-        all_track, indices = self._get_track_def(l_scattered_pos, scrap, vchamber)
+        all_track, indices = self._get_track_def(
+            l_scattered_pos, scrap, vchamber
+        )
         spos = self.spos
         fact = 0.03
 
@@ -491,7 +508,9 @@ class TousAnalysis:
 
             data = _pd.DataFrame({"lost_pos_by_tracking": lost_positions})
             # dataframe that storages the tracking data
-            lost_pos_column = (data.groupby("lost_pos_by_tracking").groups).keys()
+            lost_pos_column = (
+                data.groupby("lost_pos_by_tracking").groups
+            ).keys()
             data = _pd.DataFrame({"lost_pos_by_tracking": lost_pos_column})
             # this step agroups the lost_positions
 
@@ -583,7 +602,9 @@ class TousAnalysis:
 
             for j, boolean in enumerate(bool_array):
                 if boolean:
-                    index = _np.intp(_np.where(lostp[idx] == all_lostp[j])[0][0])
+                    index = _np.intp(
+                        _np.where(lostp[idx] == all_lostp[j])[0][0]
+                    )
                     scat_data.append(prob[idx][index])
                 else:
                     scat_data.append(0)
@@ -611,7 +632,8 @@ class TousAnalysis:
         zip_ordered = zip(*new_tuples)
 
         new_dict = {
-            chave: list(valores) for chave, valores in zip(dic.keys(), zip_ordered)
+            chave: list(valores)
+            for chave, valores in zip(dic.keys(), zip_ordered)
         }
 
         return new_dict
@@ -635,10 +657,10 @@ class TousAnalysis:
 
         summed = []
         for idx, _ in a.iterrows():
-            sum_row = scyint.trapz(a.loc[idx], spos[indices])
+            sum_row = _sp_int.trapz(a.loc[idx], spos[indices])
             summed.append(sum_row)
 
-        _, ax = _plt.subplots(
+        _, ax = _mplt.subplots(
             figsize=(13, 7), gridspec_kw={"hspace": 0.2, "wspace": 0.2}
         )
         ax.set_title("loss rate integral along the ring", fontsize=16)
@@ -648,7 +670,7 @@ class TousAnalysis:
         ax.tick_params(axis="both", labelsize=16)
 
         ax.plot(list(a.index), summed, color="navy")
-        _pyaccel.graphics.draw_lattice(
+        _pa.graphics.draw_lattice(
             self._model_fit, offset=-1e-6, height=1e-6, gca=True
         )
 
@@ -673,7 +695,7 @@ class TousAnalysis:
 
             summed = []
             for idx, _ in a.iterrows():
-                sum_row = scyint.trapz(a.loc[idx], s[indices])
+                sum_row = _sp_int.trapz(a.loc[idx], s[indices])
                 summed.append(sum_row)
 
             lista.append((a.index, summed))
@@ -696,7 +718,7 @@ class TousAnalysis:
         val[idx] = _np.log10(val[idx])
         val[~idx] = val[idx].min()
 
-        fig, ax = _plt.subplots(figsize=(10, 10))
+        fig, ax = _mplt.subplots(figsize=(10, 10))
 
         y = _np.linspace(0, s[-1], df.shape[0] + 1)
         x = _np.linspace(0, s[-1], df.shape[1] + 1)
@@ -704,7 +726,7 @@ class TousAnalysis:
 
         heatmp = ax.pcolor(x_mesh, y_mesh, val, cmap="jet", shading="flat")
 
-        cbar = _plt.colorbar(heatmp)
+        cbar = _mplt.colorbar(heatmp)
         cbar.set_label("Loss rate [1/s] in logarithmic scale", rotation=90)
 
         ax.set_title("Loss profile", fontsize=16)
@@ -713,5 +735,5 @@ class TousAnalysis:
         ax.set_ylabel("lost positions [m]", fontsize=16)
 
         fig.tight_layout()
-        _plt.gca().set_aspect("equal")
-        _plt.show()
+        _mplt.gca().set_aspect("equal")
+        _mplt.show()
