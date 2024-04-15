@@ -180,9 +180,6 @@ class MeasureTbTData(_AcqBPMsSignals):
         self.isonline = isonline
         self._fname = filename
 
-        if self.isonline:
-            self.create_devices()
-
     def create_devices(self):
         super().create_devices()
         self.devices['pingh'] = PowerSupplyPU(
@@ -198,19 +195,49 @@ class MeasureTbTData(_AcqBPMsSignals):
     def fname(self, val):
         self._fname = val
 
-    def prepare_pingers(self):
+    def get_magnets_state(self):
         """."""
         pingh, pingv = self.devices['pingh'], self.devices['pingv']
-        hkick, vkick = self.params['hkick'], self.params['vkick']
-        pingh.strength = hkick / 1e3   # [urad]
-        pingv.strength = vkick / 1e3   # [urad]
-        # MISSING: set to listen to the same event as BPMs
+        hkick, vkick = pingh.strength, pingv.strength
+        return hkick, vkick
+
+    def recover_magnets_state(self, hkick, vkick):
+        """."""
+        self.set_magnets_state(hkick, vkick)
+
+    def set_magnets_state(self, hkick, vkick):
+        """."""
+        pingh, pingv = self.devices['pingh'], self.devices['pingv']
+        if hkick is not None:
+            pingh.strength = hkick
+        if vkick is not None:
+            pingv.strength = vkick
+
+    def prepare_magnets(self):
+        """."""
+        hkick, vkick = self.params.hkick, self.params.vkick
+        hkick = hkick/1e6 if hkick is not None else None
+        vkick = vkick/1e6 if vkick is not None else None
+        self.set_magnets_state(hkick, vkick)
 
     def do_measurement(self):
+        """."""
         currinfo = self.devices['currinfo']
-        self.prepare_pingers()
+        init_timing_state = self.get_timing_state()
+        init_magnets_state = self.get_magnets_state()
         current_before = currinfo.current()
-        self.acquire_data()
+        self.prepare_timing()
+        self.prepare_magnets()
+        self.data['measurement_error'] = False  # error flag
+        try:
+            self.acquire_data()  # BPMs signals + relevant info are acquired
+                                 # such as timestamps tunes, stored current
+                                 # rf frequency, acq rate, nr samples, etc.
+        except Exception as e:
+            print(f'An error occurred during acquisition: {e}')
+            self.data['measurement_error'] = True
+        self.recover_timing_state(init_timing_state)
+        self.recover_magnets_state(init_magnets_state)
         self.data['current_before'] = current_before
         self.data['current_after'] = self.data.pop('stored_current')
         self.data['trajx'] = self.data.pop('orbx')
