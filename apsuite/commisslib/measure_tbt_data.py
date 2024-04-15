@@ -143,8 +143,15 @@ class TbTDataParams(_AcqBPMsSignalsParams):
     def __str__(self):
         stg = super().__str__()
         ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
-        stg += ftmp('hkick', self.hkick, '[urad]')
-        stg += ftmp('vkick', self.vkick, '[urad]')
+        stmp = '{0:26s} = {1:9}  {2:s}\n'.format
+        if self.hkick is None:
+            stg += stmp('hkick', 'same', '(current value will not be changed)')
+        else:
+            stg += ftmp('hkick', self.hkick, '[urad]')
+        if self.hkick is None:
+            stg += stmp('vkick', 'same', '(current value will not be changed)')
+        else:
+            stg += ftmp('vkick', self.vkick, '[urad]')
         return stg
 
     @property
