@@ -175,17 +175,19 @@ class TbTDataParams(_AcqBPMsSignalsParams):
 class MeasureTbTData(_AcqBPMsSignals):
     """."""
     def __init__(self, filename='', isonline=False):
-        super.__init__(params=TbTDataParams(), isonline=isonline,
-                        ispost_mortem=False)
+        """."""
+        self.params = TbTDataParams()
+        self.isonline = isonline
         self._fname = filename
 
+        if self.isonline:
+            self.create_devices()
 
     def create_devices(self):
         super().create_devices()
         self.devices['pingh'] = PowerSupplyPU(
             PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
         self.devices['pinghv'] = PowerSupplyPU(PowerSupplyPU.DEVICES.SI_PING_V)
-
 
     @property
     def fname(self):
@@ -199,8 +201,7 @@ class MeasureTbTData(_AcqBPMsSignals):
     def prepare_pingers(self):
         """."""
         pingh, pingv = self.devices['pingh'], self.devices['pingv']
-        params = self.params
-        hkick, vkick = params['hkick'], params['vkick']
+        hkick, vkick = self.params['hkick'], self.params['vkick']
         pingh.strength = hkick / 1e3   # [urad]
         pingv.strength = vkick / 1e3   # [urad]
         # MISSING: set to listen to the same event as BPMs
