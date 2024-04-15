@@ -8,6 +8,133 @@ from siriuspy.devices import PowerSupplyPU
 from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals, \
     AcqBPMsSignalsParams as _AcqBPMsSignalsParams
 
+
+class TbTDataParams(_AcqBPMsSignalsParams):
+    """."""
+
+    def __init__(self):
+        self.signals2acq = 'XYS'
+        self.acq_rate = 'TbT'
+        self.timeout = 40  # [s]
+
+        self.nrpoints_before = 100
+        self.nrpoints_after = 2000
+        self.acq_repeat = False
+        self.trigbpm_delay = None
+        self.trigbpm_nrpulses = 1
+
+        self.timing_event = 'Linac'
+        self.event_mode = 'Injection'
+        self.event_delay = None
+        self.do_pulse_evg = False
+
+        self._hkick = None  # [urad]
+        self._vkick = None  # [urad]
+
+
+    def __str__(self):
+        stg = super().__str__()
+        ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
+        stmp = '{0:26s} = {1:9}  {2:s}\n'.format
+        if self.hkick is None:
+            stg += stmp('hkick', 'same', '(current value will not be changed)')
+        else:
+            stg += ftmp('hkick', self.hkick, '[urad]')
+        if self.hkick is None:
+            stg += stmp('vkick', 'same', '(current value will not be changed)')
+        else:
+            stg += ftmp('vkick', self.vkick, '[urad]')
+        return stg
+
+    @property
+    def hkick(self):
+        """."""
+        return self._hkick
+
+    @hkick.setter
+    def hkick(self, val):
+        self._hkick = val
+
+    @property
+    def vkick(self):
+        """."""
+        return self._vkick
+
+    @vkick.setter
+    def vkick(self, val):
+        self._vkick = val
+
+class MeasureTbTData(_AcqBPMsSignals):
+    """."""
+    def __init__(self, filename='', isonline=False):
+        """."""
+        self.params = TbTDataParams()
+        self.isonline = isonline
+        self._fname = filename
+
+    def create_devices(self):
+        super().create_devices()
+        self.devices['pingh'] = PowerSupplyPU(
+            PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
+        self.devices['pinghv'] = PowerSupplyPU(PowerSupplyPU.DEVICES.SI_PING_V)
+
+    @property
+    def fname(self):
+        """."""
+        return self._fname
+
+    @fname.setter
+    def fname(self, val):
+        self._fname = val
+
+    def get_magnets_state(self):
+        """."""
+        pingh, pingv = self.devices['pingh'], self.devices['pingv']
+        hkick, vkick = pingh.strength, pingv.strength
+        return hkick, vkick
+
+    def recover_magnets_state(self, hkick, vkick):
+        """."""
+        self.set_magnets_state(hkick, vkick)
+
+    def set_magnets_state(self, hkick, vkick):
+        """."""
+        pingh, pingv = self.devices['pingh'], self.devices['pingv']
+        if hkick is not None:
+            pingh.strength = hkick
+        if vkick is not None:
+            pingv.strength = vkick
+
+    def prepare_magnets(self):
+        """."""
+        hkick, vkick = self.params.hkick, self.params.vkick
+        hkick = hkick/1e6 if hkick is not None else None
+        vkick = vkick/1e6 if vkick is not None else None
+        self.set_magnets_state(hkick, vkick)
+
+    def do_measurement(self):
+        """."""
+        currinfo = self.devices['currinfo']
+        init_timing_state = self.get_timing_state()
+        init_magnets_state = self.get_magnets_state()
+        current_before = currinfo.current()
+        self.prepare_timing()
+        self.prepare_magnets()
+        self.data['measurement_error'] = False  # error flag
+        try:
+            self.acquire_data()  # BPMs signals + relevant info are acquired
+                                 # such as timestamps tunes, stored current
+                                 # rf frequency, acq rate, nr samples, etc.
+        except Exception as e:
+            print(f'An error occurred during acquisition: {e}')
+            self.data['measurement_error'] = True
+        self.recover_timing_state(init_timing_state)
+        self.recover_magnets_state(init_magnets_state)
+        self.data['current_before'] = current_before
+        self.data['current_after'] = self.data.pop('stored_current')
+        self.data['trajx'] = self.data.pop('orbx')
+        self.data['trajy'] = self.data.pop('orby')
+
 class TbTDataAnalysis(_AcqBPMsSignals):
     """."""
 
@@ -126,119 +253,3 @@ class TbTDataAnalysis(_AcqBPMsSignals):
         action /= _np.sum(amplitudes**2 * nominal_beta)
         beta = amplitudes**2/action
         return beta, action
-
-class TbTDataParams(_AcqBPMsSignalsParams):
-    """."""
-
-    def __init__(self, hkick=None, vkick=None):
-        super().__init__()
-        self.nrpoints_before = 100
-        self.nrpoints_after = 2000
-        self.acq_rate = 'TbT'
-        self.signals2acq = 'XYS'
-        self._hkick = hkick
-        self._vkick = vkick
-
-
-    def __str__(self):
-        stg = super().__str__()
-        ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
-        stmp = '{0:26s} = {1:9}  {2:s}\n'.format
-        if self.hkick is None:
-            stg += stmp('hkick', 'same', '(current value will not be changed)')
-        else:
-            stg += ftmp('hkick', self.hkick, '[urad]')
-        if self.hkick is None:
-            stg += stmp('vkick', 'same', '(current value will not be changed)')
-        else:
-            stg += ftmp('vkick', self.vkick, '[urad]')
-        return stg
-
-    @property
-    def hkick(self):
-        """."""
-        return self._hkick
-
-    @hkick.setter
-    def hkick(self, val):
-        self._hkick = val
-
-    @property
-    def vkick(self):
-        """."""
-        return self._vkick
-
-    @vkick.setter
-    def vkick(self, val):
-        self._vkick = val
-
-class MeasureTbTData(_AcqBPMsSignals):
-    """."""
-    def __init__(self, filename='', isonline=False):
-        """."""
-        self.params = TbTDataParams()
-        self.isonline = isonline
-        self._fname = filename
-
-    def create_devices(self):
-        super().create_devices()
-        self.devices['pingh'] = PowerSupplyPU(
-            PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
-        self.devices['pinghv'] = PowerSupplyPU(PowerSupplyPU.DEVICES.SI_PING_V)
-
-    @property
-    def fname(self):
-        """."""
-        return self._fname
-
-    @fname.setter
-    def fname(self, val):
-        self._fname = val
-
-    def get_magnets_state(self):
-        """."""
-        pingh, pingv = self.devices['pingh'], self.devices['pingv']
-        hkick, vkick = pingh.strength, pingv.strength
-        return hkick, vkick
-
-    def recover_magnets_state(self, hkick, vkick):
-        """."""
-        self.set_magnets_state(hkick, vkick)
-
-    def set_magnets_state(self, hkick, vkick):
-        """."""
-        pingh, pingv = self.devices['pingh'], self.devices['pingv']
-        if hkick is not None:
-            pingh.strength = hkick
-        if vkick is not None:
-            pingv.strength = vkick
-
-    def prepare_magnets(self):
-        """."""
-        hkick, vkick = self.params.hkick, self.params.vkick
-        hkick = hkick/1e6 if hkick is not None else None
-        vkick = vkick/1e6 if vkick is not None else None
-        self.set_magnets_state(hkick, vkick)
-
-    def do_measurement(self):
-        """."""
-        currinfo = self.devices['currinfo']
-        init_timing_state = self.get_timing_state()
-        init_magnets_state = self.get_magnets_state()
-        current_before = currinfo.current()
-        self.prepare_timing()
-        self.prepare_magnets()
-        self.data['measurement_error'] = False  # error flag
-        try:
-            self.acquire_data()  # BPMs signals + relevant info are acquired
-                                 # such as timestamps tunes, stored current
-                                 # rf frequency, acq rate, nr samples, etc.
-        except Exception as e:
-            print(f'An error occurred during acquisition: {e}')
-            self.data['measurement_error'] = True
-        self.recover_timing_state(init_timing_state)
-        self.recover_magnets_state(init_magnets_state)
-        self.data['current_before'] = current_before
-        self.data['current_after'] = self.data.pop('stored_current')
-        self.data['trajx'] = self.data.pop('orbx')
-        self.data['trajy'] = self.data.pop('orby')
