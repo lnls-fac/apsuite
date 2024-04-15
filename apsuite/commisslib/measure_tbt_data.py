@@ -3,7 +3,7 @@ import numpy as _np
 from scipy.optimize import curve_fit as _curve_fit
 import matplotlib.pyplot as _mplt
 import datetime as _datetime
-from siriuspy.devices import PowerSupplyPU
+from siriuspy.devices import PowerSupplyPU, Trigger
 
 from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals, \
     AcqBPMsSignalsParams as _AcqBPMsSignalsParams
@@ -13,6 +13,7 @@ class TbTDataParams(_AcqBPMsSignalsParams):
     """."""
 
     def __init__(self):
+        """."""
         self.signals2acq = 'XYS'
         self.acq_rate = 'TbT'
         self.timeout = 40  # [s]
@@ -31,8 +32,8 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self._hkick = None  # [urad]
         self._vkick = None  # [urad]
 
-
     def __str__(self):
+        """."""
         stg = super().__str__()
         ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
         stmp = '{0:26s} = {1:9}  {2:s}\n'.format
@@ -64,8 +65,13 @@ class TbTDataParams(_AcqBPMsSignalsParams):
     def vkick(self, val):
         self._vkick = val
 
+
 class MeasureTbTData(_AcqBPMsSignals):
     """."""
+
+    PINGERH_TRIGGER = 'SI-01SA:TI-InjDpKckr'
+    PINGERV_TRIGGER = 'SI-19C4:TI-PingV'
+
     def __init__(self, filename='', isonline=False):
         """."""
         self.params = TbTDataParams()
@@ -73,10 +79,13 @@ class MeasureTbTData(_AcqBPMsSignals):
         self._fname = filename
 
     def create_devices(self):
+        """."""
         super().create_devices()
         self.devices['pingh'] = PowerSupplyPU(
             PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
+        self.devices['trigpingh'] = Trigger(self.PINGERH_TRIGGER)
         self.devices['pinghv'] = PowerSupplyPU(PowerSupplyPU.DEVICES.SI_PING_V)
+        self.devices['trigpingv'] = Trigger(self.PINGERV_TRIGGER)
 
     @property
     def fname(self):
@@ -87,13 +96,43 @@ class MeasureTbTData(_AcqBPMsSignals):
     def fname(self, val):
         self._fname = val
 
-    def get_magnets_state(self):
+    def get_timing_state(self):
+        """."""
+        state = super().get_timing_state()
+        trigpingh = self.devices['trigpingh']
+        state['trigpingh_source'] = trigpingh.source
+        state['trigpingh_nrpulses'] = trigpingh.nr_pulses
+        state['trigpingh_delay'] = trigpingh.delay
+        trigpingv = self.devices['trigpingv']
+        state['trigpingv_source'] = trigpingv.source
+        state['trigpingv_nrpulses'] = trigpingv.nr_pulses
+        state['trigpingv_delay'] = trigpingv.delay
+
+    def recover_timing_state(self, state):
+        """."""
+        return super().recover_timing_state(state)
+
+    def prepare_timing(self, state=None):
+        """."""
+        super().prepare_timing(state)
+        trigpingh = self.devices['trigpingh']
+        trigpingh.source = state['trigpingh_source']
+        trigpingh.nr_pulses = state['trigpingh_nrpulses']
+        if trigpingh.delay is not None:
+            trigpingh.delay = state['trigpingh_delay']
+        trigpingv = self.devices['trigpingv']
+        trigpingv.source = state['trigpingv_source']
+        trigpingv.nr_pulses = state['trigpingv_nrpulses']
+        if trigpingv.delay is not None:
+            trigpingv.delay = state['trigpingv_delay']
+
+    def get_magnets_strength(self):
         """."""
         pingh, pingv = self.devices['pingh'], self.devices['pingv']
         hkick, vkick = pingh.strength, pingv.strength
         return hkick, vkick
 
-    def recover_magnets_state(self, hkick, vkick):
+    def recover_magnets_strength(self, hkick, vkick):
         """."""
         self.set_magnets_state(hkick, vkick)
 
@@ -116,7 +155,7 @@ class MeasureTbTData(_AcqBPMsSignals):
         """."""
         currinfo = self.devices['currinfo']
         init_timing_state = self.get_timing_state()
-        init_magnets_state = self.get_magnets_state()
+        init_magnets_strength = self.get_magnets_strength()
         current_before = currinfo.current()
         self.prepare_timing()
         self.prepare_magnets()
@@ -129,19 +168,36 @@ class MeasureTbTData(_AcqBPMsSignals):
             print(f'An error occurred during acquisition: {e}')
             self.data['measurement_error'] = True
         self.recover_timing_state(init_timing_state)
-        self.recover_magnets_state(init_magnets_state)
+        self.recover_magnets_strength(init_magnets_strength)
         self.data['current_before'] = current_before
         self.data['current_after'] = self.data.pop('stored_current')
         self.data['trajx'] = self.data.pop('orbx')
         self.data['trajy'] = self.data.pop('orby')
 
+    def get_fname(self):
+        """."""
+        hkick, vkick = self.params.hkick, self.params.vkick
+        tm = self.data['timestamp']
+        fmt = '%Y-%m-%d-%H-%M-%S'
+        tmstp = _datetime.datetime.fromtimestamp(tm).strftime(fmt)
+        stg = f'tbt_hkick={hkick:3d}_vkick={vkick:3d}_urad_{tmstp}'
+        return stg
+
+
 class TbTDataAnalysis(_AcqBPMsSignals):
     """."""
 
     def __init__(self, filename='', isonline=False):
-        """Analysis of betatron motion and linear optics using Turn-by-turn
-        data"""
-        super().__init__(isonline=isonline, ispost_mortem=False)
+        """Analysis of linear optics using Turn-by-turn data."""
+        self.params = TbTDataParams()
+        self.isonline = isonline
+        self._ispost_mortem = False
+
+        self._fname = filename
+        self._trajx, self._trajy = None, None
+        self._trajsum = None
+
+        # load if fname, load method
 
     @property
     def fname(self):
@@ -167,10 +223,11 @@ class TbTDataAnalysis(_AcqBPMsSignals):
         return self._trajy
 
     @trajy.setter
-    def trajx(self, val):
+    def trajy(self, val):
         self._trajy = val
 
     def linear_optics_analysis(self):
+        """."""
         raise NotImplementedError
 
     def harmonic_analysis(self):
@@ -178,18 +235,21 @@ class TbTDataAnalysis(_AcqBPMsSignals):
         raise NotImplementedError
 
     def principal_components_analysis(self):
+        """."""
         raise NotImplementedError
 
     def independent_component_analysis(self):
+        """."""
         raise NotImplementedError
 
     def equilibrium_params_analysis(self):
+        """."""
         raise NotImplementedError
 
     # plotting methods
     def plot_traj_spectrum():
+        """."""
         raise NotImplementedError
-
 
     def _get_tune_guess(self, matrix):
         """."""
@@ -200,8 +260,10 @@ class TbTDataAnalysis(_AcqBPMsSignals):
         return _np.mean(tune_peaks)  # tune guess
 
     def _get_amplitudes_and_phases_guess(self, matrix, tune):
-        """Calculate initial guesses for harmonic TbT model as
-           Eqs. (5.2)-(5.4) of Ref. [2]"""
+        """Calculate initial amplitude & phase guesses for harmonic TbT model.
+
+        Implements Eqs. (5.2)-(5.4) from Ref. [2]
+        """
         N = matrix.shape[0]
         ilist = _np.arange(N)
         cos = _np.cos(2 * _np.pi * tune * ilist)
@@ -214,12 +276,14 @@ class TbTDataAnalysis(_AcqBPMsSignals):
         return amplitudes, phases
 
     def harmonic_tbt_model(self, ilist, amplitude, tune, phase):
-        """Harmonic motion model for positions seen at a given BPM"""
+        """Harmonic motion model for positions seen at a given BPM."""
         return amplitude * _np.cos(2 * _np.pi * tune * ilist + phase)
 
     def harmonic_tbt_model_vectorized(self, ilist, amplitude, tune, phase):
-        """Harmonic motion model for positions seen at a given BPM"""
-        return amplitude[None, :] * _np.cos(2 * _np.pi * tune * ilist[:, None] + phase[None, :])
+        """Harmonic motion model for positions seen at a given BPM."""
+        model = amplitude[None, :]
+        model *= _np.cos(2 * _np.pi * tune * ilist[:, None] + phase[None, :])
+        return model
 
     def fit_harmonic_model(self, matrix, amp_guesses,
                            tune_guess, phase_guesses):
@@ -239,16 +303,18 @@ class TbTDataAnalysis(_AcqBPMsSignals):
         ilist = _np.arange(matrix.shape[0])
         params = _np.zeros((3, matrix.shape[-1]))
         for bpm_idx, bpm_data in enumerate(matrix.T):
-            p0=[amp_guesses[bpm_idx],tune_guess,phase_guesses[bpm_idx]]
+            p0 = [amp_guesses[bpm_idx], tune_guess, phase_guesses[bpm_idx]]
             popt, *_ = _curve_fit(f=self.harmonic_tbt_model,
-                                  xdata=ilist,ydata=bpm_data,
+                                  xdata=ilist, ydata=bpm_data,
                                   p0=p0)
             params[:, bpm_idx] = popt
         return params
 
     def calculate_betafunc_and_action(self, amplitudes, nominal_beta):
-        """Calculates beta function and betatron action as in Eq. (9)
-            of Ref. [1]"""
+        """Calculates beta function and betatron action.
+
+        As in Eq. (9) of Ref. [1]
+        """
         action = _np.sum(amplitudes**4)
         action /= _np.sum(amplitudes**2 * nominal_beta)
         beta = amplitudes**2/action
