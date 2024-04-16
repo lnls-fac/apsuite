@@ -4,7 +4,7 @@ import time as _time
 import numpy as _np
 import scipy.fft as _sp_fft
 import scipy.signal as _sp_sig
-from siriuspy.devices import CurrInfoSI, Event, EVG, FamBPMs, RFGen, Trigger, \
+from siriuspy.devices import CurrInfoSI, Event, FamBPMs, RFGen, Trigger, \
     Tune
 from siriuspy.search import HLTimeSearch as _HLTimeSearch
 
@@ -19,7 +19,6 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
         """."""
         self.trigbpm_delay = None
         self.trigbpm_nrpulses = 1
-        self.do_pulse_evg = True
         self._timing_event = 'Study'
         self.event_delay = None
         self.event_mode = 'External'
@@ -43,7 +42,6 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
         else:
             stg += ftmp('trigbpm_delay', dly, '[us]')
         stg += dtmp('trigbpm_nrpulses', self.trigbpm_nrpulses, '')
-        stg += stmp('do_pulse_evg', str(self.do_pulse_evg), '')
         stg += stmp('timing_event', self.timing_event, '')
         dly = self.event_delay
         if dly is None:
@@ -131,7 +129,6 @@ class AcqBPMsSignals(_BaseClass):
             trigname = self.PSM_TRIGGER
         self.devices['trigbpm'] = Trigger(trigname)
         self.devices['evt_study'] = Event('Study')
-        self.devices['evg'] = EVG()
         self.devices['rfgen'] = RFGen()
 
     def get_timing_state(self):
@@ -142,8 +139,6 @@ class AcqBPMsSignals(_BaseClass):
         state['trigbpm_source'] = trigbpm.source
         state['trigbpm_nrpulses'] = trigbpm.nr_pulses
         state['trigbpm_delay'] = trigbpm.delay
-        if self.params.do_pulse_evg:
-            state['evg_nrpulses'] = self.devices['evg'].nrpulses
 
         evt = self._get_event(self.params.timing_event)
         if evt is not None:
@@ -176,23 +171,6 @@ class AcqBPMsSignals(_BaseClass):
                 evt.delay = dly
             evt.mode = state.get('evt_mode', self.params.event_mode)
 
-        nrpul = 1 if self.params.do_pulse_evg else None
-        nrpul = state.get('evg_nrpulses', nrpul)
-        if nrpul is not None:
-            evg = self.devices['evg']
-            evg.set_nrpulses(nrpul)
-            evg.cmd_update_events()
-
-    def trigger_timing_signal(self):
-        """."""
-        if not self.params.do_pulse_evg:
-            return
-        evt = self._get_event(self.params.timing_event)
-        if evt is not None and evt.mode_str == 'External':
-            evt.cmd_external_trigger()
-        else:
-            self.devices['evg'].cmd_turn_on_injection()
-
     def prepare_bpms_acquisition(self):
         """."""
         fambpms = self.devices['fambpms']
@@ -214,7 +192,7 @@ class AcqBPMsSignals(_BaseClass):
             print(tag + ' is not ready for acquisition.')
 
         fambpms.reset_mturn_initial_state()
-        self.trigger_timing_signal()
+        # user must trigger timing event
 
         time0 = _time.time()
         ret = fambpms.wait_update_mturn(timeout=self.params.timeout)
