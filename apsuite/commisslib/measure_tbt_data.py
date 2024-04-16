@@ -94,6 +94,7 @@ class MeasureTbTData(_AcqBPMsSignals):
         state['trigpingv_source'] = trigpingv.source
         state['trigpingv_nrpulses'] = trigpingv.nr_pulses
         state['trigpingv_delay'] = trigpingv.delay
+        return state
 
     def recover_timing_state(self, state):
         """."""
