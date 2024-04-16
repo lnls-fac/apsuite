@@ -44,6 +44,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         self.svd_levels_rf_enbllist = _np.ones(1, dtype=bool)
         self.svd_levels_respmat = _np.zeros((320, 161))
         self.svd_levels_singmode_idx = 0
+        self.svd_levels_ampmax = 5000
         # prbs fofbacc levels
         self.prbs_fofbacc_enbl = False
         self.prbs_fofbacc_lvl0 = _np.zeros(160)
