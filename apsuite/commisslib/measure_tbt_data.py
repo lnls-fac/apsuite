@@ -69,11 +69,10 @@ class MeasureTbTData(_AcqBPMsSignals):
     PINGERH_TRIGGER = 'SI-01SA:TI-InjDpKckr'
     PINGERV_TRIGGER = 'SI-19C4:TI-PingV'
 
-    def __init__(self, filename='', isonline=False):
+    def __init__(self, isonline=False):
         """."""
         super().__init__(isonline=isonline, ispost_mortem=False)
         self.params = TbTDataParams()
-        self._fname = filename
 
     def create_devices(self):
         """."""
@@ -83,15 +82,6 @@ class MeasureTbTData(_AcqBPMsSignals):
         self.devices['trigpingh'] = Trigger(self.PINGERH_TRIGGER)
         self.devices['pinghv'] = PowerSupplyPU(PowerSupplyPU.DEVICES.SI_PING_V)
         self.devices['trigpingv'] = Trigger(self.PINGERV_TRIGGER)
-
-    @property
-    def fname(self):
-        """."""
-        return self._fname
-
-    @fname.setter
-    def fname(self, val):
-        self._fname = val
 
     def get_timing_state(self):
         """."""
