@@ -3,6 +3,7 @@ import numpy as _np
 from scipy.optimize import curve_fit as _curve_fit
 import matplotlib.pyplot as _mplt
 import datetime as _datetime
+import time as _time
 from siriuspy.devices import PowerSupplyPU, Trigger
 
 from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals, \
@@ -23,12 +24,13 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.timing_event = 'Linac'
         self.event_mode = 'Injection'
 
+        self.pingers2kick = 'H'  # 'H', 'V' or 'HV'
         self.hkick = None  # [urad]
         self.vkick = None  # [urad]
         self.trigpingh_delay = None
-        self.trigpingh_nrpulses = 1
+        self.trigpingh_nrpulses = 1 if 'h' in self.pingers2kick.lower() else 0
         self.trigpingv_delay = None
-        self.trigpingv_nrpulses = 1
+        self.trigpingv_nrpulses = 1 if 'v' in self.pingers2kick.lower() else 0
 
     def __str__(self):
         """."""
@@ -77,11 +79,15 @@ class MeasureTbTData(_AcqBPMsSignals):
     def create_devices(self):
         """."""
         super().create_devices()
-        self.devices['pingh'] = PowerSupplyPU(
-            PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
-        self.devices['trigpingh'] = Trigger(self.PINGERH_TRIGGER)
-        self.devices['pinghv'] = PowerSupplyPU(PowerSupplyPU.DEVICES.SI_PING_V)
-        self.devices['trigpingv'] = Trigger(self.PINGERV_TRIGGER)
+        for pinger in self.pingers2kick:
+            if pinger.lower == 'h':
+                self.devices['pingh'] = PowerSupplyPU(
+                    PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
+            self.devices['trigpingh'] = Trigger(self.PINGERH_TRIGGER)
+            if pinger.lower() == 'v':
+                self.devices['pinghv'] = PowerSupplyPU(
+                    PowerSupplyPU.DEVICES.SI_PING_V)
+                self.devices['trigpingv'] = Trigger(self.PINGERV_TRIGGER)
 
     def get_timing_state(self):
         """."""
@@ -128,10 +134,12 @@ class MeasureTbTData(_AcqBPMsSignals):
             pingh.strength = hkick
         else:
             pingh.strength = self.params.hkick / 1e6
+        _time.sleep(0.5)
         if vkick is not None:
             pingv.strength = vkick
         else:
             pingv.strength = self.params.vkick / 1e6
+        _time.sleep(0.5)
 
     def do_measurement(self):
         """."""
