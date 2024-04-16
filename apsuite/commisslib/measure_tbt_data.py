@@ -105,7 +105,6 @@ class MeasureTbTData(_AcqBPMsSignals):
         super().prepare_timing(state)  # BPM trigger timing
         # magnets trigger timing below
         prms = self.params
-
         trigpingh = self.devices['trigpingh']
         trigpingh.source = state.get('trigpingh_source', prms.timing_event)
         trigpingh.nr_pulses = state.get('trigpingh_nrpulses',
@@ -167,8 +166,6 @@ class MeasureTbTData(_AcqBPMsSignals):
         self.recover_magnets_strength(init_magnets_strength)
         self.data['current_before'] = current_before
         self.data['current_after'] = self.data.pop('stored_current')
-        self.data['trajx'] = self.data.pop('orbx')
-        self.data['trajy'] = self.data.pop('orby')
 
     def get_fname(self):
         """."""
