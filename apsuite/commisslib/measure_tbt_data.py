@@ -167,13 +167,14 @@ class MeasureTbTData(_AcqBPMsSignals):
         self.data['current_before'] = current_before
         self.data['current_after'] = self.data.pop('stored_current')
 
-    def get_fname(self):
+    def get_default_fname(self):
         """."""
         hkick, vkick = self.params.hkick, self.params.vkick
         tm = self.data['timestamp']
         fmt = '%Y-%m-%d-%H-%M-%S'
         tmstp = _datetime.datetime.fromtimestamp(tm).strftime(fmt)
-        stg = f'tbt_hkick={hkick:3d}_vkick={vkick:3d}_urad_{tmstp}'
+        stg = f'hkick_{int(round(hkick)):3d}_vkick_{int(round(vkick)):3d}'
+        stg += f'_urad_{tmstp}'
         return stg
 
 
