@@ -14,24 +14,17 @@ class TbTDataParams(_AcqBPMsSignalsParams):
 
     def __init__(self):
         """."""
+        super().__init__()
         self.signals2acq = 'XYS'
         self.acq_rate = 'TbT'
-        self.timeout = 40  # [s]
-
         self.nrpoints_before = 100
         self.nrpoints_after = 2000
-        self.acq_repeat = False
-        self.trigbpm_delay = None
-        self.trigbpm_nrpulses = 1
 
         self.timing_event = 'Linac'
         self.event_mode = 'Injection'
-        self.event_delay = None
-        self.do_pulse_evg = False
 
         self.hkick = None  # [urad]
         self.vkick = None  # [urad]
-
         self.trigpingh_delay = None
         self.trigpingh_nrpulses = 1
         self.trigpingv_delay = None
@@ -78,8 +71,8 @@ class MeasureTbTData(_AcqBPMsSignals):
 
     def __init__(self, filename='', isonline=False):
         """."""
+        super().__init__(isonline=isonline, ispost_mortem=False)
         self.params = TbTDataParams()
-        self.isonline = isonline
         self._fname = filename
 
     def create_devices(self):
