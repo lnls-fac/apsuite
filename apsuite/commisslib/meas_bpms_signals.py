@@ -250,6 +250,7 @@ class AcqBPMsSignals(_BaseClass):
         data['switching_frequency'] = fbpms.get_switching_frequency(rf_freq)
         data['tunex_enable'] = tune.enablex
         data['tuney_enable'] = tune.enabley
+        data['timing_state'] = self.get_timing_state()
         return data
 
     @staticmethod
