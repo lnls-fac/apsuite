@@ -96,10 +96,6 @@ class MeasureTbTData(_AcqBPMsSignals):
         state['trigpingv_delay'] = trigpingv.delay
         return state
 
-    def recover_timing_state(self, state):
-        """."""
-        return super().recover_timing_state(state)
-
     def prepare_timing(self, state=None):
         """."""
         super().prepare_timing(state)  # BPM trigger timing
