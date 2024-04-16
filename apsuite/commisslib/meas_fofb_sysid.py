@@ -218,12 +218,13 @@ class FOFBSysIdAcq(_BaseClass):
         matc /= 1e3
         return respm
 
-    def get_levels_corrs_from_svd(self, lvl0, lvl1):
+    def get_levels_corrs_from_svd(self, lvl0, lvl1 = None):
         """Get levels from SVD for corrector devices.
 
         Args:
             lvl0 (int): maximum level for PRBS level 0
-            lvl1 (int): maximum level for PRBS level 1
+            lvl1 (optional, int): maximum level for PRBS level 1
+            If None, we consider level1 = -level0. Defaults to None.
 
         Returns:
             lvls0 (numpy.ndarray, 160):
@@ -242,18 +243,21 @@ class FOFBSysIdAcq(_BaseClass):
         *_, v = self._calc_svd(respm)
         vs = v[singval]
         vs /= _np.abs(vs).max()
+        if lvl1 is None:
+            lvl1 = - lvl0
         amp = (lvl1-lvl0)/2
         off = (lvl1+lvl0)/2
         lvls0 = off - amp * vs
         lvls1 = off + amp * vs
         return lvls0[:-1], lvls1[:-1]
 
-    def get_levels_bpms_from_svd(self, lvl0, lvl1, ampmax):
+    def get_levels_bpms_from_svd(self, ampmax, lvl0, lvl1 = None):
         """Get levels from SVD for BPMs devices.
 
         Args:
             lvl0 (int): minimum level for PRBS level 0
-            lvl1 (int): minimum level for PRBS level 1
+            lvl1 (optional, int): minimum level for PRBS level 1
+            If None, we consider level1 = -level0. Defaults to None.
             ampmax (int): maximum level after SV scaling
 
         Returns:
@@ -280,23 +284,36 @@ class FOFBSysIdAcq(_BaseClass):
         us = u[:, singval]
         ss = s[singval]
         ss /= _np.abs(s).min()
-        amp = (lvl1-lvl0)/2
-        off = (lvl1+lvl0)/2
-        # Scales the amplitude with its corresponding singular value (normalized
-        # to the lesser one). The amplitudes are saturated to 'ampmax'.
-        amp = min(amp * ss, ampmax)
-        lvls0 = off - amp * us
-        lvls1 = off + amp * us
-        lvls0x, lvls1x = lvls0[:SI_NUM_BPMS], lvls1[:SI_NUM_BPMS]
-        lvls0y, lvls1y = lvls0[SI_NUM_BPMS:], lvls1[SI_NUM_BPMS:]
-        return lvls0x, lvls0y, lvls1x, lvls1y
 
-    def get_levels_corrs_indiv_exc(self, corrname, lvl0, lvl1):
+        if lvl1 is None:
+            amp = _np.abs(lvl0)
+            # Scales the amplitude with its corresponding singular value (normalized
+            # to the lesser one). The amplitudes are saturated to 'ampmax'.
+            amp = min(amp * ss, ampmax)
+            lvls0 = - amp * us
+            lvls0x, lvls0y = lvls0[:SI_NUM_BPMS], lvls0[SI_NUM_BPMS:],
+            return lvls0x, lvls0y
+        
+        else:
+            amp = (lvl1-lvl0)/2
+            off = (lvl1+lvl0)/2
+            # Scales the amplitude with its corresponding singular value (normalized
+            # to the lesser one). The amplitudes are saturated to 'ampmax'.
+            amp = min(amp * ss, ampmax)
+            lvls0 = off - amp * us
+            lvls1 = off + amp * us
+            lvls0x, lvls1x = lvls0[:SI_NUM_BPMS], lvls1[:SI_NUM_BPMS]
+            lvls0y, lvls1y = lvls0[SI_NUM_BPMS:], lvls1[SI_NUM_BPMS:]
+            return lvls0x, lvls0y, lvls1x, lvls1y
+
+    def get_levels_corrs_indiv_exc(self, corrname, lvl0, lvl1 = None):
         """Get levels for excitation with only one corrector."""
         famsysid = self.devices['famsysid']
         corrindex = famsysid.psnames.index(corrname)
         lvls0 = _np.zeros(len(famsysid.psnames))
         lvls0[corrindex] = lvl0
+        if lvl1 is None:
+            lvl1 = -lvl0
         lvls1 = _np.zeros(len(famsysid.psnames))
         lvls1[corrindex] = lvl1
         return lvls0, lvls1
