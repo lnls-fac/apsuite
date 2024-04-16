@@ -29,13 +29,13 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.event_delay = None
         self.do_pulse_evg = False
 
-        self._hkick = None  # [urad]
-        self._vkick = None  # [urad]
+        self.hkick = None  # [urad]
+        self.vkick = None  # [urad]
 
-        self._trigpingh_delay = None
-        self._trigpingh_nrpulses = 1
-        self._trigpingv_delay = None
-        self._trigpingv_nrpulses = 1
+        self.trigpingh_delay = None
+        self.trigpingh_nrpulses = 1
+        self.trigpingv_delay = None
+        self.trigpingv_nrpulses = 1
 
     def __str__(self):
         """."""
@@ -68,60 +68,6 @@ class TbTDataParams(_AcqBPMsSignalsParams):
             stg += ftmp('trigpingv_delay', dly, '[us]')
         stg += dtmp('trigpingv_nrpulses', self.trigpingv_nrpulses, '')
         return stg
-
-    @property
-    def hkick(self):
-        """."""
-        return self._hkick
-
-    @hkick.setter
-    def hkick(self, val):
-        self._hkick = val
-
-    @property
-    def vkick(self):
-        """."""
-        return self._vkick
-
-    @vkick.setter
-    def vkick(self, val):
-        self._vkick = val
-
-    @property
-    def trigpingh_delay(self):
-        """."""
-        return self._trigpingh_delay
-
-    @trigpingh_delay.setter
-    def trigpingh_delay(self, val):
-        self._trigpingh_delay = val
-
-    @property
-    def trigpingh_nrpulses(self):
-        """."""
-        return self._trigpingh_nrpulses
-
-    @trigpingh_nrpulses.setter
-    def trigpingh_nrpulses(self, val):
-        self._trigpingh_nrpulses = val
-
-    @property
-    def trigpingv_delay(self):
-        """."""
-        return self._trigpingh_delay
-
-    @trigpingv_delay.setter
-    def trigpingv_delay(self, val):
-        self._trigpingh_delay = val
-
-    @property
-    def trigpingv_nrpulses(self):
-        """."""
-        return self._trigpingv_nrpulses
-
-    @trigpingv_nrpulses.setter
-    def trigpingv_nrpulses(self, val):
-        self._trigpingv_nrpulses = val
 
 
 class MeasureTbTData(_AcqBPMsSignals):
