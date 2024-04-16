@@ -32,19 +32,41 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self._hkick = None  # [urad]
         self._vkick = None  # [urad]
 
+        self._trigpingh_delay = None
+        self._trigpingh_nrpulses = 1
+        self._trigpingv_delay = None
+        self._trigpingv_nrpulses = 1
+
     def __str__(self):
         """."""
         stg = super().__str__()
         ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
+        dtmp = '{0:26s} = {1:9d}  {2:s}\n'.format
         stmp = '{0:26s} = {1:9}  {2:s}\n'.format
         if self.hkick is None:
             stg += stmp('hkick', 'same', '(current value will not be changed)')
         else:
             stg += ftmp('hkick', self.hkick, '[urad]')
-        if self.hkick is None:
+        dly = self.trigpingh_delay
+        if dly is None:
+            stg += stmp('trigpingh_delay',
+                        'same',
+                        '(current value will not be changed)')
+        else:
+            stg += ftmp('trigpingh_delay', dly, '[us]')
+        stg += dtmp('trigpingh_nrpulses', self.trigpingh_nrpulses, '')
+        if self.vkick is None:
             stg += stmp('vkick', 'same', '(current value will not be changed)')
         else:
             stg += ftmp('vkick', self.vkick, '[urad]')
+        dly = self.trigpingv_delay
+        if dly is None:
+            stg += stmp('trigpingv_delay',
+                        'same',
+                        '(current value will not be changed)')
+        else:
+            stg += ftmp('trigpingv_delay', dly, '[us]')
+        stg += dtmp('trigpingv_nrpulses', self.trigpingv_nrpulses, '')
         return stg
 
     @property
@@ -64,6 +86,42 @@ class TbTDataParams(_AcqBPMsSignalsParams):
     @vkick.setter
     def vkick(self, val):
         self._vkick = val
+
+    @property
+    def trigpingh_delay(self):
+        """."""
+        return self._trigpingh_delay
+
+    @trigpingh_delay.setter
+    def trigpingh_delay(self, val):
+        self._trigpingh_delay = val
+
+    @property
+    def trigpingh_nrpulses(self):
+        """."""
+        return self._trigpingh_nrpulses
+
+    @trigpingh_nrpulses.setter
+    def trigpingh_nrpulses(self, val):
+        self._trigpingh_nrpulses = val
+
+    @property
+    def trigpingv_delay(self):
+        """."""
+        return self._trigpingh_delay
+
+    @trigpingv_delay.setter
+    def trigpingv_delay(self, val):
+        self._trigpingh_delay = val
+
+    @property
+    def trigpingv_nrpulses(self):
+        """."""
+        return self._trigpingv_nrpulses
+
+    @trigpingv_nrpulses.setter
+    def trigpingv_nrpulses(self, val):
+        self._trigpingv_nrpulses = val
 
 
 class MeasureTbTData(_AcqBPMsSignals):
@@ -114,17 +172,25 @@ class MeasureTbTData(_AcqBPMsSignals):
 
     def prepare_timing(self, state=None):
         """."""
-        super().prepare_timing(state)
+        super().prepare_timing(state)  # BPM trigger timing
+        # magnets trigger timing below
+        prms = self.params
+
         trigpingh = self.devices['trigpingh']
-        trigpingh.source = state['trigpingh_source']
-        trigpingh.nr_pulses = state['trigpingh_nrpulses']
-        if trigpingh.delay is not None:
-            trigpingh.delay = state['trigpingh_delay']
+        trigpingh.source = state.get('trigpingh_source', prms.timing_event)
+        trigpingh.nr_pulses = state.get('trigpingh_nrpulses',
+                                        prms.trigpingh_nrpulses)
+        dly = state.get('trigpingh_delay', prms.trigpingh_delay)
+        if dly is not None:
+            trigpingh.delay = dly
+
         trigpingv = self.devices['trigpingv']
-        trigpingv.source = state['trigpingv_source']
-        trigpingv.nr_pulses = state['trigpingv_nrpulses']
-        if trigpingv.delay is not None:
-            trigpingv.delay = state['trigpingv_delay']
+        trigpingv.source = state.get('trigpingv_source', prms.timing_event)
+        trigpingh.nr_pulses = state.get('trigpingv_nrpulses',
+                                        prms.trigpingv_nrpulses)
+        dly = state.get('trigpingv_delay', prms.trigpingv_delay)
+        if dly is not None:
+            trigpingv.delay = dly
 
     def get_magnets_strength(self):
         """."""
