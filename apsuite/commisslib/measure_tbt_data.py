@@ -123,28 +123,19 @@ class MeasureTbTData(_AcqBPMsSignals):
 
     def get_magnets_strength(self):
         """."""
-        pingh, pingv = self.devices['pingh'], self.devices['pingv']
-        hkick, vkick = pingh.strength, pingv.strength
-        return hkick, vkick
+        return self.devices['pingh'].strength, self.devices['pingv'].strength
 
-    def recover_magnets_strength(self, hkick, vkick):
-        """."""
-        self.set_magnets_state(hkick, vkick)
-
-    def set_magnets_state(self, hkick, vkick):
+    def set_magnets_strength(self, hkick=None, vkick=None):
         """."""
         pingh, pingv = self.devices['pingh'], self.devices['pingv']
         if hkick is not None:
             pingh.strength = hkick
+        else:
+            pingh.strength = self.params.hkick / 1e6
         if vkick is not None:
             pingv.strength = vkick
-
-    def prepare_magnets(self):
-        """."""
-        hkick, vkick = self.params.hkick, self.params.vkick
-        hkick = hkick/1e6 if hkick is not None else None
-        vkick = vkick/1e6 if vkick is not None else None
-        self.set_magnets_state(hkick, vkick)
+        else:
+            pingv.strength = self.params.vkick / 1e6
 
     def do_measurement(self):
         """."""
@@ -153,7 +144,7 @@ class MeasureTbTData(_AcqBPMsSignals):
         init_magnets_strength = self.get_magnets_strength()
         current_before = currinfo.current()
         self.prepare_timing()
-        self.prepare_magnets()
+        self.set_magnets_strength()  # gets strengths from params
         self.data['measurement_error'] = False  # error flag
         try:
             self.acquire_data()  # BPMs signals + relevant info are acquired
@@ -163,7 +154,7 @@ class MeasureTbTData(_AcqBPMsSignals):
             print(f'An error occurred during acquisition: {e}')
             self.data['measurement_error'] = True
         self.recover_timing_state(init_timing_state)
-        self.recover_magnets_strength(init_magnets_strength)
+        self.set_magnets_strength(init_magnets_strength)  # restore strengths
         self.data['current_before'] = current_before
         self.data['current_after'] = self.data.pop('stored_current')
 
