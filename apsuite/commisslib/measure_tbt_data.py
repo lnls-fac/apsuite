@@ -24,13 +24,14 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.timing_event = 'Linac'
         self.event_mode = 'Injection'
 
-        self._pingers2kick = 'H'  # 'H', 'V' or 'HV'
+        self._pingers2kick = None  # 'H', 'V' or 'HV'
         self.hkick = None  # [urad]
         self.vkick = None  # [urad]
         self.trigpingh_delay = None
-        self.trigpingh_nrpulses = 1 if 'h' in self.pingers2kick.lower() else 0
         self.trigpingv_delay = None
-        self.trigpingv_nrpulses = 1 if 'v' in self.pingers2kick.lower() else 0
+        pingers2kick = str(self._pingers2kick).lower()
+        self.trigpingh_nrpulses = 1 if 'h' in pingers2kick else 0
+        self.trigpingv_nrpulses = 1 if 'v' in pingers2kick else 0
 
     def __str__(self):
         """."""
@@ -38,6 +39,7 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
         dtmp = '{0:26s} = {1:9d}  {2:s}\n'.format
         stmp = '{0:26s} = {1:9}  {2:s}\n'.format
+        stg += stmp('pingers2kick', self.pingers2kick, '')
         if self.hkick is None:
             stg += stmp('hkick', 'same', '(current value will not be changed)')
         else:
@@ -71,8 +73,8 @@ class TbTDataParams(_AcqBPMsSignalsParams):
 
     @pingers2kick.setter
     def pingers2kick(self, value):
-        if value.lower() not in "hv":
-            raise ValueError('Invalid pinger keyword. Set "H", "V" or "HV"')
+        if (value is not None) and (value.lower() not in "hv"):
+            raise ValueError('Invalid keyword. Set "None", "H", "V" or "HV"')
         else:
             self._pingers2kick = value
 
@@ -142,15 +144,12 @@ class MeasureTbTData(_AcqBPMsSignals):
     def set_magnets_strength(self, hkick=None, vkick=None):
         """."""
         pingh, pingv = self.devices['pingh'], self.devices['pingv']
-        if hkick is not None:
-            pingh.strength = hkick
-        else:
-            pingh.strength = self.params.hkick / 1e6
-        _time.sleep(0.5)
-        if vkick is not None:
-            pingv.strength = vkick
-        else:
-            pingv.strength = self.params.vkick / 1e6
+        if hkick is None:
+            hkick = self.params.hkick / 1e3  # [urad] -> [mrad]
+        pingh.strength = hkick
+        if vkick is None:
+            vkick = self.params.vkick / 1e3  # [urad] -> [mrad]
+        pingv.strength = vkick
         _time.sleep(0.5)
 
     def do_measurement(self):
