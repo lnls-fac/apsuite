@@ -4,7 +4,7 @@ import time as _time
 import numpy as _np
 import scipy.fft as _sp_fft
 import scipy.signal as _sp_sig
-from siriuspy.devices import CurrInfoSI, Event, FamBPMs, RFGen, Trigger, \
+from siriuspy.devices import CurrInfoSI, Event, EVG, FamBPMs, RFGen, Trigger, \
     Tune
 from siriuspy.search import HLTimeSearch as _HLTimeSearch
 
@@ -129,6 +129,7 @@ class AcqBPMsSignals(_BaseClass):
             trigname = self.PSM_TRIGGER
         self.devices['trigbpm'] = Trigger(trigname)
         self.devices['evt_study'] = Event('Study')
+        self.devices['evg'] = EVG()
         self.devices['rfgen'] = RFGen()
 
     def get_timing_state(self):
@@ -170,6 +171,7 @@ class AcqBPMsSignals(_BaseClass):
             if dly is not None:
                 evt.delay = dly
             evt.mode = state.get('evt_mode', self.params.event_mode)
+            self.devices['evg'].cmd_update_events()
 
     def prepare_bpms_acquisition(self):
         """."""
@@ -192,7 +194,8 @@ class AcqBPMsSignals(_BaseClass):
             print(tag + ' is not ready for acquisition.')
 
         fambpms.reset_mturn_initial_state()
-        # user must trigger timing event
+
+        # NOTE: user must trigger timing event
 
         time0 = _time.time()
         ret = fambpms.wait_update_mturn(timeout=self.params.timeout)
