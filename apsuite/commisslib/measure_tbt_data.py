@@ -202,47 +202,13 @@ class MeasureTbTData(_AcqBPMsSignals):
         return stg
 
 
-class TbTDataAnalysis(_AcqBPMsSignals):
+class TbTDataAnalysis(MeasureTbTData):
     """."""
 
     def __init__(self, filename="", isonline=False):
         """Analysis of linear optics using Turn-by-turn data."""
-        self.params = TbTDataParams()
-        self.isonline = isonline
-        self._ispost_mortem = False
-
-        self._fname = filename
-        self._trajx, self._trajy = None, None
-        self._trajsum = None
-
-        # load if fname, load method
-
-    @property
-    def fname(self):
-        """."""
-        return self._fname
-
-    @fname.setter
-    def fname(self, val):
-        self._fname = val
-
-    @property
-    def trajx(self):
-        """."""
-        return self._trajx
-
-    @trajx.setter
-    def trajx(self, val):
-        self._trajx = val
-
-    @property
-    def trajy(self):
-        """."""
-        return self._trajy
-
-    @trajy.setter
-    def trajy(self, val):
-        self._trajy = val
+        super().__init__(isonline=isonline)
+        self.fname = filename
 
     def linear_optics_analysis(self):
         """."""
