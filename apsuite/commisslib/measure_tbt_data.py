@@ -104,7 +104,7 @@ class MeasureTbTData(_AcqBPMsSignals):
                 self.devices["pingh"] = PowerSupplyPU(
                     PowerSupplyPU.DEVICES.SI_INJ_DPKCKR
                 )
-            self.devices["trigpingh"] = Trigger(self.PINGERH_TRIGGER)
+                self.devices["trigpingh"] = Trigger(self.PINGERH_TRIGGER)
             if pinger.lower() == "v":
                 self.devices["pinghv"] = PowerSupplyPU(
                     PowerSupplyPU.DEVICES.SI_PING_V
