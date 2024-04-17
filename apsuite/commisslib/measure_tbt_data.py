@@ -24,7 +24,7 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.timing_event = 'Linac'
         self.event_mode = 'Injection'
 
-        self.pingers2kick = 'H'  # 'H', 'V' or 'HV'
+        self._pingers2kick = 'H'  # 'H', 'V' or 'HV'
         self.hkick = None  # [urad]
         self.vkick = None  # [urad]
         self.trigpingh_delay = None
@@ -63,6 +63,18 @@ class TbTDataParams(_AcqBPMsSignalsParams):
             stg += ftmp('trigpingv_delay', dly, '[us]')
         stg += dtmp('trigpingv_nrpulses', self.trigpingv_nrpulses, '')
         return stg
+
+    @property
+    def pingers2kick(self):
+        """."""
+        return self._pingers2kick
+
+    @pingers2kick.setter
+    def pingers2kick(self, value):
+        if value.lower() not in "hv":
+            raise ValueError('Invalid pinger keyword. Set "H", "V" or "HV"')
+        else:
+            self._pingers2kick = value
 
 
 class MeasureTbTData(_AcqBPMsSignals):
