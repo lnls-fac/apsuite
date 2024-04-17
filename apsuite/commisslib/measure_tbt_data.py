@@ -186,12 +186,19 @@ class MeasureTbTData(_AcqBPMsSignals):
 
     def get_default_fname(self):
         """."""
-        hkick, vkick = self.params.hkick, self.params.vkick
-        tm = self.data['timestamp']
-        fmt = '%Y-%m-%d-%H-%M-%S'
+        prms = self.params
+        stg = 'kicked_data'
+        stg += f'_{prms.acq_rate}_rate'
+        hkick, vkick = prms.hkick, prms.vkick
+        pingers2kick = prms.pingers2kick
+        if pingers2kick is not None:
+            for plane in pingers2kick:
+                kick = hkick if plane == 'h' else vkick
+                stg += f"{plane}kick_{int(round(kick)):3d}_urad"
+        tm = self.data["timestamp"]
+        fmt = "%Y-%m-%d-%H-%M-%S"
         tmstp = _datetime.datetime.fromtimestamp(tm).strftime(fmt)
-        stg = f'hkick_{int(round(hkick)):3d}_vkick_{int(round(vkick)):3d}'
-        stg += f'_urad_{tmstp}'
+        stg += f"{tmstp}"
         return stg
 
 
