@@ -1,9 +1,11 @@
 """."""
-import numpy as _np
-from scipy.optimize import curve_fit as _curve_fit
-import matplotlib.pyplot as _mplt
+
 import datetime as _datetime
 import time as _time
+
+import matplotlib.pyplot as _mplt
+import numpy as _np
+from scipy.optimize import curve_fit as _curve_fit
 from siriuspy.devices import PowerSupplyPU, Trigger
 
 from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals, \
@@ -16,13 +18,13 @@ class TbTDataParams(_AcqBPMsSignalsParams):
     def __init__(self):
         """."""
         super().__init__()
-        self.signals2acq = 'XYS'
-        self.acq_rate = 'TbT'
+        self.signals2acq = "XYS"
+        self.acq_rate = "TbT"
         self.nrpoints_before = 100
         self.nrpoints_after = 2000
 
-        self.timing_event = 'Linac'
-        self.event_mode = 'Injection'
+        self.timing_event = "Linac"
+        self.event_mode = "Injection"
 
         self._pingers2kick = None  # 'H', 'V' or 'HV'
         self.hkick = None  # [urad]
@@ -30,40 +32,44 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.trigpingh_delay = None
         self.trigpingv_delay = None
         pingers2kick = str(self._pingers2kick).lower()
-        self.trigpingh_nrpulses = 1 if 'h' in pingers2kick else 0
-        self.trigpingv_nrpulses = 1 if 'v' in pingers2kick else 0
+        self.trigpingh_nrpulses = 1 if "h" in pingers2kick else 0
+        self.trigpingv_nrpulses = 1 if "v" in pingers2kick else 0
 
     def __str__(self):
         """."""
         stg = super().__str__()
-        ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
-        dtmp = '{0:26s} = {1:9d}  {2:s}\n'.format
-        stmp = '{0:26s} = {1:9}  {2:s}\n'.format
-        stg += stmp('pingers2kick', self.pingers2kick, '')
+        ftmp = "{0:26s} = {1:9.6f}  {2:s}\n".format
+        dtmp = "{0:26s} = {1:9d}  {2:s}\n".format
+        stmp = "{0:26s} = {1:9}  {2:s}\n".format
+        stg += stmp("pingers2kick", self.pingers2kick, "")
         if self.hkick is None:
-            stg += stmp('hkick', 'same', '(current value will not be changed)')
+            stg += stmp("hkick", "same", "(current value will not be changed)")
         else:
-            stg += ftmp('hkick', self.hkick, '[urad]')
+            stg += ftmp("hkick", self.hkick, "[urad]")
         dly = self.trigpingh_delay
         if dly is None:
-            stg += stmp('trigpingh_delay',
-                        'same',
-                        '(current value will not be changed)')
+            stg += stmp(
+                "trigpingh_delay",
+                "same",
+                "(current value will not be changed)",
+            )
         else:
-            stg += ftmp('trigpingh_delay', dly, '[us]')
-        stg += dtmp('trigpingh_nrpulses', self.trigpingh_nrpulses, '')
+            stg += ftmp("trigpingh_delay", dly, "[us]")
+        stg += dtmp("trigpingh_nrpulses", self.trigpingh_nrpulses, "")
         if self.vkick is None:
-            stg += stmp('vkick', 'same', '(current value will not be changed)')
+            stg += stmp("vkick", "same", "(current value will not be changed)")
         else:
-            stg += ftmp('vkick', self.vkick, '[urad]')
+            stg += ftmp("vkick", self.vkick, "[urad]")
         dly = self.trigpingv_delay
         if dly is None:
-            stg += stmp('trigpingv_delay',
-                        'same',
-                        '(current value will not be changed)')
+            stg += stmp(
+                "trigpingv_delay",
+                "same",
+                "(current value will not be changed)",
+            )
         else:
-            stg += ftmp('trigpingv_delay', dly, '[us]')
-        stg += dtmp('trigpingv_nrpulses', self.trigpingv_nrpulses, '')
+            stg += ftmp("trigpingv_delay", dly, "[us]")
+        stg += dtmp("trigpingv_nrpulses", self.trigpingv_nrpulses, "")
         return stg
 
     @property
@@ -82,8 +88,8 @@ class TbTDataParams(_AcqBPMsSignalsParams):
 class MeasureTbTData(_AcqBPMsSignals):
     """."""
 
-    PINGERH_TRIGGER = 'SI-01SA:TI-InjDpKckr'
-    PINGERV_TRIGGER = 'SI-19C4:TI-PingV'
+    PINGERH_TRIGGER = "SI-01SA:TI-InjDpKckr"
+    PINGERV_TRIGGER = "SI-19C4:TI-PingV"
 
     def __init__(self, isonline=False):
         """."""
@@ -94,26 +100,28 @@ class MeasureTbTData(_AcqBPMsSignals):
         """."""
         super().create_devices()
         for pinger in self.pingers2kick:
-            if pinger.lower == 'h':
-                self.devices['pingh'] = PowerSupplyPU(
-                    PowerSupplyPU.DEVICES.SI_INJ_DPKCKR)
-            self.devices['trigpingh'] = Trigger(self.PINGERH_TRIGGER)
-            if pinger.lower() == 'v':
-                self.devices['pinghv'] = PowerSupplyPU(
-                    PowerSupplyPU.DEVICES.SI_PING_V)
-                self.devices['trigpingv'] = Trigger(self.PINGERV_TRIGGER)
+            if pinger.lower == "h":
+                self.devices["pingh"] = PowerSupplyPU(
+                    PowerSupplyPU.DEVICES.SI_INJ_DPKCKR
+                )
+            self.devices["trigpingh"] = Trigger(self.PINGERH_TRIGGER)
+            if pinger.lower() == "v":
+                self.devices["pinghv"] = PowerSupplyPU(
+                    PowerSupplyPU.DEVICES.SI_PING_V
+                )
+                self.devices["trigpingv"] = Trigger(self.PINGERV_TRIGGER)
 
     def get_timing_state(self):
         """."""
         state = super().get_timing_state()
-        trigpingh = self.devices['trigpingh']
-        state['trigpingh_source'] = trigpingh.source
-        state['trigpingh_nrpulses'] = trigpingh.nr_pulses
-        state['trigpingh_delay'] = trigpingh.delay
-        trigpingv = self.devices['trigpingv']
-        state['trigpingv_source'] = trigpingv.source
-        state['trigpingv_nrpulses'] = trigpingv.nr_pulses
-        state['trigpingv_delay'] = trigpingv.delay
+        trigpingh = self.devices["trigpingh"]
+        state["trigpingh_source"] = trigpingh.source
+        state["trigpingh_nrpulses"] = trigpingh.nr_pulses
+        state["trigpingh_delay"] = trigpingh.delay
+        trigpingv = self.devices["trigpingv"]
+        state["trigpingv_source"] = trigpingv.source
+        state["trigpingv_nrpulses"] = trigpingv.nr_pulses
+        state["trigpingv_delay"] = trigpingv.delay
         return state
 
     def prepare_timing(self, state=None):
@@ -121,29 +129,31 @@ class MeasureTbTData(_AcqBPMsSignals):
         super().prepare_timing(state)  # BPM trigger timing
         # magnets trigger timing below
         prms = self.params
-        trigpingh = self.devices['trigpingh']
-        trigpingh.source = state.get('trigpingh_source', prms.timing_event)
-        trigpingh.nr_pulses = state.get('trigpingh_nrpulses',
-                                        prms.trigpingh_nrpulses)
-        dly = state.get('trigpingh_delay', prms.trigpingh_delay)
+        trigpingh = self.devices["trigpingh"]
+        trigpingh.source = state.get("trigpingh_source", prms.timing_event)
+        trigpingh.nr_pulses = state.get(
+            "trigpingh_nrpulses", prms.trigpingh_nrpulses
+        )
+        dly = state.get("trigpingh_delay", prms.trigpingh_delay)
         if dly is not None:
             trigpingh.delay = dly
 
-        trigpingv = self.devices['trigpingv']
-        trigpingv.source = state.get('trigpingv_source', prms.timing_event)
-        trigpingh.nr_pulses = state.get('trigpingv_nrpulses',
-                                        prms.trigpingv_nrpulses)
-        dly = state.get('trigpingv_delay', prms.trigpingv_delay)
+        trigpingv = self.devices["trigpingv"]
+        trigpingv.source = state.get("trigpingv_source", prms.timing_event)
+        trigpingh.nr_pulses = state.get(
+            "trigpingv_nrpulses", prms.trigpingv_nrpulses
+        )
+        dly = state.get("trigpingv_delay", prms.trigpingv_delay)
         if dly is not None:
             trigpingv.delay = dly
 
     def get_magnets_strength(self):
         """."""
-        return self.devices['pingh'].strength, self.devices['pingv'].strength
+        return self.devices["pingh"].strength, self.devices["pingv"].strength
 
     def set_magnets_strength(self, hkick=None, vkick=None):
         """."""
-        pingh, pingv = self.devices['pingh'], self.devices['pingv']
+        pingh, pingv = self.devices["pingh"], self.devices["pingv"]
         if hkick is None:
             hkick = self.params.hkick / 1e3  # [urad] -> [mrad]
         pingh.strength = hkick
@@ -154,24 +164,25 @@ class MeasureTbTData(_AcqBPMsSignals):
 
     def do_measurement(self):
         """."""
-        currinfo = self.devices['currinfo']
+        currinfo = self.devices["currinfo"]
         init_timing_state = self.get_timing_state()
         init_magnets_strength = self.get_magnets_strength()
         current_before = currinfo.current()
         self.prepare_timing()
         self.set_magnets_strength()  # gets strengths from params
-        self.data['measurement_error'] = False  # error flag
+        self.data["measurement_error"] = False  # error flag
         try:
-            self.acquire_data()  # BPMs signals + relevant info are acquired
-                                 # such as timestamps tunes, stored current
-                                 # rf frequency, acq rate, nr samples, etc.
+            self.acquire_data()
+        # BPMs signals + relevant info are acquired
+        # such as timestamps tunes, stored current
+        # rf frequency, acq rate, nr samples, etc.
         except Exception as e:
-            print(f'An error occurred during acquisition: {e}')
-            self.data['measurement_error'] = True
+            print(f"An error occurred during acquisition: {e}")
+            self.data["measurement_error"] = True
         self.recover_timing_state(init_timing_state)
         self.set_magnets_strength(init_magnets_strength)  # restore strengths
-        self.data['current_before'] = current_before
-        self.data['current_after'] = self.data.pop('stored_current')
+        self.data["current_before"] = current_before
+        self.data["current_after"] = self.data.pop("stored_current")
 
     def get_default_fname(self):
         """."""
@@ -187,7 +198,7 @@ class MeasureTbTData(_AcqBPMsSignals):
 class TbTDataAnalysis(_AcqBPMsSignals):
     """."""
 
-    def __init__(self, filename='', isonline=False):
+    def __init__(self, filename="", isonline=False):
         """Analysis of linear optics using Turn-by-turn data."""
         self.params = TbTDataParams()
         self.isonline = isonline
@@ -269,8 +280,8 @@ class TbTDataAnalysis(_AcqBPMsSignals):
         cos = _np.cos(2 * _np.pi * tune * ilist)
         sin = _np.sin(2 * _np.pi * tune * ilist)
         C, S = _np.dot(cos, matrix), _np.dot(sin, matrix)
-        C *= 2/N
-        S *= 2/N
+        C *= 2 / N
+        S *= 2 / N
         amplitudes = _np.sqrt(C**2 + S**2)
         phases = _np.unwrap(_np.arctan2(C, S))
         return amplitudes, phases
@@ -285,8 +296,9 @@ class TbTDataAnalysis(_AcqBPMsSignals):
         model *= _np.cos(2 * _np.pi * tune * ilist[:, None] + phase[None, :])
         return model
 
-    def fit_harmonic_model(self, matrix, amp_guesses,
-                           tune_guess, phase_guesses):
+    def fit_harmonic_model(
+        self, matrix, amp_guesses, tune_guess, phase_guesses
+    ):
         """Fits harmonic TbT model to data.
 
         Args:
@@ -304,9 +316,9 @@ class TbTDataAnalysis(_AcqBPMsSignals):
         params = _np.zeros((3, matrix.shape[-1]))
         for bpm_idx, bpm_data in enumerate(matrix.T):
             p0 = [amp_guesses[bpm_idx], tune_guess, phase_guesses[bpm_idx]]
-            popt, *_ = _curve_fit(f=self.harmonic_tbt_model,
-                                  xdata=ilist, ydata=bpm_data,
-                                  p0=p0)
+            popt, *_ = _curve_fit(
+                f=self.harmonic_tbt_model, xdata=ilist, ydata=bpm_data, p0=p0
+            )
             params[:, bpm_idx] = popt
         return params
 
@@ -317,5 +329,5 @@ class TbTDataAnalysis(_AcqBPMsSignals):
         """
         action = _np.sum(amplitudes**4)
         action /= _np.sum(amplitudes**2 * nominal_beta)
-        beta = amplitudes**2/action
+        beta = amplitudes**2 / action
         return beta, action
