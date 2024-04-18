@@ -26,21 +26,28 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.timing_event = "Linac"
         self.event_mode = "Injection"
 
-        self._pingers2kick = "None"  # 'H', 'V' or 'HV'
+        self._pingers2kick = "none"  # 'none' 'H', 'V' or 'HV'
         self.hkick = None  # [urad]
         self.vkick = None  # [urad]
         self.trigpingh_delay = None
         self.trigpingv_delay = None
         self.trigpingh_nrpulses = 1 if "h" in self.pingers2kick else 0
         self.trigpingv_nrpulses = 1 if "v" in self.pingers2kick else 0
+        self.magnets_timeout = 5.
 
     def __str__(self):
         """."""
-        stg = super().__str__()
+        stg = "BPMs & timing params\n"
+        stg += "\n"
+        stg += super().__str__()
         ftmp = "{0:26s} = {1:9.6f}  {2:s}\n".format
         dtmp = "{0:26s} = {1:9d}  {2:s}\n".format
         stmp = "{0:26s} = {1:9}  {2:s}\n".format
+        stg += "\n"
+        stg += "Pingers params\n"
+        stg += "\n"
         stg += stmp("pingers2kick", self.pingers2kick, "")
+        stg += ftmp("magnets_timeout", self.magnets_timeout, "[s]")
         if self.hkick is None:
             stg += stmp("hkick", "same", "(current value will not be changed)")
         else:
@@ -163,6 +170,8 @@ class MeasureTbTData(_AcqBPMsSignals):
         pingv.set_strength(vkick, tol=0.1 * vkick, timeout=0, wait_mon=False)
 
         # wait magnets ramp and check if correctly set
+        if magnets_timeout is None:
+            magnets_timeout = self.params.magnets_timeout
         t0 = _time.time()
         pingh_ok = pingh.set_strength(
             hkick, tol=0.05 * hkick, timeout=magnets_timeout, wait_mon=False
