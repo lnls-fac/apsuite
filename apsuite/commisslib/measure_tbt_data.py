@@ -154,7 +154,7 @@ class MeasureTbTData(_AcqBPMsSignals):
     def set_magnets_strength(
         self, hkick=None, vkick=None, magnets_timeout=None
     ):
-        """."""
+        """Set pingers strengths, check if was set & indicate which failed."""
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
         if hkick is None:
             hkick = self.params.hkick / 1e3  # [urad] -> [mrad]
@@ -162,14 +162,25 @@ class MeasureTbTData(_AcqBPMsSignals):
         if vkick is None:
             vkick = self.params.vkick / 1e3  # [urad] -> [mrad]
         pingv.set_strength(vkick, tol=0.1 * vkick, timeout=0, wait_mon=False)
-        # wait magnets ramp
-        pingh.set_strength(
+
+        # wait magnets ramp and check if set
+        t0 = _time.time()
+        pingh_ok = pingh.set_strength(
             hkick, tol=0.05 * hkick, timeout=magnets_timeout, wait_mon=False
         )
-        pingv.set_strength(
+        elapsed_time = _time.time() - t0
+        magnets_timeout -= elapsed_time
+        pingv_ok = pingv.set_strength(
             vkick, tol=0.05 * vkick, timeout=magnets_timeout, wait_mon=False
         )
 
+        if (not pingh_ok) or (not pingv_ok):
+            bad_pingers = "pingh " if not pingh_ok else ""
+            bad_pingers += "pingv" if not pingv_ok else ""
+            print(f"Some magnets were not set.\n\tBad pingers: {bad_pingers}")
+            return False
+
+        return True
     def do_measurement(self):
         """."""
         currinfo = self.devices["currinfo"]
