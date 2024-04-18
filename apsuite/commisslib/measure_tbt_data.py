@@ -152,7 +152,7 @@ class MeasureTbTData(_AcqBPMsSignals):
         return self.devices["pingh"].strength, self.devices["pingv"].strength
 
     def set_magnets_strength(
-        self, hkick=None, vkick=None, magnets_wait_time=None
+        self, hkick=None, vkick=None, magnets_timeout=None
     ):
         """."""
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
@@ -164,10 +164,10 @@ class MeasureTbTData(_AcqBPMsSignals):
         pingv.set_strength(vkick, tol=0.1 * vkick, timeout=0, wait_mon=False)
         # wait magnets ramp
         pingh.set_strength(
-            hkick, tol=0.05 * hkick, timeout=magnets_wait_time, wait_mon=False
+            hkick, tol=0.05 * hkick, timeout=magnets_timeout, wait_mon=False
         )
         pingv.set_strength(
-            vkick, tol=0.05 * vkick, timeout=magnets_wait_time, wait_mon=False
+            vkick, tol=0.05 * vkick, timeout=magnets_timeout, wait_mon=False
         )
 
     def do_measurement(self):
