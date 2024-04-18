@@ -26,14 +26,13 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.timing_event = "Linac"
         self.event_mode = "Injection"
 
-        self._pingers2kick = None  # 'H', 'V' or 'HV'
+        self._pingers2kick = "None"  # 'H', 'V' or 'HV'
         self.hkick = None  # [urad]
         self.vkick = None  # [urad]
         self.trigpingh_delay = None
         self.trigpingv_delay = None
-        pingers2kick = str(self._pingers2kick).lower()
-        self.trigpingh_nrpulses = 1 if "h" in pingers2kick else 0
-        self.trigpingv_nrpulses = 1 if "v" in pingers2kick else 0
+        self.trigpingh_nrpulses = 1 if "h" in self.pingers2kick else 0
+        self.trigpingv_nrpulses = 1 if "v" in self.pingers2kick else 0
 
     def __str__(self):
         """."""
@@ -78,11 +77,14 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         return self._pingers2kick
 
     @pingers2kick.setter
-    def pingers2kick(self, value):
-        if (value is not None) and (value.lower() not in "hv"):
-            raise ValueError('Invalid keyword. Set "None", "H", "V" or "HV"')
+    def pingers2kick(self, val):
+        val = str(val).lower()
+        if val not in ["none", "h", "v", "hv"]:
+            raise ValueError('Invalid keyword. Set "None", "H", "V" or "HV".')
         else:
-            self._pingers2kick = value
+            self._pingers2kick = val
+            self.trigpingh_nrpulses = 1 if "h" in val else 0
+            self.trigpingv_nrpulses = 1 if "v" in val else 0
 
 
 class MeasureTbTData(_AcqBPMsSignals):
@@ -100,12 +102,12 @@ class MeasureTbTData(_AcqBPMsSignals):
         """."""
         super().create_devices()
         for pinger in self.pingers2kick:
-            if pinger.lower == "h":
+            if pinger == "h":
                 self.devices["pingh"] = PowerSupplyPU(
                     PowerSupplyPU.DEVICES.SI_INJ_DPKCKR
                 )
                 self.devices["trigpingh"] = Trigger(self.PINGERH_TRIGGER)
-            if pinger.lower() == "v":
+            if pinger == "v":
                 self.devices["pinghv"] = PowerSupplyPU(
                     PowerSupplyPU.DEVICES.SI_PING_V
                 )
@@ -210,7 +212,7 @@ class MeasureTbTData(_AcqBPMsSignals):
         stg += f"_{prms.acq_rate}_rate"
         hkick, vkick = prms.hkick, prms.vkick
         pingers2kick = prms.pingers2kick
-        if pingers2kick is not None:
+        if pingers2kick != 'none':
             for plane in pingers2kick:
                 kick = hkick if plane == "h" else vkick
                 stg += f"{plane}kick_{int(round(kick)):3d}_urad"
