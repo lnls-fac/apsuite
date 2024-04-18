@@ -86,8 +86,10 @@ class TbTDataParams(_AcqBPMsSignalsParams):
     @pingers2kick.setter
     def pingers2kick(self, val):
         val = str(val).lower()
-        if val not in ["none", "h", "v", "hv"]:
-            raise ValueError('Invalid keyword. Set "None", "H", "V" or "HV".')
+        if val not in ["none", "h", "v", "hv", "vh"]:
+            raise ValueError(
+                'Invalid keyword. Set "None", "H", "V", "HV" or "VH".'
+            )
         else:
             self._pingers2kick = val
             self.trigpingh_nrpulses = 1 if "h" in val else 0
