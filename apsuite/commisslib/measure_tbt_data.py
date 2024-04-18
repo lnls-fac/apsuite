@@ -183,6 +183,7 @@ class MeasureTbTData(_AcqBPMsSignals):
             return False
 
         return True
+
     def do_measurement(self):
         """."""
         currinfo = self.devices["currinfo"]
@@ -190,20 +191,36 @@ class MeasureTbTData(_AcqBPMsSignals):
         init_magnets_strength = self.get_magnets_strength()
         current_before = currinfo.current()
         self.prepare_timing()
-        self.set_magnets_strength()  # gets strengths from params
-        self.data["measurement_error"] = False  # error flag
-        try:
-            self.acquire_data()
-        # BPMs signals + relevant info are acquired
-        # such as timestamps tunes, stored current
-        # rf frequency, acq rate, nr samples, etc.
-        except Exception as e:
-            print(f"An error occurred during acquisition: {e}")
-            self.data["measurement_error"] = True
+        mags_ok = self.set_magnets_strength()  # gets strengths from params
+        if mags_ok:
+            print("Magnets strengths were succesfully set.")
+            strenghts = self.get_magnets_strength()
+            try:
+                self.acquire_data()
+                # BPMs signals + relevant info are acquired
+                # such as timestamps tunes, stored current
+                # rf frequency, acq rate, nr samples, etc.
+                self.data["current_before"] = current_before
+                self.data["current_after"] = self.data.pop("stored_current")
+                self.data["init_magnets_strengths"] = init_magnets_strength
+                self.data["manets_strengths"] = strenghts * 1e3  # [urad]
+                print("Acquisition was succesful.")
+            except Exception as e:
+                print(f"An error occurred during acquisition: {e}")
+        else:
+            print("Did not measure. Restoring magnets & timing initial state.")
+
         self.recover_timing_state(init_timing_state)
-        self.set_magnets_strength(init_magnets_strength)  # restore strengths
-        self.data["current_before"] = current_before
-        self.data["current_after"] = self.data.pop("stored_current")
+        mags_ok = self.set_magnets_strength(init_magnets_strength)  # restore
+        if not mags_ok:
+            msg = "Magnets strengths were not restored to initial values."
+            msg += "Restore manually."
+            print(msg)
+            print("Initial strengths:")
+            print(f"\t pingh:{init_magnets_strength[0]:.4f} [mrad]")
+            print(f"\t pingv:{init_magnets_strength[0]:.4f} [mrad]")
+        else:
+            print("Magnets strengths succesfully restored to initial values.")
 
     def get_default_fname(self):
         """."""
