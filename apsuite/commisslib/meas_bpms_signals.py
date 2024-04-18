@@ -196,6 +196,7 @@ class AcqBPMsSignals(_BaseClass):
         fambpms.reset_mturn_initial_state()
 
         # NOTE: user must trigger timing event
+        print('Ready for acquisition. Waiting for trigger event.')
 
         time0 = _time.time()
         ret = fambpms.wait_update_mturn(timeout=self.params.timeout)
