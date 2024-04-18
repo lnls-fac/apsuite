@@ -101,17 +101,14 @@ class MeasureTbTData(_AcqBPMsSignals):
     def create_devices(self):
         """."""
         super().create_devices()
-        for pinger in self.pingers2kick:
-            if pinger == "h":
-                self.devices["pingh"] = PowerSupplyPU(
-                    PowerSupplyPU.DEVICES.SI_INJ_DPKCKR
-                )
-                self.devices["trigpingh"] = Trigger(self.PINGERH_TRIGGER)
-            if pinger == "v":
-                self.devices["pinghv"] = PowerSupplyPU(
-                    PowerSupplyPU.DEVICES.SI_PING_V
-                )
-                self.devices["trigpingv"] = Trigger(self.PINGERV_TRIGGER)
+        self.devices["pingh"] = PowerSupplyPU(
+            PowerSupplyPU.DEVICES.SI_INJ_DPKCKR
+        )
+        self.devices["trigpingh"] = Trigger(self.PINGERH_TRIGGER)
+
+        self.devices["pinghv"] = PowerSupplyPU(PowerSupplyPU.DEVICES.SI_PING_V)
+        self.devices["trigpingv"] = Trigger(self.PINGERV_TRIGGER)
+        return
 
     def get_timing_state(self):
         """."""
@@ -229,7 +226,7 @@ class MeasureTbTData(_AcqBPMsSignals):
         stg += f"_{prms.acq_rate}_rate"
         hkick, vkick = prms.hkick, prms.vkick
         pingers2kick = prms.pingers2kick
-        if pingers2kick != 'none':
+        if pingers2kick != "none":
             for plane in pingers2kick:
                 kick = hkick if plane == "h" else vkick
                 stg += f"{plane}kick_{int(round(kick)):3d}_urad"
