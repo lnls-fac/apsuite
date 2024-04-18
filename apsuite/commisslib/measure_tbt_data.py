@@ -162,7 +162,7 @@ class MeasureTbTData(_AcqBPMsSignals):
             vkick = self.params.vkick / 1e3  # [urad] -> [mrad]
         pingv.set_strength(vkick, tol=0.1 * vkick, timeout=0, wait_mon=False)
 
-        # wait magnets ramp and check if set
+        # wait magnets ramp and check if correctly set
         t0 = _time.time()
         pingh_ok = pingh.set_strength(
             hkick, tol=0.05 * hkick, timeout=magnets_timeout, wait_mon=False
@@ -222,14 +222,19 @@ class MeasureTbTData(_AcqBPMsSignals):
     def get_default_fname(self):
         """."""
         prms = self.params
-        stg = "kicked_data"
+        stg = "kickedbeam_data"
         stg += f"_{prms.acq_rate}_rate"
-        hkick, vkick = prms.hkick, prms.vkick
+
+        hkick, vkick = int(round(prms.hkick)), int(round(prms.vkick))
         pingers2kick = prms.pingers2kick
-        if pingers2kick != "none":
-            for plane in pingers2kick:
-                kick = hkick if plane == "h" else vkick
-                stg += f"{plane}kick_{int(round(kick)):3d}_urad"
+        if pingers2kick == "none":
+            stg += "hkick_inactive_vkick_inactive"
+        else:
+            stg += f"hkick_{hkick:3d}_urad" if "h" in pingers2kick else \
+                "hkick_inactive"
+            stg += f"vkick_{vkick:3d}_urad" if "h" in pingers2kick else \
+                "vkick_inactive"
+
         tm = self.data["timestamp"]
         fmt = "%Y-%m-%d-%H-%M-%S"
         tmstp = _datetime.datetime.fromtimestamp(tm).strftime(fmt)
