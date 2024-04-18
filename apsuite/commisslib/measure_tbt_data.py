@@ -234,11 +234,11 @@ class MeasureTbTData(_AcqBPMsSignals):
         stg = "kickedbeam_data"
         stg += f"_{prms.acq_rate}_rate"
 
-        hkick, vkick = int(round(prms.hkick)), int(round(prms.vkick))
         pingers2kick = prms.pingers2kick
         if pingers2kick == "none":
             stg += "hkick_inactive_vkick_inactive"
         else:
+            hkick, vkick = int(round(prms.hkick)), int(round(prms.vkick))
             stg += f"hkick_{hkick:3d}_urad" if "h" in pingers2kick else \
                 "hkick_inactive"
             stg += f"vkick_{vkick:3d}_urad" if "h" in pingers2kick else \
