@@ -302,48 +302,44 @@ class TbTDataAnalysis(MeasureTbTData):
 
         coeff_mat = _np.concatenate((cos[:, None], sin[:, None]), axis=1)
         fourier_components = _np.linalg.pinv(coeff_mat) @ matrix
-        # amplitudes = _np.sqrt(_np.sum(fourier_components**2, axis=0))
-        # phases = _np.arctan2(
-        #     fourier_components[0, :], fourier_components[-1, :]
-        # )
+
         return fourier_components
 
+    def _get_amplitude_phase(self, fourier_components):
+        amplitudes = _np.sqrt(_np.sum(fourier_components**2, axis=0))
+        phases = _np.arctan2(
+            fourier_components[0, :], fourier_components[-1, :]
+        )
+        return amplitudes, phases
 
-    def harmonic_tbt_model(self, ilist, amplitude, tune, phase):
+    def harmonic_tbt_model(self, ilist, *args, return_ravel=True):
         """Harmonic motion model for positions seen at a given BPM."""
-        return amplitude * _np.cos(2 * _np.pi * tune * ilist + phase)
-
-    def harmonic_tbt_model_vectorized(self, ilist, amplitude, tune, phase):
-        """Harmonic motion model for positions seen at a given BPM."""
-        model = amplitude[None, :]
-        model *= _np.cos(2 * _np.pi * tune * ilist[:, None] + phase[None, :])
-        return model
+        nbpms = (len(args)-1) // 2
+        tune = args[0]
+        amps = _np.array(args[1:nbpms+1])
+        phases = _np.array(args[-nbpms:])
+        x = ilist.reshape((-1, nbpms), order="F")
+        wr = 2 * _np.pi * tune
+        mod = amps[None, :] * _np.sin(wr * x + phases[None, :])
+        if return_ravel:
+            return mod.ravel()
+        return mod
 
     def fit_harmonic_model(
-        self, matrix, amp_guesses, tune_guess, phase_guesses
+        self, matrix, tune_guess, amplitudes_guess, phases_guess
     ):
-        """Fits harmonic TbT model to data.
+        """Fits harmonic TbT model to data."""
+        bpmdata = matrix.ravel()
+        nturns, nbpms = matrix.shape[0], matrix.shape[1]
+        xdata = _np.tile(_np.arange(nturns), nbpms).ravel()
+        p0 = _np.concatenate(
+            ([tune_guess], amplitudes_guess, phases_guess)
+        ).tolist()
 
-        Args:
-            matrix (N,M)-array: data matrix containing N turns and BPMs
-            amp_guesses M-array: amplitude guess for each BPM time-series
-            tune_guess (float): betatron tune guess
-            phase_guesses M-array: phase guess for each BPM
-
-        Returns:
-            params (3, M)-array: fitted ampliude, tune and phase for each BPM.
-                                each column corresponds to a BPM, each row
-                                corresponds to amplitudes, tune and phase
-        """
-        ilist = _np.arange(matrix.shape[0])
-        params = _np.zeros((3, matrix.shape[-1]))
-        for bpm_idx, bpm_data in enumerate(matrix.T):
-            p0 = [amp_guesses[bpm_idx], tune_guess, phase_guesses[bpm_idx]]
-            popt, *_ = _curve_fit(
-                f=self.harmonic_tbt_model, xdata=ilist, ydata=bpm_data, p0=p0
-            )
-            params[:, bpm_idx] = popt
-        return params
+        popt, pcov = _curve_fit(
+            f=self.harmonic_tbt_model, xdata=xdata, ydata=bpmdata, p0=p0
+        )
+        return popt, _np.diagonal(pcov)
 
     def calculate_betafunc_and_action(self, amplitudes, nominal_beta):
         """Calculates beta function and betatron action.
