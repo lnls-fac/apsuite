@@ -294,21 +294,20 @@ class TbTDataAnalysis(MeasureTbTData):
         tune_peaks = [tunes[idc, col] for col, idc in enumerate(peak_idcs)]
         return _np.mean(tune_peaks)  # tune guess
 
-    def _get_amplitudes_and_phases_guess(self, matrix, tune):
-        """Calculate initial amplitude & phase guesses for harmonic TbT model.
-
-        Implements Eqs. (5.2)-(5.4) from Ref. [2]
-        """
-        N = matrix.shape[0]
-        ilist = _np.arange(N)
+    def _get_fourier_components(self, matrix, tune):
+        """Performs linear fit for Fourier components amplitudes."""
+        ilist = _np.arange(matrix.shape[0])
         cos = _np.cos(2 * _np.pi * tune * ilist)
         sin = _np.sin(2 * _np.pi * tune * ilist)
-        C, S = _np.dot(cos, matrix), _np.dot(sin, matrix)
-        C *= 2 / N
-        S *= 2 / N
-        amplitudes = _np.sqrt(C**2 + S**2)
-        phases = _np.unwrap(_np.arctan2(C, S))
-        return amplitudes, phases
+
+        coeff_mat = _np.concatenate((cos[:, None], sin[:, None]), axis=1)
+        fourier_components = _np.linalg.pinv(coeff_mat) @ matrix
+        # amplitudes = _np.sqrt(_np.sum(fourier_components**2, axis=0))
+        # phases = _np.arctan2(
+        #     fourier_components[0, :], fourier_components[-1, :]
+        # )
+        return fourier_components
+
 
     def harmonic_tbt_model(self, ilist, amplitude, tune, phase):
         """Harmonic motion model for positions seen at a given BPM."""
