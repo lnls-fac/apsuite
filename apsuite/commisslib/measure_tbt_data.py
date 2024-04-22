@@ -275,7 +275,6 @@ class MeasureTbTData(_AcqBPMsSignals):
         timing_ok = self.prepare_timing()
         if timing_ok:
             print("Timing configs. were succesfully set")
-        # TODO: prepare_magnets actions when strnegth is None
         mags_ok = self.prepare_magnets()  # gets strengths from params
         if mags_ok:
             print("Magnets ready.")
@@ -288,8 +287,6 @@ class MeasureTbTData(_AcqBPMsSignals):
                 self.data["current_before"] = current_before
                 self.data["current_after"] = self.data.pop("stored_current")
                 self.data["init_magnets_strengths"] = init_magnets_strength
-                strenghts = self.get_magnets_strength()
-                self.data["manets_strengths"] = strenghts * 1e3  # [urad]
                 print("Acquisition was succesful.")
             except Exception as e:
                 print(f"An error occurred during acquisition: {e}")
@@ -310,6 +307,13 @@ class MeasureTbTData(_AcqBPMsSignals):
         else:
             print("Magnets strengths succesfully restored to initial values.")
         print('Measurement finished.')
+
+    def get_data(self):
+        """."""
+        data = super().get_data()
+        data["magnets_state"] = self.get_magnets_state
+        data["magnets_strengths"] = self.get_magnets_strength() * 1e3
+        return data
 
     def get_default_fname(self):
         """."""
