@@ -122,29 +122,36 @@ class MeasureTbTData(_AcqBPMsSignals):
 
     def prepare_timing(self, state=None):
         """."""
+        print("Setting BPMs timing")
         super().prepare_timing(state)  # BPM trigger timing
+
+        print("Setting magnets timing")
         # magnets trigger timing below
         prms = self.params
         trigpingh = self.devices["trigpingh"]
         pingers2kick = prms.pingers2kick
         if ("h" in pingers2kick) or (state.get("trigpingh_state", 0) == 1):
-            trigpingh.cmd_enable(timeout=prms.timeout)
+            trigh_ok = trigpingh.cmd_enable(timeout=prms.timeout)
             trigpingh.source = state.get("trigpingh_source", prms.timing_event)
             dly = state.get("trigpingh_delay", prms.trigpingh_delay)
             if dly is not None:
                 trigpingh.delay = dly
         else:
-            trigpingh.cmd_disable(timeout=prms.timeout)
+            trigh_ok = trigpingh.cmd_disable(timeout=prms.timeout)
+        print(f"PingerH trigger set: {trigh_ok}")
 
         trigpingv = self.devices["trigpingv"]
         if ("v" in pingers2kick) or (state.get("trigpingv_state", 0) == 1):
-            trigpingv.cmd_enable(timeout=prms.timeout)
+            trigv_ok = trigpingv.cmd_enable(timeout=prms.timeout)
             trigpingv.source = state.get("trigpingv_source", prms.timing_event)
             dly = state.get("trigpingv_delay", prms.trigpingv_delay)
             if dly is not None:
                 trigpingv.delay = dly
         else:
-            trigpingv.cmd_disable(timeout=prms.timeout)
+            trigv_ok = trigpingv.cmd_disable(timeout=prms.timeout)
+        print(f"PingerV trigger set: {trigv_ok}")
+
+        return trigh_ok and trigv_ok
 
     def get_magnets_strength(self):
         """."""
@@ -152,20 +159,39 @@ class MeasureTbTData(_AcqBPMsSignals):
 
     def get_magnets_state(self):
         """."""
-        return self.devices["pingh"].pwrstate, self.devices["pingv"].pwrstate
+        state = dict()
+        pingh, pingv = self.devices["pingh"], self.devices["pingv"]
+        state["pingh_pwr"] = pingh.pwrstate
+        state["pingv_pwr"] = pingv.pwrstate
+        state["pingh_pulse"] = pingh.pulse
+        state["pingv_pulse"] = pingv.pulse
+        return state
 
     def restore_magnets_state(self, state):
-        """."""
-        pinghpulse, pingvpulse = state
+        """Restore magnets pwr and pulse states."""
+        timeout = self.params.magnets_timeout
         pingh, pingv = self.devices['pingh'], self.devices['pingv']
-        if pinghpulse:
-            pingh_ok = pingh.cmd_turn_on(timeout=self.params.magnets_timeout)
+
+        if state['pingh_pwr']:
+            pingh_ok = pingh.cmd_turn_on(timeout)
         else:
-            pingh_ok = pingh.cmd_turn_off(timeout=self.params.magnets_timeout)
-        if pingvpulse:
-            pingh_ok = pingv.cmd_turn_on(timeout=self.params.magnets_timeout)
+            pingh_ok = pingh.cmd_turn_off(timeout)
+
+        if state["pingv_pwr"]:
+            pingv_ok = pingv.cmd_turn_on(timeout)
         else:
-            pingv_ok = pingv.cmd_turn_off(timeout=self.params.magnets_timeout)
+            pingv_ok = pingv.cmd_turn_off(timeout)
+
+        if state['pingh_pulse']:
+            pingh_ok = pingh.cmd_turn_on_pulse(timeout)
+        else:
+            pingh_ok = pingh.cmd_turn_off_pulse(timeout)
+
+        if state["pingv_pulse"]:
+            pingv_ok = pingv.cmd_turn_on_pulse(timeout)
+        else:
+            pingv_ok = pingv.cmd_turn_off_pulse(timeout)
+
         return pingh_ok and pingv_ok
 
     def set_magnets_strength(
@@ -235,11 +261,14 @@ class MeasureTbTData(_AcqBPMsSignals):
         init_magnets_state = self.get_magnets_state()
         init_magnets_strength = self.get_magnets_strength()
         current_before = currinfo.current()
-        self.prepare_timing()
+        timing_ok = self.prepare_timing()
+        if timing_ok:
+            print("Timing configs. were succesfully set")
         # TODO: prepare_magnets actions when strnegth is None
         mags_ok = self.prepare_magnets()  # gets strengths from params
         if mags_ok:
             print("Magnets strengths were succesfully set.")
+        if mags_ok and timing_ok:
             try:
                 self.acquire_data()
                 # BPMs signals + relevant info are acquired
