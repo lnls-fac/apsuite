@@ -8,6 +8,10 @@ import numpy as _np
 from scipy.optimize import curve_fit as _curve_fit
 from siriuspy.devices import PowerSupplyPU, Trigger
 
+import pyaccel as _pa
+from pymodels import si as _si
+
+from ..optics_analysis import ChromCorr as _ChromCorr, TuneCorr as _TuneCorr
 from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals, \
     AcqBPMsSignalsParams as _AcqBPMsSignalsParams
 
@@ -555,6 +559,41 @@ class TbTDataAnalysis(MeasureTbTData):
         fig.tight_layout()
         _mplt.show()
         return fig, ax
+    def plot_betabeat_and_phase_error(
+        self, beta_model, beta_meas, phase_model, phase_meas
+    ):
+        """."""
+        fig, ax = _mplt.subplots(1, 3, figsize=(15, 5))
+        fig.suptitle("beta and phase")
+        ax[0].plot(beta_model, "o-", label="Model", mfc="none")
+        ax[0].plot(beta_meas, "o--", label="Meas", mfc="none")
+        ax[0].set_ylabel("beta function")
+        ax[0].legend()
+
+        beta_beat = (beta_model - beta_meas) / beta_meas
+        ax[1].plot(
+            beta_beat * 100,
+            "o-",
+            label=f"rms = {beta_beat.std()*100:.2f} %",
+            mfc="none",
+        )
+        ax[1].set_ylabel("beta beating [%]")
+        ax[1].legend()
+        delta_mu = phase_model - phase_meas
+        ax[2].plot(phase_model, "o-", label="Model", mfc="none")
+        ax[2].plot(phase_meas, "o--", label="Meas", mfc="none")
+        ax[2].plot(
+            delta_mu,
+            "o-",
+            label=f"max abs err: {_np.abs(delta_mu.max()):.2f})",
+            mfc="none",
+        )
+        ax[2].set_ylabel("phase advance [rad]")
+        ax[2].legend()
+
+        fig.supxlabel("BPM")
+        fig.tight_layout()
+        _mplt.show()
     def _get_tune_guess(self, matrix):
         """."""
         matrix_dft, tune = self.calc_spectrum(matrix, fs=1, axis=0)
@@ -619,3 +658,27 @@ class TbTDataAnalysis(MeasureTbTData):
         action /= _np.sum(amplitudes**2 * nominal_beta)
         beta = amplitudes**2 / action
         return beta, action
+    def _get_nominal_beta_and_phase(self, tunes=None, chroms=None):
+        """."""
+        model = _si.create_accelerator()
+        model = _si.fitted_models.vertical_dispersion_and_coupling(model)
+        model.radiation_on = False
+        model.cavity_on = False
+        model.vchamber_on = False
+
+        if tunes is not None:
+            tunecorr = _TuneCorr(model, acc="SI")
+            tunecorr.correct_parameters(goal_parameters=tunes)
+
+        if chroms is not None:
+            chromcorr = _ChromCorr(model, acc="SI")
+            chromcorr.correct_parameters(goal_parameters=chroms)
+
+        famdata = _si.get_family_data(model)
+        twiss, *_ = _pa.optics.calc_twiss(accelerator=model, indices="open")
+        bpms_idcs = _pa.lattice.flatten(famdata["BPM"]["index"])
+        betax = twiss.betax[bpms_idcs]
+        phasex = twiss.mux[bpms_idcs]
+        betay = twiss.betay[bpms_idcs]
+        phasey = twiss.muy[bpms_idcs]
+        return betax, betay, phasex, phasey
