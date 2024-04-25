@@ -35,7 +35,7 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.vkick = None  # [mrad]
         self.trigpingh_delay = None
         self.trigpingv_delay = None
-        self.magnets_timeout = 5.
+        self.magnets_timeout = 5.0
 
     def __str__(self):
         """."""
@@ -174,9 +174,9 @@ class MeasureTbTData(_AcqBPMsSignals):
     def set_magnets_state(self, state):
         """Restore magnets pwr and pulse states."""
         timeout = self.params.magnets_timeout
-        pingh, pingv = self.devices['pingh'], self.devices['pingv']
+        pingh, pingv = self.devices["pingh"], self.devices["pingv"]
 
-        if state['pingh_pwr']:
+        if state["pingh_pwr"]:
             pingh_ok = pingh.cmd_turn_on(timeout)
         else:
             pingh_ok = pingh.cmd_turn_off(timeout)
@@ -186,7 +186,7 @@ class MeasureTbTData(_AcqBPMsSignals):
         else:
             pingv_ok = pingv.cmd_turn_off(timeout)
 
-        if state['pingh_pulse']:
+        if state["pingh_pulse"]:
             pingh_ok = pingh.cmd_turn_on_pulse(timeout)
         else:
             pingh_ok = pingh.cmd_turn_off_pulse(timeout)
@@ -221,15 +221,19 @@ class MeasureTbTData(_AcqBPMsSignals):
         t0 = _time.time()
         if hkick is not None:
             pingh_ok = pingh.set_strength(
-                hkick, tol=0.05 * abs(hkick), timeout=magnets_timeout,
-                wait_mon=False
+                hkick,
+                tol=0.05 * abs(hkick),
+                timeout=magnets_timeout,
+                wait_mon=False,
             )
         elapsed_time = _time.time() - t0
         magnets_timeout -= elapsed_time
         if vkick is not None:
             pingv_ok = pingv.set_strength(
-                vkick, tol=0.05 * abs(vkick), timeout=magnets_timeout,
-                wait_mon=False
+                vkick,
+                tol=0.05 * abs(vkick),
+                timeout=magnets_timeout,
+                wait_mon=False,
             )
 
         if (not pingh_ok) or (not pingv_ok):
@@ -241,32 +245,32 @@ class MeasureTbTData(_AcqBPMsSignals):
 
     def prepare_magnets(self):
         """."""
-        print('Preparing magnets...')
+        print("Preparing magnets...")
         pingers2kick = self.params.pingers2kick
         state = dict()
-        if 'h' in pingers2kick:
-            state['pingh_pwr'] = 1
-            state['pingh_pulse'] = 1
+        if "h" in pingers2kick:
+            state["pingh_pwr"] = 1
+            state["pingh_pulse"] = 1
         else:
-            state['pingh_pwr'] = 0
-            state['pingh_pulse'] = 0
+            state["pingh_pwr"] = 0
+            state["pingh_pulse"] = 0
 
-        if 'v' in pingers2kick:
-            state['pingv_pwr'] = 1
-            state['pingv_pulse'] = 1
+        if "v" in pingers2kick:
+            state["pingv_pwr"] = 1
+            state["pingv_pulse"] = 1
         else:
-            state['pingv_pwr'] = 0
-            state['pingv_pulse'] = 0
+            state["pingv_pwr"] = 0
+            state["pingv_pulse"] = 0
 
         state_ok = self.set_magnets_state(state)
 
         if state_ok:
             hkick = self.params.hkick
             vkick = self.params.vkick
-            print('Setting magnets strengths...')
+            print("Setting magnets strengths...")
             return self.set_magnets_strength(hkick, vkick)
         else:
-            print('Magnets state not set.')
+            print("Magnets state not set.")
             return False
 
     def do_measurement(self):
@@ -310,7 +314,7 @@ class MeasureTbTData(_AcqBPMsSignals):
             print(f"\t pingv:{init_magnets_strength[1]:.4f} [mrad]")
         else:
             print("Magnets strengths succesfully restored to initial values.")
-        print('Measurement finished.')
+        print("Measurement finished.")
 
     def get_data(self):
         """."""
@@ -330,10 +334,16 @@ class MeasureTbTData(_AcqBPMsSignals):
             stg += "hkick_inactive_vkick_inactive"
         else:
             hkick, vkick = int(round(prms.hkick)), int(round(prms.vkick))
-            stg += f"hkick_{hkick:3d}_mrad" if "h" in pingers2kick else \
-                "hkick_inactive"
-            stg += f"vkick_{vkick:3d}_mrad" if "h" in pingers2kick else \
-                "vkick_inactive"
+            stg += (
+                f"hkick_{hkick:3d}_mrad"
+                if "h" in pingers2kick
+                else "hkick_inactive"
+            )
+            stg += (
+                f"vkick_{vkick:3d}_mrad"
+                if "h" in pingers2kick
+                else "vkick_inactive"
+            )
 
         tm = self.data["timestamp"]
         fmt = "%Y-%m-%d-%H-%M-%S"
@@ -344,6 +354,7 @@ class MeasureTbTData(_AcqBPMsSignals):
 
 class TbTDataAnalysis(MeasureTbTData):
     """."""
+    SYNCH_TUNE = 0.004713
 
     def __init__(self, filename="", isonline=False):
         """Analysis of linear optics using Turn-by-turn data."""
@@ -559,6 +570,7 @@ class TbTDataAnalysis(MeasureTbTData):
         fig.tight_layout()
         _mplt.show()
         return fig, ax
+
     def plot_betabeat_and_phase_error(
         self, beta_model, beta_meas, phase_model, phase_meas
     ):
@@ -594,6 +606,7 @@ class TbTDataAnalysis(MeasureTbTData):
         fig.supxlabel("BPM")
         fig.tight_layout()
         _mplt.show()
+
     def _get_tune_guess(self, matrix):
         """."""
         matrix_dft, tune = self.calc_spectrum(matrix, fs=1, axis=0)
@@ -622,9 +635,9 @@ class TbTDataAnalysis(MeasureTbTData):
 
     def harmonic_tbt_model(self, ilist, *args, return_ravel=True):
         """Harmonic motion model for positions seen at a given BPM."""
-        nbpms = (len(args)-1) // 2
+        nbpms = (len(args) - 1) // 2
         tune = args[0]
-        amps = _np.array(args[1:nbpms+1])
+        amps = _np.array(args[1 : nbpms + 1])
         phases = _np.array(args[-nbpms:])
         x = ilist.reshape((-1, nbpms), order="F")
         wr = 2 * _np.pi * tune
