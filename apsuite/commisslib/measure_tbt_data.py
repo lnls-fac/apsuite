@@ -501,6 +501,60 @@ class TbTDataAnalysis(MeasureTbTData):
         """."""
         raise NotImplementedError
 
+    def plot_trajs(self, bpm_index=0, timescale=0):
+        """Plot trajectories and sum-signal at a given BPM and time-scale.
+
+        Timescale 0 : Harmonic motion
+        Timescale 1 : Chromaticity decoherence modulation
+        Timescale 2 : Transverse decoherence modulations
+        """
+        nr_pre = self.data['nrsamples_pre']
+        nr_post = self.data['nrsamples_post']
+        n = 5
+
+        if not timescale:
+            nmax_x, nmax_y = int(1 / self.tunex), int(1 / self.tuney)
+            slicex = (nr_pre - n, nr_pre + nmax_x + n + 1)
+            slicey = (nr_pre - n, nr_pre + nmax_y + n + 1)
+            slicesum = (nr_pre - n, nr_pre + max(nmax_x, nmax_y) + n + 1)
+
+        nmax = int(1 / self.SYNCH_TUNE)
+        if timescale == 1:
+            slicex = (nr_pre - n, nr_pre + nmax + n + 1)
+            slicey = slicex
+            slicesum = slicex
+
+        elif timescale == 2:
+            slicex = (nr_pre + nmax, nr_pre + nr_post + 1)
+            slicey = slicex
+            slicesum = slicex
+
+        trajx = self.trajx[:, bpm_index]
+        trajy = self.trajy[:, bpm_index]
+        trajsum = self.trajsum[:, bpm_index]
+
+        fig, ax = _mplt.subplots(1, 3, figsize=(15, 5))
+        fig.suptitle(
+            f"{self.acq_rate.upper()} acquisition at BPM {bpm_index:3d}"
+        )
+        ax[0].set_title("horizontal trajectory")
+        ax[0].plot(trajx, "-", mfc="none", color="blue")
+        ax[0].set_xlim(slicex)
+        ax[0].set_ylabel("position [mm]")
+        ax[1].set_title("vertical trajectory")
+        ax[1].plot(trajy, "-", mfc="none", color="red")
+        ax[1].set_xlim(slicey)
+        ax[1].sharey(ax[0])
+        ax[2].set_title("BPM sum signal")
+        ax[2].plot(trajsum, "-", mfc="none", color="k")
+        ax[2].set_xlim(slicesum)
+
+        ax[2].set_ylabel("sum [a.u.]")
+
+        fig.supxlabel("turn index")
+        fig.tight_layout()
+        _mplt.show()
+        return fig, ax
     def _get_tune_guess(self, matrix):
         """."""
         matrix_dft, tune = self.calc_spectrum(matrix, fs=1, axis=0)
