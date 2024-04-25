@@ -344,7 +344,137 @@ class TbTDataAnalysis(MeasureTbTData):
     def __init__(self, filename="", isonline=False):
         """Analysis of linear optics using Turn-by-turn data."""
         super().__init__(isonline=isonline)
-        self.fname = filename
+        self._fname = filename
+        self.timestamp = None
+        self.trajx, self.trajy = None, None  # zero-mean trajectories in [mm]
+        self.trajsum = None
+        self.tunex, self.tuney = None, None
+        self.acq_rate = None
+        self.sampling_freq = None
+        self.switching_freq = None
+        self.rf_freq = None
+        if self._fname:
+            self.load_and_apply()
+
+    def __str__(self):
+        """."""
+        stg = ""
+        data = self.data
+        if data:
+            stg += "\n"
+            stg += "Measurement data:\n"
+
+            ftmp = "{0:26s} = {1:9.6f}  {2:s}\n".format
+            stmp = "{0:26s} = {1:9}  {2:s}\n".format
+            gtmp = "{0:<15s} = {1:}  {2:}\n".format
+
+            stg += gtmp("timestamp", self.timestamp, "")
+            stg += "\n"
+            stg += "Storage Ring State\n"
+
+            stg += ftmp("current_before", data["current_before"], "mA")
+            stg += ftmp("current_after", data["current_after"], "mA")
+            stg += ftmp("tunex", data["tunex"], "")
+            stg += ftmp("tuney", data["tuney"], "")
+            stg += stmp("tunex_enable", bool(data["tunex_enable"]), "")
+            stg += stmp("tuney_enable", bool(data["tuney_enable"]), "")
+
+            stg += "\n"
+            stg += "EVT state\n"
+
+            stg += stmp("evt_mode", data["timing_state"]["evt_mode"], "")
+            stg += stmp("evt_delay", data["timing_state"]["evt_delay"], "")
+
+            stg += "\n"
+            stg += "BPMs state\n"
+
+            stg += stmp("acq_rate", data["acq_rate"], "")
+            stg += stmp("nrsamples_pre", data["nrsamples_pre"], "")
+            stg += stmp("nrsamples_post", data["nrsamples_post"], "")
+            stg += stmp("switching_mode", data["switching_mode"], "")
+            stg += stmp("switching_frequency", data["switching_frequency"], "")
+            stg += stmp(
+                "trigbpm_source", data["timing_state"]["trigbpm_source"], ""
+            )
+            stg += stmp(
+                "trigbpm_nrpulses",
+                data["timing_state"]["trigbpm_nrpulses"],
+                "",
+            )
+            stg += stmp(
+                "trigbpm_delay", data["timing_state"]["trigbpm_delay"], ""
+            )
+
+            stg += "\n"
+            stg += "Pingers state\n"
+
+            stg += stmp(
+                "trigpingh_state", data["timing_state"]["trigpingh_state"], ""
+            )
+            stg += stmp(
+                "trigpingh_source",
+                data["timing_state"]["trigpingh_source"],
+                "",
+            )
+            stg += stmp(
+                "trigpingh_delay", data["timing_state"]["trigpingh_delay"], ""
+            )
+            # stg += stmp("pingh_pwr", data["magnets_state"]["pingh_pwr"], "")
+            # stg += stmp(
+                # "pingh_pulse", data["magnets_state"]["pingh_pulse"], ""
+            # )
+            stg += ftmp("hkick", data["magnets_strengths"][0], "mrad")
+
+            stg += stmp(
+                "trigpingv_state", data["timing_state"]["trigpingv_state"], ""
+            )
+            stg += stmp(
+                "trigpingv_source",
+                data["timing_state"]["trigpingv_source"],
+                "",
+            )
+            stg += stmp(
+                "trigpingv_delay", data["timing_state"]["trigpingv_delay"], ""
+            )
+            # stg += stmp("pingv_pwr", data["magnets_state"]["pingv_pwr"], "")
+            # stg += stmp(
+                # "pingv_pulse", data["magnets_state"]["pingv_pulse"], ""
+            # )
+            stg += ftmp("vkick", data["magnets_strengths"][1], "mrad")
+        return stg
+
+    @property
+    def fname(self):
+        """."""
+        return self._fname
+
+    @fname.setter
+    def fname(self, val):
+        """."""
+        self._fname = val
+        self.load_and_apply(val)
+
+    def load_and_apply(self):
+        """Load data and copy often used data to class attributes."""
+        keys = super().load_and_apply(self.fname)
+        if keys:
+            print("The following keys were not used:")
+            print("     ", str(keys))
+        data = self.data
+        timestamp = _datetime.datetime.fromtimestamp(data["timestamp"])
+        self.timestamp = timestamp
+        trajx, trajy = data["orbx"].copy() * 1e-3, data["orby"].copy() * 1e-3
+        trajsum = data["sumdata"].copy()
+        # zero mean in samples dimension
+        trajx -= trajx.mean(axis=0)[None, :]
+        trajy -= trajy.mean(axis=0)[None, :]
+        self.trajx, self.trajy, self.trajsum = trajx, trajy, trajsum
+        self.tunex, self.tuney = data['tunex'], data['tuney']
+        self.acq_rate = data["acq_rate"]
+        self.rf_freq = data["rf_frequency"]
+        self.sampling_freq = self.data["sampling_frequency"]
+        self.switching_freq = self.data["switching_frequency"]
+        return
 
     def linear_optics_analysis(self):
         """."""
