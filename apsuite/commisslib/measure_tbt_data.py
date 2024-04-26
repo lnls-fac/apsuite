@@ -368,8 +368,13 @@ class TbTDataAnalysis(MeasureTbTData):
         self.sampling_freq = None
         self.switching_freq = None
         self.rf_freq = None
+        self.trajx_turns_slice = None
+        self.trajy_turns_slice = None
+        self.model_optics = None
+        self.fitted_optics = None
+        self.pca_optics = None
         if self._fname:
-            self.load_and_apply()
+            self.load_and_apply(self._fname)
 
     def __str__(self):
         """."""
@@ -469,9 +474,9 @@ class TbTDataAnalysis(MeasureTbTData):
         self._fname = val
         self.load_and_apply(val)
 
-    def load_and_apply(self):
+    def load_and_apply(self, fname):
         """Load data and copy often used data to class attributes."""
-        keys = super().load_and_apply(self.fname)
+        keys = super().load_and_apply(fname)
         if keys:
             print("The following keys were not used:")
             print("     ", str(keys))
@@ -495,9 +500,83 @@ class TbTDataAnalysis(MeasureTbTData):
         """."""
         raise NotImplementedError
 
-    def harmonic_analysis(self):
+    def harmonic_analysis(self, guess_tunes=False):
         """."""
-        raise NotImplementedError
+        if guess_tunes:
+            tunex, tuney = self._guess_tune_from_dft()
+        else:
+            tunex, tuney = self.tunex, self.tuney
+
+        fitted_optics = dict()
+        for pinger in self.params.pingers2kick:
+            if pinger == "h":
+                from_turn2turn = self.trajx_turns_slice
+                turns_slice = slice(
+                    from_turn2turn[0], from_turn2turn[1] + 1, 1
+                )
+                traj = self.trajx[turns_slice, :].copy()
+                tune = tunex
+                label = "x"
+            else:
+                from_turn2turn = self.trajy_turns_slice
+                turns_slice = slice(
+                    from_turn2turn[0], from_turn2turn[1] + 1, 1
+                )
+                traj = self.trajy[turns_slice, :].copy()
+                tune = tuney
+                label = "y"
+
+            # TODO: adapt turns selection to grant integer nr of cycles
+            nbpms = traj.shape[-1]
+
+            fourier = self._get_fourier_components(traj, tune)
+            amps, phases = self._get_amplitude_phase(fourier)
+            params_guess = _np.concatenate(([tune], amps, phases)).tolist()
+            n = self._get_independent_variables(from_turn2turn, nbpms)
+
+            initial_fit = self.harmonic_tbt_model(
+                n, *params_guess, return_ravel=False
+            )
+
+            params_fit, params_error = self.fit_harmonic_model(
+                from_turn2turn, traj, *params_guess
+            )
+            params_fit = params_fit.tolist()
+            final_fit = self.harmonic_tbt_model(
+                n, *params_fit, return_ravel=False
+            )
+
+            tune = params_fit[0]
+            amps = _np.array(params_fit[1 : nbpms + 1])
+            phases_fit = _np.array(params_fit[-nbpms:])
+
+            self._get_nominal_optics(tunes=(tunex, tuney))
+            beta_model = self.model_optics["beta"+label]
+            phases_model = self.model_optics["phase"+label]
+            beta_fit, action = self.calc_beta_and_action(amps, beta_model)
+
+            # collect fitted data
+            fitted_optics["tune"+label] = tune
+            fitted_optics["tune_err"+label] = params_error[0]
+            fitted_optics["beta"+label] = beta_fit
+            # TODO: propagate amplitude errors to beta errors
+            fitted_optics["beta"+label+"_err"] = params_error[1 : nbpms + 1]
+            fitted_optics["phase"+label] = phases_fit
+            fitted_optics["phase"+label+"_err"] = params_error[-nbpms:]
+            fitted_optics["action"+label] = action
+            # TODO: propagate amplitude errors to action error
+            fitted_optics["traj"+label+"_init_fit"] = initial_fit
+            fitted_optics["traj"+label+"_final_fit"] = final_fit
+
+            self.fitted_optics = fitted_optics
+
+            self.plot_betabeat_and_phase_error(
+                beta_model, beta_fit, phases_model, phases_fit,
+                title=f"beta{label} & phase{label} - from harmonic model fit"
+            )
+
+            # TODO: compare fit with trajectory
+        self.fitted_optics = fitted_optics
 
     def principal_components_analysis(self):
         """."""
@@ -571,18 +650,25 @@ class TbTDataAnalysis(MeasureTbTData):
         _mplt.show()
         return fig, ax
 
+    def plot_trajs_vs_fit(self):
+        """."""
+        raise NotImplementedError
+
     def plot_betabeat_and_phase_error(
-        self, beta_model, beta_meas, phase_model, phase_meas
+        self, beta_model, beta_meas, phase_model, phase_meas, title=None
     ):
         """."""
         fig, ax = _mplt.subplots(1, 3, figsize=(15, 5))
-        fig.suptitle("beta and phase")
+        if title is not None:
+            fig.suptitle(title)
+        else:
+            fig.suptitle("beta and phase")
         ax[0].plot(beta_model, "o-", label="Model", mfc="none")
         ax[0].plot(beta_meas, "o--", label="Meas", mfc="none")
         ax[0].set_ylabel("beta function")
         ax[0].legend()
 
-        beta_beat = (beta_model - beta_meas) / beta_meas
+        beta_beat = (beta_model - beta_meas) / beta_model
         ax[1].plot(
             beta_beat * 100,
             "o-",
@@ -607,19 +693,25 @@ class TbTDataAnalysis(MeasureTbTData):
         fig.tight_layout()
         _mplt.show()
 
-    def _get_tune_guess(self, matrix):
+    def _guess_tune_from_dft(self):
         """."""
-        matrix_dft, tune = self.calc_spectrum(matrix, fs=1, axis=0)
-        tunes = tune[:, None] * _np.ones(matrix.shape[-1])[None, :]
-        peak_idcs = _np.abs(matrix_dft).argmax(axis=0)
-        tune_peaks = [tunes[idc, col] for col, idc in enumerate(peak_idcs)]
-        return _np.mean(tune_peaks)  # tune guess
+        tune_guesses = list()
+        for plane in "xy":
+            traj = self.trajx if plane == "x" else self.trajy
+            traj_dft, tune = self.calc_spectrum(traj, fs=1, axis=0)
+            tunes = tune[:, None] * _np.ones(traj.shape[-1])[None, :]
+            peak_idcs = _np.abs(traj_dft).argmax(axis=0)
+            tune_peaks = [
+                tunes[idc, col] for col, idc in enumerate(peak_idcs)
+            ]  # peaking tune at each BPM's DFT.
+            tune_guesses.append(_np.mean(tune_peaks))
+        return tune_guesses
 
     def _get_fourier_components(self, matrix, tune):
         """Performs linear fit for Fourier components amplitudes."""
-        ilist = _np.arange(matrix.shape[0])
-        cos = _np.cos(2 * _np.pi * tune * ilist)
-        sin = _np.sin(2 * _np.pi * tune * ilist)
+        n = _np.arange(matrix.shape[0])
+        cos = _np.cos(2 * _np.pi * tune * n)
+        sin = _np.sin(2 * _np.pi * tune * n)
 
         coeff_mat = _np.concatenate((cos[:, None], sin[:, None]), axis=1)
         fourier_components = _np.linalg.pinv(coeff_mat) @ matrix
@@ -631,38 +723,38 @@ class TbTDataAnalysis(MeasureTbTData):
         phases = _np.arctan2(
             fourier_components[0, :], fourier_components[-1, :]
         )
-        return amplitudes, phases
+        return amplitudes, _np.unwrap(phases)
 
-    def harmonic_tbt_model(self, ilist, *args, return_ravel=True):
+    def harmonic_tbt_model(self, n, *args, return_ravel=True):
         """Harmonic motion model for positions seen at a given BPM."""
         nbpms = (len(args) - 1) // 2
         tune = args[0]
         amps = _np.array(args[1 : nbpms + 1])
         phases = _np.array(args[-nbpms:])
-        x = ilist.reshape((-1, nbpms), order="F")
+        x = n.reshape((-1, nbpms), order="F")
         wr = 2 * _np.pi * tune
         mod = amps[None, :] * _np.sin(wr * x + phases[None, :])
         if return_ravel:
             return mod.ravel()
         return mod
 
-    def fit_harmonic_model(
-        self, matrix, tune_guess, amplitudes_guess, phases_guess
-    ):
-        """Fits harmonic TbT model to data."""
-        bpmdata = matrix.ravel()
-        nturns, nbpms = matrix.shape[0], matrix.shape[1]
-        xdata = _np.tile(_np.arange(nturns), nbpms).ravel()
-        p0 = _np.concatenate(
-            ([tune_guess], amplitudes_guess, phases_guess)
-        ).tolist()
+    def _get_independent_variables(self, from_turn2turn, nbpms):
+        arange = _np.arange(from_turn2turn[0], from_turn2turn[1] + 1, 1)
+        return _np.tile(arange, nbpms)
 
+    def fit_harmonic_model(self, from_turn2turn, traj, *params_guess):
+        """Fits harmonic TbT model to data."""
+        bpmdata = traj.ravel()
+        nbpms = traj.shape[1]
+        xdata = self._get_independent_variables(from_turn2turn, nbpms)
+        # TODO: add exception in case fit fails
         popt, pcov = _curve_fit(
-            f=self.harmonic_tbt_model, xdata=xdata, ydata=bpmdata, p0=p0
+            f=self.harmonic_tbt_model, xdata=xdata, ydata=bpmdata,
+            p0=params_guess
         )
         return popt, _np.diagonal(pcov)
 
-    def calculate_betafunc_and_action(self, amplitudes, nominal_beta):
+    def calc_beta_and_action(self, amplitudes, nominal_beta):
         """Calculates beta function and betatron action.
 
         As in Eq. (9) of Ref. [1]
@@ -671,27 +763,34 @@ class TbTDataAnalysis(MeasureTbTData):
         action /= _np.sum(amplitudes**2 * nominal_beta)
         beta = amplitudes**2 / action
         return beta, action
-    def _get_nominal_beta_and_phase(self, tunes=None, chroms=None):
+
+    def _get_nominal_optics(self, tunes=None, chroms=None):
         """."""
-        model = _si.create_accelerator()
-        model = _si.fitted_models.vertical_dispersion_and_coupling(model)
-        model.radiation_on = False
-        model.cavity_on = False
-        model.vchamber_on = False
+        if self.model_optics is None:
+            model_optics = dict()
+            model = _si.create_accelerator()
+            model = _si.fitted_models.vertical_dispersion_and_coupling(model)
+            model.radiation_on = False
+            model.cavity_on = False
+            model.vchamber_on = False
 
-        if tunes is not None:
-            tunecorr = _TuneCorr(model, acc="SI")
-            tunecorr.correct_parameters(goal_parameters=tunes)
+            if tunes is not None:
+                tunecorr = _TuneCorr(model, acc="SI")
+                tunex = tunes[0] + 49
+                tuney = tunes[0] + 14
+                tunecorr.correct_parameters(goal_parameters=(tunex, tuney))
 
-        if chroms is not None:
+            chroms = (2.5, 2.5)
             chromcorr = _ChromCorr(model, acc="SI")
             chromcorr.correct_parameters(goal_parameters=chroms)
 
-        famdata = _si.get_family_data(model)
-        twiss, *_ = _pa.optics.calc_twiss(accelerator=model, indices="open")
-        bpms_idcs = _pa.lattice.flatten(famdata["BPM"]["index"])
-        betax = twiss.betax[bpms_idcs]
-        phasex = twiss.mux[bpms_idcs]
-        betay = twiss.betay[bpms_idcs]
-        phasey = twiss.muy[bpms_idcs]
-        return betax, betay, phasex, phasey
+            famdata = _si.get_family_data(model)
+            twiss, *_ = _pa.optics.calc_twiss(
+                accelerator=model, indices="open"
+            )
+            bpms_idcs = _pa.lattice.flatten(famdata["BPM"]["index"])
+            model_optics["betax"] = twiss.betax[bpms_idcs]
+            model_optics["phasex"] = twiss.mux[bpms_idcs]
+            model_optics["betay"] = twiss.betay[bpms_idcs]
+            model_optics["phasey"] = twiss.muy[bpms_idcs]
+            self.model_optics = model_optics
