@@ -498,6 +498,8 @@ class TbTDataAnalysis(MeasureTbTData):
 
     def linear_optics_analysis(self):
         """."""
+        self.harmonic_analysis()
+        self.principal_components_analysis()
         raise NotImplementedError
 
     def harmonic_analysis(self, guess_tunes=False):
@@ -580,7 +582,21 @@ class TbTDataAnalysis(MeasureTbTData):
 
     def principal_components_analysis(self):
         """."""
-        raise NotImplementedError
+        pca_optics = dict()
+        for pinger in self.params.pingers2kick:
+            tunes = self.tunex, self.tuney
+            if self.model_optics is None:
+                self._get_nominal_optics(tunes)
+            beta_model = self.model_optics["beta"+pinger]
+            phase_model = self.model_optics["phase"+pinger]
+            beta_pca, phase_pca = self.calc_beta_and_phase_with_pca(self.trajx)
+            self.plot_betabeat_and_phase_error(
+                beta_model, beta_pca, phase_model, phase_pca,
+                title=f'beta{pinger} & phase{pinger} - from PCA'
+            )
+            pca_optics["beta"+pinger] = beta_pca
+            pca_optics["phase"+pinger] = phase_pca
+        self.pca_optics = pca_optics
 
     def independent_component_analysis(self):
         """."""
@@ -763,6 +779,19 @@ class TbTDataAnalysis(MeasureTbTData):
         action /= _np.sum(amplitudes**2 * nominal_beta)
         beta = amplitudes**2 / action
         return beta, action
+
+    def calc_beta_and_phase_with_pca(self, matrix, beta_model):
+        """."""
+        _, svals, vtmat = self.calc_svd(matrix, full_matrices=False)
+        beta_meas = (
+            svals[0] ** 2 * vtmat[0, :] ** 2 + svals[1] ** 2 * vtmat[1, :] ** 2
+        )
+        beta_meas /= _np.std(beta_meas) / _np.std(beta_model)
+        phase_meas = _np.arctan2(
+            svals[1] * vtmat[1, :], svals[0] * vtmat[0, :]
+        )
+        phase_meas = _np.abs(_np.unwrap(phase_meas))  # why the abs?
+        return beta_meas, phase_meas
 
     def _get_nominal_optics(self, tunes=None, chroms=None):
         """."""
