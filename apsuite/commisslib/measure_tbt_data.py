@@ -176,15 +176,15 @@ class MeasureTbTData(_AcqBPMsSignals):
         timeout = self.params.magnets_timeout
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
 
-        if state["pingh_pwr"]:
-            pingh_ok = pingh.cmd_turn_on(timeout)
-        else:
-            pingh_ok = pingh.cmd_turn_off(timeout)
+        # if state["pingh_pwr"]:
+        #     pingh_ok = pingh.cmd_turn_on(timeout)
+        # else:
+        #     pingh_ok = pingh.cmd_turn_off(timeout)
 
-        if state["pingv_pwr"]:
-            pingv_ok = pingv.cmd_turn_on(timeout)
-        else:
-            pingv_ok = pingv.cmd_turn_off(timeout)
+        # if state["pingv_pwr"]:
+        #     pingv_ok = pingv.cmd_turn_on(timeout)
+        # else:
+        #     pingv_ok = pingv.cmd_turn_off(timeout)
 
         if state["pingh_pulse"]:
             pingh_ok = pingh.cmd_turn_on_pulse(timeout)
@@ -249,17 +249,17 @@ class MeasureTbTData(_AcqBPMsSignals):
         pingers2kick = self.params.pingers2kick
         state = dict()
         if "h" in pingers2kick:
-            state["pingh_pwr"] = 1
+            # state["pingh_pwr"] = 1 disable pulsing only
             state["pingh_pulse"] = 1
         else:
-            state["pingh_pwr"] = 0
+            # state["pingh_pwr"] = 0
             state["pingh_pulse"] = 0
 
         if "v" in pingers2kick:
-            state["pingv_pwr"] = 1
+            # state["pingv_pwr"] = 1
             state["pingv_pulse"] = 1
         else:
-            state["pingv_pwr"] = 0
+            # state["pingv_pwr"] = 0
             state["pingv_pulse"] = 0
 
         state_ok = self.set_magnets_state(state)
@@ -439,7 +439,7 @@ class TbTDataAnalysis(MeasureTbTData):
             stg += stmp(
                 "trigpingh_delay", data["timing_state"]["trigpingh_delay"], ""
             )
-            # stg += stmp("pingh_pwr", data["magnets_state"]["pingh_pwr"], "")
+            # stg += stmp("pingh_pwr", data["magnets_state"]["pingh_pwr"], "") # commented because last measurement had a problem here
             # stg += stmp(
                 # "pingh_pulse", data["magnets_state"]["pingh_pulse"], ""
             # )
