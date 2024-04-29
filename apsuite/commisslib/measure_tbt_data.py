@@ -304,7 +304,7 @@ class MeasureTbTData(_AcqBPMsSignals):
             print("Timing was not restored to initial state.")
         mags_ok = self.set_magnets_state(init_magnets_state)
         mags_ok = mags_ok and self.set_magnets_strength(
-            init_magnets_strength
+            *init_magnets_strength
         )  # restore
         if not mags_ok:
             msg = "Magnets state or strengths were not restored."
