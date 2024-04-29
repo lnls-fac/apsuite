@@ -332,21 +332,16 @@ class MeasureTbTData(_AcqBPMsSignals):
         stg += f"_{prms.acq_rate}_rate"
 
         pingers2kick = prms.pingers2kick
-        if pingers2kick == "none":
-            stg += "hkick_inactive_vkick_inactive"
-        else:
-            hkick, vkick = int(round(prms.hkick)), int(round(prms.vkick))
-            stg += (
-                f"hkick_{hkick:3d}_mrad"
-                if "h" in pingers2kick
-                else "hkick_inactive"
-            )
-            stg += (
-                f"vkick_{vkick:3d}_mrad"
-                if "h" in pingers2kick
-                else "vkick_inactive"
-            )
-
+        stg += (
+            f"hkick_{prms.hkick:.4f}_mrad".replace(".", "p")
+            if "h" in pingers2kick
+            else "hkick_inactive"
+        )
+        stg += (
+            f"vkick_{prms.vkick:.4f}_mrad".replace(".", "p")
+            if "v" in pingers2kick
+            else "vkick_inactive"
+        )
         tm = self.data["timestamp"]
         fmt = "%Y-%m-%d-%H-%M-%S"
         tmstp = _datetime.datetime.fromtimestamp(tm).strftime(fmt)
