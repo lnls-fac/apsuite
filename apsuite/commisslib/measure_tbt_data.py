@@ -204,13 +204,13 @@ class MeasureTbTData(_AcqBPMsSignals):
         """Set pingers strengths, check if was set & indicate which failed."""
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
         if hkick is not None:
-            pingh.set_strength(hkick, timeout=0, wait_mon=False)
+            pingh.set_strength(hkick, timeout=0, wait_mon=True)
         else:
             print("pingh not changed (None-type strength)")
             pingh_ok = True
 
         if vkick is not None:
-            pingv.set_strength(vkick, timeout=0, wait_mon=False)
+            pingv.set_strength(vkick, timeout=0, wait_mon=True)
         else:
             print("pingv not changed (None-type strength)")
             pingv_ok = True
@@ -224,7 +224,7 @@ class MeasureTbTData(_AcqBPMsSignals):
                 hkick,
                 tol=0.05 * abs(hkick),
                 timeout=magnets_timeout,
-                wait_mon=False,
+                wait_mon=True,
             )
         elapsed_time = _time.time() - t0
         magnets_timeout -= elapsed_time
@@ -233,7 +233,7 @@ class MeasureTbTData(_AcqBPMsSignals):
                 vkick,
                 tol=0.05 * abs(vkick),
                 timeout=magnets_timeout,
-                wait_mon=False,
+                wait_mon=True,
             )
 
         if (not pingh_ok) or (not pingv_ok):
@@ -353,7 +353,7 @@ class MeasureTbTData(_AcqBPMsSignals):
 
 class TbTDataAnalysis(MeasureTbTData):
     """."""
-    SYNCH_TUNE = 0.004713
+    SYNCH_TUNE = 0.004713  # check this
 
     def __init__(self, filename="", isonline=False):
         """Analysis of linear optics using Turn-by-turn data."""
