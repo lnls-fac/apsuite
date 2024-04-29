@@ -292,7 +292,9 @@ class MeasureTbTData(_AcqBPMsSignals):
                     # such as timestamps tunes, stored current
                     # rf frequency, acq rate, nr samples, etc.
                     self.data["current_before"] = current_before
-                    self.data["current_after"] = self.data.pop("stored_current")
+                    self.data["current_after"] = self.data.pop(
+                        "stored_current"
+                    )
                     self.data["init_magnets_strengths"] = init_magnets_strength
                     print("Acquisition was succesful.")
                 except Exception as e:
