@@ -806,7 +806,7 @@ class TbTDataAnalysis(MeasureTbTData):
                 tuney = tunes[0] + 14
                 tunecorr.correct_parameters(goal_parameters=(tunex, tuney))
 
-            chroms = (2.5, 2.5)
+            chroms = (2.5, 2.5) if chroms is None else chroms
             chromcorr = _ChromCorr(model, acc="SI")
             chromcorr.correct_parameters(goal_parameters=chroms)
 
