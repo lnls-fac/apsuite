@@ -283,21 +283,20 @@ class MeasureTbTData(_AcqBPMsSignals):
         timing_ok = self.prepare_timing()
         if timing_ok:
             print("Timing configs. were succesfully set")
-        mags_ok = self.prepare_magnets()  # gets strengths from params
-        if mags_ok:
-            print("Magnets ready.")
-        if mags_ok and timing_ok:
-            try:
-                self.acquire_data()
-                # BPMs signals + relevant info are acquired
-                # such as timestamps tunes, stored current
-                # rf frequency, acq rate, nr samples, etc.
-                self.data["current_before"] = current_before
-                self.data["current_after"] = self.data.pop("stored_current")
-                self.data["init_magnets_strengths"] = init_magnets_strength
-                print("Acquisition was succesful.")
-            except Exception as e:
-                print(f"An error occurred during acquisition: {e}")
+            mags_ok = self.prepare_magnets()  # gets strengths from params
+            if mags_ok:
+                print("Magnets ready.")
+                try:
+                    self.acquire_data()
+                    # BPMs signals + relevant info are acquired
+                    # such as timestamps tunes, stored current
+                    # rf frequency, acq rate, nr samples, etc.
+                    self.data["current_before"] = current_before
+                    self.data["current_after"] = self.data.pop("stored_current")
+                    self.data["init_magnets_strengths"] = init_magnets_strength
+                    print("Acquisition was succesful.")
+                except Exception as e:
+                    print(f"An error occurred during acquisition: {e}")
         else:
             print("Did not measure. Restoring magnets & timing initial state.")
         timing_ok = self.recover_timing_state(init_timing_state)
