@@ -303,16 +303,19 @@ class MeasureTbTData(_AcqBPMsSignals):
         if not timing_ok:
             print("Timing was not restored to initial state.")
         mags_ok = self.set_magnets_state(init_magnets_state)
-        mags_ok = self.set_magnets_strength(init_magnets_strength)  # restore
+        mags_ok = mags_ok and self.set_magnets_strength(
+            init_magnets_strength
+        )  # restore
         if not mags_ok:
-            msg = "Magnets strengths were not restored to initial values."
+            msg = "Magnets state or strengths were not restored."
             msg += "Restore manually."
             print(msg)
+            print(init_magnets_state)
             print("Initial strengths:")
             print(f"\t pingh:{init_magnets_strength[0]:.4f} [mrad]")
             print(f"\t pingv:{init_magnets_strength[1]:.4f} [mrad]")
         else:
-            print("Magnets strengths succesfully restored to initial values.")
+            print("Magnets state & strengths succesfully restored.")
         print("Measurement finished.")
 
     def get_data(self):
