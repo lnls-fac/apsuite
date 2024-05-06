@@ -165,37 +165,65 @@ class MeasureTbTData(_AcqBPMsSignals):
         """."""
         state = dict()
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
+        pingh_str, pingv_str = self.get_magnets_strength()
         state["pingh_pwr"] = pingh.pwrstate
         state["pingv_pwr"] = pingv.pwrstate
         state["pingh_pulse"] = pingh.pulse
         state["pingv_pulse"] = pingv.pulse
+        state["pingh_strength"] = pingh_str
+        state["pingv_strength"] = pingv_str
+
         return state
 
     def set_magnets_state(self, state):
-        """Restore magnets pwr and pulse states."""
+        """Set magnets strengths, pwr and pulse states."""
         timeout = self.params.magnets_timeout
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
 
-        # if state["pingh_pwr"]:
-        #     pingh_ok = pingh.cmd_turn_on(timeout)
-        # else:
-        #     pingh_ok = pingh.cmd_turn_off(timeout)
-
-        # if state["pingv_pwr"]:
-        #     pingv_ok = pingv.cmd_turn_on(timeout)
-        # else:
-        #     pingv_ok = pingv.cmd_turn_off(timeout)
-
-        if state["pingh_pulse"]:
-            pingh_ok = pingh.cmd_turn_on_pulse(timeout)
+        # Power and strengths
+        if state["pingh_pwr"]:
+            pingh_ok = pingh.turn_on(timeout=self.params.magnets_timeout)
+            if pingh_ok:
+                pingh_ok = self.set_magnets_strength(
+                    hkick=state["pingh_strength"]
+                )
+            else:
+                print("Failed at turning-on pingh.")
         else:
-            pingh_ok = pingh.cmd_turn_off_pulse(timeout)
+            pingh_ok = pingh.turn_off(timeout=self.params.magnets_timeout)
+
+        if state["pingv_pwr"]:
+            pingv_ok = pingv.turn_on(timeout=self.params.magnets_timeout)
+            if pingv_ok:
+                pingv_ok = self.set_magnets_strength(
+                    vkick=state["pingv_strength"]
+                )
+            else:
+                print("Failed at turning-on pingv.")
+        else:
+            pingv_ok = pingv.turn_off(timeout=self.params.magnets_timeout)
+
+        if pingh_ok and pingv_ok:
+            print("Magnets power-state and strengths set.")
+        else:
+            print("Failed at setting magnets power-state and strengths")
+
+        print("Changing pulse-state")
+
+        # Pulse state
+        if state["pingh_pulse"]:
+            pingh_ok = pingh_ok and pingh.cmd_turn_on_pulse(timeout)
+        else:
+            pingh_ok = pingh_ok and pingh.cmd_turn_off_pulse(timeout)
+        msg = "pingh pulse set" if pingh_ok else "pingh pulse not set"
+        print("\t"+msg)
 
         if state["pingv_pulse"]:
-            pingv_ok = pingv.cmd_turn_on_pulse(timeout)
+            pingv_ok = pingv_ok and pingv.cmd_turn_on_pulse(timeout)
         else:
-            pingv_ok = pingv.cmd_turn_off_pulse(timeout)
-
+            pingv_ok = pingv_ok and pingv.cmd_turn_off_pulse(timeout)
+        msg = "pingv pulse set" if pingv_ok else "pingv pulse not set"
+        print("\t"+msg)
         return pingh_ok and pingv_ok
 
     def set_magnets_strength(
@@ -239,7 +267,8 @@ class MeasureTbTData(_AcqBPMsSignals):
         if (not pingh_ok) or (not pingv_ok):
             bad_pingers = "pingh " if not pingh_ok else ""
             bad_pingers += "pingv" if not pingv_ok else ""
-            print(f"Some magnets were not set.\n\tBad pingers: {bad_pingers}")
+            msg = "Some magnets strengths were not set.\n"
+            msg += f"\t Bad pingers: {bad_pingers}"
             return False
         return True
 
@@ -249,40 +278,33 @@ class MeasureTbTData(_AcqBPMsSignals):
         pingers2kick = self.params.pingers2kick
         state = dict()
         if "h" in pingers2kick:
-            # state["pingh_pwr"] = 1 disable pulsing only
+            state["pingh_pwr"] = 1  # always make sure its on
             state["pingh_pulse"] = 1
         else:
-            # state["pingh_pwr"] = 0
-            state["pingh_pulse"] = 0
+            # state["pingh_pwr"] = 0  # but will not be turning-off.
+            state["pingh_pulse"] = 0  # only changing pulse-sts
 
         if "v" in pingers2kick:
-            # state["pingv_pwr"] = 1
+            state["pingv_pwr"] = 1
             state["pingv_pulse"] = 1
         else:
             # state["pingv_pwr"] = 0
             state["pingv_pulse"] = 0
 
-        state_ok = self.set_magnets_state(state)
+        state["pingh_strength"] = self.params.hkick
+        state["pingv_strength"] = self.params.vkick
 
-        if state_ok:
-            hkick = self.params.hkick
-            vkick = self.params.vkick
-            print("Setting magnets strengths...")
-            return self.set_magnets_strength(hkick, vkick)
-        else:
-            print("Magnets state not set.")
-            return False
+        return self.set_magnets_state(state)
 
     def do_measurement(self):
         """."""
         currinfo = self.devices["currinfo"]
         init_timing_state = self.get_timing_state()
         init_magnets_state = self.get_magnets_state()
-        init_magnets_strength = self.get_magnets_strength()
         current_before = currinfo.current
         timing_ok = self.prepare_timing()
         if timing_ok:
-            print("Timing configs. were succesfully set")
+            print("Timing configs. were successfully set")
             mags_ok = self.prepare_magnets()  # gets strengths from params
             if mags_ok:
                 print("Magnets ready.")
@@ -295,8 +317,8 @@ class MeasureTbTData(_AcqBPMsSignals):
                     self.data["current_after"] = self.data.pop(
                         "stored_current"
                     )
-                    self.data["init_magnets_strengths"] = init_magnets_strength
-                    print("Acquisition was succesful.")
+                    self.data["init_magnets_state"] = init_magnets_state
+                    print("Acquisition was successful.")
                 except Exception as e:
                     print(f"An error occurred during acquisition: {e}")
         else:
@@ -305,19 +327,13 @@ class MeasureTbTData(_AcqBPMsSignals):
         if not timing_ok:
             print("Timing was not restored to initial state.")
         mags_ok = self.set_magnets_state(init_magnets_state)
-        mags_ok = mags_ok and self.set_magnets_strength(
-            *init_magnets_strength
-        )  # restore
         if not mags_ok:
             msg = "Magnets state or strengths were not restored."
             msg += "Restore manually."
             print(msg)
             print(init_magnets_state)
-            print("Initial strengths:")
-            print(f"\t pingh:{init_magnets_strength[0]:.4f} [mrad]")
-            print(f"\t pingv:{init_magnets_strength[1]:.4f} [mrad]")
         else:
-            print("Magnets state & strengths succesfully restored.")
+            print("Magnets state & strengths successfully restored.")
         print("Measurement finished.")
 
     def get_data(self):
