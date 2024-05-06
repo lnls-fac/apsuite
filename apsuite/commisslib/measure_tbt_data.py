@@ -583,18 +583,22 @@ class TbTDataAnalysis(MeasureTbTData):
         """."""
         pca_optics = dict()
         for pinger in self.params.pingers2kick:
+            traj = self.trajx if pinger == "h" else self.trajy
+            label = "x" if pinger == "h" else "y"
             tunes = self.tunex, self.tuney
             if self.model_optics is None:
                 self._get_nominal_optics(tunes)
-            beta_model = self.model_optics["beta"+pinger]
-            phase_model = self.model_optics["phase"+pinger]
-            beta_pca, phase_pca = self.calc_beta_and_phase_with_pca(self.trajx)
+            beta_model = self.model_optics["beta"+label]
+            phase_model = self.model_optics["phase"+label]
+            beta_pca, phase_pca = self.calc_beta_and_phase_with_pca(
+                traj, beta_model
+            )
             self.plot_betabeat_and_phase_error(
                 beta_model, beta_pca, phase_model, phase_pca,
-                title=f'beta{pinger} & phase{pinger} - from PCA'
+                title=f'beta{label} & phase{label} - from PCA'
             )
-            pca_optics["beta"+pinger] = beta_pca
-            pca_optics["phase"+pinger] = phase_pca
+            pca_optics["beta"+label] = beta_pca
+            pca_optics["phase"+label] = phase_pca
         self.pca_optics = pca_optics
 
     def independent_component_analysis(self):
