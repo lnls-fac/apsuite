@@ -141,9 +141,8 @@ class UtilClass:
         sigma_freq = params.bandwidth
         ftype = params.filter_type
 
-        data_dft = _np.fft.fft(data, axis=-1)
-
         if ftype.lower().startswith('gauss'):
+            data_dft = _np.fft.fft(data, axis=-1)
             # Apply Gaussian filter to get only the synchrotron frequency
             H = _np.exp(-(freq - center_freq)**2/2/sigma_freq**2)
             H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
@@ -152,7 +151,9 @@ class UtilClass:
                 data_dft *= H[None, :]
             else:
                 data_dft *= H
-        else:
+            data = _np.fft.ifft(data_dft, axis=-1)
+        elif ftype.lower().startswith('sinc'):
+            data_dft = _np.fft.fft(data, axis=-1)
             indcsp = (freq > center_freq - sigma_freq)
             indcsp &= (freq < center_freq + sigma_freq)
             indcsn = (-freq > center_freq - sigma_freq)
@@ -162,7 +163,11 @@ class UtilClass:
                 data_dft[:, ~indcs] = 0
             else:
                 data_dft[~indcs] = 0
-        return _np.fft.ifft(data_dft, axis=-1)
+            data = _np.fft.ifft(data_dft, axis=-1)
+        elif ftype.lower().startswith('noavg'):
+            data = data.copy()
+            data -= data.mean(axis=-1, keepdims=True)
+        return data
 
     @staticmethod
     def estimate_fitting_intervals(infos, int_type='both', clearance=0):
@@ -273,7 +278,7 @@ class BbBLParams(_ParamsBaseClass):
         super().__init__()
         self.center_frequency = 2090  # [Hz]
         self.bandwidth = 200  # [Hz]
-        self.filter_type = 'gauss'  # (gauss, sinc)
+        self.filter_type = 'gauss'  # (gauss, sinc, noavg, none)
         self.acqtype = 'SRAM'
         self.integer_tune = 0
 
@@ -284,7 +289,8 @@ class BbBLParams(_ParamsBaseClass):
         stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
         st = ftmp('center_frequency  [Hz]', self.center_frequency, '')
         st += ftmp('bandwidth [Hz]', self.bandwidth, '')
-        st += stmp('filter_type', self.filter_type, '[gauss or sinc]')
+        st += stmp(
+            'filter_type', self.filter_type, '[gauss, sinc, noavg, none]')
         st += stmp('acqtype', self.acqtype, '[SRAM or BRAM]')
         st += dtmp('integer_tune', self.integer_tune, '')
         return st
@@ -1048,7 +1054,7 @@ class TuneShiftParams(_ParamsBaseClass):
         self.decay_model = 'exp'
         self.sync_freq = 1800  # [Hz]
         self.bandwidth = 5000  # [Hz]
-        self.filter_type = 'gauss'  # (gauss, sinc)
+        self.filter_type = 'gauss'  # (gauss, sinc, noavg, none)
         self.integer_tuneh = 0
         self.integer_tunev = 0
         self.currents = _np.arange(0.05, 2.1, 0.1)  # mA
@@ -1071,7 +1077,8 @@ class TuneShiftParams(_ParamsBaseClass):
         stg += stmp('decay_model', self.decay_model, '(exp, decoh)')
         stg += ftmp('sync_freq', self.sync_freq, '[Hz]')
         stg += ftmp('bandwidth', self.bandwidth, '[Hz]')
-        stg += stmp('filter_type', self.filter_type, '(gauss, sinc)')
+        stg += stmp(
+            'filter_type', self.filter_type, '(gauss, sinc, noavg, none)')
         stg += dtmp('integer_tuneh', self.integer_tuneh, '')
         stg += dtmp('integer_tunev', self.integer_tunev, '')
         stg += f"{'currents':10s} = ("
@@ -1177,13 +1184,15 @@ class MeasTuneShift(_ThreadBaseClass):
             H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
             H /= H.max()
             data_dft *= H
-        else:
+        elif ftype.lower().startswith('sinc'):
             indcsp = (freq > center_freq - sigma_freq)
             indcsp &= (freq < center_freq + sigma_freq)
             indcsn = (-freq > center_freq - sigma_freq)
             indcsn &= (-freq < center_freq + sigma_freq)
             indcs = indcsp | indcsn
             data_dft[~indcs] = 0
+        elif ftype.lower().startswith('noavg'):
+            data_dft[freq == 0] = 0
         return _np.fft.ifft(data_dft, axis=-1)
 
     @classmethod
