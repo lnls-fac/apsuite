@@ -207,9 +207,9 @@ class PhaseSpace(_BaseClass):
             routx[1].ravel()*1e3,
             c='b', s=2)
         phx.scatter(
-           routy[0].ravel()*1e3,
-           routy[1].ravel()*1e3,
-           c='r', s=2)
+            routy[0].ravel()*1e3,
+            routy[1].ravel()*1e3,
+            c='r', s=2)
         phx.set_xlabel('X [mm]')
         phx.set_ylabel("X' [mrad]")
 
@@ -218,9 +218,9 @@ class PhaseSpace(_BaseClass):
             routy[3].ravel()*1e3,
             c='r', s=2)
         phy.scatter(
-           routx[2].ravel()*1e3,
-           routx[3].ravel()*1e3,
-           c='b', s=2)
+            routx[2].ravel()*1e3,
+            routx[3].ravel()*1e3,
+            c='b', s=2)
         phy.set_xlabel('Y [mm]')
         phy.set_ylabel("Y' [mrad]")
 
