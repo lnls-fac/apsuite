@@ -17,11 +17,6 @@ from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals, \
     AcqBPMsSignalsParams as _AcqBPMsSignalsParams
 
 
-from matplotlib import rcParams
-rcParams.update({
-    'font.size': 14, 'grid.alpha': 0.5, 'grid.linestyle': '--',
-    'axes.grid': True, 'text.usetex': False})
-
 class TbTDataParams(_AcqBPMsSignalsParams):
     """."""
     BPMS_NAMES = SOFBFactory.create("SI").bpm_names
