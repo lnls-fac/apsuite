@@ -7,6 +7,7 @@ import matplotlib.pyplot as _mplt
 import numpy as _np
 from scipy.optimize import curve_fit as _curve_fit
 from siriuspy.devices import PowerSupplyPU, Trigger
+from siriuspy.sofb.csdev import SOFBFactory
 
 import pyaccel as _pa
 from pymodels import si as _si
@@ -16,8 +17,14 @@ from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals, \
     AcqBPMsSignalsParams as _AcqBPMsSignalsParams
 
 
+from matplotlib import rcParams
+rcParams.update({
+    'font.size': 14, 'grid.alpha': 0.5, 'grid.linestyle': '--',
+    'axes.grid': True, 'text.usetex': False})
+
 class TbTDataParams(_AcqBPMsSignalsParams):
     """."""
+    BPMS_NAMES = SOFBFactory.create("SI").bpm_names
 
     def __init__(self):
         """."""
@@ -606,7 +613,7 @@ class TbTDataAnalysis(MeasureTbTData):
 
             self.plot_betabeat_and_phase_error(
                 beta_model, beta_fit, phases_model, phases_fit,
-                title=f"beta{label} & phase{label} - from harmonic model fit"
+                title=f"Sinusoidal fit analysis - beta{label} & phase{label}"
             )
 
             # TODO: compare fit with trajectory
@@ -628,7 +635,7 @@ class TbTDataAnalysis(MeasureTbTData):
             )
             self.plot_betabeat_and_phase_error(
                 beta_model, beta_pca, phase_model, phase_pca,
-                title=f'beta{label} & phase{label} - from PCA'
+                title=f"PCA Analysis: beta{label} & phase{label}"
             )
             pca_optics["beta"+label] = beta_pca
             pca_optics["phase"+label] = phase_pca
@@ -680,8 +687,9 @@ class TbTDataAnalysis(MeasureTbTData):
         trajsum = self.trajsum[:, bpm_index]
 
         fig, ax = _mplt.subplots(1, 3, figsize=(15, 5))
+        name = self.params.BPMS_NAMES[bpm_index]
         fig.suptitle(
-            f"{self.acq_rate.upper()} acquisition at BPM {bpm_index:3d}"
+            f"{self.acq_rate.upper()} acq. at BPM {bpm_index:3d} ({name})"
         )
         ax[0].set_title("horizontal trajectory")
         ax[0].plot(trajx, "-", mfc="none", color="blue")
@@ -707,41 +715,60 @@ class TbTDataAnalysis(MeasureTbTData):
         raise NotImplementedError
 
     def plot_betabeat_and_phase_error(
-        self, beta_model, beta_meas, phase_model, phase_meas, title=None
+        self, beta_model, beta_meas, phase_model, phase_meas, title=None,
+        plot_comparison=False
     ):
         """."""
-        fig, ax = _mplt.subplots(1, 3, figsize=(15, 5))
+        if plot_comparison:
+            fig, axs = _mplt.subplots(2, 2, figsize=(15, 10))
+        else:
+            fig, axs = _mplt.subplots(1, 2, figsize=(15, 5))
+
         if title is not None:
             fig.suptitle(title)
         else:
             fig.suptitle("beta and phase")
-        ax[0].plot(beta_model, "o-", label="Model", mfc="none")
-        ax[0].plot(beta_meas, "o--", label="Meas", mfc="none")
-        ax[0].set_ylabel("beta function")
-        ax[0].legend()
 
+        # Beta plots
+        if plot_comparison:
+            ax_beta = axs[0, 0]
+            ax_beta.plot(beta_model, "o-", label="Model", mfc="none")
+            ax_beta.plot(beta_meas, "o--", label="Meas", mfc="none")
+            ax_beta.set_ylabel("beta function")
+            ax_beta.legend()
+
+        # Beta beating plot
+        ax_beat = axs[0, 1] if plot_comparison else axs[0]
         beta_beat = (beta_model - beta_meas) / beta_model
-        ax[1].plot(
+        ax_beat.plot(
             beta_beat * 100,
             "o-",
             label=f"rms = {beta_beat.std()*100:.2f} %",
             mfc="none",
         )
-        ax[1].set_ylabel("beta beating [%]")
-        ax[1].legend()
+        ax_beat.set_ylabel("beta beating [%]")
+        ax_beat.legend()
+
+        # Phase plots
+        if plot_comparison:
+            ax_phase = axs[1, 0]
+            ax_phase.plot(phase_model, "o-", label="Model", mfc="none")
+            ax_phase.plot(phase_meas, "o--", label="Meas", mfc="none")
+            ax_phase.set_ylabel("phase advance [rad]")
+            ax_phase.legend()
+
+        ax_phase_err = axs[1, 1] if plot_comparison else axs[1]
         delta_mu = phase_model - phase_meas
-        ax[2].plot(phase_model, "o-", label="Model", mfc="none")
-        ax[2].plot(phase_meas, "o--", label="Meas", mfc="none")
-        ax[2].plot(
+        ax_phase_err.plot(
             delta_mu,
             "o-",
-            label=f"max abs err: {_np.abs(delta_mu.max()):.2f})",
-            mfc="none",
+            label=f"avg. error = {delta_mu.mean():.2f}",
+            mfc="none"
         )
-        ax[2].set_ylabel("phase advance [rad]")
-        ax[2].legend()
+        ax_phase_err.set_ylabel("phase error [rad]")
+        ax_phase_err.legend()
 
-        fig.supxlabel("BPM")
+        fig.supxlabel("BPM index")
         fig.tight_layout()
         _mplt.show()
 
