@@ -543,7 +543,7 @@ class TbTDataAnalysis(MeasureTbTData):
         else:
             tunex, tuney = self.tunex, self.tuney
 
-        fitted_optics = dict()
+        fitting_data = dict()
         for pinger in self.params.pingers2kick:
             if pinger == "h":
                 from_turn2turn = self.trajx_turns_slice
@@ -592,19 +592,19 @@ class TbTDataAnalysis(MeasureTbTData):
             beta_fit, action = self.calc_beta_and_action(amps, beta_model)
 
             # collect fitted data
-            fitted_optics["tune"+label] = tune
-            fitted_optics["tune_err"+label] = params_error[0]
-            fitted_optics["beta"+label] = beta_fit
+            fitting_data["tune"+label] = tune
+            fitting_data["tune_err"+label] = params_error[0]
+            fitting_data["beta"+label] = beta_fit
             # TODO: propagate amplitude errors to beta errors
-            fitted_optics["beta"+label+"_err"] = params_error[1 : nbpms + 1]
-            fitted_optics["phase"+label] = phases_fit
-            fitted_optics["phase"+label+"_err"] = params_error[-nbpms:]
-            fitted_optics["action"+label] = action
+            fitting_data["beta"+label+"_err"] = params_error[1 : nbpms + 1]
+            fitting_data["phase"+label] = phases_fit
+            fitting_data["phase"+label+"_err"] = params_error[-nbpms:]
+            fitting_data["action"+label] = action
             # TODO: propagate amplitude errors to action error
-            fitted_optics["traj"+label+"_init_fit"] = initial_fit
-            fitted_optics["traj"+label+"_final_fit"] = final_fit
+            fitting_data["traj"+label+"_init_fit"] = initial_fit
+            fitting_data["traj"+label+"_final_fit"] = final_fit
 
-            self.fitted_optics = fitted_optics
+            self.fitting_data = fitting_data
 
             self.plot_betabeat_and_phase_error(
                 beta_model, beta_fit, phases_model, phases_fit,
@@ -612,7 +612,7 @@ class TbTDataAnalysis(MeasureTbTData):
             )
 
             # TODO: compare fit with trajectory
-        self.fitted_optics = fitted_optics
+        self.fitting_data = fitting_data
 
     def principal_components_analysis(self):
         """."""
