@@ -614,27 +614,57 @@ class TbTDataAnalysis(MeasureTbTData):
             # TODO: compare fit with trajectory
         self.fitting_data = fitting_data
 
-    def principal_components_analysis(self):
+    def principal_components_analysis(self, compare_meas2model=True):
         """."""
-        pca_optics = dict()
+        pca_data = dict()
         for pinger in self.params.pingers2kick:
-            traj = self.trajx if pinger == "h" else self.trajy
-            label = "x" if pinger == "h" else "y"
+            if pinger == "h":
+                traj = self.trajx
+                label = "x"
+            else:
+                traj = self.trajy
+                label = "y"
+
             tunes = self.tunex, self.tuney
+
             if self.model_optics is None:
                 self._get_nominal_optics(tunes)
+
+            # get model optics
             beta_model = self.model_optics["beta"+label]
             phase_model = self.model_optics["phase"+label]
-            beta_pca, phase_pca = self.calc_beta_and_phase_with_pca(
-                traj, beta_model
+
+            # perform PCA via SVD of history matrix
+            umat, svals, vtmat = self.calc_svd(traj, full_matrices=False)
+
+            # collect source signals and mixing matrix
+            signals = umat * _np.sqrt(traj.shape[0] - 1)  # whiten signals
+            mixing_matrix = vtmat.T @ _np.diag(svals)
+            mixing_matrix /= _np.sqrt(traj.shape[0] - 1)
+
+            # determine betatron sine and cosine modes
+            sin_mode = mixing_matrix[:, 1]  # check this
+            cos_mode = mixing_matrix[:, 0]
+
+            # calculate beta function & phase from betatron modes
+            beta, phase = self.get_beta_and_phase_from_betatron_modes(
+                sin_mode, cos_mode, beta_model
             )
+
+            # plot_results
             self.plot_betabeat_and_phase_error(
-                beta_model, beta_pca, phase_model, phase_pca,
-                title=f"PCA Analysis: beta{label} & phase{label}"
+                beta_model, beta, phase_model, phase,
+                title=f"PCA Analysis: beta{label} & phase{label}",
+                compare_meas2model=compare_meas2model
             )
-            pca_optics["beta"+label] = beta_pca
-            pca_optics["phase"+label] = phase_pca
-        self.pca_optics = pca_optics
+
+            # save analysis data
+            pca_data["singular_values_"+label] = svals
+            pca_data["source_signals_"+label] = signals
+            pca_data["mixing_matrix_"+label] = mixing_matrix
+            pca_data["beta"+label] = beta
+            pca_data["phase"+label] = phase
+        self.pca_data = pca_data
 
     def independent_component_analysis(self):
         """."""
@@ -852,6 +882,18 @@ class TbTDataAnalysis(MeasureTbTData):
         )
         phase_meas = _np.abs(_np.unwrap(phase_meas))  # why the abs?
         return beta_meas, phase_meas
+
+    def get_beta_and_phase_from_betatron_modes(
+        self, sin_mode, cos_mode, beta_model
+    ):
+        """Calulate beta & phase at BPMs from sine and cosine modes."""
+        beta = (sin_mode**2 + cos_mode**2)
+        beta /= _np.std(beta) / _np.std(beta_model)
+        phase = _np.arctan2(sin_mode, cos_mode)
+        phase = _np.unwrap(phase, discont=2.6)
+        # 2.6 was set because it was the largest phase advance
+        # observed in the model for both x and y motion
+        return beta, phase
 
     def _get_nominal_optics(self, tunes=None, chroms=None):
         """."""
