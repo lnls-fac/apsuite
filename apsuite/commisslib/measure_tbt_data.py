@@ -5,6 +5,7 @@ import time as _time
 
 import matplotlib.pyplot as _mplt
 import numpy as _np
+from sklearn.decomposition import FastICA as _FastICA
 from scipy.optimize import curve_fit as _curve_fit
 from siriuspy.devices import PowerSupplyPU, Trigger
 from siriuspy.sofb.csdev import SOFBFactory
@@ -534,6 +535,7 @@ class TbTDataAnalysis(MeasureTbTData):
         """."""
         self.harmonic_analysis()
         self.principal_components_analysis()
+        self.independent_component_analysis()
         raise NotImplementedError
 
     def harmonic_analysis(self, guess_tunes=False):
@@ -666,9 +668,69 @@ class TbTDataAnalysis(MeasureTbTData):
             pca_data["phase"+label] = phase
         self.pca_data = pca_data
 
-    def independent_component_analysis(self):
+    def independent_component_analysis(
+            self, n_components=8, compare_meas2model=True
+    ):
         """."""
-        raise NotImplementedError
+        ica_data = dict()
+        for pinger in self.params.pingers2kick:
+            if pinger == "h":
+                traj = self.trajx
+                label = "x"
+            else:
+                traj = self.trajy
+                label = "y"
+            tunes = self.tunex, self.tuney
+
+            if self.model_optics is None:
+                self._get_nominal_optics(tunes)
+
+            # get model optics
+            beta_model = self.model_optics["beta"+label]
+            phase_model = self.model_optics["phase"+label]
+
+            # perform Independent Component Analysis (ICA)
+            ica = _FastICA(
+                n_components=n_components,
+                whiten="unit-variance",
+                algorithm="deflation",
+                tol=1e-12
+            )
+
+            # collect source signals & mixing matrix
+            signals = ica.fit_transform(traj)  # whiten signals
+            mixing_matrix = ica.mixing_
+
+            # determine betatron modes from mixing matrix
+            # largest variance should be contained in the betatron modes
+            idcs = _np.argsort(_np.std(mixing_matrix, axis=0))[-2:]
+            sin_mode = mixing_matrix[:, idcs[0]]
+            cos_mode = mixing_matrix[:, idcs[-1]]
+
+            # determine which betatron mode is the sine & which is cosine
+            # sine mode starts off close to zero
+            if _np.abs(sin_mode[0]) > _np.abs(cos_mode[0]):
+                cos_mode, sin_mode = sin_mode, cos_mode
+                idcs[0], idcs[1] = idcs[1], idcs[0]
+
+            # calculate beta function & phase from betatron modes
+            beta, phase = self.get_beta_and_phase_from_betatron_modes(
+                sin_mode, cos_mode, beta_model
+            )
+
+            # plot results
+            self.plot_betabeat_and_phase_error(
+                beta_model, beta, phase_model, phase,
+                title=f"ICA Analysis: beta{label} & phase{label}",
+                compare_meas2model=compare_meas2model
+            )
+
+            # save results
+            ica_data["source_signals_"+label] = signals
+            ica_data["mixing_matrix_"+label] = mixing_matrix
+            ica_data["beta"+label] = beta
+            ica_data["phase"+label] = phase
+        self.ica_data = ica_data
 
     def equilibrium_params_analysis(self):
         """."""
