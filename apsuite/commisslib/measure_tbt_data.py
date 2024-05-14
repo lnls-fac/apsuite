@@ -711,10 +711,10 @@ class TbTDataAnalysis(MeasureTbTData):
 
     def plot_betabeat_and_phase_error(
         self, beta_model, beta_meas, phase_model, phase_meas, title=None,
-        plot_comparison=False
+        compare_meas2model=False
     ):
         """."""
-        if plot_comparison:
+        if compare_meas2model:
             fig, axs = _mplt.subplots(2, 2, figsize=(15, 10))
         else:
             fig, axs = _mplt.subplots(1, 2, figsize=(15, 5))
@@ -725,7 +725,7 @@ class TbTDataAnalysis(MeasureTbTData):
             fig.suptitle("beta and phase")
 
         # Beta plots
-        if plot_comparison:
+        if compare_meas2model:
             ax_beta = axs[0, 0]
             ax_beta.plot(beta_model, "o-", label="Model", mfc="none")
             ax_beta.plot(beta_meas, "o--", label="Meas", mfc="none")
@@ -733,7 +733,7 @@ class TbTDataAnalysis(MeasureTbTData):
             ax_beta.legend()
 
         # Beta beating plot
-        ax_beat = axs[0, 1] if plot_comparison else axs[0]
+        ax_beat = axs[0, 1] if compare_meas2model else axs[0]
         beta_beat = (beta_model - beta_meas) / beta_model
         ax_beat.plot(
             beta_beat * 100,
@@ -745,22 +745,24 @@ class TbTDataAnalysis(MeasureTbTData):
         ax_beat.legend()
 
         # Phase plots
-        if plot_comparison:
+        if compare_meas2model:
+            model_phase_advance = _np.diff(phase_model)
+            meas_phase_advance = _np.abs(_np.diff(phase_meas))
             ax_phase = axs[1, 0]
-            ax_phase.plot(phase_model, "o-", label="Model", mfc="none")
-            ax_phase.plot(phase_meas, "o--", label="Meas", mfc="none")
-            ax_phase.set_ylabel("phase advance [rad]")
+            ax_phase.plot(model_phase_advance, "o-", label="Model", mfc="none")
+            ax_phase.plot(meas_phase_advance, "o--", label="Meas", mfc="none")
+            ax_phase.set_ylabel("BPMs phase advance [rad]")
             ax_phase.legend()
 
-        ax_phase_err = axs[1, 1] if plot_comparison else axs[1]
-        delta_mu = phase_model - phase_meas
+        ax_phase_err = axs[1, 1] if compare_meas2model else axs[1]
+        phase_advance_err = model_phase_advance - meas_phase_advance
         ax_phase_err.plot(
-            delta_mu,
+            phase_advance_err,
             "o-",
-            label=f"avg. error = {delta_mu.mean():.2f}",
+            label=f"rms. error = {phase_advance_err.std():.2f}",
             mfc="none"
         )
-        ax_phase_err.set_ylabel("phase error [rad]")
+        ax_phase_err.set_ylabel("BPMs phase advance error [rad]")
         ax_phase_err.legend()
 
         fig.supxlabel("BPM index")
