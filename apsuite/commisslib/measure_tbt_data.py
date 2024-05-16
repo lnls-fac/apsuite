@@ -116,14 +116,17 @@ class MeasureTbTData(_AcqBPMsSignals):
     def get_timing_state(self):
         """."""
         state = super().get_timing_state()
+
         trigpingh = self.devices["trigpingh"]
-        state["trigpingh_state"] = trigpingh.state  # correct?
-        state["trigpingh_source"] = trigpingh.source
+        state["trigpingh_state"] = trigpingh.state
+        state["trigpingh_source"] = trigpingh.source_str
         state["trigpingh_delay"] = trigpingh.delay
+
         trigpingv = self.devices["trigpingv"]
-        state["trigpingv_state"] = trigpingv.state  # correct?
-        state["trigpingv_source"] = trigpingv.source
+        state["trigpingv_state"] = trigpingv.state
+        state["trigpingv_source"] = trigpingv.source_str
         state["trigpingv_delay"] = trigpingv.delay
+
         return state
 
     def prepare_timing(self, state=None):
