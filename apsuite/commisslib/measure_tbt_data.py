@@ -7,6 +7,7 @@ import matplotlib.pyplot as _mplt
 import numpy as _np
 from sklearn.decomposition import FastICA as _FastICA
 from scipy.optimize import curve_fit as _curve_fit
+
 from siriuspy.devices import PowerSupplyPU, Trigger
 from siriuspy.sofb.csdev import SOFBFactory
 
@@ -30,15 +31,12 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.nrpoints_before = 100
         self.nrpoints_after = 2000
 
-        self.timing_event = "Linac"
-        self.event_mode = "Injection"
-
         self._pingers2kick = "none"  # 'H', 'V' or 'HV'
         self.hkick = None  # [mrad]
         self.vkick = None  # [mrad]
         self.trigpingh_delay = None
         self.trigpingv_delay = None
-        self.magnets_timeout = 5.0
+        self.magnets_timeout = 120.
 
     def __str__(self):
         """."""
@@ -49,6 +47,7 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         dtmp = "{0:26s} = {1:9d}  {2:s}\n".format
         stmp = "{0:26s} = {1:9}  {2:s}\n".format
         stg += "\n"
+
         stg += "Pingers params\n"
         stg += "\n"
         stg += stmp("pingers2kick", self.pingers2kick, "")
