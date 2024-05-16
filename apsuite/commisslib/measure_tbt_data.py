@@ -396,20 +396,28 @@ class TbTDataAnalysis(MeasureTbTData):
     def __init__(self, filename="", isonline=False):
         """Analysis of linear optics using Turn-by-turn data."""
         super().__init__(isonline=isonline)
+
         self._fname = filename
         self.timestamp = None
         self.trajx, self.trajy = None, None  # zero-mean trajectories in [mm]
         self.trajsum = None
+
         self.tunex, self.tuney = None, None
         self.acq_rate = None
+        self.nrsamples_pre = None
+        self.nrsamples_post = None
         self.sampling_freq = None
         self.switching_freq = None
         self.rf_freq = None
+
         self.trajx_turns_slice = None
         self.trajy_turns_slice = None
+
         self.model_optics = None
-        self.fitted_optics = None
-        self.pca_optics = None
+        self.fitting_data = None
+        self.pca_data = None
+        self.ica_data = None
+
         if self._fname:
             self.load_and_apply(self._fname)
 
@@ -540,20 +548,30 @@ class TbTDataAnalysis(MeasureTbTData):
         if keys:
             print("The following keys were not used:")
             print("     ", str(keys))
+
         data = self.data
         timestamp = _datetime.datetime.fromtimestamp(data["timestamp"])
         self.timestamp = timestamp
         trajx, trajy = data["orbx"].copy() * 1e-3, data["orby"].copy() * 1e-3
         trajsum = data["sumdata"].copy()
+
         # zero mean in samples dimension
         trajx -= trajx.mean(axis=0)[None, :]
         trajy -= trajy.mean(axis=0)[None, :]
         self.trajx, self.trajy, self.trajsum = trajx, trajy, trajsum
+
         self.tunex, self.tuney = data['tunex'], data['tuney']
         self.acq_rate = data["acq_rate"]
         self.rf_freq = data["rf_frequency"]
         self.sampling_freq = self.data["sampling_frequency"]
         self.switching_freq = self.data["switching_frequency"]
+        self.nrsamples_pre = self.data["nrsamples_pre"]
+        self.nrsamples_post = self.data["nrsamples_post"]
+
+        nrpre = self.nrsamples_pre
+        self.trajx_turns_slice = (nrpre, nrpre + int(1 / self.tunex))
+        self.trajy_turns_slice = (nrpre, nrpre + int(1 / self.tuney))
+
         return
 
     def linear_optics_analysis(self):
