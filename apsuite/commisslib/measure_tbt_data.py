@@ -428,6 +428,7 @@ class TbTDataAnalysis(MeasureTbTData):
             stg += gtmp("timestamp", self.timestamp, "")
             stg += "\n"
             stg += "Storage Ring State\n"
+            stg += "\n"
 
             stg += ftmp("current_before", data["current_before"], "mA")
             stg += ftmp("current_after", data["current_after"], "mA")
@@ -444,6 +445,7 @@ class TbTDataAnalysis(MeasureTbTData):
 
             stg += "\n"
             stg += "BPMs state\n"
+            stg += "\n"
 
             stg += stmp("acq_rate", data["acq_rate"], "")
             stg += stmp("nrsamples_pre", data["nrsamples_pre"], "")
@@ -451,53 +453,74 @@ class TbTDataAnalysis(MeasureTbTData):
             stg += stmp("switching_mode", data["switching_mode"], "")
             stg += stmp("switching_frequency", data["switching_frequency"], "")
             stg += stmp(
-                "trigbpm_source", data["timing_state"]["trigbpm_source"], ""
+                "trigbpm_source",
+                data["timing_state"]["trigbpm_source"],
+                ""
             )
             stg += stmp(
                 "trigbpm_nrpulses",
                 data["timing_state"]["trigbpm_nrpulses"],
-                "",
+                ""
             )
             stg += stmp(
-                "trigbpm_delay", data["timing_state"]["trigbpm_delay"], ""
+                "trigbpm_delay",
+                data["timing_state"]["trigbpm_delay"],
+                ""
             )
 
             stg += "\n"
             stg += "Pingers state\n"
+            stg += "\n"
 
             stg += stmp(
-                "trigpingh_state", data["timing_state"]["trigpingh_state"], ""
+                "trigpingh_state",
+                data["timing_state"]["trigpingh_state"],
+                ""
             )
             stg += stmp(
                 "trigpingh_source",
                 data["timing_state"]["trigpingh_source"],
-                "",
+                ""
             )
             stg += stmp(
-                "trigpingh_delay", data["timing_state"]["trigpingh_delay"], ""
+                "trigpingh_delay",
+                data["timing_state"]["trigpingh_delay"],
+                ""
             )
-            # stg += stmp("pingh_pwr", data["magnets_state"]["pingh_pwr"], "") # commented because last measurement had a problem here
-            # stg += stmp(
-                # "pingh_pulse", data["magnets_state"]["pingh_pulse"], ""
-            # )
-            stg += ftmp("hkick", data["magnets_strengths"][0], "mrad")
+            stg += stmp("pingh_pwr", data["magnets_state"]["pingh_pwr"], "")
 
             stg += stmp(
-                "trigpingv_state", data["timing_state"]["trigpingv_state"], ""
+                "pingh_pulse",
+                data["magnets_state"]["pingh_pulse"],
+                ""
+            )
+            stg += ftmp("hkick", data["magnets_strengths"][0], "mrad")
+            stg += "\n"
+
+            stg += stmp(
+                "trigpingv_state",
+                data["timing_state"]["trigpingv_state"],
+                ""
             )
             stg += stmp(
                 "trigpingv_source",
                 data["timing_state"]["trigpingv_source"],
-                "",
+                ""
             )
             stg += stmp(
-                "trigpingv_delay", data["timing_state"]["trigpingv_delay"], ""
+                "trigpingv_delay",
+                data["timing_state"]["trigpingv_delay"],
+                ""
             )
-            # stg += stmp("pingv_pwr", data["magnets_state"]["pingv_pwr"], "")
-            # stg += stmp(
-                # "pingv_pulse", data["magnets_state"]["pingv_pulse"], ""
-            # )
+            stg += stmp("pingv_pwr", data["magnets_state"]["pingv_pwr"], "")
+
+            stg += stmp(
+                "pingv_pulse",
+                data["magnets_state"]["pingv_pulse"],
+                ""
+            )
             stg += ftmp("vkick", data["magnets_strengths"][1], "mrad")
+
         return stg
 
     @property
