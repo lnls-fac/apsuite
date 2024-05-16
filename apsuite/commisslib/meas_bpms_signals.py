@@ -137,14 +137,14 @@ class AcqBPMsSignals(_BaseClass):
         trigbpm = self.devices['trigbpm']
 
         state = dict()
-        state['trigbpm_source'] = trigbpm.source
+        state['trigbpm_source'] = trigbpm.source_str
         state['trigbpm_nrpulses'] = trigbpm.nr_pulses
         state['trigbpm_delay'] = trigbpm.delay
 
         evt = self._get_event(self.params.timing_event)
         if evt is not None:
             state['evt_delay'] = evt.delay
-            state['evt_mode'] = evt.mode
+            state['evt_mode'] = evt.mode_str
         return state
 
     def recover_timing_state(self, state):
