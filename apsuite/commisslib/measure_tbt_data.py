@@ -930,26 +930,31 @@ class TbTDataAnalysis(MeasureTbTData):
         """."""
         raise NotImplementedError
 
-    def plot_trajs(self, bpm_index=0, timescale=0):
+    def plot_trajs(self, bpm_index=0, timescale=0, compare_fit=False):
         """Plot trajectories and sum-signal at a given BPM and time-scale.
 
         Timescale 0 : Harmonic motion
         Timescale 1 : Chromaticity decoherence modulation
         Timescale 2 : Transverse decoherence modulations
         """
+        if self.fitting_data is None and compare_fit:
+            msg = "No fitting was performed yet."
+            msg += "Plotting measured data only."
+            print(msg)
+            compare_fit = False
+
         nr_pre = self.data['nrsamples_pre']
         nr_post = self.data['nrsamples_post']
-        n = 5
 
         if not timescale:
             nmax_x, nmax_y = int(1 / self.tunex), int(1 / self.tuney)
-            slicex = (nr_pre - n, nr_pre + nmax_x + n + 1)
-            slicey = (nr_pre - n, nr_pre + nmax_y + n + 1)
-            slicesum = (nr_pre - n, nr_pre + max(nmax_x, nmax_y) + n + 1)
+            slicex = (nr_pre, nr_pre + nmax_x + 1)
+            slicey = (nr_pre, nr_pre + nmax_y + 1)
+            slicesum = (nr_pre, nr_pre + max(nmax_x, nmax_y) + 1)
 
         nmax = int(1 / self.SYNCH_TUNE)
         if timescale == 1:
-            slicex = (nr_pre - n, nr_pre + nmax + n + 1)
+            slicex = (nr_pre, nr_pre + nmax + 1)
             slicey = slicex
             slicesum = slicex
 
@@ -965,16 +970,32 @@ class TbTDataAnalysis(MeasureTbTData):
         fig, ax = _mplt.subplots(1, 3, figsize=(15, 5))
         name = self.params.BPMS_NAMES[bpm_index]
         fig.suptitle(
-            f"{self.acq_rate.upper()} acq. at BPM {bpm_index:3d} ({name})"
+            f"{self.acq_rate.upper()} acq. at BPM {bpm_index:03d} ({name})"
         )
         ax[0].set_title("horizontal trajectory")
-        ax[0].plot(trajx, "-", mfc="none", color="blue")
+        ax[0].plot(trajx, "-", mfc="none", color="blue", label="acq.")
+        if compare_fit and "h" in self.params.pingers2kick:
+            fit = self.fitting_data["trajx_final_fit"]
+            ax[0].plot(
+                fit[slice(*slicex, 1), bpm_index],
+                "x-", mfc="none", color="blue", label="fit"
+            )
+            ax[0].legend()
         ax[0].set_xlim(slicex)
         ax[0].set_ylabel("position [mm]")
+
         ax[1].set_title("vertical trajectory")
-        ax[1].plot(trajy, "-", mfc="none", color="red")
+        ax[1].plot(trajy, "-", mfc="none", color="red", label="acq.")
+        if compare_fit and "v" in self.params.pingers2kick:
+            fit = self.fitting_data["trajy_final_fit"]
+            ax[1].plot(
+                fit[slice(*slicey, 1), bpm_index],
+                "x-", mfc="none", color="red", label="fit"
+            )
+            ax[1].legend()
         ax[1].set_xlim(slicey)
         ax[1].sharey(ax[0])
+
         ax[2].set_title("BPM sum signal")
         ax[2].plot(trajsum, "-", mfc="none", color="k")
         ax[2].set_xlim(slicesum)
