@@ -613,6 +613,12 @@ class TbTDataAnalysis(MeasureTbTData):
             nominal beta-functions and BPMs phase-advance, as well as
             beta-beting and phase-advance errors or plot only beta-beating and
             phase-advance-errors. Defaults to True
+
+        References:
+        [1] X.R. Resende, M.B. Alves, L. Liu, and F.H. de Sá, “Equilibrium and
+            Nonlinear Beam Dynamics Parameters From Sirius Turn-by-Turn BPM
+            Data”, in Proc. IPAC'21, Campinas, SP, Brazil, May 2021, pp.
+            1935-1938. doi:10.18429/JACoW-IPAC2021-TUPAB219
         """
         if guess_tunes:
             tunex, tuney = self._guess_tune_from_dft()
