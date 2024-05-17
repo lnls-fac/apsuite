@@ -133,6 +133,7 @@ class MeasureTbTData(_AcqBPMsSignals):
         """."""
         print("Setting BPMs timing")
         super().prepare_timing(state)  # BPM trigger timing
+
         state = dict() if state is None else state
         print("Setting magnets timing")
         # magnets trigger timing below
@@ -177,6 +178,8 @@ class MeasureTbTData(_AcqBPMsSignals):
         state["pingv_pulse"] = pingv.pulse
         state["pingh_strength"] = pingh_str
         state["pingv_strength"] = pingv_str
+        state["pingh_voltage"] = pingh.voltage
+        state["pingv_voltage"] = pingv.voltage
 
         return state
 
