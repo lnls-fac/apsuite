@@ -619,6 +619,9 @@ class TbTDataAnalysis(MeasureTbTData):
             Nonlinear Beam Dynamics Parameters From Sirius Turn-by-Turn BPM
             Data”, in Proc. IPAC'21, Campinas, SP, Brazil, May 2021, pp.
             1935-1938. doi:10.18429/JACoW-IPAC2021-TUPAB219
+
+        [2] Huang, X. Beam-based correction and optimization for accelerators.
+            Section 5.1. CRC Press, 2020.
         """
         if guess_tunes:
             tunex, tuney = self._guess_tune_from_dft()
@@ -706,7 +709,52 @@ class TbTDataAnalysis(MeasureTbTData):
         self.fitting_data = fitting_data
 
     def principal_components_analysis(self, compare_meas2model=True):
-        """."""
+        r"""Peforms Principal Components Analysis (PCA).
+
+        Calculates beta-functions and betatron phase-advance at the BPMs using
+        PCA. PCA aims to identify principal axes along which the covariance
+        matrix of the data is diagonal. For betatron-dominated motion, there
+        are two pricipal components (cosine and sine modes) that can be
+        related to betatron functions and phase advance, as described in refs
+        [1,2].
+
+        For a beam history matrix with BPMs arranged along the columns and
+        turn-by turn samples along the rows (nturns x nbpms), it can be shown
+        (ref. [1]) that the principal components diagonalizing the covariance
+        matrix are the columns of the V matrix, where V refers to the spatial
+        patterns of the data, as accessed by its singular-value decomposition:
+        data = U S Vt. The first two columns of V are the beatron modes.
+
+        In the language of Blind Source Separation, if the data matrix X can
+        be expressed as a linear mixture of uncorrelated source signals
+        arranged as the columns of matrix S, i.e. X = S A^T, then the
+        mixing matrix A can be identified with A = V S^T / sqrt{nturns - 1}.
+        Acting on X with A's pseudo-inverse, the unmixing matrix, gives the
+        whitened uncorrelated source signals S = U \sqrt{nturns - 1},
+        with S^T S / (nsamples - 1 ) = identity. This choice for the mixing
+        matrix and the whitened sources follows scikit-learn's [2] convention
+        and is compatible with the convention adopted in the independent
+        components analysis (ICA), where the betatron modes and phase advances
+        are calculated from the columns of the mixing matrix.
+
+        Args:
+            compare_meas2model (bool, optional): whether to plot measured and
+            nominal beta-functions and BPMs phase-advance, as well as
+            beta-beting and phase-advance errors or plot only beta-beating and
+            phase-advance-errors. Defaults to True
+
+        References:
+        [1] Wang, Chun-xi and Sajaev, Vadim and Yao, Chih-Yuan. Phase advance
+            and ${\beta}$ function measurements using model-independent
+            analysis. Phys. Rev. ST Accel. Beams. Vol 6, issue 10. DOI 10.1103/
+            PhysRevSTAB.6.104001
+
+        [2] Huang, X. Beam-Based Correction and Optimization, Ch 5.2.
+            CRC Press. 2020.
+
+        [3] Scikit-learn examples. "Blind Source Separation using FastICA".
+            https://scikit-learn.org/stable/auto_examples/decomposition/plot_ica_blind_source_separation.html#sphx-glr-auto-examples-decomposition-plot-ica-blind-source-separation-py
+        """
         pca_data = dict()
         for pinger in self.params.pingers2kick:
             if pinger == "h":
@@ -760,7 +808,56 @@ class TbTDataAnalysis(MeasureTbTData):
     def independent_components_analysis(
             self, n_components=8, compare_meas2model=True
     ):
-        """."""
+        r"""Peforms Independent Components Analysis (ICA).
+
+        Calculates beta-functions and betatron phase-advance at the BPMs using
+        ICA. ICA aims to identify the linear transformation (unmixing matrix)
+        revealing statistically independent source signals. Just as in PCA,
+        the beatron motion sine and cosine modes can be used to calculate
+        beta-functions and BPMs phase advances.
+
+        While PCA aims to identify the linear transformation revealing
+        uncorrelated source signals, ICA seeks the transformation
+        revealing statistically independent signals, a stronger
+        requirement than uncorrelatedness. ICA often performs better at blind
+        source separation for linear mixtures of sinals with non-gaussian
+        distributions, and can be more robust at betatron motion
+        identification when there are contaminating signals or bad
+        acquisitions.
+
+        ICA can be implemented with second-oderd blind source identification
+        (SOBI) [1], based on simultaneous diagonalization of the time-shifted
+        data covariance matrix(not implemented), or with information-theoretic
+        approaches for maximizing statistical indpendence of source signals
+        [2]. We use the latter, as implemented in scikit-learn's FastICA [3,
+        4].
+
+        The variance convention is the same as in PCA analysis: whiten source
+        signals, with the mixing matrix containing the modes energy/variance
+        [4].
+
+        Args:
+            n_components (int, optional): number of independent components to
+            decompose the data
+            compare_meas2model (bool, optional): whether to plot measured and
+            nominal beta-functions and BPMs phase-advance, as well as
+            beta-beting and phase-advance errors or plot only beta-beating and
+            phase-advance-errors. Defaults to True
+
+        References:
+        [1] Huang, X. Beam-Based Correction and Optimization, Section 5.2.3
+            CRC Press. 2020.
+
+        [2] A. Hyvärinen, E. Oja. Independent component analysis: algorithms
+            and applications. Neural Networks. Volume 13, Issues 4-5, 2000,
+            Pages 411-430, https://doi.org/10.1016/S0893-6080(00)00026-5.
+
+        [3] scikit-learn.decomposition.FastICA documentation.
+            https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.FastICA.html
+
+        [4] Scikit-learn examples. "Blind Source Separation using FastICA"
+            https://scikit-learn.org/stable/auto_examples/decomposition/plot_ica_blind_source_separation.html#sphx-glr-auto-examples-decomposition-plot-ica-blind-source-separation-py
+        """
         ica_data = dict()
         for pinger in self.params.pingers2kick:
             if pinger == "h":
