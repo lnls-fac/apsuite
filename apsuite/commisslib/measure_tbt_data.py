@@ -688,6 +688,9 @@ class TbTDataAnalysis(MeasureTbTData):
             # fit beta-function & action from fitted amplitudes & nominal beta
             beta_fit, action = self.calc_beta_and_action(amps, beta_model)
 
+            # evaluate fitting residues
+            residue = traj - final_fit
+
             # store fitting data
             fitting_data["tune"+label] = tune
             fitting_data["tune_err"+label] = params_error[0]
@@ -700,7 +703,7 @@ class TbTDataAnalysis(MeasureTbTData):
             # TODO: propagate amplitude errors to action error
             fitting_data["traj"+label+"_init_fit"] = initial_fit
             fitting_data["traj"+label+"_final_fit"] = final_fit
-
+            fitting_data["fitting"+label+"_residue"] = residue
             # Plot results (beta_beating and phase adv. error)
             self.plot_betabeat_and_phase_error(
                 beta_model, beta_fit, phases_model, phases_fit,
