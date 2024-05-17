@@ -575,14 +575,45 @@ class TbTDataAnalysis(MeasureTbTData):
         return
 
     def linear_optics_analysis(self):
-        """."""
+        """Linear optics (beta-beating & phase adv. errors) analysis.
+
+        Determines beta-functions and phase-advances on BPMs via sinusoidal
+        fitting of TbT data in the harmonic motion timescale, as well as via
+        spatio-temporal modal analysis using Independent Components Analysis
+        (PCA) and Independent Components Analysis (ICA).
+        """
         self.harmonic_analysis()
         self.principal_components_analysis()
         self.independent_component_analysis()
-        raise NotImplementedError
 
-    def harmonic_analysis(self, guess_tunes=False):
-        """."""
+    def harmonic_analysis(self, guess_tunes=False, compare_meas2model=True):
+        r"""Linear optics analysis using sinusoidal model for TbT data.
+
+        TbT motion at the i-th turn and j-th BPM  in the timescale of less
+        than $\nu^{-1}$ turns reads
+
+            $$ x_{ij} = A_j \sin (2 \pi \nu i + \phi_j) $$.
+
+        The betatron tune $\nu$ and the amplitudes $A_j$ and phases $\phi_j$
+        are fitted at each BPM.
+
+        Phase-advance between adjacent BPMs is calulated from the fitted BPM
+        phase $\phi_j$. The betatron action $J$ is determined from the fitted
+        amplitudes $A_j$ and the nominal beta-function as in  eq. (9) of ref.
+        [1]. Fitting of beta-functions from the calculated action and
+        fitted amplitudes.
+
+
+        Args:
+            guess_tunes (bool, optional): whether to use the initial guess for
+            the tunes from the data DFT or use the measured tunes. Defaults to
+            False.
+
+            compare_meas2model (bool, optional): whether to plot measured and
+            nominal beta-functions and BPMs phase-advance, as well as
+            beta-beting and phase-advance errors or plot only beta-beating and
+            phase-advance-errors. Defaults to True
+        """
         if guess_tunes:
             tunex, tuney = self._guess_tune_from_dft()
         else:
@@ -610,33 +641,42 @@ class TbTDataAnalysis(MeasureTbTData):
             # TODO: adapt turns selection to grant integer nr of cycles
             nbpms = traj.shape[-1]
 
+            # get initial guess of amplitudes and phases with linear fit
             fourier = self._get_fourier_components(traj, tune)
             amps, phases = self._get_amplitude_phase(fourier)
             params_guess = _np.concatenate(([tune], amps, phases)).tolist()
-            n = self._get_independent_variables(from_turn2turn, nbpms)
 
+            # evaluate harmonic motion model with initial guess for params
+            n = self._get_independent_variables(from_turn2turn, nbpms)
             initial_fit = self.harmonic_tbt_model(
                 n, *params_guess, return_ravel=False
             )
 
+            # perform nonlinear fit to refine search for params
             params_fit, params_error = self.fit_harmonic_model(
                 from_turn2turn, traj, *params_guess
             )
             params_fit = params_fit.tolist()
+
+            # evaluate harmonic motion model with nonlinear fit params
             final_fit = self.harmonic_tbt_model(
                 n, *params_fit, return_ravel=False
             )
 
+            # collect fitted params (tune, amplitudes and phases at BPMs)
             tune = params_fit[0]
             amps = _np.array(params_fit[1 : nbpms + 1])
             phases_fit = _np.array(params_fit[-nbpms:])
 
-            self._get_nominal_optics(tunes=(tunex, tuney))
+            if self.model_optics is None:
+                self._get_nominal_optics(tunes=(tunex, tuney))
             beta_model = self.model_optics["beta"+label]
             phases_model = self.model_optics["phase"+label]
+
+            # fit beta-function & action from fitted amplitudes & nominal beta
             beta_fit, action = self.calc_beta_and_action(amps, beta_model)
 
-            # collect fitted data
+            # store fitting data
             fitting_data["tune"+label] = tune
             fitting_data["tune_err"+label] = params_error[0]
             fitting_data["beta"+label] = beta_fit
@@ -649,14 +689,14 @@ class TbTDataAnalysis(MeasureTbTData):
             fitting_data["traj"+label+"_init_fit"] = initial_fit
             fitting_data["traj"+label+"_final_fit"] = final_fit
 
-            self.fitting_data = fitting_data
-
+            # Plot results (beta_beating and phase adv. error)
             self.plot_betabeat_and_phase_error(
                 beta_model, beta_fit, phases_model, phases_fit,
-                title=f"Sinusoidal fit analysis - beta{label} & phase{label}"
+                title=f"Sinusoidal fit analysis - beta{label} & phase{label}",
+                compare_meas2model=compare_meas2model
             )
-
             # TODO: compare fit with trajectory
+
         self.fitting_data = fitting_data
 
     def principal_components_analysis(self, compare_meas2model=True):
