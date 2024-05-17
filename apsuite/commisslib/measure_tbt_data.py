@@ -584,7 +584,7 @@ class TbTDataAnalysis(MeasureTbTData):
         """
         self.harmonic_analysis()
         self.principal_components_analysis()
-        self.independent_component_analysis()
+        self.independent_components_analysis()
 
     def harmonic_analysis(self, guess_tunes=False, compare_meas2model=True):
         r"""Linear optics analysis using sinusoidal model for TbT data.
@@ -757,7 +757,7 @@ class TbTDataAnalysis(MeasureTbTData):
             pca_data["phase"+label] = phase
         self.pca_data = pca_data
 
-    def independent_component_analysis(
+    def independent_components_analysis(
             self, n_components=8, compare_meas2model=True
     ):
         """."""
