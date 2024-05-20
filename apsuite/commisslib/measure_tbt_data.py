@@ -1020,9 +1020,41 @@ class TbTDataAnalysis(MeasureTbTData):
         _mplt.show()
         return fig, ax
 
-    def plot_trajs_vs_fit(self):
-        """."""
-        raise NotImplementedError
+    def plot_fit_comparison(self, bpm_index=0, timescale=0):
+        """Plot comparison of fit vs. acqusitions.
+
+        Args:
+            bpm_index (int, optional): BPM at which to compare. Defaults to 0.
+            timescale (int, optional): TbT timescale to plot.
+                0 = harmonic TbT motion,
+                1 = chromatic decoherence modulated motion,
+                2 = amplitude decoherence modulated motion. Defaults to 0.
+
+        Returns:
+            fig, ax: figure env and axes containing the plots
+        """
+        return self.plot_trajs(
+            bpm_index=bpm_index, timescale=timescale, compare_fit=True
+            )
+
+    def plot_rms_residue(self, axis=0):
+        """Plot RMS fitting residue along BPMs or along Turns.
+
+        Args:
+            axis (int, optional): If 0, plot along BPMs. If 1, along the
+            turns. Defaults to 0.
+        """
+        for pinger in self.params.pingers2kick:
+            label = "x" if "h" in pinger else "y"
+            _mplt.figure()
+            along = "BPMs" if not axis else "Turns"
+            _mplt.title(f"RMS fitting residue along {along}")
+            _mplt.plot(
+                self.fitting_data["fitting"+label+"_residue"].std(axis=axis),
+                "o-", mfc='none'
+            )
+            _mplt.xlabel(f"{along} index")
+            _mplt.ylabel("residue [mm]")
 
     def plot_betabeat_and_phase_error(
         self, beta_model, beta_meas, phase_model, phase_meas, title=None,
