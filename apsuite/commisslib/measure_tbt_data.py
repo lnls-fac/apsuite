@@ -582,7 +582,7 @@ class TbTDataAnalysis(MeasureTbTData):
 
         Determines beta-functions and phase-advances on BPMs via sinusoidal
         fitting of TbT data in the harmonic motion timescale, as well as via
-        spatio-temporal modal analysis using Independent Components Analysis
+        spatio-temporal modal analysis using Principal Components Analysis
         (PCA) and Independent Components Analysis (ICA).
         """
         self.harmonic_analysis()
@@ -750,13 +750,14 @@ class TbTDataAnalysis(MeasureTbTData):
             phase-advance-errors. Defaults to True
 
         References:
+
         [1] Wang, Chun-xi and Sajaev, Vadim and Yao, Chih-Yuan. Phase advance
             and ${\beta}$ function measurements using model-independent
             analysis. Phys. Rev. ST Accel. Beams. Vol 6, issue 10. DOI 10.1103/
             PhysRevSTAB.6.104001
 
-        [2] Huang, X. Beam-Based Correction and Optimization, Ch 5.2.
-            CRC Press. 2020.
+        [2] Huang, X. Beam-Based Correction and Optimization for Accelerators,
+            Ch 5.2. CRC Press. 2020.
 
         [3] Scikit-learn examples. "Blind Source Separation using FastICA".
             https://scikit-learn.org/stable/auto_examples/decomposition/plot_ica_blind_source_separation.html#sphx-glr-auto-examples-decomposition-plot-ica-blind-source-separation-py
@@ -851,8 +852,9 @@ class TbTDataAnalysis(MeasureTbTData):
             phase-advance-errors. Defaults to True
 
         References:
-        [1] Huang, X. Beam-Based Correction and Optimization, Section 5.2.3
-            CRC Press. 2020.
+
+        [1] Huang, X. Beam-Based Correction and Optimization for Accelerators,
+            Section 5.2.3. CRC Press. 2020.
 
         [2] A. Hyvärinen, E. Oja. Independent component analysis: algorithms
             and applications. Neural Networks. Volume 13, Issues 4-5, 2000,
@@ -934,11 +936,23 @@ class TbTDataAnalysis(MeasureTbTData):
         raise NotImplementedError
 
     def plot_trajs(self, bpm_index=0, timescale=0, compare_fit=False):
-        """Plot trajectories and sum-signal at a given BPM and time-scale.
+        """Plot trajectories and sum-signal at a given BPM and timescale.
 
-        Timescale 0 : Harmonic motion
-        Timescale 1 : Chromaticity decoherence modulation
-        Timescale 2 : Transverse decoherence modulations
+        Args:
+            bpm_index (int, optional): Which BPM's reading to show.
+            Defaults to 0 (first BPM).
+            timescale (int, optional): Turn-by-turn timescale, where:
+                timescale = 0 : ~ 20 turns; harmonic motion
+                timescale = 1 : ~ 200 turns; chromaticity decoherence
+                modulation
+                timescale = 2 : ~ 2000 turns; transverse decoherence
+                modulations
+            Defaults to 0.
+            compare_fit (bool, optional): whether to plot acquisitions and the
+            fitting and the fit residue. Defaults to False.
+
+        Returns:
+            fig, ax: matplotlib figure and axes
         """
         if self.fitting_data is None and compare_fit:
             msg = "No fitting was performed yet."
@@ -1180,7 +1194,12 @@ class TbTDataAnalysis(MeasureTbTData):
     def calc_beta_and_action(self, amplitudes, nominal_beta):
         """Calculates beta function and betatron action.
 
-        As in Eq. (9) of Ref. [1]
+        As in Eq. (9) of Ref:
+
+        X.R. Resende, M.B. Alves, L. Liu, and F.H. de Sá, “Equilibrium and
+        Nonlinear Beam Dynamics Parameters From Sirius Turn-by-Turn BPM Data”,
+        in Proc. IPAC'21, Campinas, SP, Brazil, May 2021, pp. 1935-1938.
+        doi:10.18429/JACoW-IPAC2021-TUPAB219
         """
         action = _np.sum(amplitudes**4)
         action /= _np.sum(amplitudes**2 * nominal_beta)
@@ -1203,7 +1222,22 @@ class TbTDataAnalysis(MeasureTbTData):
     def get_beta_and_phase_from_betatron_modes(
         self, sin_mode, cos_mode, beta_model
     ):
-        """Calulate beta & phase at BPMs from sine and cosine modes."""
+        """Calulate beta & phase at BPMs from sine and cosine modes.
+
+        Reference: X. Huang. Beam-based correction and optimization for
+        accelerators. Eq. 5.44, pg. 139.
+
+        Args:
+            sin_mode (160-array): sine mode of mixing matrix
+            cos_mode (160-array): cosine mode of mixing matrix
+            beta_model (160-array): nominal beta function, used for
+            determining the measured beta function scaling factor
+
+        Returns:
+            beta: 160-array of measured beta function at BPMs
+            phase: 160-array of betatron phase at BPMs
+
+        """
         beta = (sin_mode**2 + cos_mode**2)
         beta /= _np.std(beta) / _np.std(beta_model)
         phase = _np.arctan2(sin_mode, cos_mode)
@@ -1213,7 +1247,14 @@ class TbTDataAnalysis(MeasureTbTData):
         return beta, phase
 
     def _get_nominal_optics(self, tunes=None, chroms=None):
-        """."""
+        r"""Gets nominal lattice optics functions and phase-advances.
+
+        Args:
+            tunes (tuple, optional): (nux, nuy) - betatron tunes fractional
+            part. Defaults to None, in which case (0.16, 0.22) is used.
+            chroms (tuple, optional): (\chix, \chiy) - machine chromaticity.
+            Defaults to None, in which case (2.5, 2.5) is used.
+        """
         if self.model_optics is None:
             model_optics = dict()
             model = _si.create_accelerator()
