@@ -979,9 +979,14 @@ class TbTDataAnalysis(MeasureTbTData):
         ax[0].plot(trajx, "-", mfc="none", color="blue", label="acq.")
         if compare_fit and "h" in self.params.pingers2kick:
             fit = self.fitting_data["trajx_final_fit"]
+            res = self.fitting_data["fittingx_residue"]
             ax[0].plot(
                 fit[slice(*slicex, 1), bpm_index],
                 "x-", mfc="none", color="blue", label="fit"
+            )
+            ax[0].plot(
+                res[slice(*slicex), bpm_index],
+                "x-", mfc="none", color="green", label="residue"
             )
             ax[0].legend()
         ax[0].set_xlim(slicex)
@@ -991,9 +996,14 @@ class TbTDataAnalysis(MeasureTbTData):
         ax[1].plot(trajy, "-", mfc="none", color="red", label="acq.")
         if compare_fit and "v" in self.params.pingers2kick:
             fit = self.fitting_data["trajy_final_fit"]
+            res = self.fitting_data["fittingy_residue"]
             ax[1].plot(
                 fit[slice(*slicey, 1), bpm_index],
                 "x-", mfc="none", color="red", label="fit"
+            )
+            ax[1].plot(
+                res[slice(*slicey), bpm_index],
+                "x-", mfc="none", color="green", label="residue"
             )
             ax[1].legend()
         ax[1].set_xlim(slicey)
