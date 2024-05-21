@@ -639,7 +639,7 @@ class TbTDataAnalysis(MeasureTbTData):
                     from_turn2turn[0], from_turn2turn[1] + 1, 1
                 )
                 traj = self.trajx[turns_slice, :].copy()
-                tune = tunex
+                tune = tunex + 49.
                 label = "x"
             else:
                 from_turn2turn = self.trajy_turns_slice
@@ -647,7 +647,7 @@ class TbTDataAnalysis(MeasureTbTData):
                     from_turn2turn[0], from_turn2turn[1] + 1, 1
                 )
                 traj = self.trajy[turns_slice, :].copy()
-                tune = tuney
+                tune = tuney + 14.
                 label = "y"
 
             # TODO: adapt turns selection to grant integer nr of cycles
@@ -681,7 +681,7 @@ class TbTDataAnalysis(MeasureTbTData):
             phases_fit = _np.array(params_fit[-nbpms:])
 
             if self.model_optics is None:
-                self._get_nominal_optics(tunes=(tunex, tuney))
+                self._get_nominal_optics(tunes=(tunex+49., tuney+14.))
             beta_model = self.model_optics["beta"+label]
             phases_model = self.model_optics["phase"+label]
 
@@ -1274,9 +1274,7 @@ class TbTDataAnalysis(MeasureTbTData):
 
             if tunes is not None:
                 tunecorr = _TuneCorr(model, acc="SI")
-                tunex = tunes[0] + 49
-                tuney = tunes[0] + 14
-                tunecorr.correct_parameters(goal_parameters=(tunex, tuney))
+                tunecorr.correct_parameters(goal_parameters=tunes)
 
             chroms = (2.5, 2.5) if chroms is None else chroms
             chromcorr = _ChromCorr(model, acc="SI")
