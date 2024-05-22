@@ -16,10 +16,6 @@ class OrbRespmat:
         self.model = model
         self.acc = acc
         if self.acc == 'BO':
-            # shift booster to start on injection point
-            inj = pyaccel.lattice.find_indices(
-                self.model, 'fam_name', 'InjSept')
-            self.model = pyaccel.lattice.shift(self.model, inj[0])
             self.fam_data = bo.get_family_data(self.model)
             self.rf_idx = self._get_idx(self.fam_data['P5Cav']['index'])
         elif self.acc == 'SI':
@@ -27,7 +23,10 @@ class OrbRespmat:
             self.rf_idx = self._get_idx(self.fam_data['SRFCav']['index'])
         else:
             raise ValueError('Set models: BO or SI')
-        self.dim = dim
+        if dim == '4d' or dim == '6d':
+            self.dim = dim
+        else:
+            raise ValueError('Dimension must be "4d" or "6d"')
         self.bpm_idx = self._get_idx(self.fam_data['BPM']['index'])
         if corr_system == 'SOFB':
             self.ch_idx = self._get_idx(self.fam_data['CH']['index'])
@@ -38,7 +37,7 @@ class OrbRespmat:
         else:
             raise ValueError('Correction system must be "SOFB" or "FOFB"')
 
-    def get_respm(self):
+    def get_respm(self, add_rfline=True):
         """."""
         cav = self.model.cavity_on
         self.model.cavity_on = self.dim == '6d'
@@ -66,8 +65,10 @@ class OrbRespmat:
             else:
                 respmat.append(respy)
 
-        rfline = self._get_rfline()  # m/Hz
-        respmat.append(rfline)
+        if add_rfline == True:
+            rfline = self._get_rfline()  # m/Hz
+            respmat.append(rfline)
+            
         respmat = np.array(respmat).T
 
         self.model.cavity_on = cav
