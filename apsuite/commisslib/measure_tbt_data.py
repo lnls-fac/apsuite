@@ -589,7 +589,9 @@ class TbTDataAnalysis(MeasureTbTData):
         self.principal_components_analysis()
         self.independent_components_analysis()
 
-    def harmonic_analysis(self, guess_tunes=False, compare_meas2model=True):
+    def harmonic_analysis(
+        self, guess_tunes=True, plot=True, compare_meas2model=True
+    ):
         r"""Linear optics analysis using sinusoidal model for TbT data.
 
         TbT motion at the i-th turn and j-th BPM  in the timescale of less
@@ -610,7 +612,10 @@ class TbTDataAnalysis(MeasureTbTData):
         Args:
             guess_tunes (bool, optional): whether to use the initial guess for
             the tunes from the data DFT or use the measured tunes. Defaults to
-            False.
+            True.
+
+            plot (bool, optional): whether to plot analysis results (beta &
+            phase advance). Defaults to True.
 
             compare_meas2model (bool, optional): whether to plot measured and
             nominal beta-functions and BPMs phase-advance, as well as
@@ -705,17 +710,18 @@ class TbTDataAnalysis(MeasureTbTData):
             fitting_data["traj"+label+"_init_fit"] = initial_fit
             fitting_data["traj"+label+"_final_fit"] = final_fit
             fitting_data["fitting"+label+"_residue"] = residue
-            # Plot results (beta_beating and phase adv. error)
-            self.plot_betabeat_and_phase_error(
-                beta_model, beta_fit, phases_model, phases_fit,
-                title=f"Sinusoidal fit analysis - beta{label} & phase{label}",
-                compare_meas2model=compare_meas2model
-            )
-            # TODO: compare fit with trajectory
 
+            # Plot results (beta_beating and phase adv. error)
+            if plot:
+                title = f"Sinusoidal fit analysis - beta{label} & phase{label}"
+                self.plot_betabeat_and_phase_error(
+                    beta_model, beta_fit, phases_model, phases_fit,
+                    title=title,
+                    compare_meas2model=compare_meas2model
+                )
         self.fitting_data = fitting_data
 
-    def principal_components_analysis(self, compare_meas2model=True):
+    def principal_components_analysis(self, plot, compare_meas2model=True):
         r"""Peforms Principal Components Analysis (PCA).
 
         Calculates beta-functions and betatron phase-advance at the BPMs using
@@ -745,6 +751,9 @@ class TbTDataAnalysis(MeasureTbTData):
         are calculated from the columns of the mixing matrix.
 
         Args:
+            plot (bool, optiional): whether to plot the analysis results.
+            Defaults to True.
+
             compare_meas2model (bool, optional): whether to plot measured and
             nominal beta-functions and BPMs phase-advance, as well as
             beta-beting and phase-advance errors or plot only beta-beating and
@@ -799,11 +808,12 @@ class TbTDataAnalysis(MeasureTbTData):
             )
 
             # plot_results
-            self.plot_betabeat_and_phase_error(
-                beta_model, beta, phase_model, phase,
-                title=f"PCA Analysis: beta{label} & phase{label}",
-                compare_meas2model=compare_meas2model
-            )
+            if plot:
+                self.plot_betabeat_and_phase_error(
+                    beta_model, beta, phase_model, phase,
+                    title=f"PCA Analysis: beta{label} & phase{label}",
+                    compare_meas2model=compare_meas2model
+                )
 
             # save analysis data
             pca_data["singular_values_"+label] = svals
@@ -814,7 +824,7 @@ class TbTDataAnalysis(MeasureTbTData):
         self.pca_data = pca_data
 
     def independent_components_analysis(
-            self, n_components=8, compare_meas2model=True
+            self, n_components=8, plot=True, compare_meas2model=True
     ):
         r"""Peforms Independent Components Analysis (ICA).
 
@@ -847,6 +857,10 @@ class TbTDataAnalysis(MeasureTbTData):
         Args:
             n_components (int, optional): number of independent components to
             decompose the data
+
+            plot (bool, optiional): whether to plot the analysis results.
+            Defaults to True
+
             compare_meas2model (bool, optional): whether to plot measured and
             nominal beta-functions and BPMs phase-advance, as well as
             beta-beting and phase-advance errors or plot only beta-beating and
@@ -914,11 +928,12 @@ class TbTDataAnalysis(MeasureTbTData):
             )
 
             # plot results
-            self.plot_betabeat_and_phase_error(
-                beta_model, beta, phase_model, phase,
-                title=f"ICA Analysis: beta{label} & phase{label}",
-                compare_meas2model=compare_meas2model
-            )
+            if plot:
+                self.plot_betabeat_and_phase_error(
+                    beta_model, beta, phase_model, phase,
+                    title=f"ICA Analysis: beta{label} & phase{label}",
+                    compare_meas2model=compare_meas2model
+                )
 
             # save results
             ica_data["source_signals_"+label] = signals
