@@ -694,6 +694,7 @@ class TbTDataAnalysis(MeasureTbTData):
             # store fitting data
             fitting_data["tune"+label] = tune
             fitting_data["tune_err"+label] = params_error[0]
+            fitting_data["amplitudes"+label] = amps
             fitting_data["beta"+label] = beta_fit
             # TODO: propagate amplitude errors to beta errors
             fitting_data["beta"+label+"_err"] = params_error[1 : nbpms + 1]
