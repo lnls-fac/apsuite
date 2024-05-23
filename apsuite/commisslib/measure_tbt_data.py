@@ -188,6 +188,10 @@ class MeasureTbTData(_AcqBPMsSignals):
         timeout = self.params.magnets_timeout
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
 
+        # turn-off pulse before changing strengths
+        pingh_ok = pingh.cmd_turn_off_pulse(timeout)
+        pingv_ok = pingv.cmd_turn_off_pulse(timeout)
+
         # Power and strengths
         if state.get("pingh_pwr", False):
             pingh_ok = pingh.cmd_turn_on(timeout=self.params.magnets_timeout)
