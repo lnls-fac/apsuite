@@ -219,13 +219,13 @@ class FOFBSysIdAcq(_BaseClass):
         matc /= 1e3
         return respm
 
-    def get_levels_corrs_from_svd(self, lvl0, lvl1 = None):
+    def get_levels_corrs_from_svd(self, lvl0, lvl1=None):
         """Get levels from SVD for corrector devices.
 
         Args:
             lvl0 (int): maximum level for PRBS level 0
             lvl1 (optional, int): maximum level for PRBS level 1
-            If None, we consider level1 = -level0. Defaults to None.
+                If None, we consider level1 = -level0. Defaults to None.
 
         Returns:
             lvls0 (numpy.ndarray, 160):
@@ -252,13 +252,13 @@ class FOFBSysIdAcq(_BaseClass):
         lvls1 = off + amp * vs
         return lvls0[:-1], lvls1[:-1]
 
-    def get_levels_bpms_from_svd(self, ampmax, lvl0, lvl1 = None):
+    def get_levels_bpms_from_svd(self, ampmax, lvl0, lvl1=None):
         """Get levels from SVD for BPMs devices.
 
         Args:
             lvl0 (int): minimum level for PRBS level 0
             lvl1 (optional, int): minimum level for PRBS level 1
-            If None, we consider level1 = -level0. Defaults to None.
+                If None, we consider level1 = -level0. Defaults to None.
             ampmax (int): maximum level after SV scaling
 
         Returns:
@@ -307,7 +307,7 @@ class FOFBSysIdAcq(_BaseClass):
             lvls0y, lvls1y = lvls0[SI_NUM_BPMS:], lvls1[SI_NUM_BPMS:]
             return lvls0x, lvls0y, lvls1x, lvls1y
 
-    def get_levels_corrs_indiv_exc(self, corrname, lvl0, lvl1 = None):
+    def get_levels_corrs_indiv_exc(self, corrname, lvl0, lvl1=None):
         """Get levels for excitation with only one corrector."""
         famsysid = self.devices['famsysid']
         corrindex = famsysid.psnames.index(corrname)
