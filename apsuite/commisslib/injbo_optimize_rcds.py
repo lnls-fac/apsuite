@@ -6,7 +6,7 @@ import numpy as _np
 
 from pymodels import si as _si
 from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoBO, EVG, \
-    EGTriggerPS, LILLRF, InjCtrl, PosAng, DCCT
+    EGTriggerPS, LILLRF, InjCtrl, PosAng, DCCT, Trigger, ASLLRF
 
 from ..optimization.rcds import RCDS as _RCDS, RCDSParams as _RCDSParams
 from ..optics_analysis import ChromCorr
@@ -16,10 +16,53 @@ class OptimizeInjBOParams(_RCDSParams):
     """."""
 
     KNOBS = [
-        'li_qf3', 'tb_qf2a', 'tb_qf2b', 'tb_qd2a', 'tb_qd2b', 'posx', 'angx',
-        'posy', 'angy', 'kckr']
-    LIMS_UPPER = [+3.0, 9.5, 6.0, 8.5, 5.5, +2.0, +1.0, +2.0, +1.0, -25.0]
-    LIMS_LOWER = [-3.0, 5.0, 2.0, 4.0, 1.5, -2.0, -1.0, -2.0, -1.0, -19.0]
+        'li_qf3',
+        'tb_qf2a',
+        'tb_qf2b',
+        'tb_qd2a',
+        'tb_qd2b',
+        'posx',
+        'angx',
+        'posy',
+        'angy',
+        'kckr',
+        'kly2_amp',
+        'kly2_phs',
+        'borf_amp',
+        'borf_phs',
+    ]
+    LIMS_UPPER = [
+        +3.0,
+        9.5,
+        6.0,
+        8.5,
+        5.5,
+        +2.0,
+        +1.0,
+        +2.0,
+        +1.0,
+        -19.0,
+        76,
+        -120,
+        80,
+        160,
+    ]
+    LIMS_LOWER = [
+        -3.0,
+        5.0,
+        2.0,
+        4.0,
+        1.5,
+        -2.0,
+        -1.0,
+        -2.0,
+        -1.0,
+        -25.0,
+        70,
+        -180,
+        30,
+        90,
+    ]
 
     def __init__(self):
         """."""
@@ -28,14 +71,23 @@ class OptimizeInjBOParams(_RCDSParams):
         self.curr_wfm_index = 100
         self.limit_lower = self.LIMS_LOWER
         self.limit_upper = self.LIMS_UPPER
+        self.nrpulses = 5
+        self.use_median = False
+        self.wait_between_injections = 3  # [s]
 
     def __str__(self):
         """."""
         stg = '-----  RCDS Parameters  -----\n\n'
         stg += super().__str__()
         stg += '\n\n-----  OptimizeInjBO Parameters  -----\n\n'
-        stg += self._TMPD.format('curr_wfm_index', self.curr_wfm_index, '')
-        stg += self._TMPS.format('knobs', ', '.join(self._knobs), '')
+        stg += self._TMPD('curr_wfm_index', self.curr_wfm_index, '')
+        stg += self._TMPD('nrpulses', self.nrpulses, '')
+        stg += self._TMPD(
+            'wait_between_injections', self.wait_between_injections, '[s]'
+        )
+        stg += self._TMPS('use_median', str(self.use_median), '')
+        stg += self._TMPS('knobs', ', '.join(self._knobs), '')
+
         return stg
 
     @property
@@ -55,7 +107,7 @@ class OptimizeInjBOParams(_RCDSParams):
             kns.append(kn)
             limu.append(self.LIMS_UPPER[i])
             liml.append(self.LIMS_LOWER[i])
-        self.knobs = kns
+        self._knobs = kns
         self.limit_lower = _np.array(liml)
         self.limit_upper = _np.array(limu)
 
@@ -67,7 +119,7 @@ class OptimizeInjBO(_RCDS):
         """."""
         _RCDS.__init__(self, isonline=isonline, use_thread=use_thread)
         self.params = OptimizeInjBOParams()
-        self.data['strengths'] = []
+        self.data['positions'] = []
         self.data['currents'] = []
 
         if self.isonline:
@@ -82,20 +134,33 @@ class OptimizeInjBO(_RCDS):
         evg.cmd_update_events()
         _time.sleep(1)
 
-    def objective_function(self, pos):
+    def objective_function(self, pos=None, apply=False):
         """."""
-        self.set_position_to_machine(pos)
-        self.data['positions'].append(pos)
-        _time.sleep(2)
+        pos0 = self.get_current_position()
 
-        injcurr = self.inject_beam_and_get_current()
-        self.data['currents'].append(injcurr)
-        return -injcurr
+        if pos is not None:
+            self.set_position_to_machine(pos)
+            self.data['positions'].append(pos)
+            _time.sleep(2)
+        else:
+            self.data['positions'].append(pos0)
+
+        injcurrs = list()
+        for i in range(self.params.nrpulses):
+            injcurrs.append(self.inject_beam_and_get_current())
+            _time.sleep(self.params.wait_between_injections)
+        injcurrs = _np.array(injcurrs)
+        self.data['currents'].append(injcurrs)
+
+        if pos is not None and not apply:
+            self.set_position_to_machine(pos0)
+
+        func = _np.median if self.params.use_median else _np.mean
+        return -func(injcurrs)
 
     def inject_beam_and_get_current(self, get_injeff=True):
         """Inject beam and get injected current, if desired."""
         idx = self.params.curr_wfm_index
-        # inj0 = self.devices['currinfo'].current1gev
         inj0 = self.devices['dcct'].current_fast[idx]
         self.devices['evg'].cmd_turn_on_injection(wait_rb=True)
         self.devices['evg'].wait_injection_finish()
@@ -103,13 +168,12 @@ class OptimizeInjBO(_RCDS):
             return
 
         for _ in range(50):
-            # inj = self.devices['currinfo'].current1gev
             inj = self.devices['dcct'].current_fast[idx]
             if inj0 != inj:
                 break
             _time.sleep(0.1)
         else:
-            _log.warning('Timed out waiting current1gev to update.')
+            _log.warning('Timed out waiting current to update.')
         return inj
 
     def measure_objective_function_noise(self, nr_evals, pos=None):
@@ -135,26 +199,34 @@ class OptimizeInjBO(_RCDS):
         """
         pos = []
         for knob in self.params.knobs:
-            if knob.lower.startswith('li_qf3'):
+            if knob.lower().startswith('li_qf3'):
                 pos.append(self.devices['li_qf3'].current)
-            elif knob.lower.startswith('tb_qf2a'):
+            elif knob.lower().startswith('tb_qf2a'):
                 pos.append(self.devices['tb_qf2a'].current)
-            elif knob.lower.startswith('tb_qf2b'):
+            elif knob.lower().startswith('tb_qf2b'):
                 pos.append(self.devices['tb_qf2b'].current)
-            elif knob.lower.startswith('tb_qd2a'):
+            elif knob.lower().startswith('tb_qd2a'):
                 pos.append(self.devices['tb_qd2a'].current)
-            elif knob.lower.startswith('tb_qd2b'):
+            elif knob.lower().startswith('tb_qd2b'):
                 pos.append(self.devices['tb_qd2b'].current)
-            elif knob.lower.startswith('posx'):
+            elif knob.lower().startswith('posx'):
                 pos.append(self.devices['pos_ang'].delta_posx)
-            elif knob.lower.startswith('angx'):
+            elif knob.lower().startswith('angx'):
                 pos.append(self.devices['pos_ang'].delta_angx)
-            elif knob.lower.startswith('posy'):
+            elif knob.lower().startswith('posy'):
                 pos.append(self.devices['pos_ang'].delta_posy)
-            elif knob.lower.startswith('angy'):
+            elif knob.lower().startswith('angy'):
                 pos.append(self.devices['pos_ang'].delta_angy)
-            elif knob.lower.startswith('kckr'):
-                pos.append(self.devices['injkckr'].delta_angy)
+            elif knob.lower().startswith('kckr'):
+                pos.append(self.devices['injkckr'].strength)
+            elif knob.lower().startswith('kly2_amp'):
+                pos.append(self.devices['li_llrf'].dev_klystron2.amplitude)
+            elif knob.lower().startswith('kly2_phs'):
+                pos.append(self.devices['li_llrf'].dev_klystron2.phase)
+            elif knob.lower().startswith('borf_amp'):
+                pos.append(self.devices['bo_llrf'].voltage_bottom)
+            elif knob.lower().startswith('borf_phs'):
+                pos.append(self.devices['bo_llrf'].phase_bottom)
             else:
                 raise ValueError('Wrong specification of knob.')
         return _np.array(pos)
@@ -166,26 +238,34 @@ class OptimizeInjBO(_RCDS):
                 'Length of pos must match number of knobs selected.')
 
         for p, knob in zip(pos, self.params.knobs):
-            if knob.lower.startswith('li_qf3'):
+            if knob.lower().startswith('li_qf3'):
                 self.devices['li_qf3'].current = p
-            elif knob.lower.startswith('tb_qf2a'):
+            elif knob.lower().startswith('tb_qf2a'):
                 self.devices['tb_qf2a'].current = p
-            elif knob.lower.startswith('tb_qf2b'):
+            elif knob.lower().startswith('tb_qf2b'):
                 self.devices['tb_qf2b'].current = p
-            elif knob.lower.startswith('tb_qd2a'):
+            elif knob.lower().startswith('tb_qd2a'):
                 self.devices['tb_qd2a'].current = p
-            elif knob.lower.startswith('tb_qd2b'):
+            elif knob.lower().startswith('tb_qd2b'):
                 self.devices['tb_qd2b'].current = p
-            elif knob.lower.startswith('posx'):
+            elif knob.lower().startswith('posx'):
                 self.devices['pos_ang'].delta_posx = p
-            elif knob.lower.startswith('angx'):
+            elif knob.lower().startswith('angx'):
                 self.devices['pos_ang'].delta_angx = p
-            elif knob.lower.startswith('posy'):
+            elif knob.lower().startswith('posy'):
                 self.devices['pos_ang'].delta_posy = p
-            elif knob.lower.startswith('angy'):
+            elif knob.lower().startswith('angy'):
                 self.devices['pos_ang'].delta_angy = p
-            elif knob.lower.startswith('kckr'):
-                self.devices['injkckr'].delta_angy = p
+            elif knob.lower().startswith('kckr'):
+                self.devices['injkckr'].strength = p
+            elif knob.lower().startswith('kly2_amp'):
+                self.devices['li_llrf'].dev_klystron2.amplitude = p
+            elif knob.lower().startswith('kly2_phs'):
+                self.devices['li_llrf'].dev_klystron2.phase = p
+            elif knob.lower().startswith('borf_amp'):
+                self.devices['bo_llrf'].voltage_bottom = p
+            elif knob.lower().startswith('borf_phs'):
+                self.devices['bo_llrf'].phase_bottom = p
             else:
                 raise ValueError('Wrong specification of knob.')
 
@@ -203,16 +283,18 @@ class OptimizeInjBO(_RCDS):
         self.devices['currinfo'] = CurrInfoBO()
         self.devices['dcct'] = DCCT(DCCT.DEVICES.BO)
         self.devices['evg'] = EVG()
+        self.devices['ejekckr_trig'] = Trigger("BO-48D:TI-EjeKckr")
         self.devices['egun_trigps'] = EGTriggerPS()
-        self.devices['llrf'] = LILLRF()
+        self.devices['li_llrf'] = LILLRF()
         self.devices['injctrl'] = InjCtrl()
+        self.devices['bo_llrf'] = ASLLRF(ASLLRF.DEVICES.BO)
 
     def _initialization(self):
         """."""
         if not super()._initialization():
             return False
         self.data['timestamp'] = _time.time()
-        self.data['postitions'] = []
+        self.data['positions'] = []
         self.data['currents'] = []
         self.prepare_evg()
         return True
