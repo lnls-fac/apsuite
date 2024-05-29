@@ -89,8 +89,17 @@ class OrbRespmat:
         kyl=0,
         ksxl=0,
         ksyl=0,
-        half_cor=None,
     ):
+        # NOTE: The method for constructing "half_cor" is not the most general
+        # possible, as it only considers quadrupolar elements. An attempt was
+        # made to generalize the method. Initially, it was tried to calculate
+        # "half_cor" by taking the square root of the corrector transfer
+        # matrix. However, the overall performance penalty was too high (23%)
+        # and it couldn't handle correctors with rotation errors properly.
+        # Another possibility is to obtain "half_cor" directly by tracking,
+        # defining a component with the same properties as the corrector,
+        # but with half the length.
+
         # create a symplectic integrator of second order
         # for the last half of the element:
         drift = np.eye(rc_mat.shape[0], dtype=float)
@@ -196,10 +205,6 @@ class TrajRespmat:
         if acc == 'TB':
             self.fam_data = tb.get_family_data(self.model)
         elif acc == 'BO':
-            # shift booster to start on injection point
-            inj = pyaccel.lattice.find_indices(
-                self.model, 'fam_name', 'InjSept')
-            self.model = pyaccel.lattice.shift(self.model, inj[0])
             self.fam_data = bo.get_family_data(self.model)
         elif acc == 'TS':
             self.fam_data = ts.get_family_data(self.model)
