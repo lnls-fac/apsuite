@@ -35,8 +35,10 @@ class OptimizeInjBOParams(_RCDSParams):
     def __init__(self):
         """."""
         super().__init__()
-        zipped = zip((kn, kn[0], kn[1]) for kn in self.KNOBS)
-        self._knobs, self.limit_lower, self.limit_upper = zipped
+        kbs = self.KNOBS
+        kbs_params_tuple = ((k,) + v for k, v in kbs.items())
+        kbs_zipped = zip(*kbs_params_tuple)
+        self._knobs, self.limit_lower, self.limit_upper = kbs_zipped
         self.curr_wfm_index = 100
         self.nrpulses = 5
         self.use_median = False
@@ -59,14 +61,16 @@ class OptimizeInjBOParams(_RCDSParams):
 
     @property
     def knobs(self):
-        """Define the knobs and limits appropriately."""
+        """Return knobs and limits appropriately."""
         return self._knobs
 
     @knobs.setter
     def knobs(self, knobs):
-        """Define the knobs and limits appropriately."""
-        zipped = zip((kn, kn[0], kn[1]) for kn in self.KNOBS if kn in knobs)
-        self._knobs, self.limit_lower, self.limit_upper = zipped
+        """Set knobs and limits appropriately."""
+        kbs = self.KNOBS
+        kbs_params_tuple = ((k,) + v for k, v in kbs.items() if k in knobs)
+        kbs_zipped = zip(*kbs_params_tuple)
+        self._knobs, self.limit_lower, self.limit_upper = kbs_zipped
 
 
 class OptimizeInjBO(_RCDS):
