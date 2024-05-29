@@ -11,7 +11,7 @@ class OrbRespmat:
     _FREQ_DELTA = 10
     _ENERGY_DELTA = 1e-5
 
-    def __init__(self, model, dim='4d'):
+    def __init__(self, model, acc='SI', dim='4d', corr_system='SOFB'):
         """."""
         self.model = model
         if dim.lower() in {'4d', '6d'}:
@@ -19,17 +19,17 @@ class OrbRespmat:
         else:
             raise ValueError('Variable "dim" must be "4d" or "6d"')
 
-    def configure(self, acc='SI', corr_system='SOFB'):
         acc = acc.upper()
         if acc not in {"BO", "SI"}:
-            raise ValueError('Set models: "BO" or "SI"')
+            raise ValueError('Variable "acc" must be "BO" or "SI"')
 
         fam_data = (bo if acc == 'BO' else si).get_family_data(self.model)
-        cav_famname = 'P5Cav' if acc == 'BO' else 'SRFCav'
+        cav_famname = 'SRFCav' if acc == 'SI' else 'P5Cav'
         self.rf_idx = self._get_idx(fam_data[cav_famname]['index'])
 
         self.bpm_idx = self._get_idx(fam_data['BPM']['index'])
-        if corr_system == 'SOFB':
+
+        if corr_system.upper() == 'SOFB':
             self.ch_idx = self._get_idx(fam_data['CH']['index'])
             self.cv_idx = self._get_idx(fam_data['CV']['index'])
         elif corr_system == 'FOFB':
@@ -40,12 +40,6 @@ class OrbRespmat:
 
     def get_respm(self, add_rfline=True):
         """."""
-        if None in {self.bpm_idx, self.ch_idx, self.cv_idx}:
-            raise ValueError(
-                "Correctors and BPM indices not configured."
-                " Call 'configure' or set them manually."
-            )
-
         cav = self.model.cavity_on
         self.model.cavity_on = self.dim == '6d'
 
@@ -56,13 +50,13 @@ class OrbRespmat:
         nch = len(self.ch_idx)
         respmat = []
         corrs = np.hstack([self.ch_idx, self.cv_idx])
+
         for idx, corr in enumerate(corrs):
-            rc_mat = t_mat[corr, :, :]
-            rb_mat = t_mat[self.bpm_idx, :, :]
+            rc_mat = t_mat[corr]
+            rb_mat = t_mat[self.bpm_idx]
             corr_len = self.model[corr].length
             kl_stren = self.model[corr].KL
             ksl_stren = self.model[corr].KsL
-            # half_corr = sp_lin.sqrtm(t_mat)
             respx, respy = self._get_respmat_line(
                 rc_mat,
                 rb_mat,
@@ -73,7 +67,6 @@ class OrbRespmat:
                 kyl=-kl_stren,
                 ksxl=ksl_stren,
                 ksyl=ksl_stren,
-                half_cor=None,
             )
             respmat.append(respx if idx < nch else respy)
 
@@ -98,23 +91,22 @@ class OrbRespmat:
         ksyl=0,
         half_cor=None,
     ):
-        if half_cor is None:
-            # create a symplectic integrator of second order
-            # for the last half of the element:
-            drift = np.eye(rc_mat.shape[0], dtype=float)
-            drift[0, 1] = length/2 / 2
-            drift[2, 3] = length/2 / 2
-            quad = np.eye(rc_mat.shape[0], dtype=float)
-            quad[1, 0] = -kxl/2
-            quad[3, 2] = -kyl/2
-            quad[1, 2] = -ksxl/2
-            quad[3, 0] = -ksyl/2
-            half_cor = drift @ quad @ drift
+        # create a symplectic integrator of second order
+        # for the last half of the element:
+        drift = np.eye(rc_mat.shape[0], dtype=float)
+        drift[0, 1] = length/2 / 2
+        drift[2, 3] = length/2 / 2
+        quad = np.eye(rc_mat.shape[0], dtype=float)
+        quad[1, 0] = -kxl/2
+        quad[3, 2] = -kyl/2
+        quad[1, 2] = -ksxl/2
+        quad[3, 0] = -ksyl/2
+        half_cor = drift @ quad @ drift
 
-        # transfer matrix from 0 to the corrector, M_0->c:
+        # transfer matrix from 0 to the middle of corrector, Rc:
         rc_mat = half_cor @ rc_mat
 
-        # one tune matrix at the corrector, Mc:
+        # one tune matrix at the middle of corrector, Mc:
         mc_mat = np.linalg.solve(
             rc_mat.T, (rc_mat @ m_mat).T).T  # Mc = Rc M Rc^-1
 
@@ -124,16 +116,17 @@ class OrbRespmat:
         small = self.bpm_idx < corr
         large = np.logical_not(small)
 
-        # transfer matrix from corrector to BPM, M_c->b:
-        # First, calculate
+        # transfer matrix from corrector to BPM, Rc->b:
         rcbl_mat = np.linalg.solve(rc_mat.T, rb_mat.transpose((0, 2, 1)))
         rcbl_mat = rcbl_mat.transpose((0, 2, 1))
 
-        # if bpm is after corrector, M_c->b = M_0->b * (M_0->c)^-1
-        rcbl_mat = rcbl_mat[large]
-        # if bpm is before corrector, M_c->b = M_0->b * (M_0->c)^-1
+        # if bpm is before corrector, Rc->b = Rb * M0 * Rc^-1
         rcbs_mat = rcbl_mat[small] @ mc_mat
 
+        # if bpm is after corrector, Rc->b = Rb * Rc^-1
+        rcbl_mat = rcbl_mat[large]
+
+        # closed orbit condition from corrector to bpm Rc->b * (1 - Mc)^(-1)
         rcbl_mat = np.linalg.solve(mci_mat.T, rcbl_mat.transpose((0, 2, 1)))
         rcbl_mat = rcbl_mat.transpose((0, 2, 1))
         rcbs_mat = np.linalg.solve(mci_mat.T, rcbs_mat.transpose((0, 2, 1)))
