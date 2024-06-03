@@ -4,32 +4,30 @@ import logging as _log
 
 import numpy as _np
 
-from pymodels import si as _si
 from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoBO, EVG, \
     EGTriggerPS, LILLRF, InjCtrl, PosAng, DCCT, Trigger, ASLLRF
 
 from ..optimization.rcds import RCDS as _RCDS, RCDSParams as _RCDSParams
-from ..optics_analysis import ChromCorr
 
 
 class OptimizeInjBOParams(_RCDSParams):
     """."""
 
     KNOBS = {
-        'li_qf3': (-3.0, +3.0),  # [A]
-        'tb_qf2a': (+5.0, +9.5),  # [A]
-        'tb_qf2b': (+2.0, +6.0),  # [A]
-        'tb_qd2a': (+4.0, +8.5),  # [A]
-        'tb_qd2b': (+1.5, +5.5),  # [A]
-        'posx': (-2.0, +2.0),  # [mm]
-        'angx': (-1.0, +1.0),  # [mrad]
-        'posy': (-2.0, +2.0),  # [mm]
-        'angy': (-1.0, +1.0),  # [mrad]
-        'kckr': (-25.0, -19.0),  # [mrad]
-        'kly2_amp': (+70, +76),  # [V]
-        'kly2_phs': (-180, -120),  # [deg]
-        'borf_amp': (+30, +80),  # [V]
-        'borf_phs': (+90, +160),  # [deg]
+        'li_qf3': (-3.0, +3.0),     # [A]
+        'tb_qf2a': (+5.0, +9.5),    # [A]
+        'tb_qf2b': (+2.0, +6.0),    # [A]
+        'tb_qd2a': (+4.0, +8.5),    # [A]
+        'tb_qd2b': (+1.5, +5.5),    # [A]
+        'posx': (-2.0, +2.0),       # [mm]
+        'angx': (-1.0, +1.0),       # [mrad]
+        'posy': (-2.0, +2.0),       # [mm]
+        'angy': (-1.0, +1.0),       # [mrad]
+        'kckr': (-25.0, -19.0),     # [mrad]
+        'kly2_amp': (+70, +76),     # [V]
+        'kly2_phs': (-180, -120),   # [deg]
+        'borf_amp': (+30, +80),     # [V]
+        'borf_phs': (+90, +160),    # [deg]
     }
 
     def __init__(self):
