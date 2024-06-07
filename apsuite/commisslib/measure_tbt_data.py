@@ -419,6 +419,7 @@ class TbTDataAnalysis(MeasureTbTData):
 
         self.trajx_turns_slice = None
         self.trajy_turns_slice = None
+        self.bpms2use = None
 
         self.model_optics = None
         self.fitting_data = None
@@ -721,7 +722,8 @@ class TbTDataAnalysis(MeasureTbTData):
                 self.plot_betabeat_and_phase_error(
                     beta_model, beta_fit, phases_model, phases_fit,
                     title=title,
-                    compare_meas2model=compare_meas2model
+                    compare_meas2model=compare_meas2model,
+                    bpms2use=self.bpms2use
                 )
         self.fitting_data = fitting_data
 
@@ -814,9 +816,11 @@ class TbTDataAnalysis(MeasureTbTData):
             # plot_results
             if plot:
                 self.plot_betabeat_and_phase_error(
-                    beta_model, beta, phase_model, phase,
+                    beta_model, beta,
+                    phase_model, phase,
                     title=f"PCA Analysis: beta{label} & phase{label}",
-                    compare_meas2model=compare_meas2model
+                    compare_meas2model=compare_meas2model,
+                    bpms2use=self.bpms2use
                 )
 
             # save analysis data
@@ -934,9 +938,11 @@ class TbTDataAnalysis(MeasureTbTData):
             # plot results
             if plot:
                 self.plot_betabeat_and_phase_error(
-                    beta_model, beta, phase_model, phase,
+                    beta_model, beta,
+                    phase_model, phase,
                     title=f"ICA Analysis: beta{label} & phase{label}",
-                    compare_meas2model=compare_meas2model
+                    compare_meas2model=compare_meas2model,
+                    bpms2use=self.bpms2use
                 )
 
             # save results
@@ -1101,9 +1107,18 @@ class TbTDataAnalysis(MeasureTbTData):
 
     def plot_betabeat_and_phase_error(
         self, beta_model, beta_meas, phase_model, phase_meas, title=None,
-        compare_meas2model=False
+        compare_meas2model=False, bpms2use=None
     ):
         """."""
+        beta_model, beta_meas = beta_model.copy(), beta_meas.copy()
+        phase_model, phase_meas = phase_model.copy(), phase_meas.copy()
+
+        if bpms2use is not None:
+            beta_model[~bpms2use] = _np.nan
+            beta_meas[~bpms2use] = _np.nan
+            phase_model[~bpms2use] = _np.nan
+            phase_meas[~bpms2use] = _np.nan
+
         if compare_meas2model:
             fig, axs = _mplt.subplots(2, 2, figsize=(15, 10))
         else:
@@ -1117,42 +1132,55 @@ class TbTDataAnalysis(MeasureTbTData):
         # Beta plots
         if compare_meas2model:
             ax_beta = axs[0, 0]
-            ax_beta.plot(beta_model, "o-", label="Model", mfc="none")
-            ax_beta.plot(beta_meas, "o--", label="Meas", mfc="none")
+            ax_beta.plot(
+                beta_model, "o-", label="Model", mfc="none"
+            )
+            ax_beta.plot(
+                beta_meas, "o--", label="Meas", mfc="none"
+            )
             ax_beta.set_ylabel("beta function")
             ax_beta.legend()
 
         # Beta beating plot
         ax_beat = axs[0, 1] if compare_meas2model else axs[0]
         beta_beat = (beta_model - beta_meas) / beta_model
+        beta_beat *= 100  # [%]
         ax_beat.plot(
-            beta_beat * 100,
+            beta_beat,
             "o-",
-            label=f"rms = {beta_beat.std()*100:.2f} %",
+            label=f"rms = {beta_beat[~_np.isnan(beta_beat)].std():.2f} %",
             mfc="none",
         )
         ax_beat.set_ylabel("beta beating [%]")
         ax_beat.legend()
 
-        # Phase plots
+        # Phase advance plot
         if compare_meas2model:
             model_phase_advance = _np.diff(phase_model)
             meas_phase_advance = _np.abs(_np.diff(phase_meas))
+
             ax_phase = axs[1, 0]
-            ax_phase.plot(model_phase_advance, "o-", label="Model", mfc="none")
-            ax_phase.plot(meas_phase_advance, "o--", label="Meas", mfc="none")
+            ax_phase.plot(
+                model_phase_advance, "o-", label="Model", mfc="none"
+            )
+            ax_phase.plot(
+                meas_phase_advance, "o--", label="Meas", mfc="none"
+            )
             ax_phase.set_ylabel("BPMs phase advance [rad]")
             ax_phase.legend()
 
+        # Phase advance error plot
         ax_phase_err = axs[1, 1] if compare_meas2model else axs[1]
-        phase_advance_err = model_phase_advance - meas_phase_advance
+        rph_err = model_phase_advance - meas_phase_advance
+        rph_err /= model_phase_advance
+        rph_err *= 100  # [%]
         ax_phase_err.plot(
-            phase_advance_err,
+            rph_err,
             "o-",
-            label=f"rms. error = {phase_advance_err.std():.2f}",
+            label=f"rms.err={rph_err[~_np.isnan(rph_err)].std():.2f}",
             mfc="none"
         )
-        ax_phase_err.set_ylabel("BPMs phase advance error [rad]")
+        ax_phase_err.set_ylabel("BPMs fractional phase advance error [rad]")
         ax_phase_err.legend()
 
         fig.supxlabel("BPM index")
