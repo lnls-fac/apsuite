@@ -648,7 +648,7 @@ class TbTDataAnalysis(MeasureTbTData):
                     from_turn2turn[0], from_turn2turn[1] + 1, 1
                 )
                 traj = self.trajx[turns_slice, :].copy()
-                tune = tunex + 49.
+                tune = tunex
                 label = "x"
             else:
                 from_turn2turn = self.trajy_turns_slice
@@ -656,7 +656,7 @@ class TbTDataAnalysis(MeasureTbTData):
                     from_turn2turn[0], from_turn2turn[1] + 1, 1
                 )
                 traj = self.trajy[turns_slice, :].copy()
-                tune = tuney + 14.
+                tune = tuney
                 label = "y"
 
             # TODO: adapt turns selection to grant integer nr of cycles
@@ -690,7 +690,7 @@ class TbTDataAnalysis(MeasureTbTData):
             phases_fit = _np.array(params_fit[-nbpms:])
 
             if self.model_optics is None:
-                self._get_nominal_optics(tunes=(tunex+49., tuney+14.))
+                self._get_nominal_optics(tunes=(tunex + 49., tuney + 14.))
             beta_model = self.model_optics["beta"+label]
             phases_model = self.model_optics["phase"+label]
 
@@ -785,7 +785,7 @@ class TbTDataAnalysis(MeasureTbTData):
                 traj = self.trajy
                 label = "y"
 
-            tunes = self.tunex, self.tuney
+            tunes = self.tunex + 49., self.tuney + 14.
 
             if self.model_optics is None:
                 self._get_nominal_optics(tunes)
@@ -893,7 +893,7 @@ class TbTDataAnalysis(MeasureTbTData):
             else:
                 traj = self.trajy
                 label = "y"
-            tunes = self.tunex, self.tuney
+            tunes = self.tunex + 49., self.tuney + 14.
 
             if self.model_optics is None:
                 self._get_nominal_optics(tunes)
