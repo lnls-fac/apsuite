@@ -4,6 +4,7 @@ import datetime as _datetime
 import time as _time
 
 import matplotlib.pyplot as _mplt
+import matplotlib.gridspec as _gridspec
 import numpy as _np
 from sklearn.decomposition import FastICA as _FastICA
 from scipy.optimize import curve_fit as _curve_fit
@@ -1094,6 +1095,88 @@ class TbTDataAnalysis(MeasureTbTData):
         fig.tight_layout()
         _mplt.show()
         return fig, ax
+
+    def plot_modal_analysis(self):
+        """."""
+        trajs = _np.concatenate((self.trajx, self.trajy), axis=1)
+
+        u, s, vt = self.calc_svd(trajs, full_matrices=False)
+
+        fig = _mplt.figure(figsize=(14, 12))
+
+        gs = _gridspec.GridSpec(4, 2)
+
+        svals = fig.add_subplot(gs[0, 0])
+        var = fig.add_subplot(gs[1, 0])
+
+        source1 = fig.add_subplot(gs[0, 1])
+        source2 = fig.add_subplot(gs[1, 1], sharex=source1)
+
+        spatial1 = fig.add_subplot(gs[2, 0])
+        spatial2 = fig.add_subplot(gs[3, 0], sharex=spatial1)
+
+        spec1 = fig.add_subplot(gs[2, 1])
+        spec2 = fig.add_subplot(gs[3, 1], sharex=spec1, sharey=spec1)
+
+        svals.plot(s, 'o', color='k', mfc='none')
+        svals.set_title('singular values spectrum')
+        svals.set_yscale("log")
+
+        var.plot(_np.cumsum(s) / _np.sum(s), 'o', color="k", mfc='none')
+        var.set_title("explained variance")
+        var.set_xlabel("rank")
+
+        source1.plot(u[:, 0], label='mode 0')
+        source1.plot(u[:, 1], label='mode 1')
+        source1.set_title("temporal modes - axis 1")
+        source1.set_xlabel("turns index")
+        source1.legend()
+
+        source2.plot(u[:, 2], label='mode 2')
+        source2.plot(u[:, 3], label='mode 3')
+        source2.set_title("temporal modes - axis 2")
+        source2.set_xlabel("turns index")
+        source2.legend()
+
+        spatial1.plot(vt.T[:, 0], label='mode 0')
+        spatial1.plot(vt.T[:, 1], label='mode 1')
+        spatial1.set_title("spatial modes - axis 1")
+        spatial1.set_xlabel("BPMs index (H/V)")
+        spatial1.legend()
+
+        spatial2.plot(vt.T[:, 2], label='mode 2')
+        spatial2.plot(vt.T[:, 3], label='mode 3')
+        spatial2.set_title("spatial modes - axis 2")
+        spatial2.set_xlabel("BPMs index (H/V)")
+        spatial2.legend()
+
+        freq, fourier = _np.fft.rfftfreq(n=u.shape[0]), _np.fft.rfft(u, axis=0)
+
+        spec1.plot(
+            freq, _np.abs(fourier)[:, 0], 'o-',
+            color="C0", mfc="none", label='mode 0'
+        )
+        spec1.plot(
+            freq, _np.abs(fourier)[:, 1], 'x-', color="C0", label='mode 1'
+        )
+        spec1.set_title("temporal modes spectrum - axis 1")
+        spec1.set_xlabel("fractional tune")
+        spec1.legend()
+
+        spec2.plot(
+            freq, _np.abs(fourier)[:, 2], 'o-',
+            color="C1", mfc="none", label='mode 2'
+        )
+        spec2.plot(
+            freq, _np.abs(fourier)[:, 3], 'x-', color="C1", label='mode 3'
+        )
+        spec2.set_title("temporal modes spectrum - axis 2")
+        spec2.set_xlabel("fractional tune")
+        spec2.legend()
+
+        _mplt.tight_layout()
+
+        _mplt.show()
 
     def plot_fit_comparison(self, bpm_index=0, timescale=0):
         """Plot comparison of fit vs. acqusitions.
