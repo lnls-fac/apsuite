@@ -957,9 +957,35 @@ class TbTDataAnalysis(MeasureTbTData):
         raise NotImplementedError
 
     # plotting methods
-    def plot_traj_spectrum():
+    def plot_trajs_spectrum(
+        self, bpm_index=0, trajx=None, trajy=None, title=""
+    ):
         """."""
-        raise NotImplementedError
+        trajx = self.trajx if trajx is None else trajx
+        trajy = self.trajy if trajy is None else trajy
+
+        trajx_spec, tunesx = self.calc_spectrum(trajx, fs=1)
+        trajy_spec, tunesy = self.calc_spectrum(trajy, fs=1)
+
+        fig, axs = _mplt.subplots(2, 1, figsize=(12, 8))
+
+        axs[0].plot(
+            tunesx, _np.abs(trajx_spec)[:, bpm_index])
+        axs[1].plot(
+            tunesy, _np.abs(trajy_spec)[:, bpm_index])
+
+        if not title:
+            title = "kicked beam trajectories spectrum \n"
+            title += f"kicks = ({self.params.hkick},{self.params.vkick}) mrad"
+
+        axs[0].set_title(title)
+
+        axs[0].set_ylabel(r'$x$ [mm]')
+        axs[1].set_ylabel(r'$y$ [mm]')
+        axs[1].set_xlabel('tune')
+        fig.tight_layout()
+
+        return fig, axs
 
     def plot_trajs(self, bpm_index=0, timescale=0, compare_fit=False):
         """Plot trajectories and sum-signal at a given BPM and timescale.
