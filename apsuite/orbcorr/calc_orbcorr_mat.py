@@ -116,8 +116,7 @@ class OrbRespmat:
         rc_mat = half_cor @ rc_mat
 
         # one tune matrix at the middle of corrector, Mc = Rc * M0 * Rc^-1:
-        mc_mat = np.linalg.solve(
-            rc_mat.T, (rc_mat @ m_mat).T).T
+        mc_mat = np.linalg.solve(rc_mat.T, (rc_mat @ m_mat).T).T
 
         # inverse: (1-Mc)^-1
         mci_mat = np.eye(mc_mat.shape[0], dtype=float) - mc_mat
