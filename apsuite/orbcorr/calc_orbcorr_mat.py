@@ -115,9 +115,9 @@ class OrbRespmat:
         # transfer matrix from 0 to the middle of corrector, Rc:
         rc_mat = half_cor @ rc_mat
 
-        # one tune matrix at the middle of corrector, Mc:
+        # one tune matrix at the middle of corrector, Mc = Rc * M0 * Rc^-1:
         mc_mat = np.linalg.solve(
-            rc_mat.T, (rc_mat @ m_mat).T).T  # Mc = Rc M Rc^-1
+            rc_mat.T, (rc_mat @ m_mat).T).T
 
         # inverse: (1-Mc)^-1
         mci_mat = np.eye(mc_mat.shape[0], dtype=float) - mc_mat
@@ -126,10 +126,11 @@ class OrbRespmat:
         large = np.logical_not(small)
 
         # transfer matrix from corrector to BPM, Rc->b:
+        # first, calculate Rb * Rc^-1
         rcbl_mat = np.linalg.solve(rc_mat.T, rb_mat.transpose((0, 2, 1)))
         rcbl_mat = rcbl_mat.transpose((0, 2, 1))
 
-        # if bpm is before corrector, Rc->b = Rb * M0 * Rc^-1
+        # if bpm is before corrector, Rc->b = Rb * Rc^-1 * Mc = Rb * M0 * Rc^-1
         rcbs_mat = rcbl_mat[small] @ mc_mat
 
         # if bpm is after corrector, Rc->b = Rb * Rc^-1
