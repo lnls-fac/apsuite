@@ -451,7 +451,7 @@ class FOFBSysIdAcq(_BaseClass):
 
         ret = self.check_data_valid()
         if ret < 0:
-            print(f'FOFB controller 1 TimeFrameData is not monotonic.')
+            print('FOFB controller 1 TimeFrameData is not monotonic.')
             return False
         if ret > 0:
             print(
@@ -484,10 +484,10 @@ class FOFBSysIdAcq(_BaseClass):
         data['prbs_fofbacc_lvl0'] = famsysid.prbs_fofbacc_lvl0
         data['prbs_fofbacc_lvl1'] = famsysid.prbs_fofbacc_lvl1
         data['prbs_bpmpos_enbl'] = famsysid.prbs_bpmpos_enbl
-        data['prbs_bpmposx_lvl0'] = _np.roll(famsysid.prbs_bpmposx_lvl0, -1)
-        data['prbs_bpmposx_lvl1'] = _np.roll(famsysid.prbs_bpmposx_lvl1, -1)
-        data['prbs_bpmposy_lvl0'] = _np.roll(famsysid.prbs_bpmposy_lvl0, -1)
-        data['prbs_bpmposy_lvl1'] = _np.roll(famsysid.prbs_bpmposy_lvl1, -1)
+        data['prbs_bpmposx_lvl0_beam_order'] = _np.roll(famsysid.prbs_bpmposx_lvl0, -1)
+        data['prbs_bpmposx_lvl1_beam_order'] = _np.roll(famsysid.prbs_bpmposx_lvl1, -1)
+        data['prbs_bpmposy_lvl0_beam_order'] = _np.roll(famsysid.prbs_bpmposy_lvl0, -1)
+        data['prbs_bpmposy_lvl1_beam_order'] = _np.roll(famsysid.prbs_bpmposy_lvl1, -1)
         data['corr_currloop_kp'] = famsysid.currloop_kp
         data['corr_currloop_ti'] = famsysid.currloop_ti
 
