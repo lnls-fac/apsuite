@@ -293,7 +293,6 @@ class RCDS(_Optimize):
     def _finalization(self):
         """."""
         stg = '\n Finished! \n'
-        stg += f'Number of iterations: {iter+1:04d}\n'
         stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
         init_func = self.data['best_objfuncs'][0]
         func_min = self.data['best_objfuncs'][-1]
