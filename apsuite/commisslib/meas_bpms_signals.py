@@ -19,7 +19,6 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
         """."""
         self.trigbpm_delay = None
         self.trigbpm_nrpulses = 1
-        self.do_pulse_evg = True
         self._timing_event = 'Study'
         self.event_delay = None
         self.event_mode = 'External'
@@ -43,7 +42,6 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
         else:
             stg += ftmp('trigbpm_delay', dly, '[us]')
         stg += dtmp('trigbpm_nrpulses', self.trigbpm_nrpulses, '')
-        stg += stmp('do_pulse_evg', str(self.do_pulse_evg), '')
         stg += stmp('timing_event', self.timing_event, '')
         dly = self.event_delay
         if dly is None:
@@ -139,16 +137,14 @@ class AcqBPMsSignals(_BaseClass):
         trigbpm = self.devices['trigbpm']
 
         state = dict()
-        state['trigbpm_source'] = trigbpm.source
+        state['trigbpm_source'] = trigbpm.source_str
         state['trigbpm_nrpulses'] = trigbpm.nr_pulses
         state['trigbpm_delay'] = trigbpm.delay
-        if self.params.do_pulse_evg:
-            state['evg_nrpulses'] = self.devices['evg'].nrpulses
 
         evt = self._get_event(self.params.timing_event)
         if evt is not None:
             state['evt_delay'] = evt.delay
-            state['evt_mode'] = evt.mode
+            state['evt_mode'] = evt.mode_str
         return state
 
     def recover_timing_state(self, state):
@@ -175,23 +171,7 @@ class AcqBPMsSignals(_BaseClass):
             if dly is not None:
                 evt.delay = dly
             evt.mode = state.get('evt_mode', self.params.event_mode)
-
-        nrpul = 1 if self.params.do_pulse_evg else None
-        nrpul = state.get('evg_nrpulses', nrpul)
-        if nrpul is not None:
-            evg = self.devices['evg']
-            evg.set_nrpulses(nrpul)
-            evg.cmd_update_events()
-
-    def trigger_timing_signal(self):
-        """."""
-        if not self.params.do_pulse_evg:
-            return
-        evt = self._get_event(self.params.timing_event)
-        if evt is not None and evt.mode_str == 'External':
-            evt.cmd_external_trigger()
-        else:
-            self.devices['evg'].cmd_turn_on_injection()
+            self.devices['evg'].cmd_update_events()
 
     def prepare_bpms_acquisition(self):
         """."""
@@ -214,7 +194,9 @@ class AcqBPMsSignals(_BaseClass):
             print(tag + ' is not ready for acquisition.')
 
         fambpms.reset_mturn_initial_state()
-        self.trigger_timing_signal()
+
+        # NOTE: user must trigger timing event
+        print('Ready for acquisition. Waiting for trigger event.')
 
         time0 = _time.time()
         ret = fambpms.wait_update_mturn(timeout=self.params.timeout)
@@ -272,6 +254,7 @@ class AcqBPMsSignals(_BaseClass):
         data['switching_frequency'] = fbpms.get_switching_frequency(rf_freq)
         data['tunex_enable'] = tune.enablex
         data['tuney_enable'] = tune.enabley
+        data['timing_state'] = self.get_timing_state()
         return data
 
     @staticmethod
