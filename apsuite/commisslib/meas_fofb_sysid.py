@@ -527,7 +527,7 @@ class FOFBSysIdAcq(_BaseClass):
         data['fofb_respmat'] = fofb.respmat
         data['fofb_respmat_mon'] = fofb.respmat_mon
         data['fofb_invrespmat_mon'] = fofb.invrespmat_mon
-        data['psconfig_matrix'] = fofb.psconfig_matrix
+        data['psconfig_mat'] = fofb.psconfig_mat
 
         # sofb
         sofb = self.devices['sofb']
