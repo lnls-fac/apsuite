@@ -294,7 +294,7 @@ class FOFBSysIdAcq(_BaseClass):
             lvls0 = - amp * us
             lvls0x, lvls0y = lvls0[:SI_NUM_BPMS], lvls0[SI_NUM_BPMS:],
             return lvls0x, lvls0y
-        
+
         else:
             amp = (lvl1-lvl0)/2
             off = (lvl1+lvl0)/2
@@ -484,10 +484,18 @@ class FOFBSysIdAcq(_BaseClass):
         data['prbs_fofbacc_lvl0'] = famsysid.prbs_fofbacc_lvl0
         data['prbs_fofbacc_lvl1'] = famsysid.prbs_fofbacc_lvl1
         data['prbs_bpmpos_enbl'] = famsysid.prbs_bpmpos_enbl
-        data['prbs_bpmposx_lvl0_beam_order'] = _np.roll(famsysid.prbs_bpmposx_lvl0, -1)
-        data['prbs_bpmposx_lvl1_beam_order'] = _np.roll(famsysid.prbs_bpmposx_lvl1, -1)
-        data['prbs_bpmposy_lvl0_beam_order'] = _np.roll(famsysid.prbs_bpmposy_lvl0, -1)
-        data['prbs_bpmposy_lvl1_beam_order'] = _np.roll(famsysid.prbs_bpmposy_lvl1, -1)
+        data['prbs_bpmposx_lvl0_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposx_lvl0, -1
+            )
+        data['prbs_bpmposx_lvl1_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposx_lvl1, -1
+            )
+        data['prbs_bpmposy_lvl0_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposy_lvl0, -1
+            )
+        data['prbs_bpmposy_lvl1_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposy_lvl1, -1
+            )
         data['corr_currloop_kp'] = famsysid.currloop_kp
         data['corr_currloop_ti'] = famsysid.currloop_ti
 
@@ -519,6 +527,7 @@ class FOFBSysIdAcq(_BaseClass):
         data['fofb_respmat'] = fofb.respmat
         data['fofb_respmat_mon'] = fofb.respmat_mon
         data['fofb_invrespmat_mon'] = fofb.invrespmat_mon
+        data['psconfig_matrix'] = fofb.psconfig_matrix
 
         # sofb
         sofb = self.devices['sofb']
