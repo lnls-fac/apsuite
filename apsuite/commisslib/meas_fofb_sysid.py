@@ -423,7 +423,7 @@ class FOFBSysIdAcq(_BaseClass):
         """Check whether data is valid."""
         return self.devices['famsysid'].check_data_valid()
 
-    def acquire_data(self):
+    def acquire_data(self, wait_time=None):
         """Acquire data."""
         ret = self.prepare_acquisition()
         if ret < 0:
@@ -436,6 +436,9 @@ class FOFBSysIdAcq(_BaseClass):
         self.devices['famsysid'].update_initial_timestamps(
             bpmenbl=self.params.prbs_bpms_to_get_data,
             correnbl=self.params.prbs_corrs_to_get_data)
+
+        if wait_time is not None:
+            _time.sleep(wait_time)
 
         self.trigger_timing_signal()
 
