@@ -59,7 +59,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         self.prbs_corrs_to_get_data = _np.ones(160, dtype=bool)
         # power supply current loop
         self.corr_currloop_kp = 5000000*_np.ones(160)
-        self.corr_currloop_ti = 2000*_np.ones(160)
+        self.corr_currloop_ki = 2000*_np.ones(160)
 
     def __str__(self):
         ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
@@ -111,7 +111,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         stg += stmp('prbs_bpmposy_lvl0', str(self.prbs_bpmposy_lvl0), '')
         stg += stmp('prbs_bpmposy_lvl1', str(self.prbs_bpmposy_lvl1), '')
         stg += stmp('corr_currloop_kp', str(self.corr_currloop_kp), '')
-        stg += stmp('corr_currloop_ti', str(self.corr_currloop_ti), '')
+        stg += stmp('corr_currloop_ki', str(self.corr_currloop_ki), '')
         return stg
 
 
@@ -288,8 +288,9 @@ class FOFBSysIdAcq(_BaseClass):
 
         if lvl1 is None:
             amp = _np.abs(lvl0)
-            # Scales the amplitude with its corresponding singular value (normalized
-            # to the lesser one). The amplitudes are saturated to 'ampmax'.
+            # Scales the amplitude with its corresponding singular value
+            # (normalized to the lesser one).
+            # The amplitudes are saturated to 'ampmax'.
             amp = min(amp * ss, ampmax)
             lvls0 = - amp * us
             lvls0x, lvls0y = lvls0[:SI_NUM_BPMS], lvls0[SI_NUM_BPMS:],
@@ -298,8 +299,9 @@ class FOFBSysIdAcq(_BaseClass):
         else:
             amp = (lvl1-lvl0)/2
             off = (lvl1+lvl0)/2
-            # Scales the amplitude with its corresponding singular value (normalized
-            # to the lesser one). The amplitudes are saturated to 'ampmax'.
+            # Scales the amplitude with its corresponding singular value
+            # (normalized to the lesser one).
+            # The amplitudes are saturated to 'ampmax'.
             amp = min(amp * ss, ampmax)
             lvls0 = off - amp * us
             lvls1 = off + amp * us
@@ -500,7 +502,7 @@ class FOFBSysIdAcq(_BaseClass):
             famsysid.prbs_bpmposy_lvl1, -1
             )
         data['corr_currloop_kp'] = famsysid.currloop_kp
-        data['corr_currloop_ti'] = famsysid.currloop_ti
+        data['corr_currloop_ki'] = famsysid.currloop_ki
 
         # acquisition
         orbx, orby, currdata, kickdata = famsysid.get_data(
