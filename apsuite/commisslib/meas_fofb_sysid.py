@@ -4,7 +4,7 @@ import time as _time
 import numpy as _np
 
 from siriuspy.devices import CurrInfoSI, \
-    Trigger, RFGen, FamFOFBSysId, BPM, HLFOFB, SOFB
+    Trigger, RFGen, FamFOFBSysId, BPM, HLFOFB, SOFB, FamFOFBLamp
 
 from ..asparams import SI_NUM_BPMS
 from ..utils import MeasBaseClass as _BaseClass, \
@@ -294,7 +294,7 @@ class FOFBSysIdAcq(_BaseClass):
             lvls0 = - amp * us
             lvls0x, lvls0y = lvls0[:SI_NUM_BPMS], lvls0[SI_NUM_BPMS:],
             return lvls0x, lvls0y
-        
+
         else:
             amp = (lvl1-lvl0)/2
             off = (lvl1+lvl0)/2
@@ -552,4 +552,101 @@ class FOFBSysIdAcq(_BaseClass):
         data['sampling_frequency'] = bpmaux.get_sampling_frequency(
             rf_freq, acq_rate='FOFB')
 
+        return data
+
+
+class RTMLampAcqParams(_ParamsBaseClass):
+    """RTM-Lamp acquisition parameters.
+
+    Attributes:
+        act_acq (float): type of actuation durin acquisition.
+            Wether 'VoltageStep', 'CurrentStep', 'Test' or 'Acq'
+        high_squared_voltage (float): higher voltage value to squared
+            excitation function
+        low_squared_voltage (float): lower voltage value to squared
+            excitation function
+        despike_threshold (float): threshold value to despike values in data
+        nrpoints (integer): number of samples to measure
+        nrpoints_after (integer): number of samples to emasure before trigger
+        single_crate (integer): if not None, then the acquisition is done in the
+            specified crate
+        acq_external (bool): if True, then trigger is external
+        samples_val (integer):
+        voltage_gain (float): squared wave voltage gain
+        squared_wave_freq (float): squared wave frequency
+    """
+
+    def __init__(self):
+        self.act_acq = 'VoltageStep'
+        self.high_squared_voltage = None
+        self.low_squared_voltage = None
+        self.despike_threshold = 2
+        self.nrpoints = 2
+        self.nrpoints_after = 2
+        self.single_crate = None
+        self.acq_external = True
+        self.step_value = 10
+        self.voltage_gain = 1.12916762036e-4
+        self.squared_wave_freq = 100e6
+
+    def __str__(self):
+        ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
+        dtmp = '{0:26s} = {1:9d}  {2:s}\n'.format
+        stmp = '{0:26s} = {1:9}  {2:s}\n'.format
+        stg = ''
+        stg += stmp('act_acq', self.act_acq, '')
+        stg += ftmp('low_squared_voltage', self.low_squared_voltage, '')
+        stg += ftmp('high_squared_voltage', self.high_squared_voltage, '')
+        stg += ftmp('despike_threshold', self.despike_threshold, '')
+        stg += dtmp('nrpoints', self.nrpoints, '')
+        stg += dtmp('nrpoints_after', self.nrpoints_after, '')
+        stg += dtmp('single_crate', self.single_crate, '')
+        stg += dtmp('acq_external', self.acq_external, '')
+        stg += ftmp('step_value', self.step_value, '')
+        stg += dtmp('voltage_gain', self.voltage_gain, '')
+        stg += ftmp('squared_wave_freq', self.squared_wave_freq, '')
+        return stg
+
+
+class RTMLampAcq(_BaseClass):
+    """RTM-Lamp acquisition."""
+
+    def __init__(self, isonline=True):
+        super().__init__(params=RTMLampAcqParams(), isonline=isonline)
+        self._fname = None
+        if self.isonline:
+            self.create_devices()
+
+    def create_devices(self):
+        """Connect to devices."""
+        self.devices['famlamp'] = FamFOFBLamp()
+        self.devices['trigger'] = Trigger(self.params.trigger)
+
+    @property
+    def fname(self):
+        """Filename with acquisition data."""
+        return self._fname
+
+    @fname.setter
+    def fname(self, val):
+        self._fname = val
+
+    def prepare_acquisition(self):
+        """Prepare acquisition."""
+        return self.devices['famlamp'].config_acquisition(
+            nr_points_before=self.params.acq_nrpoints_before,
+            repeat=self.params.acq_repeat,
+            external=self.params.acq_external)
+
+    # ---- auxiliary functions ----
+
+    def despiker(self, data):
+        threshold = self.despike_threshold
+        for idx in range(len(data)):
+            if idx == 0:
+                # Assumes no spike on index 0
+                continue
+            else:
+                if abs(data[idx] - data[idx - 1]) > threshold:
+                    data[idx] = data[idx - 1]
         return data
