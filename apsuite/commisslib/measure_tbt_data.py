@@ -35,9 +35,12 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self._pingers2kick = "none"  # 'H', 'V' or 'HV'
         self.hkick = None  # [mrad]
         self.vkick = None  # [mrad]
+        self.pingh_calibration = 1.5416651659146232
+        self.pingv_calibration = 1.02267573
         self.trigpingh_delay = None
         self.trigpingv_delay = None
         self.magnets_timeout = 120.
+        self.restore_init_state = True
 
     def __str__(self):
         """."""
@@ -57,6 +60,9 @@ class TbTDataParams(_AcqBPMsSignalsParams):
             stg += stmp("hkick", "same", "(current value will not be changed)")
         else:
             stg += ftmp("hkick", self.hkick, "[mrad]")
+        stg += ftmp("pingh_calibration", self.pingh_calibration, "")
+        stg += ftmp("pingv_calibration", self.pingv_calibration, "")
+
         dly = self.trigpingh_delay
         if dly is None:
             stg += stmp(
@@ -79,6 +85,7 @@ class TbTDataParams(_AcqBPMsSignalsParams):
             )
         else:
             stg += ftmp("trigpingv_delay", dly, "[us]")
+        stg += stmp("restore_init_state", self.restore_init_state, "")
         return stg
 
     @property
@@ -258,15 +265,17 @@ class MeasureTbTData(_AcqBPMsSignals):
         """Set pingers strengths, check if was set & indicate which failed."""
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
         if hkick is not None:
+            hkick *= self.params.pingh_calibration
+            print("changing pingh")
             pingh.set_strength(hkick, timeout=0, wait_mon=wait_mon)
         else:
-            print("pingh not changed (None-type strength)")
             pingh_ok = True
 
         if vkick is not None:
+            vkick *= self.params.pingv_calibration
+            print("changing pingv")
             pingv.set_strength(vkick, timeout=0, wait_mon=wait_mon)
         else:
-            print("pingv not changed (None-type strength)")
             pingv_ok = True
 
         # wait magnets ramp and check if correctly set
@@ -275,6 +284,7 @@ class MeasureTbTData(_AcqBPMsSignals):
         t0 = _time.time()
 
         if hkick is not None:
+            print("waiting pingh")
             pingh_ok = pingh.set_strength(
                 hkick,
                 tol=0.05 * abs(hkick),
@@ -286,6 +296,7 @@ class MeasureTbTData(_AcqBPMsSignals):
         magnets_timeout -= elapsed_time
 
         if vkick is not None:
+            print("waiting pingv")
             pingv_ok = pingv.set_strength(
                 vkick,
                 tol=0.05 * abs(vkick),
@@ -352,18 +363,22 @@ class MeasureTbTData(_AcqBPMsSignals):
                 except Exception as e:
                     print(f"An error occurred during acquisition: {e}")
         else:
-            print("Did not measure. Restoring magnets & timing initial state.")
-        timing_ok = self.prepare_timing(init_timing_state)
-        if not timing_ok:
-            print("Timing was not restored to initial state.")
-        mags_ok = self.set_magnets_state(init_magnets_state, wait_mon=False)
-        if not mags_ok:
-            msg = "Magnets state or strengths were not restored."
-            msg += "Restore manually."
-            print(msg)
-            print(init_magnets_state)
-        else:
-            print("Magnets state & strengths successfully restored.")
+            print("Did not measure")
+        if self.params.restore_init_state:
+            print("Restoring magnets & timing initial state.")
+            timing_ok = self.prepare_timing(init_timing_state)
+            if not timing_ok:
+                print("Timing was not restored to initial state.")
+            mags_ok = self.set_magnets_state(
+                init_magnets_state, wait_mon=False
+            )
+            if not mags_ok:
+                msg = "Magnets state or strengths were not restored."
+                msg += "Restore manually."
+                print(msg)
+                print(init_magnets_state)
+            else:
+                print("Magnets state & strengths successfully restored.")
         print("Measurement finished.")
 
     def get_data(self):
