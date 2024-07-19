@@ -1,10 +1,11 @@
 """."""
 import time as _time
+
 import numpy as _np
-from siriuspy.devices import PowerSupply, CurrInfoSI, Tune, TuneCorr, \
-    SOFB, FamBPMs, Event, RFGen
-from siriuspy.sofb.csdev import SOFBFactory
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
+from siriuspy.devices import CurrInfoSI, Event, FamBPMs, PowerSupply, RFGen, \
+    SOFB, Tune, TuneCorr
+from siriuspy.sofb.csdev import SOFBFactory
 
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
@@ -154,14 +155,14 @@ class TurnOffCorr(_ThreadBaseClass):
         prms = self.params
         tune = self.devices['tune']
         sibpms = self.devices['sibpms']
-        sibpms.mturn_config_acquisition(
+        sibpms.config_mturn_acquisition(
             nr_points_after=prms.nr_points_bpm_acq, nr_points_before=0,
             acq_rate='FAcq', repeat=False, external=True)
-        sibpms.mturn_reset_flags_and_update_initial_timestamps()
+        sibpms.reset_mturn_initial_state()
         self.devices['event'].cmd_external_trigger()
-        ret = sibpms.mturn_wait_update(timeout=prms.orbit_timeout)
+        ret = sibpms.wait_update_mturn(timeout=prms.orbit_timeout)
         if ret != 0:
-            print(f'Problem waiting BPMs update. Error code: {ret:d}')
+            print(f'Problem waiting BPMs update. Error code: {ret:f}')
             return dict()
 
         orbx, orby = sibpms.get_mturn_signals()
