@@ -1,7 +1,7 @@
 """Script to fit vertical dispersion with skew-quadrupoles."""
 
 import numpy as np
-from mathphys.functions import load_pickle
+from mathphys.functions import load as _load
 
 import pyaccel as pa
 from pymodels import si
@@ -33,7 +33,7 @@ def calc_rms(vec):
 def get_orm_setup(name):
     """."""
     print('--- loading orm setup')
-    setup = load_pickle(name)
+    setup = _load(name)
     if 'data' in setup:
         setup = setup['data']
     return setup
@@ -415,8 +415,8 @@ if __name__ == '__main__':
     # # scan singular values
     # out = fit_dispersion_scan_singular_values(
     #     simod, disp_mat, disp_meas, bpmidx, qsidx, setup, niter=10)
-    # save_pickle(out, 'etay_fitting_svals_scan')
-    # out = load_pickle('etay_fitting_svals_scan')
+    # _save(out, 'etay_fitting_svals_scan')
+    # out = _load('etay_fitting_svals_scan')
     # plot_dispersion_fit_scan_singular_values(**out)
 
     # # compare QS strengths with different singular values
