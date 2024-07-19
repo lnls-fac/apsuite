@@ -1,5 +1,6 @@
 """Main module."""
 import time as _time
+from functools import partial as _partial
 
 import numpy as _np
 import scipy.signal as _scysig
@@ -16,6 +17,7 @@ from ..utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _ThreadBaseClass
 from .. import asparams as _asparams
+
 
 class UtilClass:
     """."""
@@ -84,9 +86,10 @@ class UtilClass:
     @staticmethod
     def _process_data(data, params, rawdata=None):
         """."""
-        rev_per = params.REV_PER
+        rev_per = params.REV_TIME
         calib = params.CALIBRATION_FACTOR
         harm_nr = params.HARM_NUM
+        int_tune = params.integer_tune
         current = data.get('stored_current', None)
         if current is None:
             current = data['current']
@@ -110,8 +113,9 @@ class UtilClass:
         data_dft = _np.fft.fft(data_anal, axis=1)
 
         # compensate the different time samplings of each bunch:
+        int_freq = int_tune/rev_per
         dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * rev_per
-        comp = _np.exp(-1j*2*_np.pi * freq[None, :]*dts[:, None])
+        comp = _np.exp(-1j*2*_np.pi * (int_freq+freq[None, :])*dts[:, None])
         data_dft *= comp
 
         # get the processed data by inverse DFT
@@ -137,9 +141,8 @@ class UtilClass:
         sigma_freq = params.bandwidth
         ftype = params.filter_type
 
-        data_dft = _np.fft.fft(data, axis=-1)
-
         if ftype.lower().startswith('gauss'):
+            data_dft = _np.fft.fft(data, axis=-1)
             # Apply Gaussian filter to get only the synchrotron frequency
             H = _np.exp(-(freq - center_freq)**2/2/sigma_freq**2)
             H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
@@ -148,7 +151,9 @@ class UtilClass:
                 data_dft *= H[None, :]
             else:
                 data_dft *= H
-        else:
+            data = _np.fft.ifft(data_dft, axis=-1)
+        elif ftype.lower().startswith('sinc'):
+            data_dft = _np.fft.fft(data, axis=-1)
             indcsp = (freq > center_freq - sigma_freq)
             indcsp &= (freq < center_freq + sigma_freq)
             indcsn = (-freq > center_freq - sigma_freq)
@@ -158,7 +163,11 @@ class UtilClass:
                 data_dft[:, ~indcs] = 0
             else:
                 data_dft[~indcs] = 0
-        return _np.fft.ifft(data_dft, axis=-1)
+            data = _np.fft.ifft(data_dft, axis=-1)
+        elif ftype.lower().startswith('noavg'):
+            data = data.copy()
+            data -= data.mean(axis=-1, keepdims=True)
+        return data
 
     @staticmethod
     def estimate_fitting_intervals(infos, int_type='both', clearance=0):
@@ -262,24 +271,28 @@ class BbBLParams(_ParamsBaseClass):
     RF_FREQ = _asparams.RF_FREQ
     HARM_NUM = _asparams.SI_HARM_NUM
     REV_FREQ = _asparams.SI_REV_FREQ
-    REV_PER = 1 / REV_FREQ
+    REV_TIME = 1 / REV_FREQ
 
     def __init__(self):
         """."""
         super().__init__()
         self.center_frequency = 2090  # [Hz]
         self.bandwidth = 200  # [Hz]
-        self.filter_type = 'gauss'  # (gauss, sinc)
+        self.filter_type = 'gauss'  # (gauss, sinc, noavg, none)
         self.acqtype = 'SRAM'
+        self.integer_tune = 0
 
     def __str__(self):
         """."""
         ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
+        dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
         stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
         st = ftmp('center_frequency  [Hz]', self.center_frequency, '')
         st += ftmp('bandwidth [Hz]', self.bandwidth, '')
-        st += stmp('filter_type', self.filter_type, '[gauss or sinc]')
+        st += stmp(
+            'filter_type', self.filter_type, '[gauss, sinc, noavg, none]')
         st += stmp('acqtype', self.acqtype, '[SRAM or BRAM]')
+        st += dtmp('integer_tune', self.integer_tune, '')
         return st
 
 
@@ -461,10 +474,15 @@ class BbBAcqData(_BaseClass, UtilClass):
                 arrowprops=dict(arrowstyle='->'),
                 bbox=dict(boxstyle="round", fc="0.8"))
 
+        title_ = f'{mode_num:02d}'
+        if title:
+            title_ += ' -> ' + title
         aty.legend(loc='best', fontsize='small')
-        aty.set_title(title, fontsize='small')
+        aty.set_title(title_, fontsize='small')
         aty.set_xlabel('time [ms]')
-        aty.set_ylabel('Amplitude [°]')
+        pln = self.devices['bbb'].devname[-1]
+        unit = '[°]' if pln == 'L' else '[um]'
+        aty.set_ylabel('Amplitude '+unit)
 
         idx = abs_mode > abs_mode.max()/10
         inst_freq = self.calc_instant_frequency(data_mode, dtime)
@@ -514,12 +532,14 @@ class BbBAcqData(_BaseClass, UtilClass):
             nzer = abs_mode > abs_mode.max()/10
             atx.plot(tim[nzer], inst_freq[nzer]/1e3, label=f'{idx:03d}')
 
+        pln = self.devices['bbb'].devname[-1]
+        unit = '[°]' if pln == 'L' else '[um]'
         aty.legend(loc='best', fontsize='small')
         ax.set_title(title)
-        ax.set_ylabel('Max Amplitude [°]')
+        ax.set_ylabel('Max Amplitude '+unit)
         ax.set_xlabel('Mode Number')
         aty.set_xlabel('time [ms]')
-        aty.set_ylabel('Amplitude [°]')
+        aty.set_ylabel('Amplitude '+unit)
         atx.set_xlabel('time [ms]')
         atx.set_ylabel('Instantaneous Frequency [kHz]')
 
@@ -535,7 +555,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         if rawdata is None:
             rawdata = self.data['rawdata']
         rawdata = rawdata.astype(float)
-        rev_per = self.params.REV_PER
+        rev_per = self.params.REV_TIME
         downsample = self.data['downsample']
         dtime = rev_per*downsample
 
@@ -583,9 +603,12 @@ class BbBAcqData(_BaseClass, UtilClass):
         abs_modes = _np.abs(data_modes)
         abs_dataf = _np.abs(data_anal)
 
+        pln = self.devices['bbb'].devname[-1]
+        unit = '[°]' if pln == 'L' else '[um]'
+
         afx.plot(mode_nums, abs_modes.mean(axis=1))
         afx.set_xlabel('Mode Number')
-        afx.set_ylabel('Average Amplitude [°]')
+        afx.set_ylabel('Average Amplitude '+unit)
         # afx.set_yscale('log')
 
         # waterfall_plot(afy, tim, mode_nums, abs_modes)
@@ -599,11 +622,11 @@ class BbBAcqData(_BaseClass, UtilClass):
         afy.set_xlabel('Time [ms]')
         afy.set_ylabel('Mode Number')
         cb = f.colorbar(cf, ax=afy, pad=0.01)
-        cb.set_label('Amplitude [°]')
+        cb.set_label('Amplitude '+unit)
 
         atx.plot(bunch_nums, abs_dataf.mean(axis=1))
         atx.set_xlabel('Bunch Number')
-        atx.set_ylabel('Average Amplitude [°]')
+        atx.set_ylabel('Average Amplitude '+unit)
 
         # waterfall_plot(aty, tim, bunch_nums, abs_dataf)
         # aty.set_ylabel('\ntime [ms]')
@@ -616,7 +639,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         aty.set_xlabel('Time [ms]')
         aty.set_ylabel('Bunch Number')
         cb = f.colorbar(cf, ax=aty, pad=0.01)
-        cb.set_label('Amplitude [°]')
+        cb.set_label('Amplitude '+unit)
 
         f.show()
         return f
@@ -690,15 +713,15 @@ class DriveDampLParams(BbBLParams):
 class DriveDampHParams(DriveDampLParams):
     """."""
 
-    DAMPING_RATE = 1/16.9e-3  # [Hz]
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+    CALIBRATION_FACTOR = _asparams.BBBH_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBH_DAMPING_RATE
 
 
 class DriveDampVParams(DriveDampLParams):
     """."""
 
-    DAMPING_RATE = 1/22.0e-3  # [Hz]
-    CALIBRATION_FACTOR = 1000  # [Counts/mA/um]
+    CALIBRATION_FACTOR = _asparams.BBBV_CALIBRATION_FACTOR
+    DAMPING_RATE = _asparams.BBBV_DAMPING_RATE
 
 
 class MeasDriveDamp(_ThreadBaseClass, UtilClass):
@@ -926,10 +949,14 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             inst_freq /= 1e3
             idx = absm > absm.max()/10
             atx.plot(tim[idx], inst_freq[idx], color=lin.get_color())
+
+        pln = self.devices['bbb'].devname[-1]
+        unit = '[°]' if pln == 'L' else '[um]'
+
         aty.legend(loc='best', fontsize='small')
         aty.set_title(title, fontsize='small')
         aty.set_xlabel('time [ms]')
-        aty.set_ylabel('Amplitude [°]')
+        aty.set_ylabel('Amplitude '+unit)
 
         atx.set_xlabel('time [ms]')
         atx.set_ylabel('Instantaneous Frequency [kHz]')
@@ -1002,27 +1029,58 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
 class TuneShiftParams(_ParamsBaseClass):
     """."""
 
-    REV_TIME = _asparams.SI_REV_TIME  # s
-    WAIT_INJ = 0.2  # s
-    DEF_TOL_CURRENT = 0.01  # mA
+    CALIBRATION_FACTOR_H = _asparams.BBBH_CALIBRATION_FACTOR  # [Counts/mA/um]
+    DAMPING_RATE_H = _asparams.BBBH_DAMPING_RATE  # [1/s]
+    CALIBRATION_FACTOR_V = _asparams.BBBV_CALIBRATION_FACTOR  # [Counts/mA/um]
+    DAMPING_RATE_V = _asparams.BBBV_DAMPING_RATE  # [1/s]
+    RF_FREQ = _asparams.RF_FREQ  # [Hz]
+    HARM_NUM = _asparams.SI_HARM_NUM
+    REV_FREQ = _asparams.SI_REV_FREQ  # [Hz]
+    REV_TIME = _asparams.SI_REV_TIME  # [s]
+    WAIT_INJ = 0.2  # [s]
+    DEF_TOL_CURRENT = 0.01  # [mA]
 
     def __init__(self):
         """."""
         super().__init__()
-        self.kickh = -25/1000  # mrad
-        self.kickv = +20/1000  # mrad
-        self.wait_bbb = 9  # s
+        self.kickh = -25/1000  # [mrad]
+        self.kickv = +20/1000  # [mrad]
+        self.wait_bbb = 9  # [s]
+        self.betatron_freqh = 41300  # [Hz]
+        self.betatron_freqv = 80200  # [Hz]
+        self.chromh = 2.5
+        self.chromv = 2.5
+        self.espread = 9e-4
+        self.decay_model = 'exp'
+        self.sync_freq = 1800  # [Hz]
+        self.bandwidth = 5000  # [Hz]
+        self.filter_type = 'gauss'  # (gauss, sinc, noavg, none)
+        self.integer_tuneh = 0
+        self.integer_tunev = 0
         self.currents = _np.arange(0.05, 2.1, 0.1)  # mA
 
     def __str__(self):
         """."""
-        dtmp = '{0:10s} = {1:9d}  {2:s}\n'.format
-        ftmp = '{0:10s} = {1:9.3f}  {2:s}\n'.format
+        stmp = '{0:20s} = {1:9s}  {2:s}\n'.format
+        dtmp = '{0:20s} = {1:9.0f}  {2:s}\n'.format
+        ftmp = '{0:20s} = {1:9.3g}  {2:s}\n'.format
         ltmp = '{0:6.3f},'.format
         stg = ''
         stg += ftmp('kickh', self.kickh, '[mrad]')
         stg += ftmp('kickv', self.kickv, '[mrad]')
         stg += dtmp('wait_bbb', self.wait_bbb, '[s]')
+        stg += ftmp('betatron_freqh', self.betatron_freqh, '[Hz]')
+        stg += ftmp('betatron_freqv', self.betatron_freqv, '[Hz]')
+        stg += ftmp('chromh', self.chromh, '')
+        stg += ftmp('chromv', self.chromv, '')
+        stg += ftmp('espread', self.espread, '')
+        stg += stmp('decay_model', self.decay_model, '(exp, decoh)')
+        stg += ftmp('sync_freq', self.sync_freq, '[Hz]')
+        stg += ftmp('bandwidth', self.bandwidth, '[Hz]')
+        stg += stmp(
+            'filter_type', self.filter_type, '(gauss, sinc, noavg, none)')
+        stg += dtmp('integer_tuneh', self.integer_tuneh, '')
+        stg += dtmp('integer_tunev', self.integer_tunev, '')
         stg += f"{'currents':10s} = ("
         stg += ''.join(map(ltmp, self.currents))
         stg += ' ) [mA] \n'
@@ -1074,6 +1132,143 @@ class MeasTuneShift(_ThreadBaseClass):
         for key in data1:
             merge[key] = data1[key] + data2[key]
         return merge
+
+    @staticmethod
+    def process_data(data, params, plane='H'):
+        """."""
+        per_rev = params.REV_TIME
+
+        if isinstance(data, dict):
+            calib = params.CALIBRATION_FACTOR_V
+            if plane.upper() == 'H':
+                calib = params.CALIBRATION_FACTOR_H
+
+            current = data.get('stored_current', None)
+            if current is None:
+                current = data['current']
+            dataraw = data['data'].astype(float)
+            dataraw *= 1 / (calib * current)
+        else:
+            dataraw = data.astype(float)
+
+        # remove DC component from bunches
+        dataraw -= dataraw.mean()
+
+        # get the analytic data vector, via discrete hilbert transform
+        data_anal = _scysig.hilbert(dataraw).copy()
+
+        # calculate DFT:
+        data_dft = _np.fft.fft(data_anal)
+
+        time = _np.arange(data_anal.size) * per_rev
+        freq = _np.fft.fftfreq(data_anal.size, d=per_rev)
+        analysis = dict()
+        analysis['freq_dft'] = freq
+        analysis['time'] = time
+        analysis['bunch_data'] = data_anal
+        analysis['data_dft'] = data_dft
+        return analysis
+
+    @staticmethod
+    def filter_data(freq, data_dft, params, plane='H'):
+        """."""
+        sigma_freq = params.bandwidth
+        ftype = params.filter_type
+        center_freq = params.betatron_freqv
+        if plane.upper() == 'H':
+            center_freq = params.betatron_freqh
+
+        if ftype.lower().startswith('gauss'):
+            # Apply Gaussian filter to get only the synchrotron frequency
+            H = _np.exp(-(freq - center_freq)**2/2/sigma_freq**2)
+            H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
+            H /= H.max()
+            data_dft *= H
+        elif ftype.lower().startswith('sinc'):
+            indcsp = (freq > center_freq - sigma_freq)
+            indcsp &= (freq < center_freq + sigma_freq)
+            indcsn = (-freq > center_freq - sigma_freq)
+            indcsn &= (-freq < center_freq + sigma_freq)
+            indcs = indcsp | indcsn
+            data_dft[~indcs] = 0
+        elif ftype.lower().startswith('noavg'):
+            data_dft[freq == 0] = 0
+        return _np.fft.ifft(data_dft, axis=-1)
+
+    @classmethod
+    def fit_decay(
+            cls, times, data, params, t_ini=None, t_fin=None, plane='H',
+            fit_offset=True):
+        """Fit exponential function."""
+        model = params.decay_model
+        espread_fit = params.espread
+        synctune_fit = params.sync_freq * params.REV_TIME
+        chrom_fit = params.chromv
+        if plane.upper() == 'H':
+            chrom_fit = params.chromh
+
+        t_ini = t_ini or times.min()
+        t_fin = t_fin or times.max()
+        idx = (times >= t_ini) & (times <= t_fin)
+        tim = times[idx]
+        dtim = data[idx]
+
+        # method to estimate fitting parameters of
+        # y = a + b*exp(c*x)
+        # based on:
+        # https://www.scribd.com/doc/14674814/Regressions-et-equations-integrales
+        # pages 16-18
+        s = _scyint.cumtrapz(dtim, x=tim, initial=0.0)
+        ym = dtim - dtim[0]
+        xm = tim - tim[0]
+        mat = _np.array([xm, s]).T
+        (_, rate), *_ = _np.linalg.lstsq(mat, ym, rcond=None)
+        theta = _np.exp(rate*tim)
+        mat = _np.ones((theta.size, 2))
+        mat[:, 1] = theta
+        (off, amp), *_ = _np.linalg.lstsq(mat, dtim, rcond=None)
+
+        # Now use scipy to refine the estimatives:
+        if model.lower().startswith('exp'):
+            model = cls.model_exponential_func
+            coefs = [off, amp, rate]
+        else:
+            model = cls.model_decoherence_decay_func
+            chrom_decoh = 2 * chrom_fit * espread_fit / synctune_fit
+            coefs = [off, amp, rate, chrom_decoh, synctune_fit, -5]
+        try:
+            model = _partial(model, fit_offset=fit_offset)
+            coefs, _ = _scyopt.curve_fit(model, tim, dtim, p0=coefs)
+        except RuntimeError:
+            print("Curve fit didn't converge.")
+        fit = model(tim, *coefs)
+        return tim, coefs, fit
+
+    @staticmethod
+    def model_exponential_func(tim, off, amp, rate, fit_offset=True):
+        """Return exponential function with offset."""
+        if not fit_offset:
+            off = 0
+        return off + amp*_np.exp(rate*tim)
+
+    @staticmethod
+    def model_decoherence_decay_func(
+            tim, off, amp, rate, chrom_decoh, nus, phi, fit_offset=True):
+        """Return exponential decay with decoherence and offse."""
+        if not fit_offset:
+            off = 0
+        turns = _np.arange(tim.size) + phi
+        alp = chrom_decoh * _np.sin(_np.pi * nus * turns)
+        exp = _np.exp(rate*tim - alp**2/2.0)
+        return off + amp*exp
+
+    @staticmethod
+    def calc_instant_frequency(data, dtime):
+        """."""
+        freq = _np.unwrap(_np.angle(data))
+        freq = _np.gradient(freq, axis=-1)
+        freq /= 2*_np.pi*dtime
+        return freq
 
     def turn_on_pingers_pulse(self):
         """."""
@@ -1147,22 +1342,20 @@ class MeasTuneShift(_ThreadBaseClass):
         print('Finished!')
 
     def plot_spectrum(
-            self, plane, freq_min=None, freq_max=None, title=None,
-            fit_sync_freq=1.8, fit_bet_freq=43, fit_max_curr=0.6,
-            fit_min_curr=0.1,
-            cut_spec=None, fname=None):
+            self, plane, title=None, fit_max_curr=0.6, fit_min_curr=0.1,
+            cut_spec=None, ax=None):
         """plane: must be 'H' or 'V'."""
         plane = plane.upper()
         if plane == 'H':
             data = self.data['horizontal']
-            freq_min = freq_min or 38
-            freq_max = freq_max or 52
-        elif plane == 'V':
-            data = self.data['vertical']
-            freq_min = freq_min or 72
-            freq_max = freq_max or 84
+            freq_center = self.params.betatron_freqh
         else:
-            raise Exception("plane input must be 'H' or 'V'.")
+            data = self.data['vertical']
+            freq_center = self.params.betatron_freqv
+        freq_center /= 1000
+        freq_min = -self.params.bandwidth/1000
+        freq_max = self.params.bandwidth/1000
+        fit_sync_freq = self.params.sync_freq/1000
 
         def model(coefs, mag, freq, curr):
             lin_c = coefs[:3][:, None]
@@ -1182,7 +1375,7 @@ class MeasTuneShift(_ThreadBaseClass):
         curr = _np.array(self.data['stored_current'])
         mag = [dta['spec_mag'] for dta in data]
         mag = _np.array(mag, dtype=float)
-        freq = _np.array(data[-1]['spec_freq'])
+        freq = _np.array(data[-1]['spec_freq']) - freq_center
 
         idcs = (freq > freq_min) & (freq < freq_max)
         freq = freq[idcs]
@@ -1204,7 +1397,7 @@ class MeasTuneShift(_ThreadBaseClass):
         mag_fit = mag[idx, :]
         freq_fit = freq_[idx, :]
         curr_fit = curr_[idx, :]
-        lin_c0 = _np.arange(-1, 2) * fit_sync_freq + fit_bet_freq
+        lin_c0 = _np.arange(-1, 2) * fit_sync_freq
         ang_c0 = _np.zeros(3)
         x0 = _np.r_[lin_c0, ang_c0]
         opt = _scyopt.least_squares(
@@ -1218,7 +1411,8 @@ class MeasTuneShift(_ThreadBaseClass):
 
         tunes_fit = ang_c[:, None] * curr[None, :] + lin_c[:, None]
 
-        fig, ax = _mplt.subplots(figsize=(8, 6))
+        if ax is None:
+            _, ax = _mplt.subplots(figsize=(8, 6))
 
         ax.pcolormesh(curr_, freq_, 10*_np.log10(mag), shading='auto')
         lines = ax.plot(curr, tunes_fit.T, 'k')
@@ -1230,16 +1424,10 @@ class MeasTuneShift(_ThreadBaseClass):
                 f' + ({lin_c[i]:6.2f} ± {err_lin_c[i]:6.2f})')
             line.set_ls(ls_)
         ax.legend(loc='best', fontsize='xx-small')
-        ax.set_ylabel('Frequency [kHz]')
+        ax.set_ylabel(r'$\Delta$ Freq [kHz]')
         ax.set_xlabel('Current [mA]')
         ax.set_title(title)
-        fig.tight_layout()
-
-        if fname:
-            if not fname.endswith('.png'):
-                fname += '.png'
-            fig.savefig(fname, dpi=300)
-        return fig, mag, opt.x, opt
+        return ax, freq, mag, opt.x, opt
 
     def plot_time_evolution(self, plane, title=None, fname=None):
         """plane: must be 'H' or 'V'."""
