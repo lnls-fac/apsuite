@@ -59,7 +59,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         self.prbs_corrs_to_get_data = _np.ones(160, dtype=bool)
         # power supply current loop
         self.corr_currloop_kp = 5000000*_np.ones(160)
-        self.corr_currloop_ti = 2000*_np.ones(160)
+        self.corr_currloop_ki = 2000*_np.ones(160)
 
     def __str__(self):
         ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
@@ -111,7 +111,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         stg += stmp('prbs_bpmposy_lvl0', str(self.prbs_bpmposy_lvl0), '')
         stg += stmp('prbs_bpmposy_lvl1', str(self.prbs_bpmposy_lvl1), '')
         stg += stmp('corr_currloop_kp', str(self.corr_currloop_kp), '')
-        stg += stmp('corr_currloop_ti', str(self.corr_currloop_ti), '')
+        stg += stmp('corr_currloop_ki', str(self.corr_currloop_ki), '')
         return stg
 
 
@@ -288,18 +288,20 @@ class FOFBSysIdAcq(_BaseClass):
 
         if lvl1 is None:
             amp = _np.abs(lvl0)
-            # Scales the amplitude with its corresponding singular value (normalized
-            # to the lesser one). The amplitudes are saturated to 'ampmax'.
+            # Scales the amplitude with its corresponding singular value
+            # (normalized to the lesser one).
+            # The amplitudes are saturated to 'ampmax'.
             amp = min(amp * ss, ampmax)
             lvls0 = - amp * us
             lvls0x, lvls0y = lvls0[:SI_NUM_BPMS], lvls0[SI_NUM_BPMS:],
             return lvls0x, lvls0y
-        
+
         else:
             amp = (lvl1-lvl0)/2
             off = (lvl1+lvl0)/2
-            # Scales the amplitude with its corresponding singular value (normalized
-            # to the lesser one). The amplitudes are saturated to 'ampmax'.
+            # Scales the amplitude with its corresponding singular value
+            # (normalized to the lesser one).
+            # The amplitudes are saturated to 'ampmax'.
             amp = min(amp * ss, ampmax)
             lvls0 = off - amp * us
             lvls1 = off + amp * us
@@ -423,7 +425,7 @@ class FOFBSysIdAcq(_BaseClass):
         """Check whether data is valid."""
         return self.devices['famsysid'].check_data_valid()
 
-    def acquire_data(self):
+    def acquire_data(self, wait_time=None):
         """Acquire data."""
         ret = self.prepare_acquisition()
         if ret < 0:
@@ -436,6 +438,9 @@ class FOFBSysIdAcq(_BaseClass):
         self.devices['famsysid'].update_initial_timestamps(
             bpmenbl=self.params.prbs_bpms_to_get_data,
             correnbl=self.params.prbs_corrs_to_get_data)
+
+        if wait_time is not None:
+            _time.sleep(wait_time)
 
         self.trigger_timing_signal()
 
@@ -484,12 +489,20 @@ class FOFBSysIdAcq(_BaseClass):
         data['prbs_fofbacc_lvl0'] = famsysid.prbs_fofbacc_lvl0
         data['prbs_fofbacc_lvl1'] = famsysid.prbs_fofbacc_lvl1
         data['prbs_bpmpos_enbl'] = famsysid.prbs_bpmpos_enbl
-        data['prbs_bpmposx_lvl0_beam_order'] = _np.roll(famsysid.prbs_bpmposx_lvl0, -1)
-        data['prbs_bpmposx_lvl1_beam_order'] = _np.roll(famsysid.prbs_bpmposx_lvl1, -1)
-        data['prbs_bpmposy_lvl0_beam_order'] = _np.roll(famsysid.prbs_bpmposy_lvl0, -1)
-        data['prbs_bpmposy_lvl1_beam_order'] = _np.roll(famsysid.prbs_bpmposy_lvl1, -1)
+        data['prbs_bpmposx_lvl0_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposx_lvl0, -1
+            )
+        data['prbs_bpmposx_lvl1_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposx_lvl1, -1
+            )
+        data['prbs_bpmposy_lvl0_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposy_lvl0, -1
+            )
+        data['prbs_bpmposy_lvl1_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposy_lvl1, -1
+            )
         data['corr_currloop_kp'] = famsysid.currloop_kp
-        data['corr_currloop_ti'] = famsysid.currloop_ti
+        data['corr_currloop_ki'] = famsysid.currloop_ki
 
         # acquisition
         orbx, orby, currdata, kickdata = famsysid.get_data(
@@ -519,6 +532,7 @@ class FOFBSysIdAcq(_BaseClass):
         data['fofb_respmat'] = fofb.respmat
         data['fofb_respmat_mon'] = fofb.respmat_mon
         data['fofb_invrespmat_mon'] = fofb.invrespmat_mon
+        data['psconfig_mat'] = fofb.psconfig_mat
 
         # sofb
         sofb = self.devices['sofb']
