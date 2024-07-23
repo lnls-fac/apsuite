@@ -295,8 +295,8 @@ class RCDS(_Optimize):
         stg = '\n Finished! \n'
         stg += f'Number of iterations: {iter+1:04d}\n'
         stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
-        init_func = self.data['best_objfuncs'][0]
-        func_min = self.data['best_objfuncs'][-1]
+        init_func = self.best_objfuncs[0]
+        func_min = self.best_objfuncs[-1]
         stg += f'f_0 = {init_func:.3g}\n'
         stg += f'f_min = {func_min:.3g}\n'
         stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
@@ -413,14 +413,14 @@ class RCDS(_Optimize):
 
             hist_best_pos.append(pos_min)
             hist_best_func.append(func_min)
-            self.data['best_positions'] = self.params.denormalize_positions(
+            self.best_positions = self.params.denormalize_positions(
                 _np.array(hist_best_pos, ndmin=2))
-            self.data['best_objfuncs'] = _np.array(hist_best_func, ndmin=2)
+            self.best_objfuncs = hist_best_func
 
             _tmp_sdirs = self.params.denormalize_positions(
                 search_dirs, is_pos=False)
             _tmp_sdirs /= _np.linalg.norm(_tmp_sdirs, axis=0)
-            self.data['final_search_directions'] = _tmp_sdirs
+            self.final_search_directions = _tmp_sdirs
 
             # Numerical recipes does:
             # cond = 2*(func0-func_min) <= \
