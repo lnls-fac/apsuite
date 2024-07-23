@@ -18,7 +18,7 @@ class RCDSParams(_OptimizeParams):
         """."""
         super().__init__()
         self._boundary_policy = self.BoundaryPolicy.ToNaN
-        self.initial_stepsize = 0.1  # in normalized units.
+        self.initial_stepsize = 0.01  # in normalized units.
         self.noise_level = 0.0  # in units of the objective function.
         self.tolerance = 1e-5  # in relative units.
         self.orthogonality_threshold = 0.9
