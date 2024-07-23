@@ -211,8 +211,10 @@ class Optimize(_Base):
         self.use_thread = use_thread
 
         self._num_objective_evals = 0
+        self.evaluated_positions = []
         self.best_positions = _np.array([], ndmin=2)
         self.best_objfuncs = _np.array([], ndmin=2)
+        self.evaluated_objfuncs = []
 
     def to_dict(self) -> dict:
         """Dump all relevant object properties to dictionary.
@@ -224,7 +226,9 @@ class Optimize(_Base):
         dic = super().to_dict()
         dic['num_objective_evals'] = self.num_objective_evals
         dic['use_thread'] = self.use_thread
+        dic['evaluated_positions'] = self.evaluated_positions
         dic['best_positions'] = self.best_positions
+        dic['evaluated_objfuncs'] = self.evaluated_objfuncs
         dic['best_objfuncs'] = self.best_objfuncs
         return dic
 
@@ -242,7 +246,9 @@ class Optimize(_Base):
         super().from_dict(info)
         self._num_objective_evals = info['num_objective_evals']
         self.use_thread = info['use_thread']
+        self.evaluated_positions = info['evaluated_positions']
         self.best_positions = info['best_positions']
+        self.evaluated_objfuncs = info['evaluated_objfuncs']
         self.best_objfuncs = info['best_objfuncs']
 
     @property
