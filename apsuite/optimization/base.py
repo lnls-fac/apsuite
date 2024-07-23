@@ -295,6 +295,8 @@ class Optimize(_Base):
     def _objective_func(self, pos):
         self._num_objective_evals += 1
         pos = self.params.check_and_adjust_boundary(pos)
+        self.evaluated_positions.append(pos)
+
         res = []
         for posi in _np.array(pos, ndmin=2):
             if self._stopevt.is_set():
@@ -302,8 +304,13 @@ class Optimize(_Base):
             if _np.any(_np.isnan(posi)):
                 _log.warning('Position out of boundaries. Returning NaN.')
                 res.append(_np.nan)
-            res.append(self.objective_function(posi))
-        return _np.array(res)
+            else:
+                res.append(self.objective_function(posi))
+
+        res = _np.array(res)
+        res = res.item() if res.shape == (1, ) else res
+        self.evaluated_objfuncs.append(res)
+        return res
 
     def _target_func(self):
         if not self._initialization():

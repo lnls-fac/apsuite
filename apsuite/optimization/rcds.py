@@ -284,7 +284,7 @@ class RCDS(_Optimize):
 
     def _objective_func(self, pos):
         pos = self.params.denormalize_positions(pos)
-        return super()._objective_func(pos)[0]
+        return super()._objective_func(pos)
 
     def _initialization(self):
         """."""
