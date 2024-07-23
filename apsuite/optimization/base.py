@@ -215,6 +215,8 @@ class Optimize(_Base):
         self.best_positions = []
         self.evaluated_objfuncs = []
         self.best_objfuncs = []
+        self.cumulated_optimum = None
+        self.cumulated_optimum_pos = None
 
     def to_dict(self) -> dict:
         """Dump all relevant object properties to dictionary.
@@ -230,6 +232,8 @@ class Optimize(_Base):
         dic['best_positions'] = self.best_positions
         dic['evaluated_objfuncs'] = self.evaluated_objfuncs
         dic['best_objfuncs'] = self.best_objfuncs
+        dic['cumulated_optimum'] = self.cumulated_optimum
+        dic['cumulated_optimum_pos'] = self.cumulated_optimum_pos
         return dic
 
     def from_dict(self, info: dict):
@@ -250,6 +254,8 @@ class Optimize(_Base):
         self.best_positions = info['best_positions']
         self.evaluated_objfuncs = info['evaluated_objfuncs']
         self.best_objfuncs = info['best_objfuncs']
+        self.cumulated_optimum = info['cumulated_optimum']
+        self.cumulated_optimum_pos = info['cumulated_optimum_pos']
 
     @property
     def num_objective_evals(self):
@@ -285,12 +291,13 @@ class Optimize(_Base):
         """
         return True
 
-    def _finalization():
+    def _finalization(self):
         """To be called after optimization ends."""
         self.evaluated_objfuncs = _np.array(self.evaluated_objfuncs)
         self.best_objfuncs = _np.array(self.best_objfuncs)
         self.evaluated_positions = _np.array(self.evaluated_positions, ndmin=2)
         self.best_positions = _np.array(self.best_positions, ndmin=2)
+        self.get_cumulated_optimum()
 
     def _objective_func(self, pos):
         self._num_objective_evals += 1
@@ -322,3 +329,17 @@ class Optimize(_Base):
         except OptimizationAborted:
             _log.info('Exiting: stop event was set.')
         self._finalization()
+
+    def get_cumulated_optimum(self):
+        """Gives the cumulative optimum along several evaluations."""
+        funcs = self.evaluated_objfuncs.copy()
+        positions = self.evaluated_positions.copy()
+
+        for i in range(1, len(funcs[1:])):
+
+            if funcs[i] >= funcs[i-1]:
+                funcs[i] = funcs[i-1]
+                positions[i] = positions[i-1]
+
+        self.cumulated_optimum = funcs
+        self.cumulated_optimum_pos = positions
