@@ -301,6 +301,7 @@ class RCDS(_Optimize):
         stg += f'f_min = {func_min:.3g}\n'
         stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
         _log.info(stg)
+        super()._finalization()
 
     def _optimize(self):
         """Xiaobiao's version of Powell's direction search algorithm (RCDS).

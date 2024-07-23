@@ -212,9 +212,9 @@ class Optimize(_Base):
 
         self._num_objective_evals = 0
         self.evaluated_positions = []
-        self.best_positions = _np.array([], ndmin=2)
-        self.best_objfuncs = _np.array([], ndmin=2)
+        self.best_positions = []
         self.evaluated_objfuncs = []
+        self.best_objfuncs = []
 
     def to_dict(self) -> dict:
         """Dump all relevant object properties to dictionary.
@@ -287,7 +287,10 @@ class Optimize(_Base):
 
     def _finalization():
         """To be called after optimization ends."""
-        pass
+        self.evaluated_objfuncs = _np.array(self.evaluated_objfuncs)
+        self.best_objfuncs = _np.array(self.best_objfuncs)
+        self.evaluated_positions = _np.array(self.evaluated_positions, ndmin=2)
+        self.best_positions = _np.array(self.best_positions, ndmin=2)
 
     def _objective_func(self, pos):
         self._num_objective_evals += 1
