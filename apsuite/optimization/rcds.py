@@ -127,6 +127,8 @@ class RCDS(_Optimize):
         """."""
         super().__init__(
             RCDSParams(), use_thread=use_thread, isonline=isonline)
+        self.nr_iterations = 0
+        self.nr_evals_by_iter = []
 
     def bracketing_min(self, pos0, func0, dir, step):
         """Bracket the minimum.
@@ -292,16 +294,16 @@ class RCDS(_Optimize):
 
     def _finalization(self):
         """."""
+        super()._finalization()
         stg = '\n Finished! \n'
-        stg += f'Number of iterations: {iter+1:04d}\n'
+        stg += f'Number of iterations: {self.nr_iterations+1:04d}\n'
         stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
-        init_func = self.objfuncs_best[0]
-        func_min = self.objfuncs_best[-1]
+        init_func = self.objfuncs_evaluated[0]
+        func_min = self.objfuncs_cumulated_optimum[-1]
         stg += f'f_0 = {init_func:.3g}\n'
         stg += f'f_min = {func_min:.3g}\n'
         stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
         _log.info(stg)
-        super()._finalization()
 
     def _optimize(self):
         """Xiaobiao's version of Powell's direction search algorithm (RCDS).
@@ -329,9 +331,11 @@ class RCDS(_Optimize):
         _log.info(f'Starting Optimization. Initial ObjFun: {func0:.3g}')
         for iter in range(max_iters):
             _log.info(f'\nIteration {iter+1:04d}/{max_iters:04d}')
+
             max_decr = 0
             max_decr_dir = 0
 
+            nr_evaluations = len(self.objfuncs_evaluated)
             # NOTE: where does this step division come from?
             # Not in numerical recipes. Check Powell' method again!
             step /= 1.20
@@ -441,6 +445,9 @@ class RCDS(_Optimize):
 
             func0 = func_min
             pos0 = pos_min
+            self.nr_iterations = iter + 1
+            evals_by_iter = len(self.objfuncs_evaluated) - nr_evaluations
+            self.nr_evals_by_iter.append(evals_by_iter)
             _log.info(
                 f'End of iteration {iter+1:04d}: '
                 f'Final ObjFun = {func_min:.3g}')
