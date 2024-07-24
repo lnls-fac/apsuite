@@ -90,12 +90,12 @@ class OptimizePosAng(_RCDS, _BaseClass):
 
     def save_optimization_data(self, fname, apply_machine=False):
         """."""
-        self.data['best_positions'] = self.best_positions
-        self.data['best_objfuncs'] = self.best_objfuncs
+        self.data['positions_best'] = self.positions_best
+        self.data['objfuncs_best'] = self.objfuncs_best
         self.data['final_search_directions'] = self.final_search_directions
 
         if apply_machine:
-            self.apply_changes(self.best_positions[-1])
+            self.apply_changes(self.positions_best[-1])
         self.save_data(fname)
 
     def _create_devices(self):
