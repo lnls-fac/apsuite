@@ -211,12 +211,12 @@ class Optimize(_Base):
         self.use_thread = use_thread
 
         self._num_objective_evals = 0
-        self.evaluated_positions = []
-        self.best_positions = []
-        self.evaluated_objfuncs = []
-        self.best_objfuncs = []
-        self.cumulated_optimum = None
-        self.cumulated_optimum_pos = None
+        self.positions_evaluated = []
+        self.positions_best = []
+        self.positions_cumulated_optimum = None
+        self.objfuncs_evaluated = []
+        self.objfuncs_best = []
+        self.objfuncs_cumulated_optimum = None
 
     def to_dict(self) -> dict:
         """Dump all relevant object properties to dictionary.
@@ -228,12 +228,12 @@ class Optimize(_Base):
         dic = super().to_dict()
         dic['num_objective_evals'] = self.num_objective_evals
         dic['use_thread'] = self.use_thread
-        dic['evaluated_positions'] = self.evaluated_positions
-        dic['best_positions'] = self.best_positions
-        dic['evaluated_objfuncs'] = self.evaluated_objfuncs
-        dic['best_objfuncs'] = self.best_objfuncs
-        dic['cumulated_optimum'] = self.cumulated_optimum
-        dic['cumulated_optimum_pos'] = self.cumulated_optimum_pos
+        dic['positions_evaluated'] = self.positions_evaluated
+        dic['positions_best'] = self.positions_best
+        dic['positions_cumulated_optimum'] = self.positions_cumulated_optimum
+        dic['objfuncs_evaluated'] = self.objfuncs_evaluated
+        dic['objfuncs_best'] = self.objfuncs_best
+        dic['objfuncs_cumulated_optimum'] = self.objfuncs_cumulated_optimum
         return dic
 
     def from_dict(self, info: dict):
@@ -250,12 +250,12 @@ class Optimize(_Base):
         super().from_dict(info)
         self._num_objective_evals = info['num_objective_evals']
         self.use_thread = info['use_thread']
-        self.evaluated_positions = info['evaluated_positions']
-        self.best_positions = info['best_positions']
-        self.evaluated_objfuncs = info['evaluated_objfuncs']
-        self.best_objfuncs = info['best_objfuncs']
-        self.cumulated_optimum = info['cumulated_optimum']
-        self.cumulated_optimum_pos = info['cumulated_optimum_pos']
+        self.positions_evaluated = info['positions_evaluated']
+        self.positions_best = info['positions_best']
+        self.positions_cumulated_optimum = info['positions_cumulated_optimum']
+        self.objfuncs_evaluated = info['objfuncs_evaluated']
+        self.objfuncs_best = info['objfuncs_best']
+        self.objfuncs_cumulated_optimum = info['objfuncs_cumulated_optimum']
 
     @property
     def num_objective_evals(self):
@@ -293,16 +293,16 @@ class Optimize(_Base):
 
     def _finalization(self):
         """To be called after optimization ends."""
-        self.evaluated_objfuncs = _np.array(self.evaluated_objfuncs)
-        self.best_objfuncs = _np.array(self.best_objfuncs)
-        self.evaluated_positions = _np.array(self.evaluated_positions, ndmin=2)
-        self.best_positions = _np.array(self.best_positions, ndmin=2)
+        self.objfuncs_evaluated = _np.array(self.objfuncs_evaluated)
+        self.objfuncs_best = _np.array(self.objfuncs_best)
+        self.positions_evaluated = _np.array(self.positions_evaluated, ndmin=2)
+        self.positions_best = _np.array(self.positions_best, ndmin=2)
         self.get_cumulated_optimum()
 
     def _objective_func(self, pos):
         self._num_objective_evals += 1
         pos = self.params.check_and_adjust_boundary(pos)
-        self.evaluated_positions.append(pos)
+        self.positions_evaluated.append(pos)
 
         res = []
         for posi in _np.array(pos, ndmin=2):
@@ -316,7 +316,7 @@ class Optimize(_Base):
 
         res = _np.array(res)
         res = res.item() if res.shape == (1, ) else res
-        self.evaluated_objfuncs.append(res)
+        self.objfuncs_evaluated.append(res)
         return res
 
     def _target_func(self):
@@ -332,8 +332,8 @@ class Optimize(_Base):
 
     def get_cumulated_optimum(self):
         """Gives the cumulative optimum along several evaluations."""
-        funcs = self.evaluated_objfuncs.copy()
-        positions = self.evaluated_positions.copy()
+        funcs = self.objfuncs_evaluated.copy()
+        positions = self.positions_evaluated.copy()
 
         for i in range(1, len(funcs[1:])):
 
@@ -341,5 +341,5 @@ class Optimize(_Base):
                 funcs[i] = funcs[i-1]
                 positions[i] = positions[i-1]
 
-        self.cumulated_optimum = funcs
-        self.cumulated_optimum_pos = positions
+        self.objfuncs_cumulated_optimum = funcs
+        self.positions_cumulated_optimum = positions

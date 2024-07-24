@@ -295,8 +295,8 @@ class RCDS(_Optimize):
         stg = '\n Finished! \n'
         stg += f'Number of iterations: {iter+1:04d}\n'
         stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
-        init_func = self.best_objfuncs[0]
-        func_min = self.best_objfuncs[-1]
+        init_func = self.objfuncs_best[0]
+        func_min = self.objfuncs_best[-1]
         stg += f'f_0 = {init_func:.3g}\n'
         stg += f'f_min = {func_min:.3g}\n'
         stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
@@ -414,9 +414,9 @@ class RCDS(_Optimize):
 
             hist_best_pos.append(pos_min)
             hist_best_func.append(func_min)
-            self.best_positions = self.params.denormalize_positions(
+            self.positions_best = self.params.denormalize_positions(
                 _np.array(hist_best_pos, ndmin=2))
-            self.best_objfuncs = hist_best_func
+            self.objfuncs_best = hist_best_func
 
             _tmp_sdirs = self.params.denormalize_positions(
                 search_dirs, is_pos=False)
