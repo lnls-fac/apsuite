@@ -299,7 +299,6 @@ class Optimize(_Base):
         self._num_objective_evals += 1
         pos = self.params.check_and_adjust_boundary(pos)
         self.positions_evaluated.append(pos)
-
         res = []
         for posi in _np.array(pos, ndmin=2):
             if self._stopevt.is_set():
@@ -309,9 +308,19 @@ class Optimize(_Base):
                 res.append(_np.nan)
             else:
                 res.append(self.objective_function(posi))
-
         res = _np.array(res)
-        res = res.item() if res.shape == (1, ) else res
+        # the objective function is a (n,m)-array
+        # for n populations & m objectives
+
+        if res.ndim == 1:
+            res.shape = (res.size, 1)
+            # single-obj, multi-population, return column array
+        if res.shape[0] == 1:
+            res = res[0]
+            # single-population, return row array
+            if res.size == 1:
+                res = res[0]
+                # single-obj, single-population, return a scalar
         self.objfuncs_evaluated.append(res)
         return res
 
