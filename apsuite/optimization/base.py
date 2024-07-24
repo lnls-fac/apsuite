@@ -293,10 +293,6 @@ class Optimize(_Base):
 
     def _finalization(self):
         """To be called after optimization ends."""
-        self.objfuncs_evaluated = _np.array(self.objfuncs_evaluated)
-        self.objfuncs_best = _np.array(self.objfuncs_best)
-        self.positions_evaluated = _np.array(self.positions_evaluated, ndmin=2)
-        self.positions_best = _np.array(self.positions_best, ndmin=2)
         self.get_cumulated_optimum()
 
     def _objective_func(self, pos):
