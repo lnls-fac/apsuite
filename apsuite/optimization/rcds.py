@@ -528,6 +528,49 @@ class RCDS(_Optimize):
 
         return fig, axs
 
+    def plot_knobspace_slice(self, knobs_idcs=(0, 1)):
+        """Plot slice of parameter space (knobs space).
+
+        Args:
+            knobs_idcs (tuple, list): Indices of the desired knobs . Defaults
+            to (0, 1).
+
+        Returns:
+            fig, ax: matplotlib fig and ax
+        """
+        idx1, idx2 = knobs_idcs
+        pos_eval = _np.array(self.positions_evaluated)
+        objfuncs_eval = _np.array(self.objfuncs_evaluated)
+        _, pos_cum_opt, _ = self.get_cumulated_optimum()
+
+        knob1_eval = pos_eval[:, idx1]
+        knob2_eval = pos_eval[:, idx2]
+
+        knob1_cum_opt = pos_cum_opt[:, idx1]
+        knob2_cum_opt = pos_cum_opt[:, idx2]
+
+        fig, ax = _mplt.subplots()
+        scatter = ax.scatter(
+            x=knob1_eval, y=knob2_eval,
+            c=objfuncs_eval,
+            vmin=objfuncs_eval.min(),
+            vmax=objfuncs_eval.max(),
+        )
+
+        ax.scatter(
+            x=knob1_cum_opt,
+            y=knob2_cum_opt,
+            marker='x', color='red'
+        )
+
+        ax.set_xlabel(f"knob {idx1}")
+        ax.set_ylabel(f"knob {idx2}")
+
+        colorbar = fig.colorbar(scatter, ax=ax)
+        colorbar.set_label('objective function value')
+
+        return fig, ax
+
     def get_cumulated_optimum(self):
         """Gives the accumulated optimum values & positions.
 
