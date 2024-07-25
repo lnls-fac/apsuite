@@ -213,10 +213,9 @@ class Optimize(_Base):
         self._num_objective_evals = 0
         self.positions_evaluated = []
         self.positions_best = []
-        self.positions_cumulated_optimum = None
         self.objfuncs_evaluated = []
         self.objfuncs_best = []
-        self.objfuncs_cumulated_optimum = None
+        self.idcs_cumulated_optimum = None
 
     def to_dict(self) -> dict:
         """Dump all relevant object properties to dictionary.
@@ -230,10 +229,10 @@ class Optimize(_Base):
         dic['use_thread'] = self.use_thread
         dic['positions_evaluated'] = self.positions_evaluated
         dic['positions_best'] = self.positions_best
-        dic['positions_cumulated_optimum'] = self.positions_cumulated_optimum
         dic['objfuncs_evaluated'] = self.objfuncs_evaluated
         dic['objfuncs_best'] = self.objfuncs_best
-        dic['objfuncs_cumulated_optimum'] = self.objfuncs_cumulated_optimum
+        dic['idcs_cumulated_optimum'] = self.idcs_cumulated_optimum
+
         return dic
 
     def from_dict(self, info: dict):
@@ -252,10 +251,9 @@ class Optimize(_Base):
         self.use_thread = info['use_thread']
         self.positions_evaluated = info['positions_evaluated']
         self.positions_best = info['positions_best']
-        self.positions_cumulated_optimum = info['positions_cumulated_optimum']
         self.objfuncs_evaluated = info['objfuncs_evaluated']
         self.objfuncs_best = info['objfuncs_best']
-        self.objfuncs_cumulated_optimum = info['objfuncs_cumulated_optimum']
+        self.idcs_cumulated_optimum = info["idcs_cumulated_optimum"]
 
     @property
     def num_objective_evals(self):
@@ -293,7 +291,7 @@ class Optimize(_Base):
 
     def _finalization(self):
         """To be called after optimization ends."""
-        self.get_cumulated_optimum()
+        pass
 
     def _objective_func(self, pos):
         self._num_objective_evals += 1
@@ -335,16 +333,18 @@ class Optimize(_Base):
             _log.info('Exiting: stop event was set.')
         self._finalization()
 
-    def get_cumulated_optimum(self):
-        """Gives the cumulative optimum along several evaluations."""
-        funcs = self.objfuncs_evaluated.copy()
-        positions = self.positions_evaluated.copy()
+    def _get_cumulated_optimum_indices(self):
+        """Calulates the indices of the optimum.
 
-        for i in range(1, len(funcs[1:])):
+        self.idcs_cumulated_optimum is an m-array with the accumulated optimum
+        indices along the `self.objfuncs_evaluated` list.
+        """
+        funcs = _np.array(self.objfuncs_evaluated)
 
-            if funcs[i] >= funcs[i-1]:
-                funcs[i] = funcs[i-1]
-                positions[i] = positions[i-1]
+        optima = []
+        for i in range(len(funcs)):
+            funcsi = funcs[:i+1]
+            funcsi = funcsi[~_np.isnan(funcsi)]
+            optima.append(funcsi.min())
 
-        self.objfuncs_cumulated_optimum = funcs
-        self.positions_cumulated_optimum = positions
+        self.idcs_cumulated_optimum = _np.isin(funcs, optima).nonzero()[0]
