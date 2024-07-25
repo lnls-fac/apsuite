@@ -294,12 +294,13 @@ class RCDS(_Optimize):
 
     def _finalization(self):
         """."""
-        super()._finalization()
+        self._get_cumulated_optimum_indices()
+        idx = self.cumulated_optimum_idcs[-1]
         stg = '\n Finished! \n'
         stg += f'Number of iterations: {self.nr_iterations+1:04d}\n'
         stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
         init_func = self.objfuncs_evaluated[0]
-        func_min = self.objfuncs_cumulated_optimum[-1]
+        func_min = self.objfuncs_evaluated[idx]
         stg += f'f_0 = {init_func:.3g}\n'
         stg += f'f_min = {func_min:.3g}\n'
         stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
@@ -451,3 +452,32 @@ class RCDS(_Optimize):
             _log.info(
                 f'End of iteration {iter+1:04d}: '
                 f'Final ObjFun = {func_min:.3g}')
+
+    def get_cumulated_optimum(self):
+        """Gives the accumulated optimum values & positions.
+
+        Assumes `objfuncs_evaluated` has the structure of a single-objective,
+        single-popoulation algorithm, i.e., it is a simple list of scalars.
+
+        Returns:
+            idcs (m-array): the indices of the m cumulated optima. Repeats the
+            last optimum.
+
+            pos ((m, n)-array): the m n-dimensional positions of the cumulated
+            minima.
+
+            vals (m-array): the values of the objective function at the m
+            cumulated minima.
+        """
+        if self.cumulated_optimum_idcs is None:
+            self._get_cumulated_optimum_indices()
+        evals = self.num_objective_evals
+        idcs = self.cumulated_optimum_idcs
+        idcs = _np.append(idcs, evals - 1) if idcs[-1] != evals - 1 else idcs
+
+        vals = _np.array(self.objfuncs_evaluated)[idcs]
+        vals[-1] = vals[-2]
+        pos = _np.array(self.positions_evaluated)[idcs]
+        pos[-1] = pos[-2]
+
+        return idcs, pos, vals
