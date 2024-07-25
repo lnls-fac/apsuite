@@ -2,6 +2,7 @@
 import logging as _log
 
 import numpy as _np
+import matplotlib.pyplot as _mplt
 
 from mathphys.functions import get_namedtuple as _get_namedtuple
 
@@ -452,6 +453,80 @@ class RCDS(_Optimize):
             _log.info(
                 f'End of iteration {iter+1:04d}: '
                 f'Final ObjFun = {func_min:.3g}')
+
+    def plot_history(self, show_iters=True, log=False):
+        """Plot the history of obj. func. and knobs throughout evaluations.
+
+        Args:
+            show_iters (bool, optional): plot vertical bars signaling an
+            iteration. Defaults to True.
+
+            log (bool, optional): whether to display the obj func plot in log
+            scale. Defaults to False.
+
+        Returns:
+            fig, ax: matplolib figure and axes
+        """
+        idcs, pos_cum_opt, objfuncs_cum_opt = self.get_cumulated_optimum()
+
+        fig, axs = _mplt.subplots(2, 1, figsize=(12, 12), sharex=True)
+        ax = axs[0]
+        ax.plot(
+            self.objfuncs_evaluated,
+            color="C0", alpha=0.4,
+            label="evaluations",
+        )
+        ax.plot(
+            idcs, objfuncs_cum_opt,
+            "o-", mfc="none",
+            color="C0",
+            label="cumulative optimum",
+        )
+        ax.set_ylabel("objective function")
+        ax.set_xlabel("evaluations")
+
+        if show_iters:
+            ymin, ymax = ax.get_ylim()
+            ax.vlines(
+                x=_np.cumsum(self.nr_evals_by_iter),
+                ymin=ymin, ymax=ymax,
+                colors="gray", alpha=0.2,
+                label="new iteration",
+            )
+        if log:
+            ax.set_yscale("log")
+        ax.legend()
+
+        ax = axs[1]
+        colors = _mplt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+        for i, knob in enumerate(_np.array(self.positions_evaluated).T):
+            color = colors[i % len(colors)]
+
+            ax.plot(knob, alpha=0.4, color=color)
+            ax.plot(
+                idcs,
+                pos_cum_opt[:, i],
+                "o-", mfc="none",
+                color=color,
+                label=f"knob {i:2d}"
+            )
+
+        if show_iters:
+            ymin, ymax = ax.get_ylim()
+            ax.vlines(
+                x=_np.cumsum(self.nr_evals_by_iter),
+                ymin=ymin, ymax=ymax,
+                colors="gray", alpha=0.2)
+
+        ax.set_ylabel("knobs")
+        ax.set_xlabel("evaluations")
+        ax.legend()
+
+        fig.tight_layout()
+        fig.show()
+
+        return fig, axs
 
     def get_cumulated_optimum(self):
         """Gives the accumulated optimum values & positions.

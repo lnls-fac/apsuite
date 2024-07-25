@@ -278,6 +278,10 @@ class Optimize(_Base):
         """Implement here the objective function."""
         raise NotImplementedError()
 
+    def plot_history():
+        """Implement visualization of the optimzation history."""
+        raise NotImplementedError()
+
     def _optimize(self):
         """Implement here optimization algorithm."""
         raise NotImplementedError()
