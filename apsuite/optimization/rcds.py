@@ -296,7 +296,7 @@ class RCDS(_Optimize):
     def _finalization(self):
         """."""
         self._get_cumulated_optimum_indices()
-        idx = self.cumulated_optimum_idcs[-1]
+        idx = self.idcs_cumulated_optimum[-1]
         stg = '\n Finished! \n'
         stg += f'Number of iterations: {self.nr_iterations+1:04d}\n'
         stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
@@ -587,10 +587,10 @@ class RCDS(_Optimize):
             vals (m-array): the values of the objective function at the m
             cumulated minima.
         """
-        if self.cumulated_optimum_idcs is None:
+        if self.idcs_cumulated_optimum is None:
             self._get_cumulated_optimum_indices()
         evals = self.num_objective_evals
-        idcs = self.cumulated_optimum_idcs
+        idcs = self.idcs_cumulated_optimum
         idcs = _np.append(idcs, evals - 1) if idcs[-1] != evals - 1 else idcs
 
         vals = _np.array(self.objfuncs_evaluated)[idcs]
