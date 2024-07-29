@@ -458,7 +458,7 @@ class RCDS(_Optimize):
         """Plot the history of obj. func. and knobs throughout evaluations.
 
         Args:
-            show_iters (bool, optional): plot vertical bars signaling an
+            show_iters (bool, optional): plot vertical bars signaling an RCDS
             iteration. Defaults to True.
 
             log (bool, optional): whether to display the obj func plot in log
@@ -478,7 +478,7 @@ class RCDS(_Optimize):
         )
         ax.plot(
             idcs, objfuncs_cum_opt,
-            "o-", mfc="none",
+            "o", mfc="none",
             color="C0",
             label="cumulative optimum",
         )
@@ -507,7 +507,7 @@ class RCDS(_Optimize):
             ax.plot(
                 idcs,
                 pos_cum_opt[:, i],
-                "o-", mfc="none",
+                "o", mfc="none",
                 color=color,
                 label=f"knob {i:2d}"
             )
@@ -572,7 +572,7 @@ class RCDS(_Optimize):
         return fig, ax
 
     def get_cumulated_optimum(self):
-        """Gives the accumulated optimum values & positions.
+        """Get the accumulated optima values & positions.
 
         Assumes `objfuncs_evaluated` has the structure of a single-objective,
         single-popoulation algorithm, i.e., it is a simple list of scalars.
@@ -589,13 +589,9 @@ class RCDS(_Optimize):
         """
         if self.idcs_cumulated_optimum is None:
             self._get_cumulated_optimum_indices()
-        evals = self.num_objective_evals
         idcs = self.idcs_cumulated_optimum
-        idcs = _np.append(idcs, evals - 1) if idcs[-1] != evals - 1 else idcs
 
         vals = _np.array(self.objfuncs_evaluated)[idcs]
-        vals[-1] = vals[-2]
         pos = _np.array(self.positions_evaluated)[idcs]
-        pos[-1] = pos[-2]
 
         return idcs, pos, vals

@@ -338,10 +338,12 @@ class Optimize(_Base):
         self._finalization()
 
     def _get_cumulated_optimum_indices(self):
-        """Calulates the indices of the optimum.
+        """Get the indices of the optima found during objfunc evaluations.
 
         self.idcs_cumulated_optimum is an m-array with the accumulated optimum
-        indices along the `self.objfuncs_evaluated` list.
+        indices along the `self.objfuncs_evaluated` list. Assumes
+        single-objective, single-population optimzation algorithms, i.e.
+        `self.objfuncs_evaluated` is a list of scalar values.
         """
         funcs = _np.array(self.objfuncs_evaluated)
 
