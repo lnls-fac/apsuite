@@ -130,6 +130,22 @@ class RCDS(_Optimize):
             RCDSParams(), use_thread=use_thread, isonline=isonline)
         self.num_iterations = 0
         self.num_evals_by_iter = []
+        self.final_search_directions = None
+
+    def to_dict(self) -> dict:
+        """."""
+        dic = super().to_dict()
+        dic['num_iterations'] = self.num_iterations
+        dic['num_evals_by_iter'] = self.num_evals_by_iter
+        dic['final_search_directions'] = self.final_search_directions
+        return dic
+
+    def from_dict(self, info: dict):
+        """."""
+        super().from_dict(info)
+        self.num_iterations = info['num_iterations']
+        self.num_evals_by_iter = info['num_evals_by_iter']
+        self.final_search_directions = info['final_search_directions']
 
     def bracketing_min(self, pos0, func0, dir, step):
         """Bracket the minimum.
