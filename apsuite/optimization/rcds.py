@@ -128,8 +128,8 @@ class RCDS(_Optimize):
         """."""
         super().__init__(
             RCDSParams(), use_thread=use_thread, isonline=isonline)
-        self.nr_iterations = 0
-        self.nr_evals_by_iter = []
+        self.num_iterations = 0
+        self.num_evals_by_iter = []
 
     def bracketing_min(self, pos0, func0, dir, step):
         """Bracket the minimum.
@@ -298,7 +298,7 @@ class RCDS(_Optimize):
         self._get_cumulated_optimum_indices()
         idx = self.idcs_cumulated_optimum[-1]
         stg = '\n Finished! \n'
-        stg += f'Number of iterations: {self.nr_iterations+1:04d}\n'
+        stg += f'Number of iterations: {self.num_iterations+1:04d}\n'
         stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
         init_func = self.objfuncs_evaluated[0]
         func_min = self.objfuncs_evaluated[idx]
@@ -337,7 +337,7 @@ class RCDS(_Optimize):
             max_decr = 0
             max_decr_dir = 0
 
-            nr_evaluations = len(self.objfuncs_evaluated)
+            num_evaluations = len(self.objfuncs_evaluated)
             # NOTE: where does this step division come from?
             # Not in numerical recipes. Check Powell' method again!
             step /= 1.20
@@ -447,9 +447,9 @@ class RCDS(_Optimize):
 
             func0 = func_min
             pos0 = pos_min
-            self.nr_iterations = iter + 1
-            evals_by_iter = len(self.objfuncs_evaluated) - nr_evaluations
-            self.nr_evals_by_iter.append(evals_by_iter)
+            self.num_iterations = iter + 1
+            evals_by_iter = len(self.objfuncs_evaluated) - num_evaluations
+            self.num_evals_by_iter.append(evals_by_iter)
             _log.info(
                 f'End of iteration {iter+1:04d}: '
                 f'Final ObjFun = {func_min:.3g}')
@@ -488,7 +488,7 @@ class RCDS(_Optimize):
         if show_iters:
             ymin, ymax = ax.get_ylim()
             ax.vlines(
-                x=_np.cumsum(self.nr_evals_by_iter),
+                x=_np.cumsum(self.num_evals_by_iter),
                 ymin=ymin, ymax=ymax,
                 colors="gray", alpha=0.2,
                 label="new iteration",
@@ -515,7 +515,7 @@ class RCDS(_Optimize):
         if show_iters:
             ymin, ymax = ax.get_ylim()
             ax.vlines(
-                x=_np.cumsum(self.nr_evals_by_iter),
+                x=_np.cumsum(self.num_evals_by_iter),
                 ymin=ymin, ymax=ymax,
                 colors="gray", alpha=0.2)
 
