@@ -472,47 +472,44 @@ class RCDS(_Optimize):
             if break_loop:
                 break
 
-    def plot_history(self, show_iters=True, log=False):
+    def plot_history(self):
         """Plot the history of obj. func. and knobs throughout evaluations.
 
-        Args:
-            show_iters (bool, optional): plot vertical bars signaling an RCDS
-            iteration. Defaults to True.
-
-            log (bool, optional): whether to display the obj func plot in log
-            scale. Defaults to False.
+        Objective function values and knobs values during evaluations are
+        shown in solid lines with transparency, circular markers with no
+        filling signal cumulative optima found during the evaluations and solid
+        filling circular markers refer to RCDS parabolic model inferences at
+        the end of an iteration (guess for the optimum).
 
         Returns:
             fig, ax: matplolib figure and axes
         """
-        idcs, pos_cum_opt, objfuncs_cum_opt = self.get_cumulated_optimum()
+        opt_idcs, pos_cum_opt, objfuncs_cum_opt = self.get_cumulated_optimum()
+        iters_idcs = _np.concatenate(([0], _np.cumsum(self.num_evals_by_iter)))
 
         fig, axs = _mplt.subplots(2, 1, figsize=(12, 12), sharex=True)
         ax = axs[0]
         ax.plot(
             self.objfuncs_evaluated,
             color="C0", alpha=0.4,
-            label="evaluations",
+            label="evaluation",
         )
         ax.plot(
-            idcs, objfuncs_cum_opt,
+            opt_idcs, objfuncs_cum_opt,
             "o", mfc="none",
             color="C0",
-            label="cumulative optimum",
+            label="cumulated optima",
         )
+
+        ax.plot(
+            iters_idcs,
+            self.objfuncs_best,
+            "o", color="C0",
+            label="end of iter. optima")
+
         ax.set_ylabel("objective function")
         ax.set_xlabel("evaluations")
 
-        if show_iters:
-            ymin, ymax = ax.get_ylim()
-            ax.vlines(
-                x=_np.cumsum(self.num_evals_by_iter),
-                ymin=ymin, ymax=ymax,
-                colors="gray", alpha=0.2,
-                label="new iteration",
-            )
-        if log:
-            ax.set_yscale("log")
         ax.legend()
 
         ax = axs[1]
@@ -523,19 +520,19 @@ class RCDS(_Optimize):
 
             ax.plot(knob, alpha=0.4, color=color)
             ax.plot(
-                idcs,
+                opt_idcs,
                 pos_cum_opt[:, i],
                 "o", mfc="none",
                 color=color,
-                label=f"knob {i:2d}"
-            )
+                label=f"knob {i:2d} - cumulated optima."
 
-        if show_iters:
-            ymin, ymax = ax.get_ylim()
-            ax.vlines(
-                x=_np.cumsum(self.num_evals_by_iter),
-                ymin=ymin, ymax=ymax,
-                colors="gray", alpha=0.2)
+            )
+            ax.plot(
+                iters_idcs,
+                self.positions_best[:, i], 'o',
+                color=color,
+                label=f"knob {i:2d} - end of iter."
+                )
 
         ax.set_ylabel("knobs")
         ax.set_xlabel("evaluations")
