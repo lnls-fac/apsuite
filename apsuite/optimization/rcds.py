@@ -349,7 +349,7 @@ class RCDS(_Optimize):
         _log.info(f'Starting Optimization. Initial ObjFun: {func0:.3g}')
         for iter in range(max_iters):
             _log.info(f'\nIteration {iter+1:04d}/{max_iters:04d}')
-
+            break_loop = False
             max_decr = 0
             max_decr_dir = 0
 
@@ -454,12 +454,12 @@ class RCDS(_Optimize):
                 _log.info(
                     f'Exiting: Init ObjFun = {func0:.3g},  '
                     f'Final ObjFun = {func_min:.3g}')
-                break
+                break_loop = True
             elif self._stopevt.is_set():
-                break
+                break_loop = True
             elif self._num_objective_evals > max_evals:
                 _log.info('Exiting: Maximum number of evaluations reached.')
-                break
+                break_loop = True
 
             func0 = func_min
             pos0 = pos_min
@@ -469,6 +469,8 @@ class RCDS(_Optimize):
             _log.info(
                 f'End of iteration {iter+1:04d}: '
                 f'Final ObjFun = {func_min:.3g}')
+            if break_loop:
+                break
 
     def plot_history(self, show_iters=True, log=False):
         """Plot the history of obj. func. and knobs throughout evaluations.
