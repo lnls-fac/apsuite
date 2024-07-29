@@ -298,7 +298,7 @@ class RCDS(_Optimize):
         self._get_cumulated_optimum_indices()
         idx = self.idcs_cumulated_optimum[-1]
         stg = '\n Finished! \n'
-        stg += f'Number of iterations: {self.num_iterations+1:04d}\n'
+        stg += f'Number of iterations: {self.num_iterations:04d}\n'
         stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
         init_func = self.objfuncs_evaluated[0]
         func_min = self.objfuncs_evaluated[idx]
