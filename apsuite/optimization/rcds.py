@@ -487,7 +487,7 @@ class RCDS(_Optimize):
         opt_idcs, pos_cum_opt, objfuncs_cum_opt = self.get_cumulated_optimum()
         iters_idcs = _np.concatenate(([0], _np.cumsum(self.num_evals_by_iter)))
 
-        fig, axs = _mplt.subplots(2, 1, figsize=(12, 12), sharex=True)
+        fig, axs = _mplt.subplots(2, 1, figsize=(10, 10), sharex=True)
         ax = axs[0]
         ax.plot(
             self.objfuncs_evaluated,
@@ -592,6 +592,14 @@ class RCDS(_Optimize):
             knob2_enditer,
             "x", color="red",
             label="end of iter. optima"
+        )
+
+        ax.plot(
+            knob1_enditer[-1],
+            knob2_enditer[-1],
+            "d", color="magenta",
+            markersize=10,
+            label="end of run optimum"
         )
 
         ax.set_xlabel(f"dir {idx1 + 1}")
