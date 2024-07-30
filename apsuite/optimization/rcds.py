@@ -524,17 +524,17 @@ class RCDS(_Optimize):
                 pos_cum_opt[:, i],
                 "o", mfc="none",
                 color=color,
-                label=f"knob {i:2d} - cumulated optima."
+                label=f"dir {i + 1:2d} - cumulated optima"
 
             )
             ax.plot(
                 iters_idcs,
                 self.positions_best[:, i], 'o',
                 color=color,
-                label=f"knob {i:2d} - end of iter."
+                label=f"dir {i + 1:2d} - end of iter. optima"
                 )
 
-        ax.set_ylabel("knobs")
+        ax.set_ylabel("knobs values")
         ax.set_xlabel("evaluations")
         ax.legend()
 
@@ -543,18 +543,22 @@ class RCDS(_Optimize):
 
         return fig, axs
 
-    def plot_knobspace_slice(self, knobs_idcs=(0, 1)):
+    def plot_knobspace_slice(self, dir_idcs=(1, 2)):
         """Plot slice of parameter space (knobs space).
 
         Args:
-            knobs_idcs (tuple, list): Indices of the desired knobs . Defaults
-            to (0, 1).
+            dir_idcs (tuple, list): Indices of the desired knobs directions
+            (eg. (1,2), (1,3) etc.) . Defaults to (1, 2).
 
         Returns:
             fig, ax: matplotlib fig and ax
         """
-        idx1, idx2 = knobs_idcs
+        idx1, idx2 = dir_idcs
+        idx1 -= 1
+        idx2 -= 1
+
         pos_eval = _np.array(self.positions_evaluated)
+        pos_best = _np.array(self.positions_best)
         objfuncs_eval = _np.array(self.objfuncs_evaluated)
         _, pos_cum_opt, _ = self.get_cumulated_optimum()
 
@@ -564,25 +568,40 @@ class RCDS(_Optimize):
         knob1_cum_opt = pos_cum_opt[:, idx1]
         knob2_cum_opt = pos_cum_opt[:, idx2]
 
+        knob1_enditer = pos_best[:, idx1]
+        knob2_enditer = pos_best[:, idx2]
+
         fig, ax = _mplt.subplots()
         scatter = ax.scatter(
             x=knob1_eval, y=knob2_eval,
             c=objfuncs_eval,
             vmin=objfuncs_eval.min(),
             vmax=objfuncs_eval.max(),
+            label="positions evaluated"
         )
 
-        ax.scatter(
-            x=knob1_cum_opt,
-            y=knob2_cum_opt,
-            marker='x', color='red'
+        ax.plot(
+            knob1_cum_opt,
+            knob2_cum_opt,
+            "o", color="red", mfc="none",
+            label="cumulated optima"
         )
 
-        ax.set_xlabel(f"knob {idx1}")
-        ax.set_ylabel(f"knob {idx2}")
+        ax.plot(
+            knob1_enditer,
+            knob2_enditer,
+            "x", color="red",
+            label="end of iter. optima"
+        )
+
+        ax.set_xlabel(f"dir {idx1 + 1}")
+        ax.set_ylabel(f"dir {idx2 + 1}")
 
         colorbar = fig.colorbar(scatter, ax=ax)
         colorbar.set_label('objective function value')
+
+        ax.legend()
+        ax.set_title("parameter space slice")
 
         return fig, ax
 
