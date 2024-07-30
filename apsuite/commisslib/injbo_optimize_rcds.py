@@ -13,31 +13,62 @@ from ..optimization.rcds import RCDS as _RCDS, RCDSParams as _RCDSParams
 class OptimizeInjBOParams(_RCDSParams):
     """."""
 
-    KNOBS = {
-        'li_qf3': (-3.0, +3.0),     # [A]
-        'tb_qf2a': (+5.0, +9.5),    # [A]
-        'tb_qf2b': (+2.0, +6.0),    # [A]
-        'tb_qd2a': (+4.0, +8.5),    # [A]
-        'tb_qd2b': (+1.5, +5.5),    # [A]
-        'posx': (-2.0, +2.0),       # [mm]
-        'angx': (-1.0, +1.0),       # [mrad]
-        'posy': (-2.0, +2.0),       # [mm]
-        'angy': (-1.0, +1.0),       # [mrad]
-        'kckr': (-25.0, -19.0),     # [mrad]
-        'kly2_amp': (+70, +76),     # [V]
-        'kly2_phs': (-180, -120),   # [deg]
-        'borf_amp': (+30, +80),     # [V]
-        'borf_phs': (+90, +160),    # [deg]
-    }
+    KNOBS = [
+        'li_qf3',
+        'tb_qf2a',
+        'tb_qf2b',
+        'tb_qd2a',
+        'tb_qd2b',
+        'posx',
+        'angx',
+        'posy',
+        'angy',
+        'kckr',
+        'kly2_amp',
+        'kly2_phs',
+        'borf_amp',
+        'borf_phs',
+    ]
+    LIMS_UPPER = [
+        +3.0,
+        9.5,
+        6.0,
+        8.5,
+        5.5,
+        +2.0,
+        +1.0,
+        +2.0,
+        +1.0,
+        -19.0,
+        76,
+        -120,
+        80,
+        160,
+    ]
+    LIMS_LOWER = [
+        -3.0,
+        5.0,
+        2.0,
+        4.0,
+        1.5,
+        -2.0,
+        -1.0,
+        -2.0,
+        -1.0,
+        -25.0,
+        70,
+        -180,
+        30,
+        90,
+    ]
 
     def __init__(self):
         """."""
         super().__init__()
-        kbs = self.KNOBS
-        kbs_params_tuple = ((k,) + v for k, v in kbs.items())
-        kbs_zipped = zip(*kbs_params_tuple)
-        self._knobs, self.limit_lower, self.limit_upper = kbs_zipped
+        self._knobs = self.KNOBS
         self.curr_wfm_index = 100
+        self.limit_lower = self.LIMS_LOWER
+        self.limit_upper = self.LIMS_UPPER
         self.nrpulses = 5
         self.use_median = False
         self.wait_between_injections = 3  # [s]
@@ -59,16 +90,24 @@ class OptimizeInjBOParams(_RCDSParams):
 
     @property
     def knobs(self):
-        """Return knobs and limits appropriately."""
+        """Define the knobs and limits appropriately."""
         return self._knobs
 
     @knobs.setter
     def knobs(self, knobs):
-        """Set knobs and limits appropriately."""
-        kbs = self.KNOBS
-        kbs_params_tuple = ((k,) + v for k, v in kbs.items() if k in knobs)
-        kbs_zipped = zip(*kbs_params_tuple)
-        self._knobs, self.limit_lower, self.limit_upper = kbs_zipped
+        """Define the knobs and limits appropriately."""
+        kns = []
+        limu = []
+        liml = []
+        for i, kn in enumerate(self.KNOBS):
+            if kn not in knobs:
+                continue
+            kns.append(kn)
+            limu.append(self.LIMS_UPPER[i])
+            liml.append(self.LIMS_LOWER[i])
+        self._knobs = kns
+        self.limit_lower = _np.array(liml)
+        self.limit_upper = _np.array(limu)
 
 
 class OptimizeInjBO(_RCDS):
