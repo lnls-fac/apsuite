@@ -197,33 +197,34 @@ class OptimizeInjBO(_RCDS):
         """
         pos = []
         for knob in self.params.knobs:
-            if knob.lower().startswith('li_qf3'):
+            fun = knob.lower().startswith
+            if fun('li_qf3'):
                 pos.append(self.devices['li_qf3'].current)
-            elif knob.lower().startswith('tb_qf2a'):
+            elif fun('tb_qf2a'):
                 pos.append(self.devices['tb_qf2a'].current)
-            elif knob.lower().startswith('tb_qf2b'):
+            elif fun('tb_qf2b'):
                 pos.append(self.devices['tb_qf2b'].current)
-            elif knob.lower().startswith('tb_qd2a'):
+            elif fun('tb_qd2a'):
                 pos.append(self.devices['tb_qd2a'].current)
-            elif knob.lower().startswith('tb_qd2b'):
+            elif fun('tb_qd2b'):
                 pos.append(self.devices['tb_qd2b'].current)
-            elif knob.lower().startswith('posx'):
+            elif fun('posx'):
                 pos.append(self.devices['pos_ang'].delta_posx)
-            elif knob.lower().startswith('angx'):
+            elif fun('angx'):
                 pos.append(self.devices['pos_ang'].delta_angx)
-            elif knob.lower().startswith('posy'):
+            elif fun('posy'):
                 pos.append(self.devices['pos_ang'].delta_posy)
-            elif knob.lower().startswith('angy'):
+            elif fun('angy'):
                 pos.append(self.devices['pos_ang'].delta_angy)
-            elif knob.lower().startswith('kckr'):
+            elif fun('kckr'):
                 pos.append(self.devices['injkckr'].strength)
-            elif knob.lower().startswith('kly2_amp'):
+            elif fun('kly2_amp'):
                 pos.append(self.devices['li_llrf'].dev_klystron2.amplitude)
-            elif knob.lower().startswith('kly2_phs'):
+            elif fun('kly2_phs'):
                 pos.append(self.devices['li_llrf'].dev_klystron2.phase)
-            elif knob.lower().startswith('borf_amp'):
+            elif fun('borf_amp'):
                 pos.append(self.devices['bo_llrf'].voltage_bottom)
-            elif knob.lower().startswith('borf_phs'):
+            elif fun('borf_phs'):
                 pos.append(self.devices['bo_llrf'].phase_bottom)
             else:
                 raise ValueError('Wrong specification of knob.')
@@ -236,33 +237,34 @@ class OptimizeInjBO(_RCDS):
                 'Length of pos must match number of knobs selected.')
 
         for p, knob in zip(pos, self.params.knobs):
-            if knob.lower().startswith('li_qf3'):
+            fun = knob.lower().startswith
+            if fun('li_qf3'):
                 self.devices['li_qf3'].current = p
-            elif knob.lower().startswith('tb_qf2a'):
+            elif fun('tb_qf2a'):
                 self.devices['tb_qf2a'].current = p
-            elif knob.lower().startswith('tb_qf2b'):
+            elif fun('tb_qf2b'):
                 self.devices['tb_qf2b'].current = p
-            elif knob.lower().startswith('tb_qd2a'):
+            elif fun('tb_qd2a'):
                 self.devices['tb_qd2a'].current = p
-            elif knob.lower().startswith('tb_qd2b'):
+            elif fun('tb_qd2b'):
                 self.devices['tb_qd2b'].current = p
-            elif knob.lower().startswith('posx'):
+            elif fun('posx'):
                 self.devices['pos_ang'].delta_posx = p
-            elif knob.lower().startswith('angx'):
+            elif fun('angx'):
                 self.devices['pos_ang'].delta_angx = p
-            elif knob.lower().startswith('posy'):
+            elif fun('posy'):
                 self.devices['pos_ang'].delta_posy = p
-            elif knob.lower().startswith('angy'):
+            elif fun('angy'):
                 self.devices['pos_ang'].delta_angy = p
-            elif knob.lower().startswith('kckr'):
+            elif fun('kckr'):
                 self.devices['injkckr'].strength = p
-            elif knob.lower().startswith('kly2_amp'):
+            elif fun('kly2_amp'):
                 self.devices['li_llrf'].dev_klystron2.amplitude = p
-            elif knob.lower().startswith('kly2_phs'):
+            elif fun('kly2_phs'):
                 self.devices['li_llrf'].dev_klystron2.phase = p
-            elif knob.lower().startswith('borf_amp'):
+            elif fun('borf_amp'):
                 self.devices['bo_llrf'].voltage_bottom = p
-            elif knob.lower().startswith('borf_phs'):
+            elif fun('borf_phs'):
                 self.devices['bo_llrf'].phase_bottom = p
             else:
                 raise ValueError('Wrong specification of knob.')
