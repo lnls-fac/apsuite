@@ -338,12 +338,24 @@ class Optimize(_Base):
         """Implement visualization of the optimzation history."""
         raise NotImplementedError()
 
-    def plot_knobspace_slice(self, dir_idcs=(1, 2)):
+    def plot_knobspace_slice(
+        self, dir_idcs=(1, 2), obj_idx=None, individual_idx=None
+    ):
         """Plot slice of parameter space (knobs space).
 
+        Shows a 2-dimensional slice of the knobs components with the objective
+        function value as a color code.
+
         Args:
-            dir_idcs (tuple, list): Indices of the desired knobs directions
-            (eg. (1,2), (1,3) etc.) . Defaults to (1, 2).
+            dir_idcs (tuple, list): Indices (starting from 1) of the desired
+            knobs directions (components). Eg.: (1,2), (1,3) etc. Defaults to
+            (1, 2).
+
+            obj_idx (int): Index (starting from 0) of the desired objective to
+            consider for the color code indicating the objective landscape.
+
+            individual_idx (int): Index (starting from 0) of the individual
+            whose positions are to be displayed
 
         Returns:
             fig, ax: matplotlib fig and ax
@@ -355,7 +367,16 @@ class Optimize(_Base):
         pos_eval = _np.array(self.positions_evaluated)
         pos_best = _np.array(self.positions_best)
         objfuncs_eval = _np.array(self.objfuncs_evaluated)
-        _, pos_cum_opt, _ = self.get_cumulated_optimum()
+
+        if obj_idx is not None:
+            objfuncs_eval = objfuncs_eval[:, :, obj_idx]
+
+        if individual_idx is not None:
+            objfuncs_eval = objfuncs_eval[:, individual_idx]
+            pos_eval = pos_eval[:, individual_idx]
+            pos_best = pos_best[:, individual_idx]
+
+        _, pos_cum_opt, _ = self.get_cumulated_optimum(obj_idx, individual_idx)
 
         knob1_eval = pos_eval[:, idx1]
         knob2_eval = pos_eval[:, idx2]
@@ -397,11 +418,19 @@ class Optimize(_Base):
             label="end of run optimum"
         )
 
-        ax.set_xlabel(f"dir {idx1 + 1}")
-        ax.set_ylabel(f"dir {idx2 + 1}")
+        xlabel = f"dir {idx1 + 1}"
+        ylabel = f"dir {idx2 + 1}"
+        if individual_idx is not None:
+            xlabel = f"individual {individual_idx} " + xlabel
+            ylabel = f"individual {individual_idx} " + ylabel
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
 
         colorbar = fig.colorbar(scatter, ax=ax)
-        colorbar.set_label('objective function value')
+        if obj_idx is None:
+            colorbar.set_label("objective function value")
+        else:
+            colorbar.set_label(f"objective {obj_idx} value")
 
         ax.legend()
         ax.set_title("parameter space slice")
