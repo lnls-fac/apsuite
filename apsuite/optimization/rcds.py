@@ -612,28 +612,3 @@ class RCDS(_Optimize):
         ax.set_title("parameter space slice")
 
         return fig, ax
-
-    def get_cumulated_optimum(self):
-        """Get the accumulated optima values & positions.
-
-        Assumes `objfuncs_evaluated` has the structure of a single-objective,
-        single-popoulation algorithm, i.e., it is a simple list of scalars.
-
-        Returns:
-            idcs (m-array): the indices of the m cumulated optima. Repeats the
-            last optimum.
-
-            pos ((m, n)-array): the m n-dimensional positions of the cumulated
-            minima.
-
-            vals (m-array): the values of the objective function at the m
-            cumulated minima.
-        """
-        if self.idcs_cumulated_optimum is None:
-            self._get_cumulated_optimum_indices()
-        idcs = self.idcs_cumulated_optimum
-
-        vals = _np.array(self.objfuncs_evaluated)[idcs]
-        pos = _np.array(self.positions_evaluated)[idcs]
-
-        return idcs, pos, vals
