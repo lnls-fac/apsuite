@@ -1,6 +1,7 @@
 """Simulated Annealing Algorithm for Minimization."""
 import logging as _log
 
+import matplotlib.pyplot as _mplt
 import numpy as _np
 
 from mathphys.functions import get_namedtuple as _get_namedtuple
@@ -278,10 +279,6 @@ class Optimize(_Base):
         """Implement here the objective function."""
         raise NotImplementedError()
 
-    def plot_history():
-        """Implement visualization of the optimzation history."""
-        raise NotImplementedError()
-
     def _optimize(self):
         """Implement here optimization algorithm."""
         raise NotImplementedError()
@@ -336,6 +333,80 @@ class Optimize(_Base):
         except OptimizationAborted:
             _log.info('Exiting: stop event was set.')
         self._finalization()
+
+    def plot_history():
+        """Implement visualization of the optimzation history."""
+        raise NotImplementedError()
+
+    def plot_knobspace_slice(self, dir_idcs=(1, 2)):
+        """Plot slice of parameter space (knobs space).
+
+        Args:
+            dir_idcs (tuple, list): Indices of the desired knobs directions
+            (eg. (1,2), (1,3) etc.) . Defaults to (1, 2).
+
+        Returns:
+            fig, ax: matplotlib fig and ax
+        """
+        idx1, idx2 = dir_idcs
+        idx1 -= 1
+        idx2 -= 1
+
+        pos_eval = _np.array(self.positions_evaluated)
+        pos_best = _np.array(self.positions_best)
+        objfuncs_eval = _np.array(self.objfuncs_evaluated)
+        _, pos_cum_opt, _ = self.get_cumulated_optimum()
+
+        knob1_eval = pos_eval[:, idx1]
+        knob2_eval = pos_eval[:, idx2]
+
+        knob1_cum_opt = pos_cum_opt[:, idx1]
+        knob2_cum_opt = pos_cum_opt[:, idx2]
+
+        knob1_enditer = pos_best[:, idx1]
+        knob2_enditer = pos_best[:, idx2]
+
+        fig, ax = _mplt.subplots()
+        scatter = ax.scatter(
+            x=knob1_eval, y=knob2_eval,
+            c=objfuncs_eval,
+            vmin=objfuncs_eval.min(),
+            vmax=objfuncs_eval.max(),
+            label="positions evaluated"
+        )
+
+        ax.plot(
+            knob1_cum_opt,
+            knob2_cum_opt,
+            "o", color="red", mfc="none",
+            label="cumulated optima"
+        )
+
+        ax.plot(
+            knob1_enditer,
+            knob2_enditer,
+            "x", color="red",
+            label="end of iter. optima"
+        )
+
+        ax.plot(
+            knob1_enditer[-1],
+            knob2_enditer[-1],
+            "d", color="magenta",
+            markersize=10,
+            label="end of run optimum"
+        )
+
+        ax.set_xlabel(f"dir {idx1 + 1}")
+        ax.set_ylabel(f"dir {idx2 + 1}")
+
+        colorbar = fig.colorbar(scatter, ax=ax)
+        colorbar.set_label('objective function value')
+
+        ax.legend()
+        ax.set_title("parameter space slice")
+
+        return fig, ax
 
     def _get_cumulated_optimum_indices(
         self, obj_idx=None, individual_idx=None
