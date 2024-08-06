@@ -373,27 +373,42 @@ class Optimize(_Base):
                 mini = fun
         self.idcs_cumulated_optimum = _np.array(optima)
 
-    def get_cumulated_optimum(self):
+    def get_cumulated_optimum(self, obj_idx=None, individual_idx=None):
         """Get the accumulated optima values & positions.
 
-        Assumes `objfuncs_evaluated` has the structure of a single-objective,
-        single-popoulation algorithm, i.e., it is a simple list of scalars.
+        For simple single-objective single-individual algorithms, returns the
+        acumulated optima along the objective function evaluations. For multi-
+        objective or multi-individual (swarm) algorithms, returns the optimal
+        of a certain objective and for a certain individual.
+
+        Args:
+            obj_idx (int): index of the objective to be compared. Defaults to
+            None (case of single objective).
+
+            individual_idx (int): index of the individual whose the objective
+            will be compared. Defaults to None (case of single indidvidual).
 
         Returns:
-            idcs (m-array): the indices of the m cumulated optima. Repeats the
-            last optimum.
+            idcs (m-array): the indices of the m cumulated optima.
 
-            pos ((m, n)-array): the m n-dimensional positions of the cumulated
-            minima.
+            pos ((m, n)-array): the m n-dimensional positions of the specified
+            individual where the cumulated optima of the specified objective
+            happens
 
-            vals (m-array): the values of the objective function at the m
-            cumulated minima.
+            vals (m-array): the values of the specified objective at the m
+            optima for the specified individual.
         """
         if self.idcs_cumulated_optimum is None:
-            self._get_cumulated_optimum_indices()
+            self._get_cumulated_optimum_indices(obj_idx, individual_idx)
         idcs = self.idcs_cumulated_optimum
 
         vals = _np.array(self.objfuncs_evaluated)[idcs]
         pos = _np.array(self.positions_evaluated)[idcs]
+
+        if individual_idx is not None:
+            vals = vals[:, individual_idx]
+            pos = pos[:, individual_idx]
+        if obj_idx is not None:
+            vals = vals[:, :, obj_idx]
 
         return idcs, pos, vals
