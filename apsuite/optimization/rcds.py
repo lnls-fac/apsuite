@@ -311,8 +311,8 @@ class RCDS(_Optimize):
 
     def _finalization(self):
         """."""
-        self._get_cumulated_optimum_indices()
-        idx = self.idcs_cumulated_optimum[-1]
+        self._get_cumul_optima_idcs()
+        idx = self.objfuncs_cumul_optima_idcs[-1]
         stg = '\n Finished! \n'
         stg += f'Number of iterations: {self.num_iterations:04d}\n'
         stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
@@ -484,7 +484,7 @@ class RCDS(_Optimize):
         Returns:
             fig, ax: matplolib figure and axes
         """
-        opt_idcs, pos_cum_opt, objfuncs_cum_opt = self.get_cumulated_optimum()
+        opt_idcs, pos_cum_opt, objfuncs_cum_opt = self.get_cumul_optima()
         iters_idcs = _np.concatenate(([0], _np.cumsum(self.num_evals_by_iter)))
 
         fig, axs = _mplt.subplots(2, 1, figsize=(10, 10), sharex=True)

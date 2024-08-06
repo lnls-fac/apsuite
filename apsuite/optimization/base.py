@@ -216,7 +216,7 @@ class Optimize(_Base):
         self.positions_best = []
         self.objfuncs_evaluated = []
         self.objfuncs_best = []
-        self.idcs_cumulated_optimum = None
+        self.objfuncs_cumul_optima_idcs = None
 
     def to_dict(self) -> dict:
         """Dump all relevant object properties to dictionary.
@@ -232,7 +232,7 @@ class Optimize(_Base):
         dic['positions_best'] = self.positions_best
         dic['objfuncs_evaluated'] = self.objfuncs_evaluated
         dic['objfuncs_best'] = self.objfuncs_best
-        dic['idcs_cumulated_optimum'] = self.idcs_cumulated_optimum
+        dic['objfuncs_cumul_optima_idcs'] = self.objfuncs_cumul_optima_idcs
 
         return dic
 
@@ -254,7 +254,7 @@ class Optimize(_Base):
         self.positions_best = info['positions_best']
         self.objfuncs_evaluated = info['objfuncs_evaluated']
         self.objfuncs_best = info['objfuncs_best']
-        self.idcs_cumulated_optimum = info["idcs_cumulated_optimum"]
+        self.objfuncs_cumul_optima_idcs = info["objfuncs_cumul_optima_idcs"]
 
     @property
     def num_objective_evals(self):
@@ -376,7 +376,7 @@ class Optimize(_Base):
             pos_eval = pos_eval[:, individual_idx]
             pos_best = pos_best[:, individual_idx]
 
-        _, pos_cum_opt, _ = self.get_cumulated_optimum(obj_idx, individual_idx)
+        _, pos_cum_opt, _ = self.get_cumul_optima(obj_idx, individual_idx)
 
         knob1_eval = pos_eval[:, idx1]
         knob2_eval = pos_eval[:, idx2]
@@ -437,15 +437,15 @@ class Optimize(_Base):
 
         return fig, ax
 
-    def _get_cumulated_optimum_indices(
+    def _get_cumul_optima_idcs(
         self, obj_idx=None, individual_idx=None
     ):
         """Get the indices of the optima found during objfunc evaluations.
 
-        self.idcs_cumulated_optimum is an m-array with the accumulated optima
-        indices along the `self.objfuncs_evaluated` list for the chosen
-        objective and individual (in the case of multi-objective,
-        multi-individuals algorithms).
+        self.objfuncs_cumul_optima_idcs is an m-array with the
+        accumulated optima indices along the `self.objfuncs_evaluated` list
+        for the chosen objective and individual (in the case of
+        multi-objective, multi-individuals algorithms).
 
         obj_idx (int): index of the desired objective to be compared during
             the evaluations. Defaults to None (case of single-objective
@@ -471,9 +471,9 @@ class Optimize(_Base):
             if not _np.isnan(fun) and fun < mini:
                 optima.append(i)
                 mini = fun
-        self.idcs_cumulated_optimum = _np.array(optima)
+        self.objfuncs_cumul_optima_idcs = _np.array(optima)
 
-    def get_cumulated_optimum(self, obj_idx=None, individual_idx=None):
+    def get_cumul_optima(self, obj_idx=None, individual_idx=None):
         """Get the accumulated optima values & positions.
 
         For simple single-objective single-individual algorithms, returns the
@@ -498,9 +498,9 @@ class Optimize(_Base):
             vals (m-array): the values of the specified objective at the m
             optima for the specified individual.
         """
-        if self.idcs_cumulated_optimum is None:
-            self._get_cumulated_optimum_indices(obj_idx, individual_idx)
-        idcs = self.idcs_cumulated_optimum
+        if self.objfuncs_cumul_optima_idcs is None:
+            self._get_cumul_optima_idcs(obj_idx, individual_idx)
+        idcs = self.objfuncs_cumul_optima_idcs
 
         vals = _np.array(self.objfuncs_evaluated)[idcs]
         pos = _np.array(self.positions_evaluated)[idcs]
