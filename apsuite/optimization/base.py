@@ -337,20 +337,38 @@ class Optimize(_Base):
             _log.info('Exiting: stop event was set.')
         self._finalization()
 
-    def _get_cumulated_optimum_indices(self):
+    def _get_cumulated_optimum_indices(
+        self, obj_idx=None, individual_idx=None
+    ):
         """Get the indices of the optima found during objfunc evaluations.
 
-        self.idcs_cumulated_optimum is an m-array with the accumulated optimum
-        indices along the `self.objfuncs_evaluated` list. Assumes
-        single-objective, single-population optimzation algorithms, i.e.
-        `self.objfuncs_evaluated` is a list of scalar values.
+        self.idcs_cumulated_optimum is an m-array with the accumulated optima
+        indices along the `self.objfuncs_evaluated` list for the chosen
+        objective and individual (in the case of multi-objective,
+        multi-individuals algorithms).
+
+        obj_idx (int): index of the desired objective to be compared during
+            the evaluations. Defaults to None (case of single-objective
+            algorithms)
+
+        individual_idx (ind): index of the individual whose value of the
+            obj_idx + 1 objective evaluation are to be compared.
+            Defaults to None (case of single-individual algorithms)
         """
         funcs = _np.array(self.objfuncs_evaluated)
 
-        optima = []
-        for i in range(len(funcs)):
-            funcsi = funcs[:i+1]
-            funcsi = funcsi[~_np.isnan(funcsi)]
-            optima.append(funcsi.min())
+        if obj_idx is not None:
+            funcs = funcs[:, :, obj_idx]
 
-        self.idcs_cumulated_optimum = _np.isin(funcs, optima).nonzero()[0]
+        if individual_idx is not None:
+            funcs = funcs[:, individual_idx]
+
+        funcs = _np.squeeze(funcs)  # handle single-objective, or single
+        #  single-individual algorithms
+        optima = []
+        mini = _np.inf
+        for i, fun in enumerate(funcs):
+            if not _np.isnan(fun) and fun < mini:
+                optima.append(i)
+                mini = fun
+        self.idcs_cumulated_optimum = _np.array(optima)
