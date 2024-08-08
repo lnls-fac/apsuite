@@ -339,9 +339,7 @@ class Optimize(_Base):
         """Implement visualization of the optimzation history."""
         raise NotImplementedError()
 
-    def plot_knobspace_slice(
-        self, dir_idcs=(1, 2), obj_idx=None, individual_idx=None
-    ):
+    def plot_knobspace_slice(self, dir_idcs=(1, 2), obj_idx=None):
         """Plot slice of parameter space (knobs space).
 
         Shows a 2-dimensional slice of the knobs components with the objective
@@ -355,9 +353,6 @@ class Optimize(_Base):
             obj_idx (int): Index (starting from 0) of the desired objective to
             consider for the color code indicating the objective landscape.
 
-            individual_idx (int): Index (starting from 0) of the individual
-            whose positions are to be displayed
-
         Returns:
             fig, ax: matplotlib fig and ax
         """
@@ -370,14 +365,9 @@ class Optimize(_Base):
         objfuncs_eval = _np.array(self.objfuncs_evaluated)
 
         if obj_idx is not None:
-            objfuncs_eval = objfuncs_eval[:, :, obj_idx]
+            objfuncs_eval = objfuncs_eval[:, obj_idx]
 
-        if individual_idx is not None:
-            objfuncs_eval = objfuncs_eval[:, individual_idx]
-            pos_eval = pos_eval[:, individual_idx]
-            pos_best = pos_best[:, individual_idx]
-
-        _, pos_cum_opt, _ = self.get_cumul_optima(obj_idx, individual_idx)
+        _, pos_cum_opt, _ = self.get_cumul_optima(obj_idx)
 
         knob1_eval = pos_eval[:, idx1]
         knob2_eval = pos_eval[:, idx2]
@@ -418,14 +408,8 @@ class Optimize(_Base):
             markersize=10,
             label="end of run optimum"
         )
-
-        xlabel = f"dir {idx1 + 1}"
-        ylabel = f"dir {idx2 + 1}"
-        if individual_idx is not None:
-            xlabel = f"individual {individual_idx} " + xlabel
-            ylabel = f"individual {individual_idx} " + ylabel
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
+        ax.set_xlabel(f"dir {idx1 + 1}")
+        ax.set_ylabel(f"dir {idx2 + 1}")
 
         colorbar = fig.colorbar(scatter, ax=ax)
         if obj_idx is None:
@@ -438,34 +422,22 @@ class Optimize(_Base):
 
         return fig, ax
 
-    def _get_cumul_optima_idcs(
-        self, obj_idx=None, individual_idx=None
-    ):
+    def _get_cumul_optima_idcs(self, obj_idx=None):
         """Get the indices of the optima found during objfunc evaluations.
 
         self.objfuncs_cumul_optima_idcs is an m-array with the
         accumulated optima indices along the `self.objfuncs_evaluated` list
-        for the chosen objective and individual (in the case of
-        multi-objective, multi-individuals algorithms).
+        for the chosen objective.
 
         obj_idx (int): index of the desired objective to be compared during
             the evaluations. Defaults to None (case of single-objective
             algorithms)
-
-        individual_idx (ind): index of the individual whose value of the
-            obj_idx + 1 objective evaluation are to be compared.
-            Defaults to None (case of single-individual algorithms)
         """
         funcs = _np.array(self.objfuncs_evaluated)
 
         if obj_idx is not None:
-            funcs = funcs[:, :, obj_idx]
+            funcs = funcs[:, obj_idx]
 
-        if individual_idx is not None:
-            funcs = funcs[:, individual_idx]
-
-        funcs = _np.squeeze(funcs)  # handle single-objective, or single
-        #  single-individual algorithms
         optima = []
         mini = _np.inf
         for i, fun in enumerate(funcs):
@@ -474,42 +446,34 @@ class Optimize(_Base):
                 mini = fun
         self.objfuncs_cumul_optima_idcs = _np.array(optima)
 
-    def get_cumul_optima(self, obj_idx=None, individual_idx=None):
+    def get_cumul_optima(self, obj_idx=None):
         """Get the accumulated optima values & positions.
 
         For simple single-objective single-individual algorithms, returns the
         acumulated optima along the objective function evaluations. For multi-
-        objective or multi-individual (swarm) algorithms, returns the optimal
-        of a certain objective and for a certain individual.
+        objective algorithms, returns the optimal along a certain objective.
 
         Args:
             obj_idx (int): index of the objective to be compared. Defaults to
             None (case of single objective).
 
-            individual_idx (int): index of the individual whose the objective
-            will be compared. Defaults to None (case of single indidvidual).
-
         Returns:
             idcs (m-array): the indices of the m cumulated optima.
 
-            pos ((m, n)-array): the m n-dimensional positions of the specified
-            individual where the cumulated optima of the specified objective
-            happens
+            pos ((m, n)-array): the m n-dimensional positions where the
+            cumulated optima of the specified objective happens.
 
             vals (m-array): the values of the specified objective at the m
-            optima for the specified individual.
+            optima.
         """
         if self.objfuncs_cumul_optima_idcs is None:
-            self._get_cumul_optima_idcs(obj_idx, individual_idx)
+            self._get_cumul_optima_idcs(obj_idx)
         idcs = self.objfuncs_cumul_optima_idcs
 
         vals = _np.array(self.objfuncs_evaluated)[idcs]
         pos = _np.array(self.positions_evaluated)[idcs]
 
-        if individual_idx is not None:
-            vals = vals[:, individual_idx]
-            pos = pos[:, individual_idx]
         if obj_idx is not None:
-            vals = vals[:, :, obj_idx]
+            vals = vals[:, obj_idx]
 
         return idcs, pos, vals
