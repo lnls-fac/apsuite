@@ -599,29 +599,30 @@ class TbTDataAnalysis(MeasureTbTData):
             print("The following keys were not used:")
             print("     ", str(keys))
 
+        # make often used data attributes
         data = self.data
-        timestamp = _datetime.datetime.fromtimestamp(data["timestamp"])
+        epoch_tmstp = data.get("timestamp", None)
+        timestamp = _datetime.datetime.fromtimestamp(
+            epoch_tmstp
+        ) if epoch_tmstp is not None else None
         self.timestamp = timestamp
-        trajx, trajy = data["orbx"].copy() * 1e-3, data["orby"].copy() * 1e-3
-        trajsum = data["sumdata"].copy()
+        trajx = data.get("orbx", None).copy() * 1e-3
+        trajy = data.get("orby", None).copy() * 1e-3
+        trajsum = data.get("sumdata", None).copy()
 
         # zero mean in samples dimension
         trajx -= trajx.mean(axis=0)[None, :]
         trajy -= trajy.mean(axis=0)[None, :]
         self.trajx, self.trajy, self.trajsum = trajx, trajy, trajsum
 
-        self.tunex, self.tuney = data['tunex'], data['tuney']
-        self.acq_rate = data["acq_rate"]
-        self.rf_freq = data["rf_frequency"]
-        self.sampling_freq = self.data["sampling_frequency"]
-        self.switching_freq = self.data["switching_frequency"]
-        self.nrsamples_pre = self.data["nrsamples_pre"]
-        self.nrsamples_post = self.data["nrsamples_post"]
-
-        nrpre = self.nrsamples_pre
-        self.trajx_turns_slice = (nrpre, nrpre + int(1 / self.tunex))
-        self.trajy_turns_slice = (nrpre, nrpre + int(1 / self.tuney))
-
+        self.nrsamples_pre = data.get("nrsamples_pre", None)
+        self.nrsamples_post = data.get("nrsamples_post", None)
+        self.tunex = data.get('tunex', None)
+        self.tuney = data.get('tuney', None)
+        self.acq_rate = data.get("acq_rate", None)
+        self.rf_freq = data.get("rf_frequency", None)
+        self.sampling_freq = data.get("sampling_frequency", None)
+        self.switching_freq = data.get("switching_frequency", None)
         return
 
     def linear_optics_analysis(self):
