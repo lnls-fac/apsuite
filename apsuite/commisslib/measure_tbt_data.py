@@ -843,7 +843,7 @@ class TbTDataAnalysis(MeasureTbTData):
             umat, svals, vtmat = self.calc_svd(traj, full_matrices=False)
 
             # collect source signals and mixing matrix
-            signals = umat * _np.sqrt(traj.shape[0] - 1)  # whiten signals
+            signals = umat * _np.sqrt(traj.shape[0] - 1)  # data signals
             mixing_matrix = vtmat.T @ _np.diag(svals)
             mixing_matrix /= _np.sqrt(traj.shape[0] - 1)
 
@@ -855,6 +855,20 @@ class TbTDataAnalysis(MeasureTbTData):
             beta, phase = self.get_beta_and_phase_from_betatron_modes(
                 sin_mode, cos_mode, beta_model
             )
+
+            # calculate error bars as in Appendix A of
+            # Wang, Chun-xi and Sajaev, Vadim and Yao, Chih-Yuan. Phase advance
+            # and ${\beta}$ function measurements using model-independent
+            # analysis. Phys. Rev. ST Accel. Beams. Vol 6, issue 10.
+            # DOI 10.1103/PhysRevSTAB.6.104001
+
+            signal = _np.sqrt(_np.sum(svals[:2]**2))
+            noise = _np.sqrt(_np.sum(svals[2:]**2))
+            snr = signal / noise
+            nrsamples = self.nrsamples_pre + self.nrsamples_post
+            phase_error = 1 / snr / _np.sqrt(nrsamples)
+            phase_error *= _np.sqrt(beta_model.mean() / 2 / beta_model)
+            beta_error = 2 * beta_model * phase_error
 
             # plot_results
             if plot:
@@ -872,6 +886,9 @@ class TbTDataAnalysis(MeasureTbTData):
             pca_data["mixing_matrix_"+label] = mixing_matrix
             pca_data["beta"+label] = beta
             pca_data["phase"+label] = phase
+            pca_data["snr"+label] = snr
+            pca_data["beta"+label+"_err"] = beta_error
+            pca_data["phase"+label+"_err"] = phase_error
         self.pca_data = pca_data
 
     def independent_components_analysis(
