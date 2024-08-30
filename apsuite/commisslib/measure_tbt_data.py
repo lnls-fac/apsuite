@@ -425,7 +425,7 @@ class TbTDataAnalysis(MeasureTbTData):
         self.trajx, self.trajy = None, None  # zero-mean trajectories in [mm]
         self.trajsum = None
 
-        self.tunex, self.tuney = None, None
+        self._tunex, self._tuney = None, None
         self.acq_rate = None
         self.nrsamples_pre = None
         self.nrsamples_post = None
@@ -565,6 +565,32 @@ class TbTDataAnalysis(MeasureTbTData):
         """."""
         self._fname = val
         self.load_and_apply(val)
+
+    @property
+    def tunex(self):
+        """."""
+        return self._tunex
+
+    @tunex.setter
+    def tunex(self, val):
+        """."""
+        if val is not None:
+            self._tunex = val
+            nrpre = self.nrsamples_pre
+            self.trajx_turns_slice = (nrpre, nrpre + int(1 / val))
+
+    @property
+    def tuney(self):
+        """."""
+        return self._tuney
+
+    @tuney.setter
+    def tuney(self, val):
+        """."""
+        if val is not None:
+            self._tuney = val
+            nrpre = self.nrsamples_pre
+            self.trajy_turns_slice = (nrpre, nrpre + int(1 / val))
 
     def load_and_apply(self, fname):
         """Load data and copy often used data to class attributes."""
