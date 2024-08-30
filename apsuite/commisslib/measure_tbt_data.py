@@ -1466,9 +1466,7 @@ class TbTDataAnalysis(MeasureTbTData):
         beta = (sin_mode**2 + cos_mode**2)
         beta /= _np.std(beta) / _np.std(beta_model)
         phase = _np.arctan2(sin_mode, cos_mode)
-        phase = _np.unwrap(phase, discont=2.6)
-        # 2.6 was set because it was the largest phase advance
-        # observed in the model for both x and y motion
+        phase = _np.unwrap(phase, discont=_np.pi)
         return beta, phase
 
     def _get_nominal_optics(self, tunes=None, chroms=None):
