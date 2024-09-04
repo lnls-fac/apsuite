@@ -1195,13 +1195,13 @@ class TbTDataAnalysis(MeasureTbTData):
 
         Args:
             bpm_index (int, optional): Which BPM's reading to show.
-            Defaults to 0 (first BPM).
+                Defaults to 0 (first BPM).
             timescale (int, optional): Turn-by-turn timescale, where:
                 timescale = 0 : ~ 20 turns; harmonic motion
                 timescale = 1 : ~ 200 turns; chromaticity decoherence
-                modulation
+                    modulation
                 timescale = 2 : ~ 2000 turns; transverse decoherence
-                modulations
+                    modulations
             Defaults to 0.
             compare_fit (bool, optional): whether to plot acquisitions and the
             fitting and the fit residue. Defaults to False.
@@ -1300,6 +1300,7 @@ class TbTDataAnalysis(MeasureTbTData):
 
     def plot_modal_analysis(self):
         """."""
+        # TODO: reuse code from `principal_components_analysis`
         trajs = _np.concatenate((self.trajx, self.trajy), axis=1)
 
         u, s, vt = self.calc_svd(trajs, full_matrices=False)
@@ -1421,6 +1422,7 @@ class TbTDataAnalysis(MeasureTbTData):
         compare_meas2model=False, bpms2use=None
     ):
         """."""
+        # TODO: plot error bars if they are available
         beta_model, beta_meas = beta_model.copy(), beta_meas.copy()
         phase_model, phase_meas = phase_model.copy(), phase_meas.copy()
 
@@ -1633,11 +1635,12 @@ class TbTDataAnalysis(MeasureTbTData):
                 tunecorr = _TuneCorr(model, acc="SI")
                 tunecorr.correct_parameters(goal_parameters=tunes)
 
-            chroms = (2.5, 2.5) if chroms is None else chroms
+            chroms = (3.8, 3.1) if chroms is None else chroms
             chromcorr = _ChromCorr(model, acc="SI")
             chromcorr.correct_parameters(goal_parameters=chroms)
 
             famdata = _si.get_family_data(model)
+            # TODO: add also EdTeng optics calculations
             twiss, *_ = _pa.optics.calc_twiss(
                 accelerator=model, indices="open"
             )
