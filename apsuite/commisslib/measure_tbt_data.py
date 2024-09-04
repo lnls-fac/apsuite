@@ -770,46 +770,65 @@ class TbTDataAnalysis(MeasureTbTData):
                 )
         self.fitting_data = fitting_data
 
-    def principal_components_analysis(self, plot, compare_meas2model=True):
-        r"""Peforms Principal Components Analysis (PCA).
+    def principal_components_analysis(
+                self,
+                stackxy=True,
+                planes="xy",
+                plot=True,
+                compare_meas2model=True
+            ):
+        r"""Peform linear optics analysis Principal Components Analysis (PCA).
 
         Calculates beta-functions and betatron phase-advance at the BPMs using
-        PCA. PCA aims to identify principal axes along which the covariance
-        matrix of the data is diagonal. For betatron-dominated motion, there
-        are two pricipal components (cosine and sine modes) that can be
-        related to betatron functions and phase advance, as described in refs
-        [1,2].
+        PCA.
 
-        For a beam history matrix with BPMs arranged along the columns and
-        turn-by turn samples along the rows (nturns x nbpms), it can be shown
-        (ref. [1]) that the principal components diagonalizing the covariance
-        matrix are the columns of the V matrix, where V refers to the spatial
-        patterns of the data, as accessed by its singular-value decomposition:
-        data = U S Vt. The first two columns of V are the beatron modes.
+        PCA aims to identify principal axes along which the covariance
+        matrix of the data is diagonal. For betatron-dominated motion, there
+        are two pricipal components (cosine and sine modes) for each plane
+        (horizontal and vertical) that can be related to the betatron
+        functions and phase advance at the corresponding planes, as described
+        in refs [1,2].
+
+        For a beam history matrix X with with turn-by-turn samples along the
+        rows (nturns x nbpms), it can be shown (ref. [1]) that the principal
+        components diagonalizing the covariance matrix are the columns of the
+        spatial patterns matrix, V, where V is such that H = U S V.T. The
+        leading modes of the V matrix are the beatron modes [2].
 
         In the language of Blind Source Separation, if the data matrix X can
         be expressed as a linear mixture of uncorrelated source signals
-        arranged as the columns of matrix S, i.e. X = S A^T, then the
-        mixing matrix A can be identified with A = V S^T / sqrt{nturns - 1}.
-        Acting on X with A's pseudo-inverse, the unmixing matrix, gives the
-        whitened uncorrelated source signals S = U \sqrt{nturns - 1},
-        with S^T S / (nsamples - 1 ) = identity. This choice for the mixing
-        matrix and the whitened sources follows scikit-learn's [2] convention
-        and is compatible with the convention adopted in the independent
-        components analysis (ICA), where the betatron modes and phase advances
-        are calculated from the columns of the mixing matrix.
+        arranged as the columns of matrix S, i.e. X = S A^T, then, using PCA,
+        the mixing matrix A can be identified with
+        A = V @ S.T / sqrt{nturns - 1}.
+        Acting on X with A's pseudo-inverse (the unmixing matrix) gives the
+        whitened, uncorrelated source signals S = U \sqrt{nturns - 1}, with
+        S.T @ S / (nturns - 1 ) = identity. This choice for the normalization
+        of mixing matrix and whitened sources follows scikit-learn's [2]
+        convention  and is compatible with the convention adopted in the
+        independent components analysis (ICA).
 
         Args:
-            plot (bool, optiional): whether to plot the analysis results.
-            Defaults to True.
+            stackxy (bool, optional): stack hrizontal (x) and vertical (y)
+                trajectories and carry out analysis with nsamples x 320 history
+                matrix. Defaults to True. In this case, the leading 2 pairs of
+                SVD modes are associated with 4 dominant singular values,
+                which are identified with the horizontal and vertical betatron
+                modes.
 
-            compare_meas2model (bool, optional): whether to plot measured and
-            nominal beta-functions and BPMs phase-advance, as well as
-            beta-beting and phase-advance errors or plot only beta-beating and
-            phase-advance-errors. Defaults to True
+            planes (str, optional): "x", "y" or "xy". Analyze the horizontal,
+                the vertical or both planes one at a time. Defaults to "xy",
+                in which case the x and y planes will be analyzed seprately.
+                Not used if stackxy is True.
+
+            plot (bool, optional): whether to plot the analysis results
+                (beta-function and phase-advances). Defaults to True.
+
+            compare_meas2model (bool, optional): whether to plot a comparison
+                between the measured and nominal beta-functions and BPMs
+                phase-advance, as well as the beta-beating and phase-advance
+                errors. Defaults to True.
 
         References:
-
         [1] Wang, Chun-xi and Sajaev, Vadim and Yao, Chih-Yuan. Phase advance
             and ${\beta}$ function measurements using model-independent
             analysis. Phys. Rev. ST Accel. Beams. Vol 6, issue 10. DOI 10.1103/
@@ -821,23 +840,118 @@ class TbTDataAnalysis(MeasureTbTData):
         [3] Scikit-learn examples. "Blind Source Separation using FastICA".
             https://scikit-learn.org/stable/auto_examples/decomposition/plot_ica_blind_source_separation.html#sphx-glr-auto-examples-decomposition-plot-ica-blind-source-separation-py
         """
+        tunes = self.tunex + 49., self.tuney + 14.
+        if self.model_optics is None:
+            self._get_nominal_optics(tunes)
+
+        # get model optics
+        betax_model = self.model_optics["betax"]
+        betay_model = self.model_optics["betay"]
+        phasex_model = self.model_optics["phasex"]
+        phasey_model = self.model_optics["phasey"]
+
         pca_data = dict()
-        for pinger in self.params.pingers2kick:
-            if pinger == "h":
+        if stackxy:
+            traj = _np.concatenate((self.trajx, self.trajy), axis=1)
+            # perform PCA via SVD of history matrix
+            umat, svals, vtmat = self.calc_svd(traj, full_matrices=False)
+
+            # collect source signals and mixing matrix
+            signals = umat * _np.sqrt(traj.shape[0] - 1)  # data signals
+            mixing_matrix = vtmat.T @ _np.diag(svals)
+            mixing_matrix /= _np.sqrt(traj.shape[0] - 1)
+
+            # calulate tunes of the source signals
+            tunes1, spec1 = self.calc_spectrum(signals[:, 0], axis=0)
+            tunes2, spec2 = self.calc_spectrum(signals[:, 2], axis=0)
+            # modes 0 & 1 and modes 2 & 3 have have equal spectra
+            # therefore, it suffices to analyze mode 0 and mode 2 only
+
+            tune1 = tunes1[_np.argmax(_np.abs(spec1))]
+            tune2 = tunes2[_np.argmax(_np.abs(spec2))]
+
+            # identify which signal is which (x or y)
+            xidcs, yidcs = self.identify_modes(
+                tune1, tune2, self.tunex, self.tuney
+            )
+
+            # extract betatron sine & cosine modes fom mixing matrix
+            sin_modex = mixing_matrix[:160, xidcs[-1]]
+            cos_modex = mixing_matrix[:160, xidcs[0]]
+            sin_modey = mixing_matrix[160:, yidcs[-1]]
+            cos_modey = mixing_matrix[160:, yidcs[0]]
+
+            # calculate beta function & phase from betatron modes
+            betax, phasex = self.get_beta_and_phase_from_betatron_modes(
+                sin_modex, cos_modex, betax_model
+            )
+            betay, phasey = self.get_beta_and_phase_from_betatron_modes(
+                sin_modey, cos_modey, betay_model
+            )
+
+            # concatenate results
+            beta = _np.concatenate((betax, betay))
+            phase = _np.concatenate((phasex, phasey))
+
+            # calculate signal variance
+            signalx = _np.sqrt(_np.sum(svals[xidcs[0]:xidcs[1] + 1]**2))
+            signaly = _np.sqrt(_np.sum(svals[yidcs[0]:yidcs[1] + 1]**2))
+            # and signal noise
+            noise = _np.sqrt(_np.sum(svals[3:]**2))
+            snrx, snry = signalx / noise, signaly / noise
+
+            # calculate error bars as in Appendix A of
+            # Wang, Chun-xi and Sajaev, Vadim and Yao, Chih-Yuan. Phase advance
+            # and ${\beta}$ function measurements using model-independent
+            # analysis. Phys. Rev. ST Accel. Beams. Vol 6, issue 10.
+            # DOI 10.1103/PhysRevSTAB.6.104001
+
+            nrsamples = self.nrsamples_pre + self.nrsamples_post
+            phasex_error = 1 / snrx / _np.sqrt(nrsamples)
+            phasex_error *= _np.sqrt(betax_model.mean() / 2 / betax_model)
+            betax_error = 2 * betax_model * phasex_error
+
+            phasey_error = 1 / snry / _np.sqrt(nrsamples)
+            phasey_error *= _np.sqrt(betay_model.mean() / 2 / betay_model)
+            betay_error = 2 * betay_model * phasey_error
+
+            # TODO: plot stacked data
+            # plot_results
+            if plot:
+                self.plot_betabeat_and_phase_error(
+                    _np.concatenate((betax_model, betay_model)), beta,
+                    _np.concatenate((phasex_model, phasey_model)), phase,
+                    title="PCA Analysis: beta & phase (stacked x/y)",
+                    compare_meas2model=compare_meas2model,
+                    bpms2use=self.bpms2use
+                )
+
+            # save analysis data
+            pca_data["singular_values"] = svals
+            pca_data["source_signals"] = signals
+            pca_data["mixing_matrix"] = mixing_matrix
+            pca_data["xidcs"] = xidcs
+            pca_data["yidcs"] = yidcs
+            pca_data["beta"] = beta
+            pca_data["phase"] = phase
+            pca_data["snrx"] = snrx
+            pca_data["snry"] = snry
+            pca_data["beta_err"] = _np.concatenate((betax_error, betay_error))
+            pca_data["phase_err"] = _np.concatenate(
+                (phasex_error, phasey_error)
+            )
+            self.pca_data = pca_data
+            return
+
+        for plane in planes:
+            if plane == "x":
                 traj = self.trajx
-                label = "x"
             else:
                 traj = self.trajy
-                label = "y"
-
-            tunes = self.tunex + 49., self.tuney + 14.
-
-            if self.model_optics is None:
-                self._get_nominal_optics(tunes)
 
             # get model optics
-            beta_model = self.model_optics["beta"+label]
-            phase_model = self.model_optics["phase"+label]
+            beta_model = self.model_optics["beta"+plane]
+            phase_model = self.model_optics["phase"+plane]
 
             # perform PCA via SVD of history matrix
             umat, svals, vtmat = self.calc_svd(traj, full_matrices=False)
@@ -856,14 +970,8 @@ class TbTDataAnalysis(MeasureTbTData):
                 sin_mode, cos_mode, beta_model
             )
 
-            # calculate error bars as in Appendix A of
-            # Wang, Chun-xi and Sajaev, Vadim and Yao, Chih-Yuan. Phase advance
-            # and ${\beta}$ function measurements using model-independent
-            # analysis. Phys. Rev. ST Accel. Beams. Vol 6, issue 10.
-            # DOI 10.1103/PhysRevSTAB.6.104001
-
-            signal = _np.sqrt(_np.sum(svals[:2]**2))
-            noise = _np.sqrt(_np.sum(svals[2:]**2))
+            signal = _np.sqrt(_np.sum(svals[:2]**2))  # signal variance
+            noise = _np.sqrt(_np.sum(svals[2:]**2))  # white noise
             snr = signal / noise
             nrsamples = self.nrsamples_pre + self.nrsamples_post
             phase_error = 1 / snr / _np.sqrt(nrsamples)
@@ -875,21 +983,56 @@ class TbTDataAnalysis(MeasureTbTData):
                 self.plot_betabeat_and_phase_error(
                     beta_model, beta,
                     phase_model, phase,
-                    title=f"PCA Analysis: beta{label} & phase{label}",
+                    title=f"PCA Analysis: beta{plane} & phase{plane}",
                     compare_meas2model=compare_meas2model,
                     bpms2use=self.bpms2use
                 )
 
             # save analysis data
-            pca_data["singular_values_"+label] = svals
-            pca_data["source_signals_"+label] = signals
-            pca_data["mixing_matrix_"+label] = mixing_matrix
-            pca_data["beta"+label] = beta
-            pca_data["phase"+label] = phase
-            pca_data["snr"+label] = snr
-            pca_data["beta"+label+"_err"] = beta_error
-            pca_data["phase"+label+"_err"] = phase_error
+            pca_data["singular_values_"+plane] = svals
+            pca_data["source_signals_"+plane] = signals
+            pca_data["mixing_matrix_"+plane] = mixing_matrix
+            pca_data["beta"+plane] = beta
+            pca_data["phase"+plane] = phase
+            pca_data["snr"+plane] = snr
+            pca_data["beta"+plane+"_err"] = beta_error
+            pca_data["phase"+plane+"_err"] = phase_error
         self.pca_data = pca_data
+
+    def identify_modes(self, tune1, tune2, tunex, tuney):
+        """Identify the x and y betatron modes in mixing matrix.
+
+        When calculating the mixing matrix via PCA or ICA, the horizontal and
+        betatron modes need the be determined. PCA sorts the modes with
+        increasing variance (singular values), while ICA sorts the modes
+        arbitrairly. By calculating the tune of the source signals
+        corresponding to a given betatron mode and comparing it to the
+        reference horizontal and vertical tunes, the hortizontal and vertical
+        beatron modes can be identified.
+
+        Args:
+            tune1 (float): tune of the 1st & 2nd mode
+            tune2 (float): tune of the 3rd and 4th mode
+            tunex (float): _description_
+            tuney (float): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        diff1x = _np.abs(tune1 - tunex)
+        diff1y = _np.abs(tune1 - tuney)
+        diff2x = _np.abs(tune2 - tunex)
+        diff2y = _np.abs(tune2 - tuney)
+
+        # Assign based on minimum differences
+        if diff1x < diff2x and diff2y < diff1y:
+            xidcs = 0, 1
+            yidcs = 2, 3
+        else:
+            xidcs = 2, 3
+            yidcs = 0, 1
+
+        return xidcs, yidcs
 
     def independent_components_analysis(
             self, n_components=8, plot=True, compare_meas2model=True
