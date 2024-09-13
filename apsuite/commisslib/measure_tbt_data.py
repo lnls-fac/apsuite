@@ -862,8 +862,8 @@ class TbTDataAnalysis(MeasureTbTData):
             mixing_matrix /= _np.sqrt(traj.shape[0] - 1)
 
             # calulate tunes of the source signals
-            tunes1, spec1 = self.calc_spectrum(signals[:, 0], axis=0)
-            tunes2, spec2 = self.calc_spectrum(signals[:, 2], axis=0)
+            spec1, tunes1 = self.calc_spectrum(signals[:, 0], axis=0)
+            spec2, tunes2 = self.calc_spectrum(signals[:, 2], axis=0)
             # modes 0 & 1 and modes 2 & 3 have have equal spectra
             # therefore, it suffices to analyze mode 0 and mode 2 only
 
