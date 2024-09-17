@@ -1,5 +1,4 @@
 """."""
-
 import datetime as _datetime
 import time as _time
 
@@ -9,6 +8,7 @@ import numpy as _np
 from sklearn.decomposition import FastICA as _FastICA
 from scipy.optimize import curve_fit as _curve_fit
 
+from mathphys.sobi import SOBI as _SOBI
 from siriuspy.devices import PowerSupplyPU, Trigger
 from siriuspy.sofb.csdev import SOFBFactory
 
@@ -1035,31 +1035,38 @@ class TbTDataAnalysis(MeasureTbTData):
         return xidcs, yidcs
 
     def independent_components_analysis(
-            self, n_components=8, plot=True, compare_meas2model=True
+            self, n_components=8, method="FastICA", plot=True,
+            compare_meas2model=True
     ):
         r"""Peforms Independent Components Analysis (ICA).
 
         Calculates beta-functions and betatron phase-advance at the BPMs using
-        ICA. ICA aims to identify the linear transformation (unmixing matrix)
+        ICA.
+
+        ICA aims to identify the linear transformation (unmixing matrix)
         revealing statistically independent source signals. Just as in PCA,
         the beatron motion sine and cosine modes can be used to calculate
         beta-functions and BPMs phase advances.
 
         While PCA aims to identify the linear transformation revealing
         uncorrelated source signals, ICA seeks the transformation
-        revealing statistically independent signals, a stronger
-        requirement than uncorrelatedness. ICA often performs better at blind
-        source separation for linear mixtures of sinals with non-gaussian
-        distributions, and can be more robust at betatron motion
-        identification when there are contaminating signals or bad
-        acquisitions.
+        revealing statistically independent signals, a requirement much
+        stronger than uncorrelatedness.
 
-        ICA can be implemented with second-oderd blind source identification
+        ICA often performs better at blind source separation for linear
+        mixtures of sinals with non-gaussian distributions, which is relevant
+        for when several source signals have similar variance. This method
+        thus is generally more robust at betatron motion identification when
+        there are contaminating signals, bad acquisitions or similar variance
+        between horizontal and vertical modes (partticularly relevant when
+        betatron coupling is significant).
+
+        ICA can be implemented with second-order blind source identification
         (SOBI) [1], based on simultaneous diagonalization of the time-shifted
-        data covariance matrix(not implemented), or with information-theoretic
-        approaches for maximizing statistical indpendence of source signals
-        [2]. We use the latter, as implemented in scikit-learn's FastICA [3,
-        4].
+        data covariance matrices or with information-theoretic
+        approaches seeking the maximization of the statistical indpendence of
+        the estimated source signals [2]. We use the latter, as implemented in
+        scikit-learn's FastICA [3,4].
 
         The variance convention is the same as in PCA analysis: whiten source
         signals, with the mixing matrix containing the modes energy/variance
@@ -1110,15 +1117,23 @@ class TbTDataAnalysis(MeasureTbTData):
             phase_model = self.model_optics["phase"+label]
 
             # perform Independent Component Analysis (ICA)
-            ica = _FastICA(
-                n_components=n_components,
-                whiten="unit-variance",
-                algorithm="deflation",
-                tol=1e-12
-            )
-
+            if method == "FastICA":
+                ica = _FastICA(
+                    n_components=n_components,
+                    whiten="unit-variance",
+                    algorithm="parallel",
+                    tol=1e-12
+                )
+            if method == "SOBI":
+                ica = _SOBI(
+                    n_components=n_components,
+                    n_lags=5,
+                    whiten="unit-variance",
+                    isreal=True,
+                    verbose=False,
+                )
             # collect source signals & mixing matrix
-            signals = ica.fit_transform(traj)  # whiten signals
+            signals = ica.fit_transform(traj)
             mixing_matrix = ica.mixing_
 
             # determine betatron modes from mixing matrix
@@ -1576,17 +1591,22 @@ class TbTDataAnalysis(MeasureTbTData):
         beta = amplitudes**2 / action
         return beta, action
 
-    def calc_beta_and_phase_with_pca(self, matrix, beta_model):
+    def calc_beta_and_phase_with_pca(self, matrix, beta_model=None):
         """."""
         _, svals, vtmat = self.calc_svd(matrix, full_matrices=False)
+
+        if beta_model is None:
+            phase_meas = _np.arctan2(
+                svals[1] * vtmat[1, :], svals[0] * vtmat[0, :]
+            )
+            phase_meas = (_np.unwrap(phase_meas))
+            return phase_meas
+
         beta_meas = (
             svals[0] ** 2 * vtmat[0, :] ** 2 + svals[1] ** 2 * vtmat[1, :] ** 2
         )
         beta_meas /= _np.std(beta_meas) / _np.std(beta_model)
-        phase_meas = _np.arctan2(
-            svals[1] * vtmat[1, :], svals[0] * vtmat[0, :]
-        )
-        phase_meas = _np.abs(_np.unwrap(phase_meas))  # why the abs?
+
         return beta_meas, phase_meas
 
     def get_beta_and_phase_from_betatron_modes(
