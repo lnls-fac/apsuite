@@ -525,7 +525,7 @@ class GenerateMachines:
             self.nominal_model, self.params.acc, method='Proportional',
             grouping='TwoKnobs')
         if jac is None:
-            self.tunemat = self.tunecorr.calc_jacobian_matrix()
+            jac = self.tunecorr.calc_jacobian_matrix()
         self.tunemat = jac
         self.goal_tunes = self.tunecorr.get_tunes()
         print('Nominal tunes: {:.4f} {:.4f}'.format(*self.goal_tunes))
