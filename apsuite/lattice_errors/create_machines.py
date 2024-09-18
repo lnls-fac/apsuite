@@ -580,7 +580,7 @@ class GenerateMachines:
                                       self.params.acc, skew_list=idcs)
         if jac is None:
             weight_dispy = self.coupcorr_params.weight_dispy
-            self.coupmat = self.coup_corr.calc_jacobian_matrix(
+            jac = self.coup_corr.calc_jacobian_matrix(
                 model=self.nominal_model, weight_dispy=weight_dispy)
         self.coupmat = jac
         return jac
@@ -660,7 +660,7 @@ class GenerateMachines:
         print()
 
         if self.do_coupling_corr:
-            print('Correcting coupling:')
+            print('Correcting coupling:')        
             mintune = self._calc_coupling(mach)
             print(f'Minimum tune separation before corr: {100*mintune:.3f} %')
             self._correct_coupling(mach)

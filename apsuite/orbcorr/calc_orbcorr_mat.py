@@ -23,18 +23,18 @@ class OrbRespmat:
         if acc not in {"BO", "SI"}:
             raise ValueError('Variable "acc" must be "BO" or "SI"')
 
-        fam_data = (bo if acc == 'BO' else si).get_family_data(self.model)
+        self.fam_data = (bo if acc == 'BO' else si).get_family_data(self.model)
         cav_famname = 'SRFCav' if acc == 'SI' else 'P5Cav'
-        self.rf_idx = self._get_idx(fam_data[cav_famname]['index'])
+        self.rf_idx = self._get_idx(self.fam_data[cav_famname]['index'])
 
-        self.bpm_idx = self._get_idx(fam_data['BPM']['index'])
+        self.bpm_idx = self._get_idx(self.fam_data['BPM']['index'])
 
         if corr_system.upper() == 'SOFB':
-            self.ch_idx = self._get_idx(fam_data['CH']['index'])
-            self.cv_idx = self._get_idx(fam_data['CV']['index'])
+            self.ch_idx = self._get_idx(self.fam_data['CH']['index'])
+            self.cv_idx = self._get_idx(self.fam_data['CV']['index'])
         elif corr_system == 'FOFB':
-            self.ch_idx = self._get_idx(fam_data['FCH']['index'])
-            self.cv_idx = self._get_idx(fam_data['FCV']['index'])
+            self.ch_idx = self._get_idx(self.fam_data['FCH']['index'])
+            self.cv_idx = self._get_idx(self.fam_data['FCV']['index'])
         else:
             raise ValueError('Correction system must be "SOFB" or "FOFB"')
 
