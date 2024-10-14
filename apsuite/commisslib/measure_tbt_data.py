@@ -173,7 +173,11 @@ class MeasureTbTData(_AcqBPMsSignals):
 
     def get_magnets_strength(self):
         """."""
-        return self.devices["pingh"].strength, self.devices["pingv"].strength
+        pingh_cal = self.params.pingh_calibration
+        pingv_cal = self.params.pingv_calibration
+        pingh_str = self.devices["pingh"].strength / pingh_cal
+        pingv_str = self.devices["pingv"].strength / pingv_cal
+        return pingh_str, pingv_str
 
     def get_magnets_state(self):
         """."""
