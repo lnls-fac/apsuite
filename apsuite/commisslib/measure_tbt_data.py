@@ -1,19 +1,18 @@
 """."""
+
 import datetime as _datetime
 import time as _time
 
-import matplotlib.pyplot as _mplt
 import matplotlib.gridspec as _gridspec
+import matplotlib.pyplot as _mplt
 import numpy as _np
-from sklearn.decomposition import FastICA as _FastICA
-from scipy.optimize import curve_fit as _curve_fit
-
+import pyaccel as _pa
 from mathphys.sobi import SOBI as _SOBI
+from pymodels import si as _si
+from scipy.optimize import curve_fit as _curve_fit
 from siriuspy.devices import PowerSupplyPU, Trigger
 from siriuspy.sofb.csdev import SOFBFactory
-
-import pyaccel as _pa
-from pymodels import si as _si
+from sklearn.decomposition import FastICA as _FastICA
 
 from ..optics_analysis import ChromCorr as _ChromCorr, TuneCorr as _TuneCorr
 from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals, \
@@ -22,6 +21,7 @@ from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals, \
 
 class TbTDataParams(_AcqBPMsSignalsParams):
     """."""
+
     BPMS_NAMES = SOFBFactory.create("SI").bpm_names
 
     def __init__(self):
@@ -39,7 +39,7 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.pingv_calibration = 1.02267573
         self.trigpingh_delay = None
         self.trigpingv_delay = None
-        self.magnets_timeout = 120.
+        self.magnets_timeout = 120.0
         self.restore_init_state = True
 
     def __str__(self):
@@ -252,14 +252,14 @@ class MeasureTbTData(_AcqBPMsSignals):
         else:
             pingh_ok = pingh_ok and pingh.cmd_turn_off_pulse(timeout)
         msg = "pingh pulse set" if pingh_ok else "pingh pulse not set"
-        print("\t"+msg)
+        print("\t" + msg)
 
         if state["pingv_pulse"]:
             pingv_ok = pingv_ok and pingv.cmd_turn_on_pulse(timeout)
         else:
             pingv_ok = pingv_ok and pingv.cmd_turn_off_pulse(timeout)
         msg = "pingv pulse set" if pingv_ok else "pingv pulse not set"
-        print("\t"+msg)
+        print("\t" + msg)
 
         return pingh_ok and pingv_ok
 
@@ -418,6 +418,7 @@ class MeasureTbTData(_AcqBPMsSignals):
 
 class TbTDataAnalysis(MeasureTbTData):
     """."""
+
     SYNCH_TUNE = 0.004713  # check this
 
     def __init__(self, filename="", isonline=False):
@@ -489,19 +490,15 @@ class TbTDataAnalysis(MeasureTbTData):
             stg += stmp("switching_mode", data["switching_mode"], "")
             stg += stmp("switching_frequency", data["switching_frequency"], "")
             stg += stmp(
-                "trigbpm_source",
-                data["timing_state"]["trigbpm_source"],
-                ""
+                "trigbpm_source", data["timing_state"]["trigbpm_source"], ""
             )
             stg += stmp(
                 "trigbpm_nrpulses",
                 data["timing_state"]["trigbpm_nrpulses"],
-                ""
+                "",
             )
             stg += stmp(
-                "trigbpm_delay",
-                data["timing_state"]["trigbpm_delay"],
-                ""
+                "trigbpm_delay", data["timing_state"]["trigbpm_delay"], ""
             )
 
             stg += "\n"
@@ -509,51 +506,39 @@ class TbTDataAnalysis(MeasureTbTData):
             stg += "\n"
 
             stg += stmp(
-                "trigpingh_state",
-                data["timing_state"]["trigpingh_state"],
-                ""
+                "trigpingh_state", data["timing_state"]["trigpingh_state"], ""
             )
             stg += stmp(
                 "trigpingh_source",
                 data["timing_state"]["trigpingh_source"],
-                ""
+                "",
             )
             stg += stmp(
-                "trigpingh_delay",
-                data["timing_state"]["trigpingh_delay"],
-                ""
+                "trigpingh_delay", data["timing_state"]["trigpingh_delay"], ""
             )
             stg += stmp("pingh_pwr", data["magnets_state"]["pingh_pwr"], "")
 
             stg += stmp(
-                "pingh_pulse",
-                data["magnets_state"]["pingh_pulse"],
-                ""
+                "pingh_pulse", data["magnets_state"]["pingh_pulse"], ""
             )
             stg += ftmp("hkick", data["magnets_strengths"][0], "mrad")
             stg += "\n"
 
             stg += stmp(
-                "trigpingv_state",
-                data["timing_state"]["trigpingv_state"],
-                ""
+                "trigpingv_state", data["timing_state"]["trigpingv_state"], ""
             )
             stg += stmp(
                 "trigpingv_source",
                 data["timing_state"]["trigpingv_source"],
-                ""
+                "",
             )
             stg += stmp(
-                "trigpingv_delay",
-                data["timing_state"]["trigpingv_delay"],
-                ""
+                "trigpingv_delay", data["timing_state"]["trigpingv_delay"], ""
             )
             stg += stmp("pingv_pwr", data["magnets_state"]["pingv_pwr"], "")
 
             stg += stmp(
-                "pingv_pulse",
-                data["magnets_state"]["pingv_pulse"],
-                ""
+                "pingv_pulse", data["magnets_state"]["pingv_pulse"], ""
             )
             stg += ftmp("vkick", data["magnets_strengths"][1], "mrad")
 
@@ -606,9 +591,11 @@ class TbTDataAnalysis(MeasureTbTData):
         # make often used data attributes
         data = self.data
         epoch_tmstp = data.get("timestamp", None)
-        timestamp = _datetime.datetime.fromtimestamp(
-            epoch_tmstp
-        ) if epoch_tmstp is not None else None
+        timestamp = (
+            _datetime.datetime.fromtimestamp(epoch_tmstp)
+            if epoch_tmstp is not None
+            else None
+        )
         self.timestamp = timestamp
         trajx = data.get("orbx", None).copy() * 1e-3
         trajy = data.get("orby", None).copy() * 1e-3
@@ -621,8 +608,8 @@ class TbTDataAnalysis(MeasureTbTData):
 
         self.nrsamples_pre = data.get("nrsamples_pre", None)
         self.nrsamples_post = data.get("nrsamples_post", None)
-        self.tunex = data.get('tunex', None)
-        self.tuney = data.get('tuney', None)
+        self.tunex = data.get("tunex", None)
+        self.tuney = data.get("tuney", None)
         self.acq_rate = data.get("acq_rate", None)
         self.rf_freq = data.get("rf_frequency", None)
         self.sampling_freq = data.get("sampling_frequency", None)
@@ -738,9 +725,9 @@ class TbTDataAnalysis(MeasureTbTData):
             phases_fit = _np.array(params_fit[-nbpms:])
 
             if self.model_optics is None:
-                self._get_nominal_optics(tunes=(tunex + 49., tuney + 14.))
-            beta_model = self.model_optics["beta"+label]
-            phases_model = self.model_optics["phase"+label]
+                self._get_nominal_optics(tunes=(tunex + 49.0, tuney + 14.0))
+            beta_model = self.model_optics["beta" + label]
+            phases_model = self.model_optics["phase" + label]
 
             # fit beta-function & action from fitted amplitudes & nominal beta
             beta_fit, action = self.calc_beta_and_action(amps, beta_model)
@@ -749,38 +736,37 @@ class TbTDataAnalysis(MeasureTbTData):
             residue = traj - final_fit
 
             # store fitting data
-            fitting_data["tune"+label] = tune
-            fitting_data["tune_err"+label] = params_error[0]
-            fitting_data["amplitudes"+label] = amps
-            fitting_data["beta"+label] = beta_fit
+            fitting_data["tune" + label] = tune
+            fitting_data["tune_err" + label] = params_error[0]
+            fitting_data["amplitudes" + label] = amps
+            fitting_data["beta" + label] = beta_fit
             # TODO: propagate amplitude errors to beta errors
-            fitting_data["beta"+label+"_err"] = params_error[1 : nbpms + 1]
-            fitting_data["phase"+label] = phases_fit
-            fitting_data["phase"+label+"_err"] = params_error[-nbpms:]
-            fitting_data["action"+label] = action
+            fitting_data["beta" + label + "_err"] = params_error[1 : nbpms + 1]
+            fitting_data["phase" + label] = phases_fit
+            fitting_data["phase" + label + "_err"] = params_error[-nbpms:]
+            fitting_data["action" + label] = action
             # TODO: propagate amplitude errors to action error
-            fitting_data["traj"+label+"_init_fit"] = initial_fit
-            fitting_data["traj"+label+"_final_fit"] = final_fit
-            fitting_data["fitting"+label+"_residue"] = residue
+            fitting_data["traj" + label + "_init_fit"] = initial_fit
+            fitting_data["traj" + label + "_final_fit"] = final_fit
+            fitting_data["fitting" + label + "_residue"] = residue
 
             # Plot results (beta_beating and phase adv. error)
             if plot:
                 title = f"Sinusoidal fit analysis - beta{label} & phase{label}"
                 self.plot_betabeat_and_phase_error(
-                    beta_model, beta_fit, phases_model, phases_fit,
+                    beta_model,
+                    beta_fit,
+                    phases_model,
+                    phases_fit,
                     title=title,
                     compare_meas2model=compare_meas2model,
-                    bpms2use=self.bpms2use
+                    bpms2use=self.bpms2use,
                 )
         self.fitting_data = fitting_data
 
     def principal_components_analysis(
-                self,
-                stackxy=True,
-                planes="xy",
-                plot=True,
-                compare_meas2model=True
-            ):
+        self, stackxy=True, planes="xy", plot=True, compare_meas2model=True
+    ):
         r"""Peform linear optics analysis Principal Components Analysis (PCA).
 
         Calculates beta-functions and betatron phase-advance at the BPMs using
@@ -844,7 +830,7 @@ class TbTDataAnalysis(MeasureTbTData):
         [3] Scikit-learn examples. "Blind Source Separation using FastICA".
             https://scikit-learn.org/stable/auto_examples/decomposition/plot_ica_blind_source_separation.html#sphx-glr-auto-examples-decomposition-plot-ica-blind-source-separation-py
         """
-        tunes = self.tunex + 49., self.tuney + 14.
+        tunes = self.tunex + 49.0, self.tuney + 14.0
         if self.model_optics is None:
             self._get_nominal_optics(tunes)
 
@@ -898,10 +884,10 @@ class TbTDataAnalysis(MeasureTbTData):
             phase = _np.concatenate((phasex, phasey))
 
             # calculate signal variance
-            signalx = _np.sqrt(_np.sum(svals[xidcs[0]:xidcs[1] + 1]**2))
-            signaly = _np.sqrt(_np.sum(svals[yidcs[0]:yidcs[1] + 1]**2))
+            signalx = _np.sqrt(_np.sum(svals[xidcs[0] : xidcs[1] + 1] ** 2))
+            signaly = _np.sqrt(_np.sum(svals[yidcs[0] : yidcs[1] + 1] ** 2))
             # and signal noise
-            noise = _np.sqrt(_np.sum(svals[3:]**2))
+            noise = _np.sqrt(_np.sum(svals[3:] ** 2))
             snrx, snry = signalx / noise, signaly / noise
 
             # calculate error bars as in Appendix A of
@@ -923,11 +909,13 @@ class TbTDataAnalysis(MeasureTbTData):
             # plot_results
             if plot:
                 self.plot_betabeat_and_phase_error(
-                    _np.concatenate((betax_model, betay_model)), beta,
-                    _np.concatenate((phasex_model, phasey_model)), phase,
+                    _np.concatenate((betax_model, betay_model)),
+                    beta,
+                    _np.concatenate((phasex_model, phasey_model)),
+                    phase,
                     title="PCA Analysis: beta & phase (stacked x/y)",
                     compare_meas2model=compare_meas2model,
-                    bpms2use=self.bpms2use
+                    bpms2use=self.bpms2use,
                 )
 
             # save analysis data
@@ -954,8 +942,8 @@ class TbTDataAnalysis(MeasureTbTData):
                 traj = self.trajy
 
             # get model optics
-            beta_model = self.model_optics["beta"+plane]
-            phase_model = self.model_optics["phase"+plane]
+            beta_model = self.model_optics["beta" + plane]
+            phase_model = self.model_optics["phase" + plane]
 
             # perform PCA via SVD of history matrix
             umat, svals, vtmat = self.calc_svd(traj, full_matrices=False)
@@ -974,8 +962,8 @@ class TbTDataAnalysis(MeasureTbTData):
                 sin_mode, cos_mode, beta_model
             )
 
-            signal = _np.sqrt(_np.sum(svals[:2]**2))  # signal variance
-            noise = _np.sqrt(_np.sum(svals[2:]**2))  # white noise
+            signal = _np.sqrt(_np.sum(svals[:2] ** 2))  # signal variance
+            noise = _np.sqrt(_np.sum(svals[2:] ** 2))  # white noise
             snr = signal / noise
             nrsamples = self.nrsamples_pre + self.nrsamples_post
             phase_error = 1 / snr / _np.sqrt(nrsamples)
@@ -985,22 +973,24 @@ class TbTDataAnalysis(MeasureTbTData):
             # plot_results
             if plot:
                 self.plot_betabeat_and_phase_error(
-                    beta_model, beta,
-                    phase_model, phase,
+                    beta_model,
+                    beta,
+                    phase_model,
+                    phase,
                     title=f"PCA Analysis: beta{plane} & phase{plane}",
                     compare_meas2model=compare_meas2model,
-                    bpms2use=self.bpms2use
+                    bpms2use=self.bpms2use,
                 )
 
             # save analysis data
-            pca_data["singular_values_"+plane] = svals
-            pca_data["source_signals_"+plane] = signals
-            pca_data["mixing_matrix_"+plane] = mixing_matrix
-            pca_data["beta"+plane] = beta
-            pca_data["phase"+plane] = phase
-            pca_data["snr"+plane] = snr
-            pca_data["beta"+plane+"_err"] = beta_error
-            pca_data["phase"+plane+"_err"] = phase_error
+            pca_data["singular_values_" + plane] = svals
+            pca_data["source_signals_" + plane] = signals
+            pca_data["mixing_matrix_" + plane] = mixing_matrix
+            pca_data["beta" + plane] = beta
+            pca_data["phase" + plane] = phase
+            pca_data["snr" + plane] = snr
+            pca_data["beta" + plane + "_err"] = beta_error
+            pca_data["phase" + plane + "_err"] = phase_error
         self.pca_data = pca_data
 
     def identify_modes(self, tune1, tune2, tunex, tuney):
@@ -1039,8 +1029,11 @@ class TbTDataAnalysis(MeasureTbTData):
         return xidcs, yidcs
 
     def independent_components_analysis(
-            self, n_components=8, method="FastICA", plot=True,
-            compare_meas2model=True
+        self,
+        n_components=8,
+        method="FastICA",
+        plot=True,
+        compare_meas2model=True,
     ):
         r"""Peforms Independent Components Analysis (ICA).
 
@@ -1111,14 +1104,14 @@ class TbTDataAnalysis(MeasureTbTData):
             else:
                 traj = self.trajy
                 label = "y"
-            tunes = self.tunex + 49., self.tuney + 14.
+            tunes = self.tunex + 49.0, self.tuney + 14.0
 
             if self.model_optics is None:
                 self._get_nominal_optics(tunes)
 
             # get model optics
-            beta_model = self.model_optics["beta"+label]
-            phase_model = self.model_optics["phase"+label]
+            beta_model = self.model_optics["beta" + label]
+            phase_model = self.model_optics["phase" + label]
 
             # perform Independent Component Analysis (ICA)
             if method == "FastICA":
@@ -1126,7 +1119,7 @@ class TbTDataAnalysis(MeasureTbTData):
                     n_components=n_components,
                     whiten="unit-variance",
                     algorithm="parallel",
-                    tol=1e-12
+                    tol=1e-12,
                 )
             if method == "SOBI":
                 ica = _SOBI(
@@ -1160,18 +1153,20 @@ class TbTDataAnalysis(MeasureTbTData):
             # plot results
             if plot:
                 self.plot_betabeat_and_phase_error(
-                    beta_model, beta,
-                    phase_model, phase,
+                    beta_model,
+                    beta,
+                    phase_model,
+                    phase,
                     title=f"ICA Analysis: beta{label} & phase{label}",
                     compare_meas2model=compare_meas2model,
-                    bpms2use=self.bpms2use
+                    bpms2use=self.bpms2use,
                 )
 
             # save results
-            ica_data["source_signals_"+label] = signals
-            ica_data["mixing_matrix_"+label] = mixing_matrix
-            ica_data["beta"+label] = beta
-            ica_data["phase"+label] = phase
+            ica_data["source_signals_" + label] = signals
+            ica_data["mixing_matrix_" + label] = mixing_matrix
+            ica_data["beta" + label] = beta
+            ica_data["phase" + label] = phase
         self.ica_data = ica_data
 
     def equilibrium_params_analysis(self):
@@ -1191,10 +1186,8 @@ class TbTDataAnalysis(MeasureTbTData):
 
         fig, axs = _mplt.subplots(2, 1, figsize=(12, 8))
 
-        axs[0].plot(
-            tunesx, _np.abs(trajx_spec)[:, bpm_index])
-        axs[1].plot(
-            tunesy, _np.abs(trajy_spec)[:, bpm_index])
+        axs[0].plot(tunesx, _np.abs(trajx_spec)[:, bpm_index])
+        axs[1].plot(tunesy, _np.abs(trajy_spec)[:, bpm_index])
 
         if not title:
             title = "kicked beam trajectories spectrum \n"
@@ -1202,9 +1195,9 @@ class TbTDataAnalysis(MeasureTbTData):
 
         axs[0].set_title(title)
 
-        axs[0].set_ylabel(r'$x$ [mm]')
-        axs[1].set_ylabel(r'$y$ [mm]')
-        axs[1].set_xlabel('tune')
+        axs[0].set_ylabel(r"$x$ [mm]")
+        axs[1].set_ylabel(r"$y$ [mm]")
+        axs[1].set_xlabel("tune")
         fig.tight_layout()
 
         return fig, axs
@@ -1234,8 +1227,8 @@ class TbTDataAnalysis(MeasureTbTData):
             print(msg)
             compare_fit = False
 
-        nr_pre = self.data['nrsamples_pre']
-        nr_post = self.data['nrsamples_post']
+        nr_pre = self.data["nrsamples_pre"]
+        nr_post = self.data["nrsamples_post"]
 
         if not timescale:
             nmax_x, nmax_y = int(1 / self.tunex), int(1 / self.tuney)
@@ -1274,12 +1267,18 @@ class TbTDataAnalysis(MeasureTbTData):
             ax[0].plot(
                 _np.arange(init, end + 1, 1),
                 fit[:, bpm_index],
-                "x-", mfc="none", color="blue", label="fit"
+                "x-",
+                mfc="none",
+                color="blue",
+                label="fit",
             )
             ax[0].plot(
                 _np.arange(init, end + 1, 1),
                 res[:, bpm_index],
-                "x-", mfc="none", color="green", label="residue"
+                "x-",
+                mfc="none",
+                color="green",
+                label="residue",
             )
             ax[0].legend()
         ax[0].set_xlim(slicex)
@@ -1295,12 +1294,18 @@ class TbTDataAnalysis(MeasureTbTData):
             ax[1].plot(
                 _np.arange(init, end + 1, 1),
                 fit[:, bpm_index],
-                "x-", mfc="none", color="red", label="fit"
+                "x-",
+                mfc="none",
+                color="red",
+                label="fit",
             )
             ax[1].plot(
                 _np.arange(init, end + 1, 1),
                 res[:, bpm_index],
-                "x-", mfc="none", color="green", label="residue"
+                "x-",
+                mfc="none",
+                color="green",
+                label="residue",
             )
             ax[1].legend()
         ax[1].set_xlim(slicey)
@@ -1340,34 +1345,34 @@ class TbTDataAnalysis(MeasureTbTData):
         spec1 = fig.add_subplot(gs[2, 1])
         spec2 = fig.add_subplot(gs[3, 1], sharex=spec1, sharey=spec1)
 
-        svals.plot(s, 'o', color='k', mfc='none')
-        svals.set_title('singular values spectrum')
+        svals.plot(s, "o", color="k", mfc="none")
+        svals.set_title("singular values spectrum")
         svals.set_yscale("log")
 
-        var.plot(_np.cumsum(s) / _np.sum(s), 'o', color="k", mfc='none')
+        var.plot(_np.cumsum(s) / _np.sum(s), "o", color="k", mfc="none")
         var.set_title("explained variance")
         var.set_xlabel("rank")
 
-        source1.plot(u[:, 0], label='mode 0')
-        source1.plot(u[:, 1], label='mode 1')
+        source1.plot(u[:, 0], label="mode 0")
+        source1.plot(u[:, 1], label="mode 1")
         source1.set_title("temporal modes - axis 1")
         source1.set_xlabel("turns index")
         source1.legend()
 
-        source2.plot(u[:, 2], label='mode 2')
-        source2.plot(u[:, 3], label='mode 3')
+        source2.plot(u[:, 2], label="mode 2")
+        source2.plot(u[:, 3], label="mode 3")
         source2.set_title("temporal modes - axis 2")
         source2.set_xlabel("turns index")
         source2.legend()
 
-        spatial1.plot(vt.T[:, 0], label='mode 0')
-        spatial1.plot(vt.T[:, 1], label='mode 1')
+        spatial1.plot(vt.T[:, 0], label="mode 0")
+        spatial1.plot(vt.T[:, 1], label="mode 1")
         spatial1.set_title("spatial modes - axis 1")
         spatial1.set_xlabel("BPMs index (H/V)")
         spatial1.legend()
 
-        spatial2.plot(vt.T[:, 2], label='mode 2')
-        spatial2.plot(vt.T[:, 3], label='mode 3')
+        spatial2.plot(vt.T[:, 2], label="mode 2")
+        spatial2.plot(vt.T[:, 3], label="mode 3")
         spatial2.set_title("spatial modes - axis 2")
         spatial2.set_xlabel("BPMs index (H/V)")
         spatial2.legend()
@@ -1375,22 +1380,30 @@ class TbTDataAnalysis(MeasureTbTData):
         freq, fourier = _np.fft.rfftfreq(n=u.shape[0]), _np.fft.rfft(u, axis=0)
 
         spec1.plot(
-            freq, _np.abs(fourier)[:, 0], 'o-',
-            color="C0", mfc="none", label='mode 0'
+            freq,
+            _np.abs(fourier)[:, 0],
+            "o-",
+            color="C0",
+            mfc="none",
+            label="mode 0",
         )
         spec1.plot(
-            freq, _np.abs(fourier)[:, 1], 'x-', color="C0", label='mode 1'
+            freq, _np.abs(fourier)[:, 1], "x-", color="C0", label="mode 1"
         )
         spec1.set_title("temporal modes spectrum - axis 1")
         spec1.set_xlabel("fractional tune")
         spec1.legend()
 
         spec2.plot(
-            freq, _np.abs(fourier)[:, 2], 'o-',
-            color="C1", mfc="none", label='mode 2'
+            freq,
+            _np.abs(fourier)[:, 2],
+            "o-",
+            color="C1",
+            mfc="none",
+            label="mode 2",
         )
         spec2.plot(
-            freq, _np.abs(fourier)[:, 3], 'x-', color="C1", label='mode 3'
+            freq, _np.abs(fourier)[:, 3], "x-", color="C1", label="mode 3"
         )
         spec2.set_title("temporal modes spectrum - axis 2")
         spec2.set_xlabel("fractional tune")
@@ -1415,7 +1428,7 @@ class TbTDataAnalysis(MeasureTbTData):
         """
         return self.plot_trajs(
             bpm_index=bpm_index, timescale=timescale, compare_fit=True
-            )
+        )
 
     def plot_rms_residue(self, axis=0):
         """Plot RMS fitting residue along BPMs or along Turns.
@@ -1430,15 +1443,24 @@ class TbTDataAnalysis(MeasureTbTData):
             along = "BPMs" if not axis else "Turns"
             _mplt.title(f"RMS fitting residue along {along}")
             _mplt.plot(
-                self.fitting_data["fitting"+label+"_residue"].std(axis=axis),
-                "o-", mfc='none'
+                self.fitting_data["fitting" + label + "_residue"].std(
+                    axis=axis
+                ),
+                "o-",
+                mfc="none",
             )
             _mplt.xlabel(f"{along} index")
             _mplt.ylabel("residue [mm]")
 
     def plot_betabeat_and_phase_error(
-        self, beta_model, beta_meas, phase_model, phase_meas, title=None,
-        compare_meas2model=False, bpms2use=None
+        self,
+        beta_model,
+        beta_meas,
+        phase_model,
+        phase_meas,
+        title=None,
+        compare_meas2model=False,
+        bpms2use=None,
     ):
         """."""
         # TODO: plot error bars if they are available
@@ -1464,12 +1486,8 @@ class TbTDataAnalysis(MeasureTbTData):
         # Beta plots
         if compare_meas2model:
             ax_beta = axs[0, 0]
-            ax_beta.plot(
-                beta_model, "o-", label="Model", mfc="none"
-            )
-            ax_beta.plot(
-                beta_meas, "o--", label="Meas", mfc="none"
-            )
+            ax_beta.plot(beta_model, "o-", label="Model", mfc="none")
+            ax_beta.plot(beta_meas, "o--", label="Meas", mfc="none")
             ax_beta.set_ylabel("beta function")
             ax_beta.legend()
 
@@ -1492,12 +1510,8 @@ class TbTDataAnalysis(MeasureTbTData):
             meas_phase_advance = _np.abs(_np.diff(phase_meas))
 
             ax_phase = axs[1, 0]
-            ax_phase.plot(
-                model_phase_advance, "o-", label="Model", mfc="none"
-            )
-            ax_phase.plot(
-                meas_phase_advance, "o--", label="Meas", mfc="none"
-            )
+            ax_phase.plot(model_phase_advance, "o-", label="Model", mfc="none")
+            ax_phase.plot(meas_phase_advance, "o--", label="Meas", mfc="none")
             ax_phase.set_ylabel("BPMs phase advance [rad]")
             ax_phase.legend()
 
@@ -1510,7 +1524,7 @@ class TbTDataAnalysis(MeasureTbTData):
             rph_err,
             "o-",
             label=f"rms.err={rph_err[~_np.isnan(rph_err)].std():.2f}",
-            mfc="none"
+            mfc="none",
         )
         ax_phase_err.set_ylabel("BPMs fractional phase advance error [rad]")
         ax_phase_err.legend()
@@ -1575,8 +1589,10 @@ class TbTDataAnalysis(MeasureTbTData):
         xdata = self._get_independent_variables(from_turn2turn, nbpms)
         # TODO: add exception in case fit fails
         popt, pcov = _curve_fit(
-            f=self.harmonic_tbt_model, xdata=xdata, ydata=bpmdata,
-            p0=params_guess
+            f=self.harmonic_tbt_model,
+            xdata=xdata,
+            ydata=bpmdata,
+            p0=params_guess,
         )
         return popt, _np.diagonal(pcov)
 
@@ -1603,7 +1619,7 @@ class TbTDataAnalysis(MeasureTbTData):
             phase_meas = _np.arctan2(
                 svals[1] * vtmat[1, :], svals[0] * vtmat[0, :]
             )
-            phase_meas = (_np.unwrap(phase_meas))
+            phase_meas = _np.unwrap(phase_meas)
             return phase_meas
 
         beta_meas = (
@@ -1632,7 +1648,7 @@ class TbTDataAnalysis(MeasureTbTData):
             phase: 160-array of betatron phase at BPMs
 
         """
-        beta = (sin_mode**2 + cos_mode**2)
+        beta = sin_mode**2 + cos_mode**2
         beta /= _np.std(beta) / _np.std(beta_model)
         phase = _np.arctan2(sin_mode, cos_mode)
         phase = _np.unwrap(phase, discont=_np.pi)
