@@ -1069,7 +1069,7 @@ class MeasACORM(_ThreadBaseClass):
             'mV:AL:REF-SP', 'mV:AMPREF:MIN:S', 'PL:REF:S', 'PHSREF:MIN:S',
             'COND:DC:S', 'COND:DC', 'PULSE:S', 'PULSE',
             ]
-        self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SI, props2init=props)
+        self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SIA, props2init=props)
         # Create Tune object:
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self._log(f'ET: = {_time.time()-t00:.2f}s')
@@ -1577,8 +1577,8 @@ class MeasACORM(_ThreadBaseClass):
         anly['orby_neg'] = orby_neg
         anly['orbx_pos'] = orbx_pos
         anly['orby_pos'] = orby_pos
-        anly['mat_colx'] = (orbx_pos - orbx_neg) / kick / 2
-        anly['mat_coly'] = (orby_pos - orby_neg) / kick / 2
+        anly['mat_colsx'] = (orbx_pos - orbx_neg) / kick / 2
+        anly['mat_colsy'] = (orby_pos - orby_neg) / kick / 2
 
         self._log(f'Done! ET: {_time.time()-t0_:2f}s')
         return anly
