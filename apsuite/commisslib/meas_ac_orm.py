@@ -340,7 +340,7 @@ class MeasACORM(_ThreadBaseClass):
 
     def save_loco_input_data(
             self, respmat_name: str, overwrite=False, save2servconf=False,
-            extra_kwargs=None):
+            extra_kwargs=None, matrix=None):
         """Save in `.pickle` format a dictionary with all LOCO input data.
 
         Args:
@@ -364,12 +364,13 @@ class MeasACORM(_ThreadBaseClass):
         data['tuney'] = bpms_anly['tuney']
         data['stored_current'] = bpms_anly['stored_current']
         data['bpm_variation'] = bpms_anly['bpm_variation']
-        mat = self.build_respmat()
-        data['respmat'] = mat
+        if matrix is None:
+            matrix = self.build_respmat()
+        data['respmat'] = matrix
         data.update(extra_kwargs or dict())
         if save2servconf:
             data['orbmat_name'] = respmat_name
-            mat = self.save_respmat_to_configdb(respmat_name, mat=mat)
+            matrix = self.save_respmat_to_configdb(respmat_name, mat=matrix)
         _save(data, f'loco_input_{respmat_name:s}', overwrite=overwrite)
 
     def save_analysis_dictionary(self, filename, overwrite=False):
