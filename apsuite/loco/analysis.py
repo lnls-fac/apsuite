@@ -21,6 +21,7 @@ rc('font', **{'size': 14})
 
 # difference between sector 20 B1 end and model start marker
 SECTOR_SHIFT = -5.017  # [m]
+DEFAULT_FIG_DPI = 100
 
 
 class LOCOAnalysis():
@@ -268,7 +269,7 @@ class LOCOAnalysis():
         ayx.legend(loc='upper right', fontsize=11)
         ayy.legend(loc='upper right', fontsize=11)
         if save:
-            fig.savefig(fname + '.png', dpi=300, format='png')
+            fig.savefig(fname + '.png', dpi=DEFAULT_FIG_DPI, format='png')
 
     def plot_3d_fitting(self, diff1, diff2, fname):
         """."""
@@ -310,7 +311,7 @@ class LOCOAnalysis():
         ax2.set_zlabel(r'$|\chi|$ [$\mu$m]', labelpad=15)
         ax2.set_title('Measured - LOCO Fit')
         plt.tight_layout()
-        fig.savefig(fname+'.png', format='png', dpi=300)
+        fig.savefig(fname+'.png', format='png', dpi=DEFAULT_FIG_DPI)
 
     def plot_quadrupoles_gradients_by_family(
             self, nom_model, fit_model, save=False, fname=None):
@@ -369,9 +370,9 @@ class LOCOAnalysis():
         if save:
             if fname is None:
                 fig.savefig(
-                    'quadrupoles_gradients.png', format='png', dpi=300)
+                    'quadrupoles_gradients.png', format='png', dpi=DEFAULT_FIG_DPI)
             else:
-                fig.savefig(fname+'.png', format='png', dpi=300)
+                fig.savefig(fname+'.png', format='png', dpi=DEFAULT_FIG_DPI)
         return df_stats
 
     def save_quadrupoles_variations(self, nom_model, fit_model, fname=''):
@@ -452,9 +453,9 @@ class LOCOAnalysis():
         plt.tight_layout()
         if save:
             if fname is None:
-                fig.savefig('quadrupoles_gradients.png', format='png', dpi=300)
+                fig.savefig('quadrupoles_gradients.png', format='png', dpi=DEFAULT_FIG_DPI)
             else:
-                fig.savefig(fname+'.png', format='png', dpi=300)
+                fig.savefig(fname+'.png', format='png', dpi=DEFAULT_FIG_DPI)
         return kfit, knom, perc
 
     def plot_skew_quadrupoles(
@@ -493,9 +494,9 @@ class LOCOAnalysis():
             if fname is None:
                 plt.savefig(
                     'skew_quadrupoles_skew_gradients.png',
-                    format='png', dpi=300)
+                    format='png', dpi=DEFAULT_FIG_DPI)
             else:
-                plt.savefig(fname+'.png', format='png', dpi=300)
+                plt.savefig(fname+'.png', format='png', dpi=DEFAULT_FIG_DPI)
         return kfit, knom, percentage
 
     def plot_gain(self, save=False, fname=None):
@@ -555,9 +556,9 @@ class LOCOAnalysis():
         plt.tight_layout()
         if save:
             if fname is None:
-                plt.savefig('gains.png', format='png', dpi=300)
+                plt.savefig('gains.png', format='png', dpi=DEFAULT_FIG_DPI)
             else:
-                plt.savefig(fname+'.png', format='png', dpi=300)
+                plt.savefig(fname+'.png', format='png', dpi=DEFAULT_FIG_DPI)
 
     def beta_and_tune(self, twiss=True):
         """."""
@@ -607,7 +608,7 @@ class LOCOAnalysis():
         ax.grid(alpha=0.5, linestyle='--')
         plt.tight_layout()
         plt.savefig(
-            'beta_beating.png', dpi=300)
+            'beta_beating.png', dpi=DEFAULT_FIG_DPI)
 
         tunex_meas = 49 + round(self.loco_setup['tunex'], 4)
         tuney_meas = 14 + round(self.loco_setup['tuney'], 4)
@@ -734,7 +735,7 @@ class LOCOAnalysis():
         self._create_sectors_vlines(ax1, xdelta=xdelta, annotate=False)
         self._create_sectors_vlines(ax2, xdelta=xdelta, yloc=max_val*0.9)
         plt.tight_layout()
-        plt.savefig('dispersion.png', dpi=300)
+        plt.savefig('dispersion.png', dpi=DEFAULT_FIG_DPI)
         return df_disp
 
     def emittance_and_coupling(self):
