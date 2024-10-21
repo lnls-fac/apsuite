@@ -370,7 +370,7 @@ class MeasACORM(_ThreadBaseClass):
         if save2servconf:
             data['orbmat_name'] = respmat_name
             mat = self.save_respmat_to_configdb(respmat_name, mat=mat)
-        _save(data, f'loco_input_{respmat_name:s}', overwrite=overwrite)
+        _save(data, f'{respmat_name:s}', overwrite=overwrite)
 
     def save_analysis_dictionary(self, filename, overwrite=False):
         """Save internal analysis dict to file.
