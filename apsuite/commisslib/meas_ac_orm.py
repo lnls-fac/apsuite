@@ -8,6 +8,7 @@ import operator as _opr
 import numpy as _np
 import matplotlib.pyplot as _mplt
 import scipy.optimize as _scyopt
+from scipy.signal import find_peaks as _find_peaks
 
 from mathphys.functions import save as _save, load as _load
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
@@ -1496,13 +1497,6 @@ class MeasACORM(_ThreadBaseClass):
     # ---------------- Data Processing methods ----------------
 
     def _process_rf_step(self, data, transition_length=10):
-        def _fitting_model(tim, *params):
-            idx1, idx2, idx3, amp1, amp2 = params
-            y = _np.zeros(tim.size)
-            y[int(idx1):int(idx2)] = amp1
-            y[int(idx2):int(idx3)] = amp2
-            return y
-
         t0_ = _time.time()
         self._log('Processing RF Step...', end='')
         fsamp = data['sampling_frequency']
@@ -1530,35 +1524,24 @@ class MeasACORM(_ThreadBaseClass):
 
         tim = _np.arange(orbx.shape[0]) * dtim
         anly['time'] = tim
-
-        # fit average horizontal orbit to find transition indices
-        excit_time = data['excit_time']
-        dly = data['step_delay']
         kick = data['step_kick']
-        idx1 = (tim > dly).nonzero()[0][0]
-        idx2 = (tim > (excit_time/2 + dly)).nonzero()[0][0]
-        idx3 = (tim > (excit_time + dly)).nonzero()[0][0]
+
         etax_avg = 0.033e6  # average dispersion function, in [um]
         rf_freq = data['rf_frequency']
         mom_compac = data.get('mom_compac', _asparams.SI_MOM_COMPACT)
+        amp = kick * etax_avg / mom_compac / rf_freq
+        # identify where positive and neg. avg. orb distortion happen
+        peaks_pos = _find_peaks(orbx.mean(axis=1), amp/2)[0]
+        peaks_neg = _find_peaks(-orbx.mean(axis=1), amp/2)[0]
 
-        amp1 = -kick * etax_avg / mom_compac / rf_freq
-        amp2 = kick * etax_avg / mom_compac / rf_freq
-        par0 = [idx1, idx2, idx3, amp1, amp2]
-        par, _ = _scyopt.curve_fit(
-            _fitting_model, tim, orbx.mean(axis=1), p0=par0)
-        idx1, idx2, idx3, amp1, amp2 = par
-        idx1 = int(idx1)
-        idx2 = int(idx2)
-        idx3 = int(idx3)
-        par = idx1, idx2, idx3, amp1, amp2
-        anly['params_fit_init'] = par0
-        anly['params_fit'] = par
+        idx1 = peaks_pos[0]
+        idx2 = peaks_pos[-1]
+        idx3 = peaks_neg[-1]
+
         anly['idx1'] = idx1
         anly['idx2'] = idx2
         anly['idx3'] = idx3
-        anly['amp1'] = amp1
-        anly['amp2'] = amp2
+        anly['amp1'] = amp
         anly['transition_length'] = transition_length
 
         sec1_ini = idx1 + transition_length
