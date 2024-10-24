@@ -35,7 +35,8 @@ class UtilClass:
             dft_freq=_np.fft.fftfreq(rawdata.shape[1], d=dtime),
             stored_current=bbb.dcct.current,
             timestamp=_time.time(),
-            cavity_data=UtilClass.get_cavity_data(bbb),
+            cavity_a_data=UtilClass.get_cavity_data(bbb.rfcav_a),
+            cavity_b_data=UtilClass.get_cavity_data(bbb.rfcav_b),
             acqtype=acqtype, downsample=acq.downsample,
             fb_set0=bbb.coeffs.set0, fb_set1=bbb.coeffs.set1,
             fb_set0_desc=bbb.coeffs.set0_desc,
@@ -51,36 +52,21 @@ class UtilClass:
             )
 
     @staticmethod
-    def get_cavity_data(bbb):
+    def get_cavity_data(rfcav):
         """."""
         return dict(
             temperature={
-                'cell1': bbb.rfcav.dev_cavmon.temp_cell1,
-                'cell2': bbb.rfcav.dev_cavmon.temp_cell2,
-                'cell3': bbb.rfcav.dev_cavmon.temp_cell3,
-                'cell4': bbb.rfcav.dev_cavmon.temp_cell4,
-                'cell5': bbb.rfcav.dev_cavmon.temp_cell5,
-                'cell6': bbb.rfcav.dev_cavmon.temp_cell6,
-                'cell7': bbb.rfcav.dev_cavmon.temp_cell7,
-                'coupler': bbb.rfcav.dev_cavmon.temp_coupler,
                 },
             power={
-                'cell2': bbb.rfcav.dev_cavmon.power_cell2,
-                'cell4': bbb.rfcav.dev_cavmon.power_cell4,
-                'cell6': bbb.rfcav.dev_cavmon.power_cell6,
-                'forward': bbb.rfcav.dev_cavmon.power_forward,
-                'reverse': bbb.rfcav.dev_cavmon.power_reverse,
-                'voltage': bbb.rfcav.dev_cavmon.gap_voltage,
+                'forward': rfcav.dev_cavmon.power_forward,
+                'reverse': rfcav.dev_cavmon.power_reverse,
+                'voltage': rfcav.dev_cavmon.gap_voltage,
+
                 },
-            voltage=bbb.rfcav.dev_llrf.voltage_mon,
-            phase=bbb.rfcav.dev_llrf.phase_mon,
-            detune=bbb.rfcav.dev_llrf.detune,
-            detune_error=bbb.rfcav.dev_llrf.detune_error,
-            field_flatness_error=bbb.rfcav.dev_llrf.field_flatness_error,
-            field_flatness_gain1=bbb.rfcav.dev_llrf.field_flatness_gain1,
-            field_flatness_gain2=bbb.rfcav.dev_llrf.field_flatness_gain2,
-            field_flatness_amp1=bbb.rfcav.dev_llrf.field_flatness_amp1,
-            field_flatness_amp2=bbb.rfcav.dev_llrf.field_flatness_amp2,
+            voltage=rfcav.dev_llrf.voltage_mon,
+            phase=rfcav.dev_llrf.phase_mon,
+            detune=rfcav.dev_llrf.detune,
+            detune_error=rfcav.dev_llrf.detune_error,
             )
 
     @staticmethod
