@@ -560,7 +560,7 @@ class LOCOAnalysis():
             else:
                 plt.savefig(fname+'.png', format='png', dpi=DEFAULT_FIG_DPI)
 
-    def beta_and_tune(self, twiss=True):
+    def beta_and_tune(self, twiss=False):
         """."""
         names = ['betax', 'betay', 'mux', 'muy']
         nom, fit = self.twi_nom, self.twi_fit
@@ -646,7 +646,7 @@ class LOCOAnalysis():
         df_betabeat.loc[:, tmp.columns] = np.round(tmp, 4)
         return df_tunes.round(4), df_betabeat
 
-    def dispersion(self, disp_meas=None, twiss=True):
+    def dispersion(self, disp_meas=None, twiss=False):
         """."""
         _ = plt.figure(figsize=(14, 6))
         gs = mpl_gs.GridSpec(2, 1)
