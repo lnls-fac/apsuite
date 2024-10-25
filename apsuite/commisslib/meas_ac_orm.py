@@ -7,8 +7,8 @@ import operator as _opr
 
 import numpy as _np
 import matplotlib.pyplot as _mplt
-import scipy.optimize as _scyopt
-from scipy.signal import find_peaks as _find_peaks
+from scipy.signal import find_peaks as _find_peaks, \
+    savgol_filter as _savgol_filter
 
 from mathphys.functions import save as _save, load as _load
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
@@ -1530,24 +1530,28 @@ class MeasACORM(_ThreadBaseClass):
         rf_freq = data['rf_frequency']
         mom_compac = data.get('mom_compac', _asparams.SI_MOM_COMPACT)
         amp = kick * etax_avg / mom_compac / rf_freq
-        # identify where positive and neg. avg. orb distortion happen
-        peaks_pos = _find_peaks(orbx.mean(axis=1), amp/2)[0]
-        peaks_neg = _find_peaks(-orbx.mean(axis=1), amp/2)[0]
+        avg_orbx_smoothed = _savgol_filter(
+            orbx.mean(axis=1), window_length=5, polyorder=2
+        )  # TODO: use only dispersive BPMs for averaging
+        peaks_neg = _find_peaks(avg_orbx_smoothed, amp/2)[0]
+        peaks_pos = _find_peaks(-avg_orbx_smoothed, amp/2)[0]
 
-        idx1 = peaks_pos[0]
-        idx2 = peaks_pos[-1]
-        idx3 = peaks_neg[-1]
+        idx1 = peaks_neg[0]
+        idx2 = peaks_neg[-1]
+        idx3 = peaks_pos[0]
+        idx4 = peaks_pos[-1]
 
         anly['idx1'] = idx1
         anly['idx2'] = idx2
         anly['idx3'] = idx3
-        anly['amp1'] = amp
+        anly['idx4'] = idx4
+        anly['amp'] = amp
         anly['transition_length'] = transition_length
 
         sec1_ini = idx1 + transition_length
         sec1_fin = idx2 - transition_length
-        sec2_ini = idx2 + transition_length
-        sec2_fin = idx3 - transition_length
+        sec2_ini = idx3 + transition_length
+        sec2_fin = idx4 - transition_length
         anly['sec1_ini'] = sec1_ini
         anly['sec1_fin'] = sec1_fin
         anly['sec2_ini'] = sec2_ini
