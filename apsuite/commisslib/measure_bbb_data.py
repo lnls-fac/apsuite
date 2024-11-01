@@ -55,13 +55,10 @@ class UtilClass:
     def get_cavity_data(rfcav):
         """."""
         return dict(
-            temperature={
-                },
             power={
                 'forward': rfcav.dev_cavmon.power_forward,
                 'reverse': rfcav.dev_cavmon.power_reverse,
                 'voltage': rfcav.dev_cavmon.gap_voltage,
-
                 },
             voltage=rfcav.dev_llrf.voltage_mon,
             phase=rfcav.dev_llrf.phase_mon,
@@ -93,22 +90,22 @@ class UtilClass:
         dataraw -= dataraw.mean(axis=1)[:, None]
 
         # get the analytic data vector, via discrete hilbert transform
-        data_anal = _scysig.hilbert(dataraw, axis=1).copy()
+        data_anly = _scysig.hilbert(dataraw, axis=1).copy()
 
         # calculate DFT:
-        data_dft = _np.fft.fft(data_anal, axis=1)
+        data_dft = _np.fft.fft(data_anly, axis=1)
 
         # compensate the different time samplings of each bunch:
         int_freq = int_tune/rev_per
-        dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * rev_per
+        dts = _np.arange(data_anly.shape[0])/data_anly.shape[0] * rev_per
         comp = _np.exp(-1j*2*_np.pi * (int_freq+freq[None, :])*dts[:, None])
         data_dft *= comp
 
         # get the processed data by inverse DFT
-        data_anal = _np.fft.ifft(data_dft, axis=1)
+        data_anly = _np.fft.ifft(data_dft, axis=1)
 
         # decompose data into even fill eigenvectors:
-        data_modes = _np.fft.fft(data_anal, axis=0) / data_anal.shape[0]
+        data_modes = _np.fft.fft(data_anly, axis=0) / data_anly.shape[0]
 
         analysis = dict()
         analysis['bunch_numbers'] = _np.arange(1, dataraw.shape[0]+1)
@@ -116,7 +113,7 @@ class UtilClass:
         analysis['mode_numbers'] = _np.arange(data_modes.shape[0])
         analysis['time'] = time
         analysis['mode_data'] = data_modes
-        analysis['bunch_data'] = data_anal
+        analysis['bunch_data'] = data_anly
 
         return analysis
 
@@ -569,7 +566,7 @@ class BbBAcqData(_BaseClass, UtilClass):
             analysis = self.analysis
 
         data_modes = analysis['mode_data']
-        data_anal = analysis['bunch_data']
+        data_anly = analysis['bunch_data']
         tim = analysis['time']
         mode_nums = analysis['mode_numbers']
         bunch_nums = analysis['bunch_numbers']
@@ -587,7 +584,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         afx = _mplt.subplot(gs[1, 1])
 
         abs_modes = _np.abs(data_modes)
-        abs_dataf = _np.abs(data_anal)
+        abs_dataf = _np.abs(data_anly)
 
         pln = self.devices['bbb'].devname[-1]
         unit = '[°]' if pln == 'L' else '[um]'
@@ -1141,17 +1138,17 @@ class MeasTuneShift(_ThreadBaseClass):
         dataraw -= dataraw.mean()
 
         # get the analytic data vector, via discrete hilbert transform
-        data_anal = _scysig.hilbert(dataraw).copy()
+        data_anly = _scysig.hilbert(dataraw).copy()
 
         # calculate DFT:
-        data_dft = _np.fft.fft(data_anal)
+        data_dft = _np.fft.fft(data_anly)
 
-        time = _np.arange(data_anal.size) * per_rev
-        freq = _np.fft.fftfreq(data_anal.size, d=per_rev)
+        time = _np.arange(data_anly.size) * per_rev
+        freq = _np.fft.fftfreq(data_anly.size, d=per_rev)
         analysis = dict()
         analysis['freq_dft'] = freq
         analysis['time'] = time
-        analysis['bunch_data'] = data_anal
+        analysis['bunch_data'] = data_anly
         analysis['data_dft'] = data_dft
         return analysis
 
