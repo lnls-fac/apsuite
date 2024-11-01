@@ -35,7 +35,7 @@ class UtilClass:
             dft_freq=_np.fft.fftfreq(rawdata.shape[1], d=dtime),
             stored_current=bbb.dcct.current,
             timestamp=_time.time(),
-            cavity_data=UtilClass.get_cavity_data(bbb),
+            # cavity_data=UtilClass.get_cavity_data(bbb),
             acqtype=acqtype, downsample=acq.downsample,
             fb_set0=bbb.coeffs.set0, fb_set1=bbb.coeffs.set1,
             fb_set0_desc=bbb.coeffs.set0_desc,
@@ -791,24 +791,12 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
                     ', '.join(list(lst.keys())))
             prop.append(lst)
 
-        if isinstance(prop[0], (int, float)):
+        if isinstance(prop[0], (int, float, _np.int64, _np.float64)):
             prop = _np.array(prop)
         elif isinstance(prop[0], (list, tuple)):
             prop = _np.hstack(prop)
         elif isinstance(prop[0], _np.ndarray):
             prop = _np.vstack(prop)
-        else:
-            return prop
-
-        # Make sure the size of the first dimension of the array is equal to
-        # the number of modes measured by repeating values when needed.
-        modes_meas = dic['modes_measured']
-        idcs = []
-        for i, ms in enumerate(modes_meas):
-            idcs.extend([i, ]*len(ms))
-
-        if prop.shape[0] < len(idcs):
-            prop = prop[idcs]
         return prop
 
     def load_merge_and_apply_data(self, fnames):
@@ -817,8 +805,9 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         Args:
             fnames (list): filenames of the saved data.
         """
-        self.clear_data()
         data = dict()
+        data.update(self.data)
+        self.clear_data()
         params = self.params
         for fname in fnames:
             datum = self.load_data(fname)['data']
@@ -976,8 +965,16 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         drive = bbb.drive0 if drive_num == 0 else bbb.drive1
         drive = drive if drive_num != 2 else bbb.drive2
 
+        mask_dr0 = drive.mask
+        mask_fb0 = bbb.feedback.mask
+
+        drive.mask = _np.ones(mask_dr0.size, dtype=bool)
+        bbb.feedback.mask = _np.zeros(mask_dr0.size, dtype=bool)
+
         harm_nr = bbb.info.harmonic_number
+        rev_freq = bbb.info.revolution_freq_nom / 1e3  # [kHz]
         modes_to_measure = self.params.modes_to_measure
+        sync_freq = self.params.center_frequency / 1e3  # [kHz]
         bunches = _np.arange(harm_nr)
 
         bbb.sram.cmd_data_dump(pv_update=True)
@@ -993,18 +990,19 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             self.data = dict(infos=[], modes_data=[], modes_measured=[])
         for mode in modes_to_measure:
             elt = _time.time()
-            drive.mask = _np.cos(2*_np.pi*bunches*mode/harm_nr) > 0
+            md = mode if mode < harm_nr/2 else harm_nr - mode
+            sig = 1 if mode < harm_nr/2 else -1
+            drive.frequency = md * rev_freq + sig * sync_freq
             _time.sleep(self.params.wait_acquisition)
             bbb.sram.cmd_data_dump(pv_update=True)
             _time.sleep(self.params.wait_pv_update)
 
             infos = self.get_data(bbb, acqtype)
             analysis = self._process_data(infos, self.params)
-            modei = sorted({mode, harm_nr - mode})
-            data = analysis['mode_data'][modei]
+            data = analysis['mode_data'][mode].copy()
             infos.pop('rawdata')
 
-            self.data['modes_measured'].append(modei)
+            self.data['modes_measured'].append(mode)
             self.data['modes_data'].append(data)
             self.data['infos'].append(infos)
 
@@ -1014,13 +1012,17 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
                 full=False)
             print(',      '.join([
                 f'mode: {m:03d} --> growth: {gt:+7.2f}'
-                for m, gt in zip(modei, grt.ravel())]), end='')
+                for m, gt in zip([mode], grt.ravel())]), end='')
             elt -= _time.time()
             elt *= -1
             print(f',      ET: {elt:.2f}s')
             if self._stopevt.is_set():
                 print('Stopping...')
                 break
+
+        drive.mask = mask_dr0
+        bbb.feedback.mask = mask_fb0
+
         elt0 -= _time.time()
         elt0 *= -1
         print(f'Finished!!  ET: {elt0/60:.2f}min')
