@@ -22,7 +22,6 @@ class RFCalibrationParams(_ParamsBaseClass):
         self.voltage_nrpoints = 15
         self.voltage_incrate = self.VoltIncRates.vel_0p5
         self.cbmode2drive = 200
-        self.cbmode_drive_freq_offset = -0.08  # [kHz]
         # TODO: UPDATE WITH NEW CONVERSION
         self.conv_physics2hardware = 506/1.75  # [mV/MV]
         self.restore_initial_state = True
@@ -38,8 +37,6 @@ class RFCalibrationParams(_ParamsBaseClass):
         stg += stmp('final_voltage', str(self.final_voltage), '[MV]')
         stg += dtmp('voltage_nrpoints', self.voltage_nrpoints)
         stg += dtmp('cbmode2drive', self.cbmode2drive)
-        stg += ftmp(
-            'cbmode_drive_freq_offset', self.cbmode_drive_freq_offset, '[kHz]')
         incrate_str = self.VoltIncRates._fields[self.voltage_incrate] \
             if isinstance(self.voltage_incrate, int) else self.voltage_incrate
         stg += stmp(
@@ -79,25 +76,17 @@ class RFCalibration(_ThreadedMeasBaseClass):
                 nrpts)
         return voltage_span
 
-    # def configure_bbb_drive_pattern(self, cbmode):
-    #     """."""
-    #     harm_nr = 864
-    #     bunches = _np.arange(harm_nr)
-    #     bbbl = self.devices['bbbl']
-    #     bbbl.drive0.mask = _np.cos(2*_np.pi*bunches*cbmode/harm_nr) > 0
-    #     # drive at synchrotron frequency
-    #     bbbl.drive0.frequency = bbbl.sram.modal_marker_freq
-
     def set_bbb_drive_frequency(self, sync_freq):
         """."""
-        harm_nr = 864
-        rf_freq = self.devices['rfcavs'][0].dev_rfgen.frequency
-        rev_freq = rf_freq/harm_nr * 1e-3  # [Hz -> kHz]
-        drive_freq = self.params.cbmode2drive * rev_freq
-        drive_freq += sync_freq
-        drive_freq += self.params.cbmode_drive_freq_offset
-        self.devices['bbbl'].drive0.frequency = drive_freq
-        self.devices['bbbl'].sram.modal_sideband_freq = sync_freq
+        bbb = self.devices['bbbl']
+        rev_freq = bbb.info.revolution_freq_nom / 1e3  # [Hz -> kHz]
+        harm_nr = bbb.info.harmonic_number
+        mode = self.params.cbmode2drive
+        md = mode if mode < harm_nr/2 else harm_nr - mode
+        sig = 1 if mode < harm_nr/2 else -1
+        drive_freq = md * rev_freq + sig * sync_freq
+        bbb.drive0.frequency = drive_freq
+        bbb.sram.modal_sideband_freq = sync_freq
 
     def _meas_func(self):
         data = dict()
