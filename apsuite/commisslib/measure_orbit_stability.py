@@ -524,7 +524,8 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
     def plot_energy_integrated_psd(
             self, denergy_spec=None, freq=None, inverse=True,
-            title='', label='', figname='', fig=None, axs=None, color='C0'):
+            title='', label='', figname='', fig=None, axs=None, color='C0',
+            plot_rfjitter=True):
         """."""
         if denergy_spec is None:
             intpsd = self.analysis['energy_ipsd']
@@ -537,14 +538,15 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
         if fig is None or axs is None:
             fig, axs = _plt.subplots(1, 1, figsize=(12, 6))
-        freq = freq/1e3
+
         axs.plot(freq, intpsd*100, label=label, color=color)
-        self._plot_ripple_rfjitter_harmonics(freq, axs)
+        if plot_rfjitter:
+            self._plot_ripple_rfjitter_harmonics(freq, axs)
         axs.legend(
             loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
         if title:
             axs.set_title(title)
-        axs.set_xlabel('Frequency [kHz]')
+        axs.set_xlabel('Frequency [Hz]')
         axs.set_ylabel(r'Sqrt of Int. Spec. [$\%$]')
         fig.tight_layout()
         if figname:
