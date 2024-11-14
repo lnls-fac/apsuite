@@ -369,6 +369,53 @@ class OrbitAnalysis(_AcqBPMsSignals):
         orby -= orby.mean(axis=0)[None, :]
         self.orbx, self.orby = orbx, orby
 
+    def calculate_rms_orb(self, freq_min=1e-1, freq_max=1e3):
+        """."""
+        orbx_freq = self.analysis["orbx_freq"]
+        orby_freq = self.analysis["orby_freq"]
+
+        orbx_ipsd = self.analysis["orbx_ipsd"]
+        orby_ipsd = self.analysis["orby_ipsd"]
+
+        idcs = (orbx_freq >= freq_min) & (orbx_freq <= freq_max)
+        orbx_rms = _np.sqrt(
+            orbx_ipsd[idcs, :][-1]**2 - orbx_ipsd[idcs, :][0]**2
+        )
+
+        idcs = (orby_freq >= freq_min) & (orby_freq <= freq_max)
+        orby_rms = _np.sqrt(
+            orby_ipsd[idcs, :][-1]**2 - orby_ipsd[idcs, :][0]**2
+        )
+
+        return orbx_rms, orby_rms
+
+    def get_beamsizes(self, model=None):
+        """Calculates transverse beam sizes at BPMs for a given model.
+
+        Uses Ohmi Envelope formalism.
+
+        Args:
+            model (accelerator.accelerator, optional): Input model. Defaults to
+                None, in which case Sirius model with fitted vertical
+                dispersion and coupling is used.
+
+        Returns:
+            horizontal_beamsize (Nbpms-array): horizontal beam sizes at BPMs,
+                in micrometers.
+            vertical_beamsize (Nbpms-array): vertical beam sizes at BPMs, in
+                micrometers.
+        """
+        if model is None:
+            model = _si.create_accelerator()
+            model = _si.fitted_models.vertical_dispersion_and_coupling(model)
+
+        bpms_idcs = _pa.lattice.flatten(
+            _si.get_family_data(model)["BPM"]["index"]
+        )
+        envelope = _pa.optics.calc_beamenvelope(model, indices=bpms_idcs)
+        sizes = _np.sqrt(envelope) * 1e6
+        return sizes[:, 0, 0], sizes[:, 2, 2]
+
     # plotting methods
     def plot_orbit_spectrum(
             self, bpmidx=0, orbx=None, orby=None,
@@ -496,6 +543,74 @@ class OrbitAnalysis(_AcqBPMsSignals):
             fig.savefig(figname, dpi=300, format='pdf')
         return fig, axs
 
+    def plot_rms_orb_by_bpm(
+            self, orbx_rms=None, orby_rms=None, title='', label='', figname='',
+            fig=None, axs='None', color='C0', freq_min=1e-1, freq_max=1e3,
+            beamsize_units=True, hor_sizes=None, ver_sizes=None):
+        """Plot integrated PSD within a specified range (RMS Orbit) at BPMs.
+
+        Args:
+            orbx_rms (n-array, optional): orbx integrated PSD. Defaults to
+                None, in which case it is calculated.
+            orby_rms (n-array, optional): orby integrated PSD. Defaults to
+                None, in which case it is calculated.
+            title (str, optional): Figure title. Defaults to ''.
+            label (str, optional): Curve label. Defaults to ''.
+            figname (str, optional): Figure name. Defaults to ''.
+            fig (matplotlib.pyplot.figure, optional): fig object. Defaults to
+                None, in which case it is created.
+            axs (matplotlib.axes, optional): axes object. Defaults to 'None',
+                in which case it is created.
+            color (str, optional): curve color. Defaults to 'C0'.
+            freq_min (float, optional): Lower limit of the frequency range over
+                which the PSD is integrated. Defaults to 1e-1 Hz.
+            freq_max (float, optional): Upper limit of the frequency range
+                over which the PSD is integrated. Defaults to 1e3 Hz.
+            beamsize_units (bool, optional): Whether to plot in micrometers
+                (False) or as a percentage of the corresponding beam size
+                (True). Defaults to True.
+            hor_sizes (160-array, optional): horizontal beam sizes at BPMs.
+                Defaults to None and it is calculated.
+            ver_sizes (160-array, optional): vertical beam sizes at BPMs.
+                Defaults to None and it is caculated.
+
+        Returns:
+            fig (matplotlib.pyplot.figure): figure object
+            axs (matplotlib.axes): axes object
+        """
+        if orbx_rms is None or orby_rms is None:
+            orbx_rms, orby_rms = self.calculate_rms_orb(freq_min, freq_max)
+
+        if beamsize_units and (hor_sizes is None and ver_sizes is None):
+            hor_sizes, ver_sizes = self.get_beamsizes()
+            orbx_rms /= hor_sizes
+            orbx_rms *= 100
+            orby_rms /= ver_sizes
+            orby_rms *= 100
+
+        if fig is None or axs is None:
+            fig, axs = _plt.subplots(2, 1, figsize=(18, 6))
+
+        axs[0].plot(orbx_rms, "o-", mfc='none', color=color, label=label)
+        axs[1].plot(orby_rms, "o-", mfc='none', color=color, label=label)
+
+        if beamsize_units:
+            axs[0].set_ylabel("RMS hor. orbit \n [\% of hor. beam size]")
+            axs[1].set_ylabel("RMS vert. orbit \n [\% of vert. beam size]")
+        else:
+            axs[0].set_ylabel(r"RMS hor. orbit [$\mu$m]")
+            axs[1].set_ylabel(r"RMS vert. orbit [$\mu$m]")
+
+        axs[0].legend(loc='best')
+        axs[1].set_xlabel("BPM index")
+
+        if title:
+            axs[0].set_title(title)
+
+        if figname:
+            fig.savefig(figname, dpi=300, format='pdf')
+        return fig, axs
+
     def plot_energy_spectrum(
             self, denergy=None,
             title='', label='', figname='', fig=None, axs=None, color='C0',
@@ -555,91 +670,6 @@ class OrbitAnalysis(_AcqBPMsSignals):
         if figname:
             fig.savefig(figname, dpi=300, format='pdf')
         return fig, axs
-
-    def plot_rms_orb(
-            self, orbx_rms=None, orby_rms=None, title='', label='', figname='',
-            fig=None, axs='None', color='C0', freq_min=1e-1, freq_max=1e3,
-            beamsize_units=True, hor_sizes=None, ver_sizes=None):
-        """."""
-        if orbx_rms is None or orby_rms is None:
-            orbx_rms, orby_rms = self._calculate_rms_orb(freq_min, freq_max)
-
-        if beamsize_units and (hor_sizes is None and ver_sizes is None):
-            hor_sizes, ver_sizes = self._get_beamsizes()
-            orbx_rms /= hor_sizes
-            orbx_rms *= 100
-            orby_rms /= ver_sizes
-            orby_rms *= 100
-
-        if fig is None or axs is None:
-            fig, axs = _plt.subplots(2, 1, figsize=(18, 6))
-
-        axs[0].plot(orbx_rms, "o-", mfc='none', color=color, label=label)
-        axs[1].plot(orby_rms, "o-", mfc='none', color=color, label=label)
-
-        if beamsize_units:
-            axs[0].set_ylabel("RMS hor. orbit \n [\% of hor. beam size]")
-            axs[1].set_ylabel("RMS vert. orbit \n [\% of vert. beam size]")
-        else:
-            axs[0].set_ylabel(r"RMS hor. orbit [$\mu$m]")
-            axs[1].set_ylabel(r"RMS vert. orbit [$\mu$m]")
-
-        axs[0].legend(loc='best')
-        axs[1].set_xlabel("BPM index")
-
-        if title:
-            axs[0].set_title(title)
-
-        if figname:
-            fig.savefig(figname, dpi=300, format='pdf')
-        return fig, axs
-
-    def _calculate_rms_orb(self, freq_min=1e-1, freq_max=1e3):
-        """."""
-        orbx_freq = self.analysis["orbx_freq"]
-        orby_freq = self.analysis["orby_freq"]
-
-        orbx_ipsd = self.analysis["orbx_ipsd"]
-        orby_ipsd = self.analysis["orby_ipsd"]
-
-        idcs = (orbx_freq >= freq_min) & (orbx_freq <= freq_max)
-        orbx_rms = _np.sqrt(
-            orbx_ipsd[idcs, :][-1]**2 - orbx_ipsd[idcs, :][0]**2
-        )
-
-        idcs = (orby_freq >= freq_min) & (orby_freq <= freq_max)
-        orby_rms = _np.sqrt(
-            orby_ipsd[idcs, :][-1]**2 - orby_ipsd[idcs, :][0]**2
-        )
-
-        return orbx_rms, orby_rms
-
-    def _get_beamsizes(self, model=None):
-        """Calculates transverse beam sizes at BPMs for a given model.
-
-        Uses Ohmi Envelope formalism.
-
-        Args:
-            model (accelerator.accelerator, optional): Input model. Defaults to
-                None, in which case Sirius model with fitted vertical
-                dispersion and coupling is used.
-
-        Returns:
-            horizontal_beamsize (Nbpms-array): horizontal beam sizes at BPms,
-                in micrometers
-            vertical_beamsize (Nbpms-array): vertical beam sizes at BPms, in
-                micrometers
-        """
-        if model is None:
-            model = _si.create_accelerator()
-            model = _si.fitted_models.vertical_dispersion_and_coupling(model)
-
-        bpms_idcs = _pa.lattice.flatten(
-            _si.get_family_data(model)["BPM"]["index"]
-        )
-        envelope = _pa.optics.calc_beamenvelope(model, indices=bpms_idcs)
-        sizes = _np.sqrt(envelope) * 1e6
-        return sizes[:, 0, 0], sizes[:, 2, 2]
 
     def _get_sampling_freq(self):
         samp_freq = self.data.get('sampling_frequency')
