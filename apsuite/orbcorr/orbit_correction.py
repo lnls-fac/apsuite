@@ -60,7 +60,7 @@ class OrbitCorr:
         dim = '6d' if self.params.use6dorb else '4d'
         self.respm = OrbRespmat(
             model=model, acc=self.acc, dim=dim, corr_system=corr_system)
-        self.respm.model.cavity_on = True
+        # self.respm.model.cavity_on = True    It was always being setted as True.
         self.params.enbllistbpm = _np.ones(
             self.respm.bpm_idx.size*2, dtype=bool)
         if corr_system == 'FOFB':
@@ -262,6 +262,8 @@ class OrbitCorr:
     def set_kicks(self, kicks):
         """."""
         model = self.respm.model
+        cav = model.cavity_on
+        model.cavity_on = True
         nch = len(self.respm.ch_idx)
         ncv = len(self.respm.cv_idx)
 
@@ -273,6 +275,7 @@ class OrbitCorr:
             model[idx].vkick_polynom = kickcv[i]
         if self.params.enblrf:
             model[self.respm.rf_idx[0]].frequency = kickrf
+        model.cavity_on = cav
 
     def _process_kicks(self, dkicks):
         chidx = self.respm.ch_idx
