@@ -370,6 +370,23 @@ class OrbitAnalysis(_AcqBPMsSignals):
         self.orbx, self.orby = orbx, orby
 
     def calculate_rms_orb(self, freq_min=1e-1, freq_max=1e3):
+        """Calculates the RMS orbit for each BPM within a frequency range.
+
+        Args:
+            freq_min (float, optional): Lower frequency limit. Defaults to
+                1e-1 Hz. If freq_min is None while freq_max is not None,
+                freq_min is set to the the lowest frequency in the spectrum.
+            freq_max (float, optional): Upper frequency limit. Defaults to 1e3
+                Hz. If freq_max is None while freq_min is not None, freq_max
+                is set to the highest freqnency in the spectrum. If both
+                freq_min and freq_max are `None`, the whole spectrum is
+                considered.
+
+        Returns:
+            orbx_rms (nbpms-array): horizontal RMS orbit for each BPM
+            orby_rms (nbpms-array): vertical RMS orbit for each BPM
+
+        """
         if freq_min is None and freq_max is None:
             orbx_rms = self.analysis["orbx_filtered"].std(axis=0)
             orby_rms = self.analysis["orby_filtered"].std(axis=0)
@@ -404,7 +421,7 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
         Args:
             model (accelerator.accelerator, optional): Input model. Defaults to
-                None, in which case Sirius model with fitted vertical
+                None, in which case SIRIUS model with fitted vertical
                 dispersion and coupling is used.
 
         Returns:
