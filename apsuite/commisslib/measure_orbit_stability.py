@@ -370,18 +370,26 @@ class OrbitAnalysis(_AcqBPMsSignals):
         self.orbx, self.orby = orbx, orby
 
     def calculate_rms_orb(self, freq_min=1e-1, freq_max=1e3):
-        """."""
+        if freq_min is None and freq_max is None:
+            orbx_rms = self.analysis["orbx_filtered"].std(axis=0)
+            orby_rms = self.analysis["orby_filtered"].std(axis=0)
+            return orbx_rms, orby_rms
+
         orbx_freq = self.analysis["orbx_freq"]
         orby_freq = self.analysis["orby_freq"]
 
         orbx_ipsd = self.analysis["orbx_ipsd"]
         orby_ipsd = self.analysis["orby_ipsd"]
 
+        freq_min = freq_min or orbx_freq.min()
+        freq_max = freq_max or orbx_freq.max()
         idcs = (orbx_freq >= freq_min) & (orbx_freq <= freq_max)
         orbx_rms = _np.sqrt(
             orbx_ipsd[idcs, :][-1]**2 - orbx_ipsd[idcs, :][0]**2
         )
 
+        freq_min = freq_min or orby_freq.min()
+        freq_max = freq_max or orby_freq.max()
         idcs = (orby_freq >= freq_min) & (orby_freq <= freq_max)
         orby_rms = _np.sqrt(
             orby_ipsd[idcs, :][-1]**2 - orby_ipsd[idcs, :][0]**2
