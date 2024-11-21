@@ -412,9 +412,16 @@ class OrbitAnalysis(_AcqBPMsSignals):
         bpms_idcs = _pa.lattice.flatten(
             _si.get_family_data(model)["BPM"]["index"]
         )
-        envelope = _pa.optics.calc_beamenvelope(model, indices=bpms_idcs)
-        sizes = _np.sqrt(envelope) * 1e6
-        return sizes[:, 0, 0], sizes[:, 2, 2]
+        eqparam = _pa.optics.EqParamsFromBeamEnvelope(model)
+        sigmae = eqparam.espread0
+        twiss, *_ = _pa.optics.calc_twiss(model)
+        etax = twiss.etax[bpms_idcs]
+
+        hor_sizes = _np.sqrt(
+            eqparam.envelopes[bpms_idcs, 0, 0] + (etax * sigmae)**2
+        ) * 1e6
+        ver_sizes = _np.sqrt(eqparam.envelopes[bpms_idcs, 2, 2]) * 1e6
+        return hor_sizes, ver_sizes
 
     # plotting methods
     def plot_orbit_spectrum(
