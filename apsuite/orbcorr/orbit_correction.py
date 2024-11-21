@@ -60,7 +60,6 @@ class OrbitCorr:
         dim = '6d' if self.params.use6dorb else '4d'
         self.respm = OrbRespmat(
             model=model, acc=self.acc, dim=dim, corr_system=corr_system)
-        # self.respm.model.cavity_on = True    It was always being setted as True.
         self.params.enbllistbpm = _np.ones(
             self.respm.bpm_idx.size*2, dtype=bool)
         if corr_system == 'FOFB':
