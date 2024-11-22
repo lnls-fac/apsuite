@@ -438,13 +438,8 @@ class OrbitAnalysis(_AcqBPMsSignals):
             _si.get_family_data(model)["BPM"]["index"]
         )
         eqparam = _pa.optics.EqParamsFromBeamEnvelope(model)
-        sigmae = eqparam.espread0
-        twiss, *_ = _pa.optics.calc_twiss(model)
-        etax = twiss.etax[bpms_idcs]
 
-        hor_sizes = _np.sqrt(
-            eqparam.envelopes[bpms_idcs, 0, 0] + (etax * sigmae)**2
-        ) * 1e6
+        hor_sizes = _np.sqrt(eqparam.envelopes[bpms_idcs, 0, 0]) * 1e6
         ver_sizes = _np.sqrt(eqparam.envelopes[bpms_idcs, 2, 2]) * 1e6
         return hor_sizes, ver_sizes
 
