@@ -35,7 +35,8 @@ class UtilClass:
             dft_freq=_np.fft.fftfreq(rawdata.shape[1], d=dtime),
             stored_current=bbb.dcct.current,
             timestamp=_time.time(),
-            # cavity_data=UtilClass.get_cavity_data(bbb),
+            cavity_a_data=UtilClass.get_cavity_data(bbb.rfcav_a),
+            cavity_b_data=UtilClass.get_cavity_data(bbb.rfcav_b),
             acqtype=acqtype, downsample=acq.downsample,
             fb_set0=bbb.coeffs.set0, fb_set1=bbb.coeffs.set1,
             fb_set0_desc=bbb.coeffs.set0_desc,
@@ -51,37 +52,19 @@ class UtilClass:
             )
 
     @staticmethod
-    def get_cavity_data(bbb):
+    def get_cavity_data(rfcav):
         """."""
         return dict(
-            temperature={
-                'cell1': bbb.rfcav.dev_cavmon.temp_cell1,
-                'cell2': bbb.rfcav.dev_cavmon.temp_cell2,
-                'cell3': bbb.rfcav.dev_cavmon.temp_cell3,
-                'cell4': bbb.rfcav.dev_cavmon.temp_cell4,
-                'cell5': bbb.rfcav.dev_cavmon.temp_cell5,
-                'cell6': bbb.rfcav.dev_cavmon.temp_cell6,
-                'cell7': bbb.rfcav.dev_cavmon.temp_cell7,
-                'coupler': bbb.rfcav.dev_cavmon.temp_coupler,
-                },
             power={
-                'cell2': bbb.rfcav.dev_cavmon.power_cell2,
-                'cell4': bbb.rfcav.dev_cavmon.power_cell4,
-                'cell6': bbb.rfcav.dev_cavmon.power_cell6,
-                'forward': bbb.rfcav.dev_cavmon.power_forward,
-                'reverse': bbb.rfcav.dev_cavmon.power_reverse,
-                'voltage': bbb.rfcav.dev_cavmon.gap_voltage,
-                },
-            voltage=bbb.rfcav.dev_llrf.voltage_mon,
-            phase=bbb.rfcav.dev_llrf.phase_mon,
-            detune=bbb.rfcav.dev_llrf.detune,
-            detune_error=bbb.rfcav.dev_llrf.detune_error,
-            field_flatness_error=bbb.rfcav.dev_llrf.field_flatness_error,
-            field_flatness_gain1=bbb.rfcav.dev_llrf.field_flatness_gain1,
-            field_flatness_gain2=bbb.rfcav.dev_llrf.field_flatness_gain2,
-            field_flatness_amp1=bbb.rfcav.dev_llrf.field_flatness_amp1,
-            field_flatness_amp2=bbb.rfcav.dev_llrf.field_flatness_amp2,
-            )
+                'forward': rfcav.dev_cavmon.power_forward,
+                'reverse': rfcav.dev_cavmon.power_reverse,
+                'voltage': rfcav.dev_cavmon.gap_voltage,
+            },
+            voltage=rfcav.dev_llrf.voltage_mon,
+            phase=rfcav.dev_llrf.phase_mon,
+            detune=rfcav.dev_llrf.detune,
+            detune_error=rfcav.dev_llrf.detune_error,
+        )
 
     @staticmethod
     def _process_data(data, params, rawdata=None):
@@ -107,22 +90,22 @@ class UtilClass:
         dataraw -= dataraw.mean(axis=1)[:, None]
 
         # get the analytic data vector, via discrete hilbert transform
-        data_anal = _scysig.hilbert(dataraw, axis=1).copy()
+        data_anly = _scysig.hilbert(dataraw, axis=1).copy()
 
         # calculate DFT:
-        data_dft = _np.fft.fft(data_anal, axis=1)
+        data_dft = _np.fft.fft(data_anly, axis=1)
 
         # compensate the different time samplings of each bunch:
         int_freq = int_tune/rev_per
-        dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * rev_per
+        dts = _np.arange(data_anly.shape[0])/data_anly.shape[0] * rev_per
         comp = _np.exp(-1j*2*_np.pi * (int_freq+freq[None, :])*dts[:, None])
         data_dft *= comp
 
         # get the processed data by inverse DFT
-        data_anal = _np.fft.ifft(data_dft, axis=1)
+        data_anly = _np.fft.ifft(data_dft, axis=1)
 
         # decompose data into even fill eigenvectors:
-        data_modes = _np.fft.fft(data_anal, axis=0) / data_anal.shape[0]
+        data_modes = _np.fft.fft(data_anly, axis=0) / data_anly.shape[0]
 
         analysis = dict()
         analysis['bunch_numbers'] = _np.arange(1, dataraw.shape[0]+1)
@@ -130,7 +113,7 @@ class UtilClass:
         analysis['mode_numbers'] = _np.arange(data_modes.shape[0])
         analysis['time'] = time
         analysis['mode_data'] = data_modes
-        analysis['bunch_data'] = data_anal
+        analysis['bunch_data'] = data_anly
 
         return analysis
 
@@ -583,7 +566,7 @@ class BbBAcqData(_BaseClass, UtilClass):
             analysis = self.analysis
 
         data_modes = analysis['mode_data']
-        data_anal = analysis['bunch_data']
+        data_anly = analysis['bunch_data']
         tim = analysis['time']
         mode_nums = analysis['mode_numbers']
         bunch_nums = analysis['bunch_numbers']
@@ -601,7 +584,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         afx = _mplt.subplot(gs[1, 1])
 
         abs_modes = _np.abs(data_modes)
-        abs_dataf = _np.abs(data_anal)
+        abs_dataf = _np.abs(data_anly)
 
         pln = self.devices['bbb'].devname[-1]
         unit = '[°]' if pln == 'L' else '[um]'
@@ -975,7 +958,6 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         rev_freq = bbb.info.revolution_freq_nom / 1e3  # [kHz]
         modes_to_measure = self.params.modes_to_measure
         sync_freq = self.params.center_frequency / 1e3  # [kHz]
-        bunches = _np.arange(harm_nr)
 
         bbb.sram.cmd_data_dump(pv_update=True)
         _time.sleep(self.params.wait_pv_update)
@@ -1157,17 +1139,17 @@ class MeasTuneShift(_ThreadBaseClass):
         dataraw -= dataraw.mean()
 
         # get the analytic data vector, via discrete hilbert transform
-        data_anal = _scysig.hilbert(dataraw).copy()
+        data_anly = _scysig.hilbert(dataraw).copy()
 
         # calculate DFT:
-        data_dft = _np.fft.fft(data_anal)
+        data_dft = _np.fft.fft(data_anly)
 
-        time = _np.arange(data_anal.size) * per_rev
-        freq = _np.fft.fftfreq(data_anal.size, d=per_rev)
+        time = _np.arange(data_anly.size) * per_rev
+        freq = _np.fft.fftfreq(data_anly.size, d=per_rev)
         analysis = dict()
         analysis['freq_dft'] = freq
         analysis['time'] = time
-        analysis['bunch_data'] = data_anal
+        analysis['bunch_data'] = data_anly
         analysis['data_dft'] = data_dft
         return analysis
 
