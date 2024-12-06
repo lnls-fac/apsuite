@@ -14,7 +14,11 @@ class OptimizeInjBOParams(_RCDSParams):
     """."""
 
     KNOBS = [
-        'li_qf3',
+        'li_qf1',
+        'li_qf2',
+        'li_qf3'
+        'li_qd1',
+        'li_qd2',
         'tb_qf2a',
         'tb_qf2b',
         'tb_qd2a',
@@ -30,7 +34,11 @@ class OptimizeInjBOParams(_RCDSParams):
         'borf_phs',
     ]
     LIMS_UPPER = [
-        +3.0,
+        +2.51,
+        +2.51,
+        +2.51,
+        +3.63,
+        +3.63,
         9.5,
         6.0,
         8.5,
@@ -46,7 +54,11 @@ class OptimizeInjBOParams(_RCDSParams):
         160,
     ]
     LIMS_LOWER = [
-        -3.0,
+        -2.51,
+        -2.51,
+        -2.51,
+        -3.63,
+        -3.63,
         5.0,
         2.0,
         4.0,
@@ -198,8 +210,16 @@ class OptimizeInjBO(_RCDS):
         pos = []
         for knob in self.params.knobs:
             fun = knob.lower().startswith
-            if fun('li_qf3'):
+            if fun('li_qf1'):
+                pos.append(self.devices['li_qf1'].current)
+            elif fun('li_qf2'):
+                pos.append(self.devices['li_qf2'].current)
+            elif fun('li_qf3'):
                 pos.append(self.devices['li_qf3'].current)
+            elif fun('li_qd1'):
+                pos.append(self.devices['li_qd1'].current)
+            elif fun('li_qd2'):
+                pos.append(self.devices['li_qd2'].current)
             elif fun('tb_qf2a'):
                 pos.append(self.devices['tb_qf2a'].current)
             elif fun('tb_qf2b'):
@@ -238,8 +258,16 @@ class OptimizeInjBO(_RCDS):
 
         for p, knob in zip(pos, self.params.knobs):
             fun = knob.lower().startswith
-            if fun('li_qf3'):
+            if fun('li_qf1'):
+                self.devices['li_qf1'].current = p
+            elif fun('li_qf2'):
+                self.devices['li_qf2'].current = p
+            elif fun('li_qf3'):
                 self.devices['li_qf3'].current = p
+            elif fun('li_qd1'):
+                self.devices['li_qd1'].current = p
+            elif fun('li_qd2'):
+                self.devices['li_qd2'].current = p
             elif fun('tb_qf2a'):
                 self.devices['tb_qf2a'].current = p
             elif fun('tb_qf2b'):
@@ -270,7 +298,12 @@ class OptimizeInjBO(_RCDS):
                 raise ValueError('Wrong specification of knob.')
 
     def _create_devices(self):
+        self.devices['li_qf1'] = PowerSupply('LI-Fam:PS-QF1')
+        self.devices['li_qf2'] = PowerSupply('LI-Fam:PS-QF2')
         self.devices['li_qf3'] = PowerSupply('LI-01:PS-QF3')
+        self.devices['li_qd1'] = PowerSupply('LI-01:PS-QD1')
+        self.devices['li_qd2'] = PowerSupply('LI-01:PS-QD2')
+
         self.devices['tb_qf2a'] = PowerSupply('TB-02:PS-QF2A')
         self.devices['tb_qf2b'] = PowerSupply('TB-02:PS-QF2B')
         self.devices['tb_qd2a'] = PowerSupply('TB-02:PS-QD2A')
