@@ -58,7 +58,11 @@ class OptimizeInjBOParams(_RCDSParams):
         'angy',
         'kckr',
 
+        'shb_amp',
+        'kly1_amp',
         'kly2_amp',
+        'shb_phs',
+        'kly1_phs',
         'kly2_phs',
 
         'borf_amp',
@@ -109,8 +113,12 @@ class OptimizeInjBOParams(_RCDSParams):
         +1.0,
         -19.0,
 
+        40,
+        91,
         76,
-        -120,
+        180,
+        180,
+        180,
 
         80,
         160,
@@ -160,7 +168,11 @@ class OptimizeInjBOParams(_RCDSParams):
         -1.0,
         -25.0,
 
+        20,
+        85,
         70,
+        -180,
+        -180,
         -180,
 
         30,
@@ -174,6 +186,12 @@ class OptimizeInjBOParams(_RCDSParams):
         self.curr_wfm_index = 100
         self.limit_lower = self.LIMS_LOWER
         self.limit_upper = self.LIMS_UPPER
+        self.initial_position = list(map(
+            lambda x: sum(x)/2, zip(self.LIMS_UPPER, self.LIMS_LOWER)
+        ))
+        self.initial_search_directions = _np.eye(
+            len(self.limit_upper), dtype=float
+        )
         self.nrpulses = 5
         self.use_median = False
         self.wait_between_injections = 3  # [s]
@@ -213,6 +231,7 @@ class OptimizeInjBOParams(_RCDSParams):
         self._knobs = kns
         self.limit_lower = _np.array(liml)
         self.limit_upper = _np.array(limu)
+        self.initial_search_directions = _np.eye(len(liml), dtype=float)
 
 
 class OptimizeInjBO(_RCDS):
@@ -304,56 +323,56 @@ class OptimizeInjBO(_RCDS):
         for knob in self.params.knobs:
             fun = knob.lower().startswith
             if fun('li_lens1'):
-                pos.append(self.devices["li_lens1"].value)
+                pos.append(self.pvs["li_lens1"].value)
             elif fun('li_lens2'):
-                pos.append(self.devices["li_lens2"].value)
+                pos.append(self.pvs["li_lens2"].value)
             elif fun('li_lens3'):
-                pos.append(self.devices["li_lens3"].value)
+                pos.append(self.pvs["li_lens3"].value)
             elif fun('li_lens4'):
-                pos.append(self.devices["li_lens4"].value)
+                pos.append(self.pvs["li_lens4"].value)
 
             elif fun('li_slnd1'):
-                pos.append(self.devices["li_slnd1"].value)
+                pos.append(self.pvs["li_slnd1"].value)
             elif fun('li_slnd2'):
-                pos.append(self.devices["li_slnd2"].value)
+                pos.append(self.pvs["li_slnd2"].value)
             elif fun('li_slnd3'):
-                pos.append(self.devices["li_slnd3"].value)
+                pos.append(self.pvs["li_slnd3"].value)
             elif fun('li_slnd4'):
-                pos.append(self.devices["li_slnd4"].value)
+                pos.append(self.pvs["li_slnd4"].value)
             elif fun('li_slnd5'):
-                pos.append(self.devices["li_slnd5"].value)
+                pos.append(self.pvs["li_slnd5"].value)
             elif fun('li_slnd6'):
-                pos.append(self.devices["li_slnd6"].value)
+                pos.append(self.pvs["li_slnd6"].value)
             elif fun('li_slnd7'):
-                pos.append(self.devices["li_slnd7"].value)
+                pos.append(self.pvs["li_slnd7"].value)
             elif fun('li_slnd8'):
-                pos.append(self.devices["li_slnd8"].value)
+                pos.append(self.pvs["li_slnd8"].value)
             elif fun('li_slnd9'):
-                pos.append(self.devices["li_slnd9"].value)
+                pos.append(self.pvs["li_slnd9"].value)
             elif fun('li_slnd10'):
-                pos.append(self.devices["li_slnd10"].value)
+                pos.append(self.pvs["li_slnd10"].value)
             elif fun('li_slnd11'):
-                pos.append(self.devices["li_slnd11"].value)
+                pos.append(self.pvs["li_slnd11"].value)
             elif fun('li_slnd12'):
-                pos.append(self.devices["li_slnd12"].value)
+                pos.append(self.pvs["li_slnd12"].value)
             elif fun('li_slnd13'):
-                pos.append(self.devices["li_slnd13"].value)
+                pos.append(self.pvs["li_slnd13"].value)
             elif fun('li_slnd14'):
-                pos.append(self.devices["li_slnd14"].value)
+                pos.append(self.pvs["li_slnd14"].value)
             elif fun('li_slnd15'):
-                pos.append(self.devices["li_slnd15"].value)
+                pos.append(self.pvs["li_slnd15"].value)
             elif fun('li_slnd16'):
-                pos.append(self.devices["li_slnd16"].value)
+                pos.append(self.pvs["li_slnd16"].value)
             elif fun('li_slnd17'):
-                pos.append(self.devices["li_slnd7"].value)
+                pos.append(self.pvs["li_slnd7"].value)
             elif fun('li_slnd18'):
-                pos.append(self.devices["li_slnd18"].value)
+                pos.append(self.pvs["li_slnd18"].value)
             elif fun('li_slnd19'):
-                pos.append(self.devices["li_slnd19"].value)
+                pos.append(self.pvs["li_slnd19"].value)
             elif fun('li_slnd20'):
-                pos.append(self.devices["li_slnd20"].value)
+                pos.append(self.pvs["li_slnd20"].value)
             elif fun('li_slnd21'):
-                pos.append(self.devices["li_slnd21"].value)
+                pos.append(self.pvs["li_slnd21"].value)
 
             elif fun('li_qf1'):
                 pos.append(self.devices['li_qf1'].current)
@@ -386,8 +405,16 @@ class OptimizeInjBO(_RCDS):
             elif fun('kckr'):
                 pos.append(self.devices['injkckr'].strength)
 
+            elif fun('shb_amp'):
+                pos.append(self.devices['li_llrf'].dev_shb.amplitude)
+            elif fun('kly1_amp'):
+                pos.append(self.devices['li_llrf'].dev_klystron1.amplitude)
             elif fun('kly2_amp'):
                 pos.append(self.devices['li_llrf'].dev_klystron2.amplitude)
+            elif fun('shb_phs'):
+                pos.append(self.devices['li_llrf'].dev_shb.phase)
+            elif fun('kly1_phs'):
+                pos.append(self.devices['li_llrf'].dev_klystron1.phase)
             elif fun('kly2_phs'):
                 pos.append(self.devices['li_llrf'].dev_klystron2.phase)
 
@@ -408,56 +435,56 @@ class OptimizeInjBO(_RCDS):
         for p, knob in zip(pos, self.params.knobs):
             fun = knob.lower().startswith
             if fun('li_lens1'):
-                self.devices["lens1"].value = p
+                self.pvs["lens1"].value = p
             elif fun('li_lens2'):
-                self.devices["li_lens2"].value = p
+                self.pvs["li_lens2"].value = p
             elif fun('li_lens3'):
-                self.devices["li_lens3"].value = p
+                self.pvs["li_lens3"].value = p
             elif fun('li_lens4'):
-                self.devices["lens4"].value = p
+                self.pvs["lens4"].value = p
 
             elif fun('li_slnd1'):
-                self.devices["li_slnd1"].value = p
+                self.pvs["li_slnd1"].value = p
             elif fun('li_slnd2'):
-                self.devices["li_slnd2"].value = p
+                self.pvs["li_slnd2"].value = p
             elif fun('li_slnd3'):
-                self.devices["li_slnd3"].value = p
+                self.pvs["li_slnd3"].value = p
             elif fun('li_slnd4'):
-                self.devices["li_slnd4"].value = p
+                self.pvs["li_slnd4"].value = p
             elif fun('li_slnd5'):
-                self.devices["li_slnd5"].value = p
+                self.pvs["li_slnd5"].value = p
             elif fun('li_slnd6'):
-                self.devices["li_slnd6"].value = p
+                self.pvs["li_slnd6"].value = p
             elif fun('li_slnd7'):
-                self.devices["li_slnd7"].value = p
+                self.pvs["li_slnd7"].value = p
             elif fun('li_slnd8'):
-                self.devices["li_slnd8"].value = p
+                self.pvs["li_slnd8"].value = p
             elif fun('li_slnd9'):
-                self.devices["li_slnd9"].value = p
+                self.pvs["li_slnd9"].value = p
             elif fun('li_slnd10'):
-                self.devices["li_slnd10"].value = p
+                self.pvs["li_slnd10"].value = p
             elif fun('li_slnd11'):
-                self.devices["li_slnd11"].value = p
+                self.pvs["li_slnd11"].value = p
             elif fun('li_slnd12'):
-                self.devices["li_slnd12"].value = p
+                self.pvs["li_slnd12"].value = p
             elif fun('li_slnd13'):
-                self.devices["li_slnd13"].value = p
+                self.pvs["li_slnd13"].value = p
             elif fun('li_slnd14'):
-                self.devices["li_slnd14"].value = p
+                self.pvs["li_slnd14"].value = p
             elif fun('li_slnd15'):
-                self.devices["li_slnd15"].value = p
+                self.pvs["li_slnd15"].value = p
             elif fun('li_slnd16'):
-                self.devices["li_slnd16"].value = p
+                self.pvs["li_slnd16"].value = p
             elif fun('li_slnd17'):
-                self.devices["li_slnd7"].value = p
+                self.pvs["li_slnd7"].value = p
             elif fun('li_slnd18'):
-                self.devices["li_slnd18"].value = p
+                self.pvs["li_slnd18"].value = p
             elif fun('li_slnd19'):
-                self.devices["li_slnd19"].value = p
+                self.pvs["li_slnd19"].value = p
             elif fun('li_slnd20'):
-                self.devices["li_slnd20"].value = p
+                self.pvs["li_slnd20"].value = p
             elif fun('li_slnd21'):
-                self.devices["li_slnd21"].value = p
+                self.pvs["li_slnd21"].value = p
 
             elif fun('li_qf1'):
                 self.devices['li_qf1'].current = p
@@ -490,8 +517,16 @@ class OptimizeInjBO(_RCDS):
             elif fun('kckr'):
                 self.devices['injkckr'].strength = p
 
+            elif fun('shb_amp'):
+                self.devices['li_llrf'].dev_shb.amplitude = p
+            elif fun('kly1_amp'):
+                self.devices['li_llrf'].dev_klystron1.amplitude = p
             elif fun('kly2_amp'):
                 self.devices['li_llrf'].dev_klystron2.amplitude = p
+            elif fun('shb_phs'):
+                self.devices['li_llrf'].dev_shb.phase = p
+            elif fun('kly1_phs'):
+                self.devices['li_llrf'].dev_klystron1.phase = p
             elif fun('kly2_phs'):
                 self.devices['li_llrf'].dev_klystron2.phase = p
 
@@ -505,32 +540,32 @@ class OptimizeInjBO(_RCDS):
     def _create_devices(self):
         # knobs devices
         # lenses
-        self.devices["li_lens1"] = PV("LI-01:PS-Lens-1:Current-SP")
-        self.devices["li_lens2"] = PV("LI-01:PS-Lens-2:Current-SP")
-        self.devices["li_lens3"] = PV("LI-01:PS-Lens-3:Current-SP")
-        self.devices["li_lens4"] = PV("LI-01:PS-Lens-4:Current-SP")
+        self.pvs["li_lens1"] = PV("LI-01:PS-Lens-1:Current-SP")
+        self.pvs["li_lens2"] = PV("LI-01:PS-Lens-2:Current-SP")
+        self.pvs["li_lens3"] = PV("LI-01:PS-Lens-3:Current-SP")
+        self.pvs["li_lens4"] = PV("LI-01:PS-Lens-4:Current-SP")
         # solenoids
-        self.devices["li_slnd1"] = PV("LI-01:PS-Slnd-1:Current-SP")
-        self.devices["li_slnd2"] = PV("LI-01:PS-Slnd-2:Current-SP")
-        self.devices["li_slnd3"] = PV("LI-01:PS-Slnd-3:Current-SP")
-        self.devices["li_slnd4"] = PV("LI-01:PS-Slnd-4:Current-SP")
-        self.devices["li_slnd5"] = PV("LI-01:PS-Slnd-5:Current-SP")
-        self.devices["li_slnd6"] = PV("LI-01:PS-Slnd-6:Current-SP")
-        self.devices["li_slnd7"] = PV("LI-01:PS-Slnd-7:Current-SP")
-        self.devices["li_slnd8"] = PV("LI-01:PS-Slnd-8:Current-SP")
-        self.devices["li_slnd9"] = PV("LI-01:PS-Slnd-9:Current-SP")
-        self.devices["li_slnd10"] = PV("LI-01:PS-Slnd-10:Current-SP")
-        self.devices["li_slnd11"] = PV("LI-01:PS-Slnd-11:Current-SP")
-        self.devices["li_slnd12"] = PV("LI-01:PS-Slnd-12:Current-SP")
-        self.devices["li_slnd13"] = PV("LI-01:PS-Slnd-13:Current-SP")
-        self.devices["li_slnd14"] = PV("LI-Fam:PS-Slnd-14:Current-SP")
-        self.devices["li_slnd15"] = PV("LI-Fam:PS-Slnd-15:Current-SP")
-        self.devices["li_slnd16"] = PV("LI-Fam:PS-Slnd-16:Current-SP")
-        self.devices["li_slnd17"] = PV("LI-Fam:PS-Slnd-17:Current-SP")
-        self.devices["li_slnd18"] = PV("LI-Fam:PS-Slnd-18:Current-SP")
-        self.devices["li_slnd19"] = PV("LI-Fam:PS-Slnd-19:Current-SP")
-        self.devices["li_slnd20"] = PV("LI-Fam:PS-Slnd-10:Current-SP")
-        self.devices["li_slnd21"] = PV("LI-Fam:PS-Slnd-21:Current-SP")
+        self.pvs["li_slnd1"] = PV("LI-01:PS-Slnd-1:Current-SP")
+        self.pvs["li_slnd2"] = PV("LI-01:PS-Slnd-2:Current-SP")
+        self.pvs["li_slnd3"] = PV("LI-01:PS-Slnd-3:Current-SP")
+        self.pvs["li_slnd4"] = PV("LI-01:PS-Slnd-4:Current-SP")
+        self.pvs["li_slnd5"] = PV("LI-01:PS-Slnd-5:Current-SP")
+        self.pvs["li_slnd6"] = PV("LI-01:PS-Slnd-6:Current-SP")
+        self.pvs["li_slnd7"] = PV("LI-01:PS-Slnd-7:Current-SP")
+        self.pvs["li_slnd8"] = PV("LI-01:PS-Slnd-8:Current-SP")
+        self.pvs["li_slnd9"] = PV("LI-01:PS-Slnd-9:Current-SP")
+        self.pvs["li_slnd10"] = PV("LI-01:PS-Slnd-10:Current-SP")
+        self.pvs["li_slnd11"] = PV("LI-01:PS-Slnd-11:Current-SP")
+        self.pvs["li_slnd12"] = PV("LI-01:PS-Slnd-12:Current-SP")
+        self.pvs["li_slnd13"] = PV("LI-01:PS-Slnd-13:Current-SP")
+        self.pvs["li_slnd14"] = PV("LI-Fam:PS-Slnd-14:Current-SP")
+        self.pvs["li_slnd15"] = PV("LI-Fam:PS-Slnd-15:Current-SP")
+        self.pvs["li_slnd16"] = PV("LI-Fam:PS-Slnd-16:Current-SP")
+        self.pvs["li_slnd17"] = PV("LI-Fam:PS-Slnd-17:Current-SP")
+        self.pvs["li_slnd18"] = PV("LI-Fam:PS-Slnd-18:Current-SP")
+        self.pvs["li_slnd19"] = PV("LI-Fam:PS-Slnd-19:Current-SP")
+        self.pvs["li_slnd20"] = PV("LI-Fam:PS-Slnd-20:Current-SP")
+        self.pvs["li_slnd21"] = PV("LI-Fam:PS-Slnd-21:Current-SP")
         # LI quads
         self.devices['li_qf1'] = PowerSupply('LI-Fam:PS-QF1')
         self.devices['li_qf2'] = PowerSupply('LI-Fam:PS-QF2')
