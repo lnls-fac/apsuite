@@ -2,9 +2,10 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-from mathphys.imgproc import Image2D_ROI
-from scipy.interpolate import griddata, interp1d
-from scipy.spatial import ConvexHull, HalfspaceIntersection
+from mathphys.imgproc import Image2D_ROI as _Image2D_ROI
+from scipy.interpolate import griddata as _griddata, interp1d as _interp1d
+from scipy.spatial import ConvexHull as _ConvexHull, \
+    HalfspaceIntersection as _HalfspaceIntersection
 
 
 def plot_lines(lines, fig=None, ax=None, **kwargs):
@@ -28,7 +29,7 @@ def plot_lines(lines, fig=None, ax=None, **kwargs):
 
 
 def plot_convex(
-    hull: ConvexHull, color="r", marker="o", fig=None, ax=None, **kwargs
+    hull: _ConvexHull, color="r", marker="o", fig=None, ax=None, **kwargs
 ):
     """Plots a convex hull."""
     if fig is None or ax is None:
@@ -46,7 +47,7 @@ def plot_convex(
     return fig, ax
 
 
-def paint_convex(hull: ConvexHull, fig=None, ax=None, **kwargs):
+def paint_convex(hull: _ConvexHull, fig=None, ax=None, **kwargs):
     """Paints the interior of a convex hull."""
     if fig is None or ax is None:
         fig, ax = plt.subplots(1, 1)
@@ -108,7 +109,7 @@ class ScreenProcess:
 
     def crop_image(self, fwhmx_factor=4, fwhmy_factor=4):
         """Crops image based on fwhm and returns new grids and new image."""
-        img2droi = Image2D_ROI(self.image)
+        img2droi = _Image2D_ROI(self.image)
         img2droi.update_roi_with_fwhm(fwhmx_factor, fwhmy_factor)
         self._roix = img2droi.roix
         self._roiy = img2droi.roiy
@@ -153,8 +154,8 @@ class ScreenProcess:
         y = y[slice(*self.roiy)]
 
         # Interpolates projections
-        fx = interp1d(x, projx)
-        fy = interp1d(y, projy)
+        fx = _interp1d(x, projx)
+        fy = _interp1d(y, projy)
         xmin, xmax = x[0], x[-1]
         ymin, ymax = y[0], y[-1]
 
@@ -316,8 +317,8 @@ class ConvexPolygon:
         if np.any(sign == 0):
             raise ValueError("Feasoble point belongs to a line.")
         line_eqs = -self.border_lines * sign[:, None]
-        hs = HalfspaceIntersection(line_eqs, feasible_point)
-        hull = ConvexHull(hs.intersections)
+        hs = _HalfspaceIntersection(line_eqs, feasible_point)
+        hull = _ConvexHull(hs.intersections)
         self._main_convex = hull
 
         return hull
@@ -401,7 +402,7 @@ class ConvexPolygon:
 
         return convex_list, idx_list
 
-    def _cut_convex(self, hull: ConvexHull, line_eq):
+    def _cut_convex(self, hull: _ConvexHull, line_eq):
         # find the intersection points
         intersec_points = self._intersection_points(line_eq, hull.equations)
 
@@ -429,8 +430,8 @@ class ConvexPolygon:
         if len(neg_points) == 0:
             return [hull], False
 
-        convex_neg = ConvexHull(np.vstack([neg_points, mid_points]))
-        convex_pos = ConvexHull(np.vstack([pos_points, mid_points]))
+        convex_neg = _ConvexHull(np.vstack([neg_points, mid_points]))
+        convex_pos = _ConvexHull(np.vstack([pos_points, mid_points]))
 
         return [convex_neg, convex_pos], None
 
@@ -590,7 +591,7 @@ class DistribReconstruction(ConvexPolygon):
         deltax = gridx[0, 1] - gridx[0, 0]
         deltay = gridy[1, 0] - gridy[0, 0]
         grid_area = deltax * deltay
-        distrib_itp = griddata(centroids, distrib_val, points, fill_value=0)
+        distrib_itp = _griddata(centroids, distrib_val, points, fill_value=0)
         distrib_itp = distrib_itp.reshape(gridx.shape)
         return distrib_itp / np.sum(distrib_itp) / grid_area
 
