@@ -1,11 +1,13 @@
 """."""
 
-import matplotlib.pyplot as plt
-import numpy as np
+import matplotlib.pyplot as _plt
+import numpy as _np
 from mathphys.imgproc import Image2D_ROI as _Image2D_ROI
 from scipy.interpolate import griddata as _griddata, interp1d as _interp1d
-from scipy.spatial import ConvexHull as _ConvexHull, \
-    HalfspaceIntersection as _HalfspaceIntersection
+from scipy.spatial import (
+    ConvexHull as _ConvexHull,
+    HalfspaceIntersection as _HalfspaceIntersection,
+)
 
 
 def plot_lines(lines, fig=None, ax=None, **kwargs):
@@ -14,10 +16,10 @@ def plot_lines(lines, fig=None, ax=None, **kwargs):
     The coefficients are in the form ax + by + c = 0.
     """
     if fig is None or ax is None:
-        fig, ax = plt.subplots(1, 1)
+        fig, ax = _plt.subplots(1, 1)
 
     for line in lines:
-        if np.isclose(line[1], 0):
+        if _np.isclose(line[1], 0):
             ax.axvline(-line[2] / line[0], **kwargs)
         else:
             a = line[0]
@@ -33,7 +35,7 @@ def plot_convex(
 ):
     """Plots a convex hull."""
     if fig is None or ax is None:
-        fig, ax = plt.subplots(1, 1)
+        fig, ax = _plt.subplots(1, 1)
 
     for simplex in hull.simplices:
         ax.plot(
@@ -50,7 +52,7 @@ def plot_convex(
 def paint_convex(hull: _ConvexHull, fig=None, ax=None, **kwargs):
     """Paints the interior of a convex hull."""
     if fig is None or ax is None:
-        fig, ax = plt.subplots(1, 1)
+        fig, ax = _plt.subplots(1, 1)
 
     points = hull.points[hull.vertices]
     ax.fill(points[:, 0], points[:, 1], **kwargs)
@@ -79,8 +81,8 @@ class ScreenProcess:
     def positions(self):
         """Returns scaled positions of images."""
         sy, sx = self.shape
-        x = np.arange(sx) * self.scale_x
-        y = np.arange(sy) * self.scale_y
+        x = _np.arange(sx) * self.scale_x
+        y = _np.arange(sy) * self.scale_y
         x -= x[sx // 2]
         y -= y[sy // 2]
         return x, y
@@ -89,7 +91,7 @@ class ScreenProcess:
     def grids(self):
         """."""
         x, y = self.positions
-        return np.meshgrid(x, y)
+        return _np.meshgrid(x, y)
 
     @property
     def roix(self):
@@ -119,7 +121,7 @@ class ScreenProcess:
         x, y = self.positions
         new_x = x[slice(*self.roix)]
         new_y = y[slice(*self.roiy)]
-        new_gridx, new_gridy = np.meshgrid(new_x, new_y)
+        new_gridx, new_gridy = _np.meshgrid(new_x, new_y)
         return new_gridx, new_gridy, image_crop
 
     def get_projections(self, nr_bins=(50, 50), bin_size=None):
@@ -147,8 +149,8 @@ class ScreenProcess:
                 - (bin_size_x, bin_size_y) (tuple of float): The calculated bin
                 sizes for X and Y axes.
         """
-        projx = np.sum(self.image, axis=0)[slice(*self.roix)]
-        projy = np.sum(self.image, axis=1)[slice(*self.roiy)]
+        projx = _np.sum(self.image, axis=0)[slice(*self.roix)]
+        projy = _np.sum(self.image, axis=1)[slice(*self.roiy)]
         x, y = self.positions
         x = x[slice(*self.roix)]
         y = y[slice(*self.roiy)]
@@ -160,12 +162,12 @@ class ScreenProcess:
         ymin, ymax = y[0], y[-1]
 
         if bin_size is None:
-            new_x = np.linspace(xmin, xmax, nr_bins[0])
-            new_y = np.linspace(ymin, ymax, nr_bins[1])
+            new_x = _np.linspace(xmin, xmax, nr_bins[0])
+            new_y = _np.linspace(ymin, ymax, nr_bins[1])
         else:
             bin_size_x, bin_size_y = bin_size
-            lengthx = np.abs(xmax - xmin)
-            lengthy = np.abs(ymax - ymin)
+            lengthx = _np.abs(xmax - xmin)
+            lengthy = _np.abs(ymax - ymin)
             nr_points_x, excess_x = divmod(lengthx, bin_size_x)
             nr_points_y, excess_y = divmod(lengthy, bin_size_y)
             new_x = self._adjust_limits(xmin, xmax, excess_x, int(nr_points_x))
@@ -177,8 +179,8 @@ class ScreenProcess:
         # Create bins
         bins_x = self.position_to_bin(new_x)
         bins_y = self.position_to_bin(new_y)
-        bin_size_x = np.abs(bins_x[1] - bins_x[0])
-        bin_size_y = np.abs(bins_y[1] - bins_y[0])
+        bin_size_x = _np.abs(bins_x[1] - bins_x[0])
+        bin_size_y = _np.abs(bins_y[1] - bins_y[0])
 
         return (projx, projy), (bins_x, bins_y), (bin_size_x, bin_size_y)
 
@@ -186,7 +188,7 @@ class ScreenProcess:
     def plot_image(gridx, gridy, image, fig=None, ax=None, **kwargs):
         """."""
         if fig is None or ax is None:
-            fig, ax = plt.subplots(1, 1)
+            fig, ax = _plt.subplots(1, 1)
 
         ax.pcolormesh(gridx, gridy, image, **kwargs)
 
@@ -199,7 +201,7 @@ class ScreenProcess:
         delta = x[1] - x[0]
         xmin = x[0] - delta / 2
         xmax = x[-1] + delta / 2
-        return np.linspace(xmin, xmax, nr_points + 1)
+        return _np.linspace(xmin, xmax, nr_points + 1)
 
     @staticmethod
     def bin_to_position(x):
@@ -213,7 +215,7 @@ class ScreenProcess:
         else:
             min_val -= excess / 2
             max_val += excess / 2
-        return np.linspace(min_val, max_val, nr_points + 1)
+        return _np.linspace(min_val, max_val, nr_points + 1)
 
 
 class ConvexPolygon:
@@ -245,8 +247,8 @@ class ConvexPolygon:
         for i, proj_bins in enumerate(projs_bins):
             matrix = matrices[i]
             nr_bins = len(proj_bins)
-            ab_line = np.tile(matrix[0], (nr_bins, 1))
-            lines.append(np.vstack([ab_line.T, -proj_bins]).T)
+            ab_line = _np.tile(matrix[0], (nr_bins, 1))
+            lines.append(_np.vstack([ab_line.T, -proj_bins]).T)
 
         self.matrices = matrices
         self.projs_bins = projs_bins
@@ -263,7 +265,7 @@ class ConvexPolygon:
             if j == 0:
                 r_lines = proj_lines
             else:
-                r_lines = np.vstack([r_lines, proj_lines])
+                r_lines = _np.vstack([r_lines, proj_lines])
         return r_lines
 
     @property
@@ -308,13 +310,13 @@ class ConvexPolygon:
         for j in range(self.nr_projs):
             border_lines.append(self.lines[j][0, :])
             border_lines.append(self.lines[j][-1, :])
-        return np.array(border_lines)
+        return _np.array(border_lines)
 
     def find_convex_from_borders(self, feasible_point):
         """Finds the convex hull from a feasible point."""
-        feasible_point = np.array(feasible_point)
-        sign = np.sign(self.border_lines @ np.r_[feasible_point, 1])
-        if np.any(sign == 0):
+        feasible_point = _np.array(feasible_point)
+        sign = _np.sign(self.border_lines @ _np.r_[feasible_point, 1])
+        if _np.any(sign == 0):
             raise ValueError("Feasoble point belongs to a line.")
         line_eqs = -self.border_lines * sign[:, None]
         hs = _HalfspaceIntersection(line_eqs, feasible_point)
@@ -377,11 +379,11 @@ class ConvexPolygon:
         for convex in idcs_to_cvx.values():
             points = convex.points
             vertices.append(points[convex.vertices])
-            centroids.append(np.sum(points, axis=0) / points.shape[0])
+            centroids.append(_np.sum(points, axis=0) / points.shape[0])
             areas.append(convex.volume)
         info["vertices"] = vertices
-        info["centroids"] = np.array(centroids)
-        info["areas"] = np.array(areas)
+        info["centroids"] = _np.array(centroids)
+        info["areas"] = _np.array(areas)
         return info
 
     def _subdivide_convex(self, hull, line_eqs):
@@ -411,12 +413,12 @@ class ConvexPolygon:
 
         all_points = hull.points
         if len(cut_points) > 1:
-            all_points = np.vstack([hull.points, cut_points])
+            all_points = _np.vstack([hull.points, cut_points])
         all_points = self._unique_points(all_points)
-        ones_column = np.ones((all_points.shape[0], 1))
-        test_points = line_eq @ np.hstack([all_points, ones_column]).T
+        ones_column = _np.ones((all_points.shape[0], 1))
+        test_points = line_eq @ _np.hstack([all_points, ones_column]).T
 
-        on_line_mask = np.isclose(test_points, 0)
+        on_line_mask = _np.isclose(test_points, 0)
         neg_side_mask = (test_points < 0) & ~on_line_mask
         pos_side_mask = (test_points > 0) & ~on_line_mask
 
@@ -430,38 +432,38 @@ class ConvexPolygon:
         if len(neg_points) == 0:
             return [hull], False
 
-        convex_neg = _ConvexHull(np.vstack([neg_points, mid_points]))
-        convex_pos = _ConvexHull(np.vstack([pos_points, mid_points]))
+        convex_neg = _ConvexHull(_np.vstack([neg_points, mid_points]))
+        convex_pos = _ConvexHull(_np.vstack([pos_points, mid_points]))
 
         return [convex_neg, convex_pos], None
 
     def _intersection_points(self, line_eq, cvx_eqs):
-        matrices = np.zeros((cvx_eqs.shape[0], 2, 2))
+        matrices = _np.zeros((cvx_eqs.shape[0], 2, 2))
         matrices[:, 0, :] = cvx_eqs[:, :2]
         matrices[:, 1, :] = line_eq[None, :2]
-        idcs = ~np.isclose(np.linalg.det(matrices), 0)
+        idcs = ~_np.isclose(_np.linalg.det(matrices), 0)
         matrices = matrices[idcs]
-        c = np.zeros((matrices.shape[0], 2))
+        c = _np.zeros((matrices.shape[0], 2))
         c[:, 0] -= cvx_eqs[idcs, 2]
         c[:, 1] -= line_eq[2]
-        return np.linalg.solve(matrices, c)
+        return _np.linalg.solve(matrices, c)
 
     def _points_in_cvx(self, points, cvx_eqs):
-        eq_points = np.hstack([points, np.ones((points.shape[0], 1))])
+        eq_points = _np.hstack([points, _np.ones((points.shape[0], 1))])
         fxy = eq_points @ cvx_eqs.T
-        idcs = np.all(np.isclose(fxy, 0) | (fxy < 0), axis=1)
+        idcs = _np.all(_np.isclose(fxy, 0) | (fxy < 0), axis=1)
         return self._unique_points(points[idcs])
 
     def _unique_points(self, points, rtol=1e-12, atol=1e-12):
         uniques = []
         for point in points:
             if not any(
-                np.all(np.isclose(point, p, rtol=rtol, atol=atol))
+                _np.all(_np.isclose(point, p, rtol=rtol, atol=atol))
                 for p in uniques
             ):
                 uniques.append(point)
 
-        return np.array(uniques)
+        return _np.array(uniques)
 
 
 class DistribReconstruction(ConvexPolygon):
@@ -483,7 +485,7 @@ class DistribReconstruction(ConvexPolygon):
         """
         lambda_list = []
         for proj in self.projs:
-            lambda_proj = np.ones_like(proj, dtype="float")
+            lambda_proj = _np.ones_like(proj, dtype="float")
             lambda_proj[proj == 0] = 0
             lambda_list.append(lambda_proj)
         return lambda_list
@@ -527,7 +529,7 @@ class DistribReconstruction(ConvexPolygon):
         for idcs, convex in idx_to_cvx.items():
             points = convex.points
             vertices = points[convex.vertices]
-            centroid = np.sum(points, axis=0) / points.shape[0]
+            centroid = _np.sum(points, axis=0) / points.shape[0]
             area = convex.volume
 
             properties[tuple(idcs)] = {
@@ -546,9 +548,9 @@ class DistribReconstruction(ConvexPolygon):
                 distrib.append(
                     self.get_distrib_value_from_lambda(idcs, lambda_list)
                 )
-            distrib = np.array(distrib)
-            areas = np.array([v["area"] for v in properties.values()])
-            distrib /= np.sum(distrib * areas)
+            distrib = _np.array(distrib)
+            areas = _np.array([v["area"] for v in properties.values()])
+            distrib /= _np.sum(distrib * areas)
 
             for i, value in enumerate(properties.values()):
                 value["distribution_value"] = distrib[i]
@@ -573,7 +575,7 @@ class DistribReconstruction(ConvexPolygon):
                         j, m, lambda_list, idcs_to_cvx
                     )
                 )
-            projs_calc.append(np.array(p))
+            projs_calc.append(_np.array(p))
         return projs_calc
 
     def reconstruct_distrib_in_regular_grid(self, gridx, gridy):
@@ -583,17 +585,17 @@ class DistribReconstruction(ConvexPolygon):
             sent += "Please call 'recontruct_distribution' first."
             raise ValueError(sent)
         cvx_props = self.convexes_properties
-        centroids = np.array([v["centroid"] for v in cvx_props.values()])
-        distrib_val = np.array(
-            [v["distribution_value"] for v in cvx_props.values()]
-        )
-        points = np.vstack([gridx.ravel(), gridy.ravel()]).T
+        centroids = _np.array([v["centroid"] for v in cvx_props.values()])
+        distrib_val = _np.array([
+            v["distribution_value"] for v in cvx_props.values()
+        ])
+        points = _np.vstack([gridx.ravel(), gridy.ravel()]).T
         deltax = gridx[0, 1] - gridx[0, 0]
         deltay = gridy[1, 0] - gridy[0, 0]
         grid_area = deltax * deltay
         distrib_itp = _griddata(centroids, distrib_val, points, fill_value=0)
         distrib_itp = distrib_itp.reshape(gridx.shape)
-        return distrib_itp / np.sum(distrib_itp) / grid_area
+        return distrib_itp / _np.sum(distrib_itp) / grid_area
 
     def select_cvxs_in_bin(self, nr_proj, nr_bin, idcs_to_cvx=None):
         """Selects convexes of a specfic bin of a specific projection."""
@@ -621,7 +623,7 @@ class DistribReconstruction(ConvexPolygon):
         value = -1
         for j, m in enumerate(convex_idcs):
             value += lambda_list[j][m]
-        return np.exp(value)
+        return _np.exp(value)
 
     def recontruct_distribution(self, nr_iter=1000, tol=0.001):
         """Finds values for Lagrange multipliers using a interative process.
@@ -657,13 +659,15 @@ class DistribReconstruction(ConvexPolygon):
         for i in range(nr_iter):
             max_frac = 0
             for j in range(len(lambda_list)):
-                idcs_m = np.unique([k[j] for k in selecteds_in_distrib.keys()])
+                idcs_m = _np.unique([
+                    k[j] for k in selecteds_in_distrib.keys()
+                ])
                 for m in idcs_m:
                     true_proj = self.projs[j][m]
                     new_proj = self.get_proj_value_from_lambda(
                         j, m, lambda_list, selecteds_in_distrib
                     )
-                    diff_proj = np.log(true_proj) - np.log(new_proj)
+                    diff_proj = _np.log(true_proj) - _np.log(new_proj)
                     lambda_list[j][m] = diff_proj + lambda_list[j][m]
                     frac = true_proj / new_proj
                     max_frac = max(abs(frac - 1), max_frac)

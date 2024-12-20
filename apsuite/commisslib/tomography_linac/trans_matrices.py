@@ -1,22 +1,22 @@
 """."""
-import numpy as np
+import numpy as _np
 
 
 def rotation_matrix(theta):
     """."""
-    return np.array(
-        [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
+    return _np.array(
+        [[_np.cos(theta), -_np.sin(theta)], [_np.sin(theta), _np.cos(theta)]]
     )
 
 
 def drift(lenght):
     """."""
-    return np.array([[1, lenght], [0, 1]])
+    return _np.array([[1, lenght], [0, 1]])
 
 
 def quad(kl):
     """."""
-    return np.array([[1, 0], [-kl, 1]])
+    return _np.array([[1, 0], [-kl, 1]])
 
 
 def to_scrn_matrix(kl):
