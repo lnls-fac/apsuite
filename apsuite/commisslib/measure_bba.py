@@ -879,7 +879,9 @@ class DoBBA(_BaseClass):
             wspace=0.35,
         )
 
-        f.suptitle(bpm, fontsize=20)
+        ind = self.params.BPMNAMES.index(bpm)
+        bpm_txt = f'{bpm} [{ind:03d}]'
+        f.suptitle(bpm_txt, fontsize=20)
 
         alx = _plt.subplot(gs[0, 0])
         aly = _plt.subplot(gs[0, 1])
