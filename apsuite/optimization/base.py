@@ -197,8 +197,8 @@ class OptimizeParams(_Params):
         wrong = (
             (pos.shape[-1] != self.limit_lower.shape[-1]) or
             (pos.shape[-1] != self.limit_upper.shape[-1]) or
-            _np.any(pos <= self.limit_lower) or
-            _np.any(pos >= self.limit_upper))
+            _np.any(pos < self.limit_lower) or
+            _np.any(pos > self.limit_upper))
         return not wrong
 
 
