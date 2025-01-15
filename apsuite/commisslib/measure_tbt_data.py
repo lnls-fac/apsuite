@@ -152,9 +152,8 @@ class MeasureTbTData(_ThreadBaseClass):
         print("Configuring BPMs timing...")
         _AcqBPMsSignals().prepare_timing(state)  # BPM trigger timing
 
-        state = dict() if state is None else state  # ?
+        state = dict() if state is None else state
         print("Configuring magnets timing...")
-        # magnets trigger timing below
         prms = self.params
         pingers2kick = prms.pingers2kick
         trigpingh = self.devices["trigpingh"]
@@ -360,20 +359,22 @@ class MeasureTbTData(_ThreadBaseClass):
         current_before = currinfo.current
 
         self._prepare_timing()
-        if self._stopevt.is_set() or not self._timing_ok:
-            self._prepare_timing(init_timing_state)
-            print("Stopped. Timing restored to initial state.")
-            return
-        else:
-            print("Timing was succesfully configured.")
+        if not self._timing_ok:
+            print("Failed at configuring timing!")
+            self._restore_and_exit(timing_state=init_timing_state)
+        print("Timing was succesfully configured.")
+
+        if self._stopevt.is_set():
+            self._restore_and_exit(timing_state=init_timing_state)
 
         self._prepare_magnets()  # gets strengths from params
-        if self._stopevt.is_set() or not self._magnets_ok:
-            self._prepare_magnets(init_magnets_state)
-            print("Stopped. Magnets restored to initial state.")
-            return
-        else:
-            print("Magnets were succesfully configured.")
+        if not self._magnets_ok:
+            print("Failed at configuring magnets!")
+            self._restore_and_exit(init_timing_state, init_magnets_state)
+        print("Magnets were succesfully configured.")
+
+        if self._stopevt.is_set():
+            self._restore_and_exit(init_timing_state, init_magnets_state)
 
         try:
             _AcqBPMsSignals.acquire_data()
@@ -389,23 +390,27 @@ class MeasureTbTData(_ThreadBaseClass):
             print("Acquisition was successful.")
         except Exception as e:
             self._meas_finished_ok = False
-            self._prepare_timing(init_timing_state)
-            self._set_magnets_state(
-                init_magnets_state, wait_mon=False
-            )
             print(f"An error occurred during acquisition: {e}")
-            return
+            self._restore_and_exit(init_timing_state, init_magnets_state)
 
         if self.params.restore_init_state:
-            print("Restoring magnets & timing initial state.")
-            self._prepare_timing(init_timing_state)
-            self._set_magnets_state(
-                init_magnets_state, wait_mon=False
-            )
-            if not self._timing_ok:
-                print("Timing was not restored to initial state.")
-            if not self._magnets_ok:
-                print("Magnets were not restored to initial state.")
+            self._restore_and_exit(init_timing_state, init_magnets_state)
+
+        print("Measurement finished.")
+
+    def _restore_and_exit(self, timing_state=None, magnets_state=None):
+        """Restore timing and magnets state and exit the measurement."""
+        print("Restoring machine initial state.")
+
+        if timing_state is not None:
+            self._prepare_timing(timing_state)
+            print(f"    Timing restored: {self._timing_ok}")
+
+        if magnets_state is not None:
+            self._set_magnets_state(magnets_state, wait_mon=False)
+            # no need to wait_mon if exiting anyways. wait_mon is critical to
+            # prevent meas to start before magnets reach the required strentgh
+            print(f"    Magnets restored: {self._magnets_ok}")
 
         print("Measurement finished.")
         return
