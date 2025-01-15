@@ -209,13 +209,15 @@ class MeasureTbTData(_ThreadBaseClass):
         """Set magnets strengths, pwr and pulse states."""
         timeout = self.params.magnets_timeout
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
+        pingh_ok, pingv_ok = True, True
 
         # turn-off pulse before changing strengths
+        # prevent accidental activation with wrong strengths
         pingh_ok = pingh.cmd_turn_off_pulse(timeout)
         pingv_ok = pingv.cmd_turn_off_pulse(timeout)
 
-        # Power and strengths
-        if state.get("pingh_pwr", False):
+        # Set power state and strengths
+        if state["pingh_pwr"]:
             pingh_ok = pingh.cmd_turn_on(timeout=self.params.magnets_timeout)
             if pingh_ok:
                 pingh_ok = self.set_magnets_strength(
@@ -232,7 +234,7 @@ class MeasureTbTData(_ThreadBaseClass):
                     timeout=self.params.magnets_timeout
                 )
 
-        if state.get("pingv_pwr", False):
+        if state["pingv_pwr"]:
             pingv_ok = pingv.cmd_turn_on(timeout=self.params.magnets_timeout)
             if pingv_ok:
                 pingv_ok = self.set_magnets_strength(
@@ -344,6 +346,7 @@ class MeasureTbTData(_ThreadBaseClass):
         if "h" in pingers2kick:
             state["pingh_pwr"] = 1  # always make sure its on
             state["pingh_pulse"] = 1
+            state["pingh_strength"] = self.params.hkick
         else:
             # state["pingh_pwr"] = 0  # but will not be turning-off.
             state["pingh_pulse"] = 0  # only changing pulse-sts
@@ -351,12 +354,10 @@ class MeasureTbTData(_ThreadBaseClass):
         if "v" in pingers2kick:
             state["pingv_pwr"] = 1
             state["pingv_pulse"] = 1
+            state["pingv_strength"] = self.params.vkick
         else:
             # state["pingv_pwr"] = 0
             state["pingv_pulse"] = 0
-
-        state["pingh_strength"] = self.params.hkick
-        state["pingv_strength"] = self.params.vkick
 
         return self.set_magnets_state(state)
 
