@@ -318,11 +318,16 @@ class MeasureTbTData(_ThreadBaseClass):
                 wait_mon=wait_mon,
             )
 
-        if (not pingh_ok) or (not pingv_ok):
-            bad_pingers = "pingh " if not pingh_ok else ""
-            bad_pingers += "pingv" if not pingv_ok else ""
-            msg = "Some magnets strengths were not set.\n"
-            msg += f"\t Bad pingers: {bad_pingers}"
+        bad_pingers = []
+        if not pingh_ok:
+            bad_pingers.append("pingh")
+        if not pingv_ok:
+            bad_pingers.append("pingv")
+
+        if bad_pingers:
+            msg = "Some magnet strengths were not set.\n"
+            msg += f"\tBad pingers: {', '.join(bad_pingers)}"
+            print(msg)
             return False
 
         return True
