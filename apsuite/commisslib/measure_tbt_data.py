@@ -278,27 +278,31 @@ class MeasureTbTData(_ThreadBaseClass):
     ):
         """Set pingers strengths, check if was set & indicate which failed."""
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
+        pingh_ok, pingv_ok = True, True
+
+        # first, strengths are only set. No waiting reaching the desired values
+        # (i.e. timeout = 0)
         if hkick is not None:
             hkick *= self.params.pingh_calibration
-            print("changing pingh")
-            pingh.set_strength(hkick, timeout=0, wait_mon=wait_mon)
-        else:
-            pingh_ok = True
+            print(f"Setting pingh strength to {hkick:.3f} mrad...")
+            pingh.set_strength(hkick, timeout=0)
 
         if vkick is not None:
             vkick *= self.params.pingv_calibration
-            print("changing pingv")
-            pingv.set_strength(vkick, timeout=0, wait_mon=wait_mon)
-        else:
-            pingv_ok = True
+            print(f"Setting pingv strength to {hkick:.3f} mrad...")
+            pingv.set_strength(vkick, timeout=0)
 
-        # wait magnets ramp and check if correctly set
-        if magnets_timeout is None:
-            magnets_timeout = self.params.magnets_timeout
+        if not wait_mon:
+            return pingh_ok and pingv_ok
+
+        # once strenghts are set and wait_mon is True
+        # we wait the magnets reach the values set
+
+        magnets_timeout = magnets_timeout or self.params.magnets_timeout
         t0 = _time.time()
 
         if hkick is not None:
-            print("waiting pingh")
+            print("\twaiting pingh")
             pingh_ok = pingh.set_strength(
                 hkick,
                 tol=0.05 * abs(hkick),
@@ -310,7 +314,7 @@ class MeasureTbTData(_ThreadBaseClass):
         magnets_timeout -= elapsed_time
 
         if vkick is not None:
-            print("waiting pingv")
+            print("\twaiting pingv")
             pingv_ok = pingv.set_strength(
                 vkick,
                 tol=0.05 * abs(vkick),
