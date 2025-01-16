@@ -193,7 +193,7 @@ class MeasureTbTData(_ThreadBaseClass):
         """."""
         state = dict()
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
-        pingh_str, pingv_str = self.get_magnets_strength()
+        pingh_str, pingv_str = self._get_magnets_strength()
         state["pingh_pwr"] = pingh.pwrstate
         state["pingv_pwr"] = pingv.pwrstate
         state["pingh_pulse"] = pingh.pulse
@@ -220,13 +220,13 @@ class MeasureTbTData(_ThreadBaseClass):
         if state["pingh_pwr"]:
             pingh_ok = pingh.cmd_turn_on(timeout=self.params.magnets_timeout)
             if pingh_ok:
-                pingh_ok = self.set_magnets_strength(
+                pingh_ok = self._set_magnets_strength(
                     hkick=state["pingh_strength"], wait_mon=wait_mon
                 )
             else:
                 print("Failed at turning-on pingh.")
         else:
-            pingh_ok = self.set_magnets_strength(
+            pingh_ok = self._set_magnets_strength(
                 hkick=state["pingh_strength"], wait_mon=wait_mon
             )
             if pingh_ok:
@@ -237,13 +237,13 @@ class MeasureTbTData(_ThreadBaseClass):
         if state["pingv_pwr"]:
             pingv_ok = pingv.cmd_turn_on(timeout=self.params.magnets_timeout)
             if pingv_ok:
-                pingv_ok = self.set_magnets_strength(
+                pingv_ok = self._set_magnets_strength(
                     vkick=state["pingv_strength"], wait_mon=wait_mon
                 )
             else:
                 print("Failed at turning-on pingv.")
         else:
-            pingv_ok = self.set_magnets_strength(
+            pingv_ok = self._set_magnets_strength(
                 vkick=state["pingv_strength"], wait_mon=wait_mon
             )
             if pingv_ok:
@@ -254,7 +254,7 @@ class MeasureTbTData(_ThreadBaseClass):
         if pingh_ok and pingv_ok:
             print("Magnets power-state and strengths set.")
         else:
-            print("Failed at setting magnets power-state and strengths")
+            print("Failed at setting magnets power-state and/or strengths")
 
         print("Changing pulse-state")
 
@@ -339,7 +339,7 @@ class MeasureTbTData(_ThreadBaseClass):
         return True
 
     def _prepare_magnets(self):
-        """."""
+        """Create magnets state dict from params."""
         print("Preparing magnets...")
         pingers2kick = self.params.pingers2kick
         state = dict()
@@ -371,7 +371,9 @@ class MeasureTbTData(_ThreadBaseClass):
         self._prepare_timing()
         if not self._timing_ok:
             print("Failed at configuring timing!")
+            self._meas_finished_ok = False
             self._restore_and_exit(timing_state=init_timing_state)
+
         print("Timing was succesfully configured.")
 
         if self._stopevt.is_set():
@@ -380,7 +382,9 @@ class MeasureTbTData(_ThreadBaseClass):
         self._prepare_magnets()  # gets strengths from params
         if not self._magnets_ok:
             print("Failed at configuring magnets!")
+            self._meas_finished_ok = False
             self._restore_and_exit(init_timing_state, init_magnets_state)
+
         print("Magnets were succesfully configured.")
 
         if self._stopevt.is_set():
@@ -414,13 +418,13 @@ class MeasureTbTData(_ThreadBaseClass):
 
         if timing_state is not None:
             self._prepare_timing(timing_state)
-            print(f"    Timing restored: {self._timing_ok}")
+            print(f"\tTiming restored: {self._timing_ok}")
 
         if magnets_state is not None:
             self._set_magnets_state(magnets_state, wait_mon=False)
             # no need to wait_mon if exiting anyways. wait_mon is critical to
             # prevent meas to start before magnets reach the required strentgh
-            print(f"    Magnets restored: {self._magnets_ok}")
+            print(f"\tMagnets restored: {self._magnets_ok}")
 
         print("Measurement finished.")
         return
@@ -429,7 +433,7 @@ class MeasureTbTData(_ThreadBaseClass):
         """."""
         if self.ismeasuring:
             print("Measurement not finished.")
-            return
+            return False
         print(f"Timing ok? {self._timing_ok}")
         print(f"Magnets ok? {self._magnets_ok}")
         print(f"Timing restored?")
