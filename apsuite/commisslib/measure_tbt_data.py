@@ -135,19 +135,19 @@ class MeasureTbTData(_ThreadBaseClass):
 
     def _get_timing_state(self):
         """."""
-        state = _AcqBPMsSignals().get_timing_state()
+        # BPMs trigger and EVG timing state
+        state_dict = _AcqBPMsSignals().get_timing_state()
 
-        trigpingh = self.devices["trigpingh"]
-        state["trigpingh_state"] = trigpingh.state
-        state["trigpingh_source"] = trigpingh.source_str
-        state["trigpingh_delay_raw"] = trigpingh.delay_raw
+        # Pingers trigger timing state
+        trigs = self.devices["trigpingh"], self.devices["trigpingv"]
+        keys = "h", "v"
 
-        trigpingv = self.devices["trigpingv"]
-        state["trigpingv_state"] = trigpingv.state
-        state["trigpingv_source"] = trigpingv.source_str
-        state["trigpingv_delay_raw"] = trigpingv.delay_raw
+        for key, trig in zip(keys, trigs) :
+            state_dict[f"trigping{key}_state"] = trig.state  # enable state
+            state_dict[f"trigping{key}_source"] = trig.source_str
+            state_dict[f"trigping{key}_delay_raw"] = trig.delay_raw
 
-        return state
+        return state_dict
 
     def _prepare_timing(self, state=None):
         """."""
@@ -485,6 +485,7 @@ class MeasureTbTData(_ThreadBaseClass):
         tmstp = _datetime.datetime.fromtimestamp(tm).strftime(fmt)
         stg += f"{tmstp}"
         return stg
+
 
 class TbTDataAnalysis(MeasureTbTData):
     """."""
