@@ -436,10 +436,31 @@ class MeasureTbTData(_ThreadBaseClass):
         if self.ismeasuring:
             print("Measurement not finished.")
             return False
-        print(f"Timing ok? {self._timing_ok}")
-        print(f"Magnets ok? {self._magnets_ok}")
-        print(f"Timing restored?")
-        print(f"Magnets restored?")
+
+        magnets_state = self._get_magnets_state()
+        timing_state = self._get_timing_state()
+        mags = self._init_magnets_state == magnets_state
+        timing = self._init_timing_state == timing_state
+
+        print(f"Magnets restored:\t{mags}")
+        print(f"Timing restored:\t{timing}")
+
+        return mags and timing
+
+    def check_measurement_finished_ok(self):
+        """Check if measument finished without errors.
+
+        Returns:
+            bool: True if measurement finished without errors.
+
+        """
+        if self.ismeasuring:
+            print("Measurment not finished.")
+            return False
+        return self._meas_finished_ok
+
+    def check_measurement_quality(self):
+        """."""
         raise NotImplementedError
 
     def get_default_fname(self):
@@ -464,22 +485,6 @@ class MeasureTbTData(_ThreadBaseClass):
         tmstp = _datetime.datetime.fromtimestamp(tm).strftime(fmt)
         stg += f"{tmstp}"
         return stg
-
-    def check_measurement_finished_ok(self):
-        """Check if measument finished without errors.
-
-        Returns:
-            bool: True if measurement finished without errors.
-
-        """
-        if self.ismeasuring:
-            print("Measurment not finished.")
-            return False
-        return self._meas_finished_ok
-
-    def check_measurement_quality(self):
-        """."""
-        raise NotImplementedError
 
 class TbTDataAnalysis(MeasureTbTData):
     """."""
