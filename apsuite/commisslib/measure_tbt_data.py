@@ -118,6 +118,8 @@ class MeasureTbTData(_ThreadBaseClass):
 
         if self.isonline:
             self._create_devices()
+            self._init_magnets_state = self._get_magnets_state()
+            self._init_timing_state = self._get_timing_state()
 
     def _create_devices(self):
         """."""
@@ -364,8 +366,8 @@ class MeasureTbTData(_ThreadBaseClass):
     def _do_measurement(self):
         """."""
         currinfo = self.devices["currinfo"]
-        init_timing_state = self._get_timing_state()
-        init_magnets_state = self._get_magnets_state()
+        init_timing_state = self._init_timing_state
+        init_magnets_state = self._init_magnets_state
         current_before = currinfo.current
 
         self._prepare_timing()
