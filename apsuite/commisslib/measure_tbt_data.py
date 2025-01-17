@@ -38,8 +38,8 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.vkick = None  # [mrad]
         self.pingh_calibration = 1.5416651659146232
         self.pingv_calibration = 1.02267573
-        self.trigpingh_delay = None
-        self.trigpingv_delay = None
+        self.trigpingh_delay_raw = 36802990  # defined @ 2024-05-21 mach. study
+        self.trigpingv_delay_raw = 36802937  # defined @ 2024-05-21 mach. study
         self.magnets_timeout = 120.0
         self.restore_init_state = True
 
@@ -64,28 +64,28 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         stg += ftmp("pingh_calibration", self.pingh_calibration, "")
         stg += ftmp("pingv_calibration", self.pingv_calibration, "")
 
-        dly = self.trigpingh_delay
+        dly = self.trigpingh_delay_raw
         if dly is None:
             stg += stmp(
-                "trigpingh_delay",
+                "trigpingh_delay_raw",
                 "same",
                 "(current value will not be changed)",
             )
         else:
-            stg += ftmp("trigpingh_delay", dly, "[us]")
+            stg += dtmp("trigpingh_delay_raw", dly, "")
         if self.vkick is None:
             stg += stmp("vkick", "same", "(current value will not be changed)")
         else:
             stg += ftmp("vkick", self.vkick, "[mrad]")
-        dly = self.trigpingv_delay
+        dly = self.trigpingv_delay_raw
         if dly is None:
             stg += stmp(
-                "trigpingv_delay",
+                "trigpingv_delay_raw",
                 "same",
                 "(current value will not be changed)",
             )
         else:
-            stg += ftmp("trigpingv_delay", dly, "[us]")
+            stg += dtmp("trigpingv_delay_raw", dly, "")
         stg += stmp("restore_init_state", self.restore_init_state, "")
         return stg
 
@@ -140,12 +140,12 @@ class MeasureTbTData(_ThreadBaseClass):
         trigpingh = self.devices["trigpingh"]
         state["trigpingh_state"] = trigpingh.state
         state["trigpingh_source"] = trigpingh.source_str
-        state["trigpingh_delay"] = trigpingh.delay
+        state["trigpingh_delay_raw"] = trigpingh.delay_raw
 
         trigpingv = self.devices["trigpingv"]
         state["trigpingv_state"] = trigpingv.state
         state["trigpingv_source"] = trigpingv.source_str
-        state["trigpingv_delay"] = trigpingv.delay
+        state["trigpingv_delay_raw"] = trigpingv.delay_raw
 
         return state
 
@@ -164,7 +164,7 @@ class MeasureTbTData(_ThreadBaseClass):
         if ("h" in pingers2kick) or (state.get("trigpingh_state", 0) == 1):
             trigh_ok = trigpingh.cmd_enable(timeout=prms.timeout)
             trigpingh.source = state.get("trigpingh_source", prms.timing_event)
-            dly = state.get("trigpingh_delay", prms.trigpingh_delay)
+            dly = state.get("trigpingh_delay_raw", prms.trigpingh_delay_raw)
             if dly is not None:
                 trigpingh.delay = dly
         else:
@@ -174,7 +174,7 @@ class MeasureTbTData(_ThreadBaseClass):
         if ("v" in pingers2kick) or (state.get("trigpingv_state", 0) == 1):
             trigv_ok = trigpingv.cmd_enable(timeout=prms.timeout)
             trigpingv.source = state.get("trigpingv_source", prms.timing_event)
-            dly = state.get("trigpingv_delay", prms.trigpingv_delay)
+            dly = state.get("trigpingv_delay_raw", prms.trigpingv_delay_raw)
             if dly is not None:
                 trigpingv.delay = dly
         else:
@@ -530,9 +530,10 @@ class TbTDataAnalysis(MeasureTbTData):
 
             ftmp = "{0:26s} = {1:9.6f}  {2:s}\n".format
             stmp = "{0:26s} = {1:9}  {2:s}\n".format
+            dtmp = "{0:26s} = {1:9d}  {2:s}\n".format
             gtmp = "{0:<15s} = {1:}  {2:}\n".format
 
-            stg += gtmp("timestamp", self.timestamp, "")
+            stg += gtmp("timestamp", self.timestamp, "")  # TODO: convert tmstp
             stg += "\n"
             stg += "Storage Ring State\n"
             stg += "\n"
@@ -583,8 +584,10 @@ class TbTDataAnalysis(MeasureTbTData):
                 data["timing_state"]["trigpingh_source"],
                 "",
             )
-            stg += stmp(
-                "trigpingh_delay", data["timing_state"]["trigpingh_delay"], ""
+            stg += dtmp(
+                "trigpingh_delay_raw",
+                data["timing_state"]["trigpingh_delay_raw"],
+                ""
             )
             stg += stmp("pingh_pwr", data["magnets_state"]["pingh_pwr"], "")
 
@@ -602,8 +605,10 @@ class TbTDataAnalysis(MeasureTbTData):
                 data["timing_state"]["trigpingv_source"],
                 "",
             )
-            stg += stmp(
-                "trigpingv_delay", data["timing_state"]["trigpingv_delay"], ""
+            stg += dtmp(
+                "trigpingv_delay_raw",
+                data["timing_state"]["trigpingv_delay_raw"],
+                ""
             )
             stg += stmp("pingv_pwr", data["magnets_state"]["pingv_pwr"], "")
 
