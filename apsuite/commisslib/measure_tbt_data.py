@@ -194,17 +194,15 @@ class MeasureTbTData(_ThreadBaseClass):
     def _get_magnets_state(self):
         """."""
         state = dict()
-        pingh, pingv = self.devices["pingh"], self.devices["pingv"]
         pingh_str, pingv_str = self._get_magnets_strength()
-        state["pingh_pwr"] = pingh.pwrstate
-        state["pingv_pwr"] = pingv.pwrstate
-        state["pingh_pulse"] = pingh.pulse
-        state["pingv_pulse"] = pingv.pulse
-        state["pingh_strength"] = pingh_str
-        state["pingv_strength"] = pingv_str
-        state["pingh_voltage"] = pingh.voltage
-        state["pingv_voltage"] = pingv.voltage
-
+        pings = self.devices["pingh"], self.devices["pingv"]
+        keys = "h", "v"
+        for key, ping in zip(keys, pings):
+            ping_str = pingh_str if key == "h" else pingv_str
+            state[f"ping{key}_pwr"] = ping.pwrstate
+            state[f"ping{key}_pulse"] = ping.pulse
+            state[f"ping{key}_strength"] = ping_str
+            state[f"ping{key}_voltage"] = ping.voltage
         return state
 
     def _set_magnets_state(self, state, wait_mon=True):
