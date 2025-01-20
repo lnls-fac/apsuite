@@ -366,7 +366,7 @@ class MeasureTbTData(_ThreadBaseClass):
         currinfo = self.devices["currinfo"]
         init_timing_state = self._init_timing_state
         init_magnets_state = self._init_magnets_state
-        current_before = currinfo.current
+        self.data["current_before"] = currinfo.current
 
         self._prepare_timing()
         if not self._timing_ok:
@@ -391,16 +391,7 @@ class MeasureTbTData(_ThreadBaseClass):
             self._restore_and_exit(init_timing_state, init_magnets_state)
 
         try:
-            _AcqBPMsSignals.acquire_data()
-            # BPMs signals + relevant info are acquired
-            # such as timestamps tunes, stored current
-            # rf frequency, acq rate, nr samples, etc.
-            self.data["magnets_state"] = self._get_magnets_state()
-            self.data["current_before"] = current_before
-            self.data["current_after"] = self.data.pop(
-                "stored_current"
-            )
-            self.data["init_magnets_state"] = init_magnets_state
+            self._acquire_data()
             print("Acquisition was successful.")
         except Exception as e:
             self._meas_finished_ok = False
@@ -411,6 +402,18 @@ class MeasureTbTData(_ThreadBaseClass):
             self._restore_and_exit(init_timing_state, init_magnets_state)
 
         print("Measurement finished.")
+
+    def _acquire_data(self):
+        """."""
+        _AcqBPMsSignals.acquire_data()
+        # BPMs signals + relevant info are acquired
+        # such as timestamps tunes, stored current
+        # rf frequency, acq rate, nr samples, etc.
+        self.data["magnets_state"] = self._get_magnets_state()
+        self.data["current_after"] = self.data.pop(
+            "stored_current"
+        )
+        self.data["init_magnets_state"] = self._init_magnets_state
 
     def _restore_and_exit(self, timing_state=None, magnets_state=None):
         """Restore timing and magnets state and exit the measurement."""
