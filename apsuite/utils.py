@@ -153,6 +153,29 @@ class MeasBaseClass(DataBaseClass):
                 return False
         return True
 
+    def get_devices_state(self):
+        """."""
+        devs = self.devices
+        return self.get_equipaments_state(devs)
+
+    def get_pvs_state(self):
+        """."""
+        pvs = self.pvs
+        return self.get_equipaments_state(pvs)
+
+    def get_equipaments_state(self, equipaments):
+        """."""
+        equipaments_state = dict()
+        for name, equip in equipaments.items():
+            state = {
+                attr: getattr(equip, attr) for attr in dir(equip) if
+                (
+                    not attr.startswith("_")
+                    and not callable(getattr(equip, attr))
+                )
+            }
+            equipaments_state[name] = state
+        return equipaments_state
 
 class ThreadedMeasBaseClass(MeasBaseClass):
     """."""
@@ -203,3 +226,11 @@ class ThreadedMeasBaseClass(MeasBaseClass):
         if self._target is not None:
             self._target()
         self._finished.set()
+
+    def _initialize(self):
+        """To be run before measurement. Save devices/pc initial state."""
+        return NotImplementedError
+
+    def _finish(self):
+        """To be run after measurement. Restore initial state."""
+        return NotImplementedError
