@@ -1,6 +1,7 @@
 """."""
 import logging as _log
 import sys as _sys
+import os as _os
 from copy import deepcopy as _dcopy
 from threading import Event as _Event
 
@@ -153,29 +154,75 @@ class MeasBaseClass(DataBaseClass):
                 return False
         return True
 
-    def get_devices_state(self):
+    def _get_equipments_state(self, equipments: dict):
         """."""
-        devs = self.devices
-        return self.get_equipaments_state(devs)
+        equipments_state = dict()
+        for name, equip in equipments.items():
+            state = _dcopy(equip.__dict__)
+            equipments_state[name] = state
+        return equipments_state
 
-    def get_pvs_state(self):
+    def get_machine_state(self):
         """."""
-        pvs = self.pvs
-        return self.get_equipaments_state(pvs)
+        if not self.isonline:
+            return
+        devs_state = self._get_equipments_state(self.devices)
+        pvs_state = self._get_equipments_state(self.pvs)
+        machine_state = {"devices": devs_state,
+                         "pvs"    : pvs_state}
+        return machine_state
 
-    def get_equipaments_state(self, equipaments):
+    def save_machine_state(self, fname):
         """."""
-        equipaments_state = dict()
-        for name, equip in equipaments.items():
-            state = {
-                attr: getattr(equip, attr) for attr in dir(equip) if
-                (
-                    not attr.startswith("_")
-                    and not callable(getattr(equip, attr))
-                )
-            }
-            equipaments_state[name] = state
-        return equipaments_state
+        state = self.get_machine_state()
+        _save(data=state, fname=fname, overwrite=False)
+
+    def set_machine_state(self, machine_state):
+        """."""
+        if not self.isonline:
+            print("Failed. Not online.")
+            return
+
+        for key, entries in machine_state.items():
+            if key == "devices":
+                equipments = self.devices
+            elif key == "pvs":
+                equipments = self.pvs
+            else:
+                raise ValueError(f"Unexpected key in saved_dict: {key}")
+            # Update attributes for each device or PV
+            for equip_name, attributes in entries.items():
+                equipment = equipments[equip_name]  # Retrieve device/PV
+                for attr_name, attr_value in attributes.items():
+                    setattr(equipment, attr_name, attr_value)
+
+    def compare_states(self, state1, state2):
+        """."""
+        if state1 == state2:
+            return True
+        # TODO: if not equal, return the diff
+        raise NotImplementedError
+
+    def _finish(self, fname):
+        try:
+            init_state = _load(fname)
+        except FileNotFoundError:
+            print(f"File {fname} does not exist.")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+        current_state = self.get_machine_state()
+        res = self.compare_states(current_state, init_state)
+        if not res:
+            print("Restoring init state.")
+            self.set_machine_state(init_state)
+        # TODO: wait and checking methods
+        try:
+            _os.remove(fname)
+            print(f"File '{fname}' successfully deleted.")
+        except OSError as e:
+            print(f"Error: {e.strerror} - Unable to delete file '{fname}'.")
+        return
+
 
 class ThreadedMeasBaseClass(MeasBaseClass):
     """."""
@@ -226,11 +273,3 @@ class ThreadedMeasBaseClass(MeasBaseClass):
         if self._target is not None:
             self._target()
         self._finished.set()
-
-    def _initialize(self):
-        """To be run before measurement. Save devices/pc initial state."""
-        return NotImplementedError
-
-    def _finish(self):
-        """To be run after measurement. Restore initial state."""
-        return NotImplementedError
