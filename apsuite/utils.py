@@ -154,11 +154,17 @@ class MeasBaseClass(DataBaseClass):
                 return False
         return True
 
-    def _get_equipments_state(self, equipments: dict):
+    def _get_equipments_state(self, equipments):
         """."""
         equipments_state = dict()
         for name, equip in equipments.items():
-            state = _dcopy(equip.__dict__)
+            state = {
+                attr: getattr(equip, attr) for attr in dir(equip) if
+                (
+                    not attr.startswith("_")
+                    and not callable(getattr(equip, attr))
+                )
+            }
             equipments_state[name] = state
         return equipments_state
 
@@ -194,7 +200,11 @@ class MeasBaseClass(DataBaseClass):
             for equip_name, attributes in entries.items():
                 equipment = equipments[equip_name]  # Retrieve device/PV
                 for attr_name, attr_value in attributes.items():
-                    setattr(equipment, attr_name, attr_value)
+                    try:
+                        setattr(equipment, attr_name, attr_value)
+                    except AttributeError:
+                        # no writing access PV
+                        pass
 
     def compare_states(self, state1, state2):
         """."""
