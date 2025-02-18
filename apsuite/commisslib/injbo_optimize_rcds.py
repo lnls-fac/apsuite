@@ -396,28 +396,28 @@ class OptimizeInjBO(_RCDS):
                 pos.append(self.devices['tb_qd2b'].current)
 
             elif fun('posx'):
-                pos.append(self.devices['pos_ang'].delta_posx)
+                pos.append(self.devices['pos_ang']['DeltaPosX-SP'])
             elif fun('angx'):
-                pos.append(self.devices['pos_ang'].delta_angx)
+                pos.append(self.devices['pos_ang']['DeltaAngX-SP'])
             elif fun('posy'):
-                pos.append(self.devices['pos_ang'].delta_posy)
+                pos.append(self.devices['pos_ang']['DeltaPosY-SP'])
             elif fun('angy'):
-                pos.append(self.devices['pos_ang'].delta_angy)
+                pos.append(self.devices['pos_ang']['DeltaAngY-SP'])
             elif fun('kckr'):
-                pos.append(self.devices['injkckr'].strength)
+                pos.append(self.devices['injkckr']['Kick-SP'])
 
             elif fun('shb_amp'):
-                pos.append(self.devices['li_llrf'].dev_shb.amplitude)
+                pos.append(self.devices['li_llrf'].dev_shb['SET_AMP'])
             elif fun('kly1_amp'):
-                pos.append(self.devices['li_llrf'].dev_klystron1.amplitude)
+                pos.append(self.devices['li_llrf'].dev_klystron1['SET_AMP'])
             elif fun('kly2_amp'):
-                pos.append(self.devices['li_llrf'].dev_klystron2.amplitude)
+                pos.append(self.devices['li_llrf'].dev_klystron2['SET_AMP'])
             elif fun('shb_phs'):
-                pos.append(self.devices['li_llrf'].dev_shb.phase)
+                pos.append(self.devices['li_llrf'].dev_shb['SET_PHASE'])
             elif fun('kly1_phs'):
-                pos.append(self.devices['li_llrf'].dev_klystron1.phase)
+                pos.append(self.devices['li_llrf'].dev_klystron1['SET_PHASE'])
             elif fun('kly2_phs'):
-                pos.append(self.devices['li_llrf'].dev_klystron2.phase)
+                pos.append(self.devices['li_llrf'].dev_klystron2['SET_AMP'])
 
             elif fun('borf_amp'):
                 pos.append(self.devices['bo_llrf'].voltage_bottom)
