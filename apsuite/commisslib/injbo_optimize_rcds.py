@@ -118,8 +118,8 @@ class OptimizeInjBOParams(_RCDSParams):
         91,      # 'kly1_amp',
         76,      # 'kly2_amp',
         180,     # 'shb_phs',
-        180,     # 'kly1_phs',
-        180,     # 'kly2_phs',
+        -150,     # 'kly1_phs',
+        0,     # 'kly2_phs',
 
         80,      # 'borf_amp',
         160,     # 'borf_phs',
@@ -172,9 +172,9 @@ class OptimizeInjBOParams(_RCDSParams):
         20,    # 'shb_amp',
         85,    # 'kly1_amp',
         70,    # 'kly2_amp',
-        -180,  # 'shb_phs',
+        160,  # 'shb_phs',
         -180,  # 'kly1_phs',
-        -180,  # 'kly2_phs',
+        -20,  # 'kly2_phs',
 
         30,    # 'borf_amp',
         90,    # 'borf_phs',
