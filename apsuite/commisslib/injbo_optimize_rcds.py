@@ -488,24 +488,24 @@ class OptimizeInjBO(_RCDS):
                 self.pvs["li_slnd21"].value = p
 
             elif fun('li_qf1'):
-                self.devices['li_qf1'].current = p
+                self.devices['li_qf1'].set_current(p)
             elif fun('li_qf2'):
-                self.devices['li_qf2'].current = p
+                self.devices['li_qf2'].set_current(p)
             elif fun('li_qf3'):
-                self.devices['li_qf3'].current = p
+                self.devices['li_qf3'].set_current(p)
             elif fun('li_qd1'):
-                self.devices['li_qd1'].current = p
+                self.devices['li_qd1'].set_current(p)
             elif fun('li_qd2'):
-                self.devices['li_qd2'].current = p
+                self.devices['li_qd2'].set_current(p)
 
             elif fun('tb_qf2a'):
-                self.devices['tb_qf2a'].current = p
+                self.devices['tb_qf2a'].set_current(p)
             elif fun('tb_qf2b'):
-                self.devices['tb_qf2b'].current = p
+                self.devices['tb_qf2b'].set_current(p)
             elif fun('tb_qd2a'):
-                self.devices['tb_qd2a'].current = p
+                self.devices['tb_qd2a'].set_current(p)
             elif fun('tb_qd2b'):
-                self.devices['tb_qd2b'].current = p
+                self.devices['tb_qd2b'].set_current(p)
 
             elif fun('posx'):
                 self.devices['pos_ang'].delta_posx = p
@@ -516,7 +516,7 @@ class OptimizeInjBO(_RCDS):
             elif fun('angy'):
                 self.devices['pos_ang'].delta_angy = p
             elif fun('kckr'):
-                self.devices['injkckr'].strength = p
+                self.devices['injkckr'].set_strength(p)
 
             elif fun('shb_amp'):
                 self.devices['li_llrf'].dev_shb.amplitude = p
