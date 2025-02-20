@@ -512,24 +512,24 @@ class OptimizeInjBO(_RCDS):
                 self.pvs["li_slnd21"].value = p
 
             elif fun('li_qf1'):
-                self.devices['li_qf1'].set_current(p)
+                self.devices['li_qf1'].current = p
             elif fun('li_qf2'):
-                self.devices['li_qf2'].set_current(p)
+                self.devices['li_qf2'].current = p
             elif fun('li_qf3'):
-                self.devices['li_qf3'].set_current(p)
+                self.devices['li_qf3'].current = p
             elif fun('li_qd1'):
-                self.devices['li_qd1'].set_current(p)
+                self.devices['li_qd1'].current = p
             elif fun('li_qd2'):
-                self.devices['li_qd2'].set_current(p)
+                self.devices['li_qd2'].current = p
 
             elif fun('tb_qf2a'):
-                self.devices['tb_qf2a'].set_current(p)
+                self.devices['tb_qf2a'].current = p
             elif fun('tb_qf2b'):
-                self.devices['tb_qf2b'].set_current(p)
+                self.devices['tb_qf2b'].current = p
             elif fun('tb_qd2a'):
-                self.devices['tb_qd2a'].set_current(p)
+                self.devices['tb_qd2a'].current = p
             elif fun('tb_qd2b'):
-                self.devices['tb_qd2b'].set_current(p)
+                self.devices['tb_qd2b'].current = p
 
             elif fun('posx'):
                 self.devices['pos_ang'].delta_posx = p
@@ -540,16 +540,16 @@ class OptimizeInjBO(_RCDS):
             elif fun('angy'):
                 self.devices['pos_ang'].delta_angy = p
             elif fun('kckr'):
-                self.devices['injkckr'].set_strength(p)
+                self.devices['injkckr'].strength = p
 
             elif fun('tb_ch1'):
-                self.devices['tb_ch1'].set_current(p)
+                self.devices['tb_ch1'].current = p
             elif fun('tb_injsept'):
-                self.devices['tb_injsept'].set_strength(p)
+                self.devices['tb_injsept'].strength = p
             elif fun('tb_cv1'):
-                self.devices['tb_cv1'].set_current(p)
+                self.devices['tb_cv1'].current = p
             elif fun('tb_cv2'):
-                self.devices['tb_cv2'].set_current(p)
+                self.devices['tb_cv2'].current = p
 
             elif fun('shb_amp'):
                 self.devices['li_llrf'].dev_shb.amplitude = p
@@ -570,6 +570,8 @@ class OptimizeInjBO(_RCDS):
                 self.devices['bo_llrf'].phase_bottom = p
             else:
                 raise ValueError('Wrong specification of knob.')
+
+            self.wait_set_pos(pos, timeout=10, rtol=0.05, atol=0.1)
 
     def _create_devices(self):
         # knobs devices
@@ -643,3 +645,17 @@ class OptimizeInjBO(_RCDS):
         self.data['currents'] = []
         self.prepare_evg()
         return True
+
+    def wait_set_pos(self, pos, timeout=10, rtol=0.05, atol=0.1):
+        """."""
+        sleep_time = 0.1
+        it = int(timeout/sleep_time)
+        for _ in range(it):
+            pos_ = self.get_current_position()
+            if _np.all(_np.isclose(pos_, pos, atol=atol, rtol=rtol)):
+                break
+                # return True ?
+            _time.sleep(sleep_time)
+        else:
+            _log.warning('Timed out waiting positions be set.')
+            # return False ?
