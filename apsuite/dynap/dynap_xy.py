@@ -103,9 +103,9 @@ class DynapXY(_BaseClass):
         self.data['x_in'] = x_in
         self.data['y_in'] = y_in
         self.data['rout'] = out[0]
-        self.data['lost_turn'] = out[2]
-        self.data['lost_element'] = out[3]
-        self.data['lost_plane'] = out[4]
+        self.data['lost_turn'] = out[1].lost_turn
+        self.data['lost_element'] = out[1].lost_element
+        self.data['lost_plane'] = out[1].lost_plane
 
     def process_data(self):
         """."""
@@ -116,17 +116,17 @@ class DynapXY(_BaseClass):
         """."""
         x_in = self.data['x_in']
         y_in = self.data['y_in']
-        lost_plane = self.data['lost_plane']
+        lost_turn = self.data['lost_turn']
 
-        self.x_dynap, self.y_dynap = self._calc_dynap(x_in, y_in, lost_plane)
+        self.x_dynap, self.y_dynap = self._calc_dynap(x_in, y_in, lost_turn)
 
     def calc_fmap(self):
         """."""
         rout = self.data['rout']
-        lost_plane = self.data['lost_plane']
+        lost_turn = self.data['lost_turn']
 
         fx1, fx2, fy1, fy2, diffx, diffy, diff = super()._calc_fmap(
-            rout, lost_plane)
+            rout, lost_turn)
 
         self.x_freq_ini = fx1
         self.x_freq_fin = fx2
