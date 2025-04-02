@@ -12,10 +12,10 @@ from ..utils import ParamsBaseClass as _ParamsBaseClass, \
 
 class InjNudgesParams(_ParamsBaseClass):
     """."""
-
     def __init__(self):
         """."""
         super().__init__()
+        self.filename2use = "inj_nudges"
         self.num_inj_samples = 3
         self.num_attempts_per_ref = 5
         self.min_topup_current = 198.5  # [mA]
@@ -39,7 +39,7 @@ class InjNudgesParams(_ParamsBaseClass):
             "BO-Fam:PS-B-2:WfmOffset-SP"     : [-0.05, 0.05],  # [A]
         }
         self.knobs_pvsnames = sorted(self.knobs_lims.keys())
-        self.injeff_pvname = None
+        self.injeff_pvname = "BO-Glob:AP-CurrInfo:RampEff-Mon"
         self.si_curr_pvname = "SI-Glob:AP-CurrInfo:Current-Mon"
         self.low_lims = [
             self.knobs_lims[kn][0] for kn in self.knobs_pvsnames
@@ -47,6 +47,7 @@ class InjNudgesParams(_ParamsBaseClass):
         self.upper_lims = [
             self.knobs_lims[kn][1] for kn in self.knobs_pvsnames
         ]
+        self.observables_pvs_names = ""  # Other observable params
 
 
 class InjNudges(_BaseClass):
@@ -103,7 +104,7 @@ class InjNudges(_BaseClass):
             if value != pv.value:
                 pv.value = value
 
-    def get_knob_nudges(self):
+    def get_knobs_nudges(self):
         """."""
         nudges = _np.random.uniform(
             low=self.params.low_lims, high=self.params.upper_lims
@@ -179,30 +180,34 @@ class InjNudges(_BaseClass):
 
         ret = self.acquire_efficiencies()
         if ret is None:
+            print("No samples for initial inj. eff. reference.")
             raise ValueError
         tim, effs, ref_mean, ref_sigma, pvvals = ret
-        si_curr = self.pvs[self.params.si_curr_pvname].value
+
         pos = self.get_pos()
         fails_w_same_ref = 0
+        evg = self.devices["evg"]
+
         while True:
 
-            delta_pos = self.get_knob_snudge()
+            delta_pos = self.get_knobs_nudges()
 
             i = _np.random.randint(len(delta_pos))
-            dposi = delta_pos[i]
+            dposi = float(delta_pos[i])
             knobi_name = self.params.knobs_pvsnames[i]
             print("")
             print(f"Nudging {knobi_name} in {dposi:2.2f}")
-            posi0 = pos[i].copy()
-            pos[knobi_name][i] += dposi
+            posi0 = pos[knobi_name].copy()
+            pos[knobi_name][1] += dposi
 
-            evg = self.devices["evg"]
             if evg.injection_state:
                 print("\tinjection is on. Waiting for it to finish...")
                 evg.wait_injection_finish()
 
             if self._stopevt.is_set():
                 print("Stop event was set.")
+                # TODO: handle stops during self.acquire_efficiencies
+                # & self.on_change
                 self.finish_meas()
 
             print("\tsetting new position")
@@ -234,23 +239,24 @@ class InjNudges(_BaseClass):
                 self.set_pos(pos)
 
                 if fails_w_same_ref > self.params.num_attempts_per_ref:
-                    t = "\nSame reference used for too long."
-                    t += "Updating reference"
+                    t = "\nSame references used for too long."
+                    t += "Updating references"
                     print(t)
 
                     ret = self.acquire_efficiencies()
                     if ret is not None:
                         _, _, ref_mean, ref_sigma, _ = ret
                         fails_w_same_ref = 0
-
+            si_curr = self.pvs[self.params.si_curr_pvname].value
             if si_curr < self.params.topup_current:
                 self.recover_topup(pos, sleep_time=10)
 
-            self.save_data(fname="inj_nudges", overwrite=True)
+            self.save_data(fname=self.params.filename2use, overwrite=True)
 
     def finish_meas(self):
         """."""
         print("Finishing measurement.")
-        self.save_data(fname="inj_nudges", overwrite=True)
+        self.save_data(fname=self.params.filename2use, overwrite=True)
+        # TODO: automatic naming convention if filename2use is None
         self.pvs[self.params.injeff_pvname].clear_callbacks()
         return
