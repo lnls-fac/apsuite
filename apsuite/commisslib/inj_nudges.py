@@ -15,11 +15,11 @@ class InjNudgesParams(_ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
-        self.filename2use = "inj_nudges"
+        self.pv_connection_timeout = 3
         self.num_inj_samples = 3
         self.num_attempts_per_ref = 5
         self.min_topup_current = 198.5  # [mA]
-        self.pv_connection_timeout = 3
+        self.filename2use = "inj_nudges"
         self.knobs_lims = {
             #        knob                   [lim_low, lim_high]  unit
             "BO-01D:PU-InjKckr:Voltage-SP"   : [-1, 1],        # [V]
@@ -49,6 +49,31 @@ class InjNudgesParams(_ParamsBaseClass):
         ]
         self.observables_pvs_names = ""  # Other observable params
 
+    def __str__(self):
+        """."""
+        ftmp = "{0:24s} = {1:9.3f}  {2:s}\n".format
+        dtmp = "{0:24s} = {1:9d}  {2:s}\n".format
+        stmp = "{0:24s} = {1:9s}  {2:s}\n".format
+
+        stg = ""
+        stg += ftmp(
+            "pv_connection_timeout", self.pv_connection_timeout, "[s]"
+        )
+        stg += dtmp("num_inj_samples", self.num_inj_samples, "")
+        stg += dtmp("num_attempts_per_ref", self.num_attempts_per_ref, "")
+        stg += ftmp("min_topup_current", self.min_topup_current, "mA")
+        stg += stmp("filename2use", self.filename2use, "")
+        stg += stmp("injeff_pvname", self.injeff_pvname, "")
+        stg += "\n"
+        stg += "        knob                   [lim_low, lim_high]\n"
+        for kn in self.knobs_pvsnames:
+            stg += f"{kn:<30s} : {self.knobs_lims[kn]}\n"
+
+        stg += "\n"
+        stg += "other observables\n"
+        for pvname in self.observables_pvs_names:
+            stg += f"{pvname:<30s}"
+        return stg
 
 class InjNudges(_BaseClass):
     """."""
