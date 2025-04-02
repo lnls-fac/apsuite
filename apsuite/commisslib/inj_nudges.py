@@ -9,8 +9,45 @@ from siriuspy.clientarch import Time
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _BaseClass
 
+BOINJEFF_PVNAME = "BO-Glob:AP-CurrInfo:RampEff-Mon"
+BOINJ_KNOBS = {
+    #        knob                   [lim_low, lim_high]  unit
+    "BO-01D:PU-InjKckr:Voltage-SP"   : [-1, 1],        # [V]
+    "TB-04:PS-CH-1:Current-SP"       : [-0.25, 0.25],  # [A]
+    "TB-04:PU-InjSept:Voltage-SP"    : [-1, 1],        # [V]
+    "TB-04:PS-CV-1:Current-SP"       : [-0.25, 0.25],  # [A]
+    "TB-04:PS-CV-2:Current-SP"       : [-0.25, 0.25],  # [A]
+    "LA-RF:LLRF:BUN1:SET_AMP"        : [-0.5, 0.5],    # [%]
+    "LA-RF:LLRF:KLY1:SET_AMP"        : [-1, 1],        # [%]
+    "LA-RF:LLRF:KLY2:SET_AMP"        : [-1, 1],        # [%]
+    "RA-RaBO01:RF-LLRF:RmpPhsBot-SP" : [-5, 5],        # [deg]
+    "BO-Fam:PS-QD:WfmOffset-SP"      : [-0.02, 0.02],  # [A]
+    "BO-Fam:PS-QF:WfmOffset-SP"      : [-0.02, 0.02],  # [A]
+    "BO-Fam:PS-SD:WfmOffset-SP"      : [-0.05, 0.05],  # [A]
+    "BO-Fam:PS-SF:WfmOffset-SP"      : [-0.05, 0.05],  # [A]
+    "BO-Fam:PS-B-1:WfmOffset-SP"     : [-0.05, 0.05],  # [A]
+    "BO-Fam:PS-B-2:WfmOffset-SP"     : [-0.05, 0.05],  # [A]
+}
 
-class InjNudgesParams(_ParamsBaseClass):
+SIINJEFF_PVNAME = "SI-Glob:AP-CurrInfo:InjEff-Mon"
+SIINJ_KNOBS = {
+    #        knob                   [lim_low, lim_high]  unit
+    "BO-48D:PU-EjeKckr:Voltage-SP"    : [-1, 1],        # [V]
+    "TS-01:PU-EjeSeptF:Voltage-SP"    : [-1, 1],        # [V]
+    "TS-01:PU-EjeSeptG:Voltage-SP"    : [-1, 1],        # [V]
+    "TS-04:PU-InjSeptF:Voltage-SP"    : [-1, 1],        # [V]
+    "TS-04:PU-InjSeptG-1:Voltage-SP"  : [-1, 1],        # [V]
+    "TS-04:PU-InjSeptG-2:Voltage-SP"  : [-1, 1],        # [V]
+    "SI-01SA:PU-InjNLKckr:Voltage-SP" : [-1, 1],        # [V]
+    "TS-04:PS-CV-0:Current-SP"        : [-0.25, 0.25],  # [A] (check)
+    "TS-04:PS-CV-1:Current-SP"        : [-0.25, 0.25],  # [A]
+    "TS-04:PS-CV-1E2:Current-SP"      : [-0.25, 0.25],  # [A]
+    "TS-04:PS-CV-2:Current-SP"        : [-0.25, 0.25],  # [A]
+    "RA-RaBO01:RF-LLRF:RmpPhsTop-SP"  : [-5, 5],        # [deg]
+}
+
+
+class InjNudgesBaseParams(_ParamsBaseClass):
     """."""
     def __init__(self):
         """."""
@@ -20,34 +57,32 @@ class InjNudgesParams(_ParamsBaseClass):
         self.num_attempts_per_ref = 5
         self.min_topup_current = 198.5  # [mA]
         self.filename2use = "inj_nudges"
-        self.knobs_lims = {
-            #        knob                   [lim_low, lim_high]  unit
-            "BO-01D:PU-InjKckr:Voltage-SP"   : [-1, 1],        # [V]
-            "TB-04:PS-CH-1:Current-SP"       : [-0.25, 0.25],  # [A]
-            "TB-04:PU-InjSept:Voltage-SP"    : [-1, 1],        # [V]
-            "TB-04:PS-CV-1:Current-SP"       : [-0.25, 0.25],  # [A]
-            "TB-04:PS-CV-2:Current-SP"       : [-0.25, 0.25],  # [A]
-            "LA-RF:LLRF:BUN1:SET_AMP"        : [-0.5, 0.5],    # [%]
-            "LA-RF:LLRF:KLY1:SET_AMP"        : [-1, 1],        # [%]
-            "LA-RF:LLRF:KLY2:SET_AMP"        : [-1, 1],        # [%]
-            "RA-RaBO01:RF-LLRF:RmpPhsBot-SP" : [-5, 5],        # [deg]
-            "BO-Fam:PS-QD:WfmOffset-SP"      : [-0.02, 0.02],  # [A]
-            "BO-Fam:PS-QF:WfmOffset-SP"      : [-0.02, 0.02],  # [A]
-            "BO-Fam:PS-SD:WfmOffset-SP"      : [-0.05, 0.05],  # [A]
-            "BO-Fam:PS-SF:WfmOffset-SP"      : [-0.05, 0.05],  # [A]
-            "BO-Fam:PS-B-1:WfmOffset-SP"     : [-0.05, 0.05],  # [A]
-            "BO-Fam:PS-B-2:WfmOffset-SP"     : [-0.05, 0.05],  # [A]
-        }
-        self.knobs_pvsnames = sorted(self.knobs_lims.keys())
-        self.injeff_pvname = "BO-Glob:AP-CurrInfo:RampEff-Mon"
+
+        self._knobs_lims = None
+        self.knobs_pvsnames = None
+        self.low_lims = None
+        self.upper_lims = None
         self.si_curr_pvname = "SI-Glob:AP-CurrInfo:Current-Mon"
+        self.observables_pvs_names = ""
+
+    @property
+    def knobs_lims(self):
+        """."""
+        return self._knobs_lims
+
+    @knobs_lims.setter
+    def knobs_lims(self, lims):
+        """."""
+        if not isinstance(lims, dict):
+            raise ValueError("knobs_lims must be a dictionary")
+        self._knobs_lims = lims
+        self.knobs_pvsnames = sorted(self._knobs_lims.keys())
         self.low_lims = [
-            self.knobs_lims[kn][0] for kn in self.knobs_pvsnames
+            self._knobs_lims[kn][0] for kn in self.knobs_pvsnames
         ]
         self.upper_lims = [
-            self.knobs_lims[kn][1] for kn in self.knobs_pvsnames
+            self._knobs_lims[kn][1] for kn in self.knobs_pvsnames
         ]
-        self.observables_pvs_names = ""  # Other observable params
 
     def __str__(self):
         """."""
@@ -67,7 +102,7 @@ class InjNudgesParams(_ParamsBaseClass):
         stg += "\n"
         stg += "        knob                   [lim_low, lim_high]\n"
         for kn in self.knobs_pvsnames:
-            stg += f"{kn:<30s} : {self.knobs_lims[kn]}\n"
+            stg += f"{kn:<35s} : {self.knobs_lims[kn]}\n"
 
         stg += "\n"
         stg += "other observables\n"
@@ -75,14 +110,39 @@ class InjNudgesParams(_ParamsBaseClass):
             stg += f"{pvname:<30s}"
         return stg
 
+
+class BOInjNudgesParams(InjNudgesBaseParams):
+    """."""
+    def __init__(self):
+        """."""
+        super().__init__()
+        self.injeff_pvname = BOINJEFF_PVNAME
+        self.knobs_lims = BOINJ_KNOBS
+
+
+class SIInjNudgesParams(InjNudgesBaseParams):
+    """."""
+    def __init__(self):
+        """."""
+        super().__init__()
+        self.injeff_pvname = SIINJEFF_PVNAME
+        self.knobs_lims = SIINJ_KNOBS
+
+
 class InjNudges(_BaseClass):
     """."""
-    def __init__(self, isonline=True):
+    def __init__(self, isonline=True, inj_system="BO"):
         """."""
         super().__init__(
             self, target=self.do_measure, isonline=isonline
         )
-        self.params = InjNudgesParams()
+        if inj_system.lower() == "bo":
+            self.params = BOInjNudgesParams()
+        elif inj_system.lower() == "si":
+            self.params = SIInjNudgesParams()
+        else:
+            raise ValueError("Injection system must be SI or BO.")
+
         self.ref_injeff_mean = None
         self.ref_injeff_std = None
 
