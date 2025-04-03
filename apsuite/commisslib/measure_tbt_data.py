@@ -264,7 +264,7 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         msg = "pingv pulse set" if pingv_ok else "pingv pulse not set"
         print("\t" + msg)
 
-        return pingh_ok and pingv_ok
+        self._magnets_ok = pingh_ok and pingv_ok
 
     def set_magnets_strength(
         self, hkick=None, vkick=None, magnets_timeout=None, wait_mon=True
@@ -351,7 +351,7 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
             # state["pingv_pwr"] = 0
             state["pingv_pulse"] = 0
 
-        return self.set_magnets_state(state)
+        self.set_magnets_state(state)
 
     def _do_measurement(self):
         """."""
