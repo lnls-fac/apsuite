@@ -99,7 +99,7 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self._pingers2kick = str(val).lower()
 
 
-class MeasureTbTData(_ThreadBaseClass):
+class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
     """."""
 
     PINGERH_TRIGGER = "SI-01SA:TI-InjDpKckr"
@@ -107,21 +107,24 @@ class MeasureTbTData(_ThreadBaseClass):
 
     def __init__(self, isonline=False):
         """."""
+        _AcqBPMsSignals.__init__(
+            self,
+            isonline=isonline,
+            ispost_mortem=False
+        )
         self.params = TbTDataParams()
-        super().__init__(
-            params=self.params, target=self._do_measurement, isonline=isonline
-            )
-        self._is_postmortem = False
+        self.target = self._do_measurement
+
         self._meas_finished_ok = True
         self._timing_ok = True
         self._magnets_ok = True
 
         if self.isonline:
-            self._create_devices()
-            self._init_magnets_state = self._get_magnets_state()
-            self._init_timing_state = self._get_timing_state()
+            self.create_devices()
+            self._init_magnets_state = self.get_magnets_state()
+            self._init_timing_state = self.get_timing_state()
 
-    def _create_devices(self):
+    def create_devices(self):
         """."""
         _AcqBPMsSignals().create_devices()
         self.devices["pingh"] = PowerSupplyPU(
@@ -133,10 +136,10 @@ class MeasureTbTData(_ThreadBaseClass):
         self.devices["trigpingv"] = Trigger(self.PINGERV_TRIGGER)
         return
 
-    def _get_timing_state(self):
+    def get_timing_state(self):
         """."""
         # BPMs trigger and EVG timing state
-        state_dict = _AcqBPMsSignals().get_timing_state()
+        state_dict = _AcqBPMsSignals(self).get_timing_state()
 
         # Pingers trigger timing state
         trigs = self.devices["trigpingh"], self.devices["trigpingv"]
@@ -149,10 +152,10 @@ class MeasureTbTData(_ThreadBaseClass):
 
         return state_dict
 
-    def _prepare_timing(self, state=None):
+    def prepare_timing(self, state=None):
         """."""
         print("Configuring BPMs timing...")
-        _AcqBPMsSignals().prepare_timing(state)  # BPM trigger timing
+        _AcqBPMsSignals(self).prepare_timing(state)  # BPM trigger timing
 
         state = dict() if state is None else state
         print("Configuring magnets timing...")
@@ -166,7 +169,7 @@ class MeasureTbTData(_ThreadBaseClass):
             trigpingh.source = state.get("trigpingh_source", prms.timing_event)
             dly = state.get("trigpingh_delay_raw", prms.trigpingh_delay_raw)
             if dly is not None:
-                trigpingh.delay = dly
+                trigpingh.delay_raw = dly
         else:
             trigh_ok = trigpingh.cmd_disable(timeout=prms.timeout)
         print(f"PingerH trigger configured: {trigh_ok}")
@@ -176,27 +179,36 @@ class MeasureTbTData(_ThreadBaseClass):
             trigpingv.source = state.get("trigpingv_source", prms.timing_event)
             dly = state.get("trigpingv_delay_raw", prms.trigpingv_delay_raw)
             if dly is not None:
-                trigpingv.delay = dly
+                trigpingv.delay_raw = dly
         else:
             trigv_ok = trigpingv.cmd_disable(timeout=prms.timeout)
         print(f"PingerV trigger configured: {trigv_ok}")
         _time.sleep(0.1)
         self._timing_ok = trigh_ok and trigv_ok
 
-    def _get_magnets_strength(self):
+    def get_magnets_strength(self):
         """."""
         pingh_cal = self.params.pingh_calibration
         pingv_cal = self.params.pingv_calibration
-        pingh_str = self.devices["pingh"].strength / pingh_cal
-        pingv_str = self.devices["pingv"].strength / pingv_cal
+
+        if self.devices["pingh"].pwrstate:
+            pingh_str = self.devices["pingh"].strength / pingh_cal
+        else:
+            pingh_str = None
+
+        if self.devices["pingv"].pwrstate:
+            pingv_str = self.devices["pingv"].strength / pingv_cal
+        else:
+            pingv_str = None
+
         return pingh_str, pingv_str
 
-    def _get_magnets_state(self):
+    def get_magnets_state(self):
         """."""
         state = dict()
-        pingh_str, pingv_str = self._get_magnets_strength()
         pings = self.devices["pingh"], self.devices["pingv"]
         keys = "h", "v"
+        pingh_str, pingv_str = self.get_magnets_strength()
         for key, ping in zip(keys, pings):
             ping_str = pingh_str if key == "h" else pingv_str
             state[f"ping{key}_pwr"] = ping.pwrstate
@@ -205,7 +217,7 @@ class MeasureTbTData(_ThreadBaseClass):
             state[f"ping{key}_voltage"] = ping.voltage
         return state
 
-    def _set_magnets_state(self, state, wait_mon=True):
+    def set_magnets_state(self, state, wait_mon=True):
         """Set magnets strengths, pwr and pulse states."""
         timeout = self.params.magnets_timeout
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
@@ -220,13 +232,13 @@ class MeasureTbTData(_ThreadBaseClass):
         if state["pingh_pwr"]:
             pingh_ok = pingh.cmd_turn_on(timeout=self.params.magnets_timeout)
             if pingh_ok:
-                pingh_ok = self._set_magnets_strength(
+                pingh_ok = self.set_magnets_strength(
                     hkick=state["pingh_strength"], wait_mon=wait_mon
                 )
             else:
                 print("Failed at turning-on pingh.")
         else:
-            pingh_ok = self._set_magnets_strength(
+            pingh_ok = self.set_magnets_strength(
                 hkick=state["pingh_strength"], wait_mon=wait_mon
             )
             if pingh_ok:
@@ -237,13 +249,13 @@ class MeasureTbTData(_ThreadBaseClass):
         if state["pingv_pwr"]:
             pingv_ok = pingv.cmd_turn_on(timeout=self.params.magnets_timeout)
             if pingv_ok:
-                pingv_ok = self._set_magnets_strength(
+                pingv_ok = self.set_magnets_strength(
                     vkick=state["pingv_strength"], wait_mon=wait_mon
                 )
             else:
                 print("Failed at turning-on pingv.")
         else:
-            pingv_ok = self._set_magnets_strength(
+            pingv_ok = self.set_magnets_strength(
                 vkick=state["pingv_strength"], wait_mon=wait_mon
             )
             if pingv_ok:
@@ -275,7 +287,7 @@ class MeasureTbTData(_ThreadBaseClass):
 
         return pingh_ok and pingv_ok
 
-    def _set_magnets_strength(
+    def set_magnets_strength(
         self, hkick=None, vkick=None, magnets_timeout=None, wait_mon=True
     ):
         """Set pingers strengths, check if was set & indicate which failed."""
@@ -338,7 +350,7 @@ class MeasureTbTData(_ThreadBaseClass):
 
         return True
 
-    def _prepare_magnets(self):
+    def prepare_magnets(self):
         """Create magnets state dict from params."""
         print("Preparing magnets...")
         pingers2kick = self.params.pingers2kick
@@ -368,7 +380,7 @@ class MeasureTbTData(_ThreadBaseClass):
         init_magnets_state = self._init_magnets_state
         self.data["current_before"] = currinfo.current
 
-        self._prepare_timing()
+        self.prepare_timing()
         if not self._timing_ok:
             print("Failed at configuring timing!")
             self._meas_finished_ok = False
@@ -379,7 +391,7 @@ class MeasureTbTData(_ThreadBaseClass):
         if self._stopevt.is_set():
             self._restore_and_exit(timing_state=init_timing_state)
 
-        self._prepare_magnets()  # gets strengths from params
+        self.prepare_magnets()  # gets strengths from params
         if not self._magnets_ok:
             print("Failed at configuring magnets!")
             self._meas_finished_ok = False
@@ -391,7 +403,7 @@ class MeasureTbTData(_ThreadBaseClass):
             self._restore_and_exit(init_timing_state, init_magnets_state)
 
         try:
-            self._acquire_data()
+            self.acquire_data()
             print("Acquisition was successful.")
         except Exception as e:
             self._meas_finished_ok = False
@@ -403,13 +415,13 @@ class MeasureTbTData(_ThreadBaseClass):
 
         print("Measurement finished.")
 
-    def _acquire_data(self):
+    def acquire_data(self):
         """."""
-        _AcqBPMsSignals.acquire_data()
+        _AcqBPMsSignals.acquire_data(self)
         # BPMs signals + relevant info are acquired
         # such as timestamps tunes, stored current
         # rf frequency, acq rate, nr samples, etc.
-        self.data["magnets_state"] = self._get_magnets_state()
+        self.data["magnets_state"] = self.get_magnets_state()
         self.data["current_after"] = self.data.pop(
             "stored_current"
         )
@@ -420,11 +432,11 @@ class MeasureTbTData(_ThreadBaseClass):
         print("Restoring machine initial state.")
 
         if timing_state is not None:
-            self._prepare_timing(timing_state)
+            self.prepare_timing(timing_state)
             print(f"\tTiming restored: {self._timing_ok}")
 
         if magnets_state is not None:
-            self._set_magnets_state(magnets_state, wait_mon=False)
+            self.set_magnets_state(magnets_state, wait_mon=False)
             # no need to wait_mon if exiting anyways. wait_mon is critical to
             # prevent meas to start before magnets reach the required strentgh
             print(f"\tMagnets restored: {self._magnets_ok}")
@@ -438,8 +450,8 @@ class MeasureTbTData(_ThreadBaseClass):
             print("Measurement not finished.")
             return False
 
-        magnets_state = self._get_magnets_state()
-        timing_state = self._get_timing_state()
+        magnets_state = self.get_magnets_state()
+        timing_state = self.get_timing_state()
         mags = self._init_magnets_state == magnets_state
         timing = self._init_timing_state == timing_state
 
