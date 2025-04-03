@@ -33,6 +33,7 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.nrpoints_before = 100
         self.nrpoints_after = 2000
 
+        self.mags_strength_rtol = 0.05
         self._pingers2kick = "none"  # 'H', 'V' or 'HV'
         self.hkick = None  # [mrad]
         self.vkick = None  # [mrad]
@@ -57,12 +58,12 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         stg += "\n"
         stg += stmp("pingers2kick", self.pingers2kick, "")
         stg += ftmp("magnets_timeout", self.magnets_timeout, "[s]")
+        stg += ftmp("mags_strength_rtol", self.mags_strength_rtol, "")
         if self.hkick is None:
             stg += stmp("hkick", "same", "(current value will not be changed)")
         else:
             stg += ftmp("hkick", self.hkick, "[mrad]")
         stg += ftmp("pingh_calibration", self.pingh_calibration, "")
-        stg += ftmp("pingv_calibration", self.pingv_calibration, "")
 
         dly = self.trigpingh_delay_raw
         if dly is None:
@@ -77,6 +78,7 @@ class TbTDataParams(_AcqBPMsSignalsParams):
             stg += stmp("vkick", "same", "(current value will not be changed)")
         else:
             stg += ftmp("vkick", self.vkick, "[mrad]")
+        stg += ftmp("pingv_calibration", self.pingv_calibration, "")
         dly = self.trigpingv_delay_raw
         if dly is None:
             stg += stmp(
@@ -276,12 +278,12 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         if hkick is not None:
             hkick *= self.params.pingh_calibration
             print(f"Setting pingh strength to {hkick:.3f} mrad...")
-            pingh.set_strength(hkick, timeout=0)
+            pingh.strength = hkick
 
         if vkick is not None:
             vkick *= self.params.pingv_calibration
             print(f"Setting pingv strength to {hkick:.3f} mrad...")
-            pingv.set_strength(vkick, timeout=0)
+            pingv.strength = vkick
 
         if not wait_mon:
             return pingh_ok and pingv_ok
@@ -293,10 +295,10 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         t0 = _time.time()
 
         if hkick is not None:
-            print("\twaiting pingh")
+            print("\twaiting pingh reach strength set")
             pingh_ok = pingh.set_strength(
                 hkick,
-                tol=0.05 * abs(hkick),
+                tol=self.params.mags_strength_rtol * abs(hkick),
                 timeout=magnets_timeout,
                 wait_mon=wait_mon,
             )
@@ -305,10 +307,10 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         magnets_timeout -= elapsed_time
 
         if vkick is not None:
-            print("\twaiting pingv")
+            print("\twaiting pingv reach strength set")
             pingv_ok = pingv.set_strength(
                 vkick,
-                tol=0.05 * abs(vkick),
+                tol=self.params.mags_strength_rtol * abs(vkick),
                 timeout=magnets_timeout,
                 wait_mon=wait_mon,
             )
