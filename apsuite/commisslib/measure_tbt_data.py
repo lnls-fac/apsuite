@@ -355,10 +355,8 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
 
     def _do_measurement(self):
         """."""
-        currinfo = self.devices["currinfo"]
         init_timing_state = self._init_timing_state
         init_magnets_state = self._init_magnets_state
-        self.data["current_before"] = currinfo.current
 
         self.prepare_timing()
         if not self._timing_ok:
@@ -397,15 +395,18 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
 
     def acquire_data(self):
         """."""
+        curr0 = self.devices["currinfo"].current
         _AcqBPMsSignals.acquire_data(self)
-        # BPMs signals + relevant info are acquired
-        # such as timestamps tunes, stored current
-        # rf frequency, acq rate, nr samples, etc.
-        self.data["magnets_state"] = self.get_magnets_state()
-        self.data["current_after"] = self.data.pop(
-            "stored_current"
-        )
-        self.data["init_magnets_state"] = self._init_magnets_state
+        self.data["current_before"] = curr0
+
+    def get_data(self):
+        """."""
+        data = _AcqBPMsSignals(self).get_data()
+        data["magnets_state"] = self.get_magnets_state()
+        data["current_after"] = data.pop("stored_current")
+        data["init_magnets_state"] = self._init_magnets_state
+        data["init_timing_state"] = self._init_timing_state
+        return data
 
     def _restore_and_exit(self, timing_state=None, magnets_state=None):
         """Restore timing and magnets state and exit the measurement."""
