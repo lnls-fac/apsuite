@@ -131,7 +131,6 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
             PowerSupplyPU.DEVICES.SI_INJ_DPKCKR
         )
         self.devices["trigpingh"] = Trigger(self.PINGERH_TRIGGER)
-
         self.devices["pingv"] = PowerSupplyPU(PowerSupplyPU.DEVICES.SI_PING_V)
         self.devices["trigpingv"] = Trigger(self.PINGERV_TRIGGER)
         return
@@ -223,45 +222,25 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
         pingh_ok, pingv_ok = True, True
 
+        # make sure mags are on to set their strengths
+        pingh_ok = pingh.cmd_turn_on(timeout=self.params.magnets_timeout)
+        pingv_ok = pingv.cmd_turn_on(timeout=self.params.magnets_timeout)
         # turn-off pulse before changing strengths
-        # prevent accidental activation with wrong strengths
+        # prevent accidental activation
         pingh_ok = pingh.cmd_turn_off_pulse(timeout)
         pingv_ok = pingv.cmd_turn_off_pulse(timeout)
 
-        # Set power state and strengths
-        if state["pingh_pwr"]:
-            pingh_ok = pingh.cmd_turn_on(timeout=self.params.magnets_timeout)
-            if pingh_ok:
-                pingh_ok = self.set_magnets_strength(
-                    hkick=state["pingh_strength"], wait_mon=wait_mon
-                )
-            else:
-                print("Failed at turning-on pingh.")
-        else:
-            pingh_ok = self.set_magnets_strength(
-                hkick=state["pingh_strength"], wait_mon=wait_mon
-            )
-            if pingh_ok:
-                pingh_ok = pingh.cmd_turn_off(
-                    timeout=self.params.magnets_timeout
-                )
+        self.set_magnets_strength(
+            hkick=state["pingh_strength"],
+            vkick=state["pingv_strength"],
+            wait_mon=wait_mon
+        )
 
-        if state["pingv_pwr"]:
-            pingv_ok = pingv.cmd_turn_on(timeout=self.params.magnets_timeout)
-            if pingv_ok:
-                pingv_ok = self.set_magnets_strength(
-                    vkick=state["pingv_strength"], wait_mon=wait_mon
-                )
-            else:
-                print("Failed at turning-on pingv.")
-        else:
-            pingv_ok = self.set_magnets_strength(
-                vkick=state["pingv_strength"], wait_mon=wait_mon
-            )
-            if pingv_ok:
-                pingv_ok = pingv.cmd_turn_off(
-                    timeout=self.params.magnets_timeout
-                )
+        if not state["pingh_pwr"]:
+            pingh_ok = pingh.cmd_turn_off(timeout=self.params.magnets_timeout)
+
+        if not state["pingv_pwr"]:
+            pingv_ok = pingv.cmd_turn_off(timeout=self.params.magnets_timeout)
 
         if pingh_ok and pingv_ok:
             print("Magnets power-state and strengths set.")
@@ -269,8 +248,6 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
             print("Failed at setting magnets power-state and/or strengths")
 
         print("Changing pulse-state")
-
-        # Pulse state
         if state["pingh_pulse"]:
             pingh_ok = pingh_ok and pingh.cmd_turn_on_pulse(timeout)
         else:
@@ -348,6 +325,7 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
             print(msg)
             return False
 
+        print("Strengths all set.")
         return True
 
     def prepare_magnets(self):
