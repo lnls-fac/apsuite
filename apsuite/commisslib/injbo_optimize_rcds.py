@@ -441,7 +441,7 @@ class OptimizeInjBO(_RCDS):
             elif fun('kly1_phs'):
                 pos.append(self.devices['li_llrf'].dev_klystron1.phase)
             elif fun('kly2_phs'):
-                pos.append(self.devices['li_llrf'].dev_klystron2.amplitude)
+                pos.append(self.devices['li_llrf'].dev_klystron2.phase)
 
             elif fun('borf_amp'):
                 pos.append(self.devices['bo_llrf'].voltage_bottom)
