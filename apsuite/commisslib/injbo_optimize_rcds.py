@@ -411,15 +411,15 @@ class OptimizeInjBO(_RCDS):
                 pos.append(self.devices['tb_qd2b'].current)
 
             elif fun('posx'):
-                pos.append(self.devices['pos_ang']['DeltaPosX-SP'])
+                pos.append(self.devices['pos_ang'].delta_posx)
             elif fun('angx'):
-                pos.append(self.devices['pos_ang']['DeltaAngX-SP'])
+                pos.append(self.devices['pos_ang'].delta_angx)
             elif fun('posy'):
-                pos.append(self.devices['pos_ang']['DeltaPosY-SP'])
+                pos.append(self.devices['pos_ang'].delta_posy)
             elif fun('angy'):
-                pos.append(self.devices['pos_ang']['DeltaAngY-SP'])
+                pos.append(self.devices['pos_ang'].delta_angy)
             elif fun('kckr'):
-                pos.append(self.devices['injkckr']['Kick-SP'])
+                pos.append(self.devices['injkckr'].strength)
 
             elif fun('tb_ch1'):
                 pos.append(self.devices['tb_ch1'].current)
@@ -431,17 +431,17 @@ class OptimizeInjBO(_RCDS):
                 pos.append(self.devices['tb_cv2'].current)
 
             elif fun('shb_amp'):
-                pos.append(self.devices['li_llrf'].dev_shb['SET_AMP'])
+                pos.append(self.devices['li_llrf'].dev_shb.amplitude)
             elif fun('kly1_amp'):
-                pos.append(self.devices['li_llrf'].dev_klystron1['SET_AMP'])
+                pos.append(self.devices['li_llrf'].dev_klystron1.amplitude)
             elif fun('kly2_amp'):
-                pos.append(self.devices['li_llrf'].dev_klystron2['SET_AMP'])
+                pos.append(self.devices['li_llrf'].dev_klystron2.amplitude)
             elif fun('shb_phs'):
-                pos.append(self.devices['li_llrf'].dev_shb['SET_PHASE'])
+                pos.append(self.devices['li_llrf'].dev_shb.phase)
             elif fun('kly1_phs'):
-                pos.append(self.devices['li_llrf'].dev_klystron1['SET_PHASE'])
+                pos.append(self.devices['li_llrf'].dev_klystron1.phase)
             elif fun('kly2_phs'):
-                pos.append(self.devices['li_llrf'].dev_klystron2['SET_AMP'])
+                pos.append(self.devices['li_llrf'].dev_klystron2.amplitude)
 
             elif fun('borf_amp'):
                 pos.append(self.devices['bo_llrf'].voltage_bottom)
