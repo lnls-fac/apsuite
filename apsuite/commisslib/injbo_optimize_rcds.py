@@ -646,16 +646,25 @@ class OptimizeInjBO(_RCDS):
         self.prepare_evg()
         return True
 
-    def wait_set_pos(self, pos, timeout=10, rtol=0.05, atol=0.1):
-        """."""
+    def wait_set_pos(self, pos, tol=0.05, timeout=10):
+        """Wait positions RB reach the the desired SP vals.
+
+        Wait current RB values reach `pos` within a `tol` precision up to
+        `timeout` seconds.
+
+        Args:
+            pos (array): reference positions that have been set to SP PVs
+            tol (float): relative tolerance for comparing values.
+                i. e. |current_pos - pos| <= tol * |pos|. Defaults to 0.05
+            timeout (float): timeout in seconds. Defaults to 10 s.
+        """
         sleep_time = 0.1
         it = int(timeout/sleep_time)
         for _ in range(it):
             pos_ = self.get_current_position()
-            if _np.all(_np.isclose(pos_, pos, atol=atol, rtol=rtol)):
+            if _np.all(_np.isclose(pos_, pos, rtol=tol)):
+                _log.info('Positions have been set.')
                 break
-                # return True ?
             _time.sleep(sleep_time)
         else:
             _log.warning('Timed out waiting positions be set.')
-            # return False ?
