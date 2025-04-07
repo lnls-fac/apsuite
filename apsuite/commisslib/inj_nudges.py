@@ -1,10 +1,11 @@
+"""Module for online nudging of injection efficiency knobs."""
 import threading as _threading
 import time as _time
 
 import numpy as _np
-from siriuspy.devices import EVG
-from siriuspy.epics import PV
-from siriuspy.clientarch import Time
+from siriuspy.clientarch import Time as _Time
+from siriuspy.devices import EVG as _EVG
+from siriuspy.epics import PV as _PV
 
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _BaseClass
@@ -158,13 +159,13 @@ class InjNudges(_BaseClass):
 
         pvs = {}
         for pv_name in pvs_names:
-            pv = PV(pv_name)
+            pv = _PV(pv_name)
             pv.wait_for_connection(timeout=self.params.pv_connection_timeout)
             print(f"PV {pv_name:<35s} connected: {pv.connected}")
             pvs[pv_name] = pv
 
         self.pvs = pvs
-        self.devices = {"evg": EVG()}
+        self.devices = {"evg": _EVG()}
 
     def get_pos(self):
         """Returns knobs positions as a dict of (timestamp, value)."""
@@ -222,7 +223,7 @@ class InjNudges(_BaseClass):
             ref_mean, ref_sigma, **kwargs
     ):
         """Callback function to be added to the injeff PV."""
-        tmstp = Time.fromtimestamp(_time.time())
+        tmstp = _Time.fromtimestamp(_time.time())
         datetime = tmstp.strftime("%Y-%m-%d %H:%M:%S")
         print(f"\t\t{datetime} inj. eff.: {value:3.2f}%, SI curr.:")
 
