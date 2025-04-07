@@ -34,9 +34,9 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.nrpoints_after = 2000
 
         self.mags_strength_rtol = 0.05
-        self._pingers2kick = "none"  # 'H', 'V' or 'HV'
-        self.hkick = None  # [mrad]
-        self.vkick = None  # [mrad]
+        self.pingers2kick = ""  # 'H', 'V' or 'HV'
+        self._hkick = None  # [mrad]
+        self._vkick = None  # [mrad]
         self.pingh_calibration = 1.5416651659146232
         self.pingv_calibration = 1.02267573
         self.trigpingh_delay_raw = 36802990  # defined @ 2024-05-21 mach. study
@@ -92,13 +92,32 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         return stg
 
     @property
-    def pingers2kick(self):
-        """."""
-        return self._pingers2kick
+    def hkick(self):
+        """Horizontal kick."""
+        return self._hkick
 
-    @pingers2kick.setter
-    def pingers2kick(self, val):
-        self._pingers2kick = str(val).lower()
+    @hkick.setter
+    def hkick(self, kick):
+        self._hkick = kick
+        if kick != 0:
+            if "h" not in self.pingers2kick:
+                self.pingers2kick += "h"
+        else:
+            self.pingers2kick = self.pingers2kick.replace("h", "")
+
+    @property
+    def vkick(self):
+        """Vertical kick."""
+        return self._vkick
+
+    @vkick.setter
+    def vkick(self, kick):
+        self._vkick = kick
+        if kick != 0:
+            if "v" not in self.pingers2kick:
+                self.pingers2kick += "v"
+        else:
+            self.pingers2kick = self.pingers2kick.replace("v", "")
 
 
 class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
