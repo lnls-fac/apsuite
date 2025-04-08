@@ -37,8 +37,8 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.pingers2kick = ""  # 'H', 'V' or 'HV'
         self._hkick = None  # [mrad]
         self._vkick = None  # [mrad]
-        self.pingh_calibration = 1.5416651659146232
-        self.pingv_calibration = 1.02267573
+        # self.pingh_calibration = 1.5416651659146232
+        # self.pingv_calibration = 1.02267573
         self.trigpingh_delay_raw = 36802990  # defined @ 2024-05-21 mach. study
         self.trigpingv_delay_raw = 36802937  # defined @ 2024-05-21 mach. study
         self.magnets_timeout = 120.0
@@ -128,38 +128,41 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
 
     def __init__(self, isonline=False):
         """."""
+        _ThreadBaseClass.__init__(
+            self,
+            params=TbTDataParams(),
+            target=self._do_measurement,
+            isonline=isonline
+        )
         _AcqBPMsSignals.__init__(
             self,
+            params=self.params,
             isonline=isonline,
             ispost_mortem=False
         )
-        self.params = TbTDataParams()
-        self.target = self._do_measurement
 
         self._meas_finished_ok = True
         self._timing_ok = True
         self._magnets_ok = True
 
         if self.isonline:
-            self.create_devices()
             self._init_magnets_state = self.get_magnets_state()
             self._init_timing_state = self.get_timing_state()
 
     def create_devices(self):
         """."""
-        _AcqBPMsSignals().create_devices()
+        _AcqBPMsSignals.create_devices(self)
         self.devices["pingh"] = PowerSupplyPU(
             PowerSupplyPU.DEVICES.SI_INJ_DPKCKR
         )
         self.devices["trigpingh"] = Trigger(self.PINGERH_TRIGGER)
         self.devices["pingv"] = PowerSupplyPU(PowerSupplyPU.DEVICES.SI_PING_V)
         self.devices["trigpingv"] = Trigger(self.PINGERV_TRIGGER)
-        return
 
     def get_timing_state(self):
         """."""
         # BPMs trigger and EVG timing state
-        state_dict = _AcqBPMsSignals(self).get_timing_state()
+        state_dict = _AcqBPMsSignals.get_timing_state(self)
 
         # Pingers trigger timing state
         trigs = self.devices["trigpingh"], self.devices["trigpingv"]
@@ -175,7 +178,7 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
     def prepare_timing(self, state=None):
         """."""
         print("Configuring BPMs timing...")
-        _AcqBPMsSignals(self).prepare_timing(state)  # BPM trigger timing
+        _AcqBPMsSignals.prepare_timing(self, state)  # BPM trigger timing
 
         state = dict() if state is None else state
         print("Configuring magnets timing...")
@@ -203,7 +206,7 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         else:
             trigv_ok = trigpingv.cmd_disable(timeout=prms.timeout)
         print(f"PingerV trigger configured: {trigv_ok}")
-        _time.sleep(0.1)
+
         self._timing_ok = trigh_ok and trigv_ok
 
     def get_magnets_strength(self):
@@ -244,12 +247,12 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         pingh_ok, pingv_ok = True, True
 
         # make sure mags are on to set their strengths
-        pingh_ok = pingh.cmd_turn_on(timeout=self.params.magnets_timeout)
-        pingv_ok = pingv.cmd_turn_on(timeout=self.params.magnets_timeout)
+        pingh_ok &= pingh.cmd_turn_on(timeout=self.params.magnets_timeout)
+        pingv_ok &= pingv.cmd_turn_on(timeout=self.params.magnets_timeout)
         # turn-off pulse before changing strengths
         # prevent accidental activation
-        pingh_ok = pingh.cmd_turn_off_pulse(timeout)
-        pingv_ok = pingv.cmd_turn_off_pulse(timeout)
+        pingh_ok &= pingh.cmd_turn_off_pulse(timeout)
+        pingv_ok &= pingv.cmd_turn_off_pulse(timeout)
 
         self.set_magnets_strength(
             hkick=state["pingh_strength"],
@@ -258,10 +261,10 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         )
 
         if not state["pingh_pwr"]:
-            pingh_ok = pingh.cmd_turn_off(timeout=self.params.magnets_timeout)
+            pingh_ok &= pingh.cmd_turn_off(timeout=self.params.magnets_timeout)
 
         if not state["pingv_pwr"]:
-            pingv_ok = pingv.cmd_turn_off(timeout=self.params.magnets_timeout)
+            pingv_ok &= pingv.cmd_turn_off(timeout=self.params.magnets_timeout)
 
         if pingh_ok and pingv_ok:
             print("Magnets power-state and strengths set.")
@@ -420,7 +423,7 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
 
     def get_data(self):
         """."""
-        data = _AcqBPMsSignals(self).get_data()
+        data = _AcqBPMsSignals.get_data(self)
         data["magnets_state"] = self.get_magnets_state()
         data["current_after"] = data.pop("stored_current")
         data["init_magnets_state"] = self._init_magnets_state
@@ -442,7 +445,6 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
             print(f"\tMagnets restored: {self._magnets_ok}")
 
         print("Measurement finished.")
-        return
 
     def check_machine_restored(self):
         """."""
@@ -509,7 +511,7 @@ class TbTDataAnalysis(MeasureTbTData):
         """Analysis of linear optics using Turn-by-turn data."""
         super().__init__(isonline=isonline)
 
-        self._fname = filename
+        self._fname = None
         self.timestamp = None
         self.trajx, self.trajy = None, None  # zero-mean trajectories in [mm]
         self.trajsum = None
@@ -531,105 +533,107 @@ class TbTDataAnalysis(MeasureTbTData):
         self.pca_data = None
         self.ica_data = None
 
-        if self._fname:
-            self.load_and_apply(self._fname)
+        if filename:
+            self.load_and_apply(filename)
 
     def __str__(self):
         """."""
         stg = ""
         data = self.data
-        if data:
-            stg += "\n"
-            stg += "Measurement data:\n"
+        if not data:
+            return stg
 
-            ftmp = "{0:26s} = {1:9.6f}  {2:s}\n".format
-            stmp = "{0:26s} = {1:9}  {2:s}\n".format
-            dtmp = "{0:26s} = {1:9d}  {2:s}\n".format
-            gtmp = "{0:<15s} = {1:}  {2:}\n".format
+        stg += "\n"
+        stg += "Measurement data:\n"
 
-            stg += gtmp("timestamp", self.timestamp, "")  # TODO: convert tmstp
-            stg += "\n"
-            stg += "Storage Ring State\n"
-            stg += "\n"
+        ftmp = "{0:26s} = {1:9.6f}  {2:s}\n".format
+        stmp = "{0:26s} = {1:9}  {2:s}\n".format
+        dtmp = "{0:26s} = {1:9d}  {2:s}\n".format
+        gtmp = "{0:<15s} = {1:}  {2:}\n".format
 
-            stg += ftmp("current_before", data["current_before"], "mA")
-            stg += ftmp("current_after", data["current_after"], "mA")
-            stg += ftmp("tunex", data["tunex"], "")
-            stg += ftmp("tuney", data["tuney"], "")
-            stg += stmp("tunex_enable", bool(data["tunex_enable"]), "")
-            stg += stmp("tuney_enable", bool(data["tuney_enable"]), "")
+        stg += gtmp("timestamp", self.timestamp, "")  # TODO: convert tmstp
+        stg += "\n"
+        stg += "Storage Ring State\n"
+        stg += "\n"
 
-            stg += "\n"
-            stg += "EVT state\n"
+        stg += ftmp("current_before", data["current_before"], "mA")
+        stg += ftmp("current_after", data["current_after"], "mA")
+        stg += ftmp("tunex", data["tunex"], "")
+        stg += ftmp("tuney", data["tuney"], "")
+        stg += stmp("tunex_enable", bool(data["tunex_enable"]), "")
+        stg += stmp("tuney_enable", bool(data["tuney_enable"]), "")
 
-            stg += stmp("evt_mode", data["timing_state"]["evt_mode"], "")
-            stg += stmp("evt_delay", data["timing_state"]["evt_delay"], "")
+        stg += "\n"
+        stg += "EVT state\n"
 
-            stg += "\n"
-            stg += "BPMs state\n"
-            stg += "\n"
+        stg += stmp("evt_mode", data["timing_state"]["evt_mode"], "")
+        stg += stmp("evt_delay", data["timing_state"]["evt_delay"], "")
 
-            stg += stmp("acq_rate", data["acq_rate"], "")
-            stg += stmp("nrsamples_pre", data["nrsamples_pre"], "")
-            stg += stmp("nrsamples_post", data["nrsamples_post"], "")
-            stg += stmp("switching_mode", data["switching_mode"], "")
-            stg += stmp("switching_frequency", data["switching_frequency"], "")
-            stg += stmp(
-                "trigbpm_source", data["timing_state"]["trigbpm_source"], ""
-            )
-            stg += stmp(
-                "trigbpm_nrpulses",
-                data["timing_state"]["trigbpm_nrpulses"],
-                "",
-            )
-            stg += stmp(
-                "trigbpm_delay", data["timing_state"]["trigbpm_delay"], ""
-            )
+        stg += "\n"
+        stg += "BPMs state\n"
+        stg += "\n"
 
-            stg += "\n"
-            stg += "Pingers state\n"
-            stg += "\n"
+        stg += stmp("acq_rate", data["acq_rate"], "")
+        stg += stmp("nrsamples_pre", data["nrsamples_pre"], "")
+        stg += stmp("nrsamples_post", data["nrsamples_post"], "")
+        stg += stmp("switching_mode", data["switching_mode"], "")
+        stg += stmp("switching_frequency", data["switching_frequency"], "")
+        stg += stmp(
+            "trigbpm_source", data["timing_state"]["trigbpm_source"], ""
+        )
+        stg += stmp(
+            "trigbpm_nrpulses",
+            data["timing_state"]["trigbpm_nrpulses"],
+            "",
+        )
+        stg += stmp(
+            "trigbpm_delay", data["timing_state"]["trigbpm_delay"], ""
+        )
 
-            stg += stmp(
-                "trigpingh_state", data["timing_state"]["trigpingh_state"], ""
-            )
-            stg += stmp(
-                "trigpingh_source",
-                data["timing_state"]["trigpingh_source"],
-                "",
-            )
-            stg += dtmp(
-                "trigpingh_delay_raw",
-                data["timing_state"]["trigpingh_delay_raw"],
-                ""
-            )
-            stg += stmp("pingh_pwr", data["magnets_state"]["pingh_pwr"], "")
+        stg += "\n"
+        stg += "Pingers state\n"
+        stg += "\n"
 
-            stg += stmp(
-                "pingh_pulse", data["magnets_state"]["pingh_pulse"], ""
-            )
-            stg += ftmp("hkick", data["magnets_strengths"][0], "mrad")
-            stg += "\n"
+        stg += stmp(
+            "trigpingh_state", data["timing_state"]["trigpingh_state"], ""
+        )
+        stg += stmp(
+            "trigpingh_source",
+            data["timing_state"]["trigpingh_source"],
+            "",
+        )
+        stg += dtmp(
+            "trigpingh_delay_raw",
+            data["timing_state"]["trigpingh_delay_raw"],
+            ""
+        )
+        stg += stmp("pingh_pwr", data["magnets_state"]["pingh_pwr"], "")
 
-            stg += stmp(
-                "trigpingv_state", data["timing_state"]["trigpingv_state"], ""
-            )
-            stg += stmp(
-                "trigpingv_source",
-                data["timing_state"]["trigpingv_source"],
-                "",
-            )
-            stg += dtmp(
-                "trigpingv_delay_raw",
-                data["timing_state"]["trigpingv_delay_raw"],
-                ""
-            )
-            stg += stmp("pingv_pwr", data["magnets_state"]["pingv_pwr"], "")
+        stg += stmp(
+            "pingh_pulse", data["magnets_state"]["pingh_pulse"], ""
+        )
+        stg += ftmp("hkick", data["magnets_strengths"][0], "mrad")
+        stg += "\n"
 
-            stg += stmp(
-                "pingv_pulse", data["magnets_state"]["pingv_pulse"], ""
-            )
-            stg += ftmp("vkick", data["magnets_strengths"][1], "mrad")
+        stg += stmp(
+            "trigpingv_state", data["timing_state"]["trigpingv_state"], ""
+        )
+        stg += stmp(
+            "trigpingv_source",
+            data["timing_state"]["trigpingv_source"],
+            "",
+        )
+        stg += dtmp(
+            "trigpingv_delay_raw",
+            data["timing_state"]["trigpingv_delay_raw"],
+            ""
+        )
+        stg += stmp("pingv_pwr", data["magnets_state"]["pingv_pwr"], "")
+
+        stg += stmp(
+            "pingv_pulse", data["magnets_state"]["pingv_pulse"], ""
+        )
+        stg += ftmp("vkick", data["magnets_strengths"][1], "mrad")
 
         return stg
 
@@ -637,12 +641,6 @@ class TbTDataAnalysis(MeasureTbTData):
     def fname(self):
         """."""
         return self._fname
-
-    @fname.setter
-    def fname(self, val):
-        """."""
-        self._fname = val
-        self.load_and_apply(val)
 
     @property
     def tunex(self):
@@ -672,7 +670,13 @@ class TbTDataAnalysis(MeasureTbTData):
 
     def load_and_apply(self, fname):
         """Load data and copy often used data to class attributes."""
-        keys = super().load_and_apply(fname)
+        try:
+            keys = super().load_and_apply(fname)
+        except Exception:
+            print('Problem loading file {fname}.')
+            return
+        self._fname = fname
+
         if keys:
             print("The following keys were not used:")
             print("     ", str(keys))
@@ -703,7 +707,6 @@ class TbTDataAnalysis(MeasureTbTData):
         self.rf_freq = data.get("rf_frequency", None)
         self.sampling_freq = data.get("sampling_frequency", None)
         self.switching_freq = data.get("switching_frequency", None)
-        return
 
     def linear_optics_analysis(self):
         """Linear optics (beta-beating & phase adv. errors) analysis.

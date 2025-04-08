@@ -88,9 +88,10 @@ class AcqBPMsSignals(_BaseClass):
     BPM_TRIGGER = "SI-Fam:TI-BPM"
     PSM_TRIGGER = "SI-Fam:TI-BPM-PsMtm"
 
-    def __init__(self, isonline=True, ispost_mortem=False):
+    def __init__(self, params=None, isonline=True, ispost_mortem=False):
         """."""
-        super().__init__(params=AcqBPMsSignalsParams(), isonline=isonline)
+        params = params or AcqBPMsSignalsParams()
+        super().__init__(params=params, isonline=isonline)
         self._ispost_mortem = ispost_mortem
 
         if self.isonline:
