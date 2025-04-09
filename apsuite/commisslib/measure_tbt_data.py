@@ -7,10 +7,11 @@ import matplotlib.gridspec as _gridspec
 import matplotlib.pyplot as _mplt
 import numpy as _np
 import pyaccel as _pa
-from mathphys.sobi import SOBI as _SOBI
+# from mathphys.sobi import SOBI as _SOBI  # unfinished work in mathphys
 from pymodels import si as _si
 from scipy.optimize import curve_fit as _curve_fit
-from siriuspy.devices import PowerSupplyPU, Trigger
+from siriuspy.devices import PowerSupplyPU as _PowerSupplyPU, \
+     Trigger as _Trigger
 from siriuspy.sofb.csdev import SOFBFactory
 from sklearn.decomposition import FastICA as _FastICA
 
@@ -23,8 +24,6 @@ from ..utils import ThreadedMeasBaseClass as _ThreadBaseClass
 class TbTDataParams(_AcqBPMsSignalsParams):
     """."""
 
-    BPMS_NAMES = SOFBFactory.create("SI").bpm_names
-
     def __init__(self):
         """."""
         super().__init__()
@@ -32,17 +31,15 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.acq_rate = "TbT"
         self.nrpoints_before = 100
         self.nrpoints_after = 2000
+        self.restore_init_state = True
 
         self.mags_strength_rtol = 0.05
-        self.pingers2kick = ""  # 'H', 'V' or 'HV'
-        self._hkick = None  # [mrad]
-        self._vkick = None  # [mrad]
-        # self.pingh_calibration = 1.5416651659146232
-        # self.pingv_calibration = 1.02267573
+        self._pingers2kick = ""  # 'h', 'v' or 'hv'
+        self.hkick = 0  # [mrad]
+        self.vkick = 0  # [mrad]
         self.trigpingh_delay_raw = 36802990  # defined @ 2024-05-21 mach. study
         self.trigpingv_delay_raw = 36802937  # defined @ 2024-05-21 mach. study
         self.magnets_timeout = 120.0
-        self.restore_init_state = True
 
     def __str__(self):
         """."""
@@ -63,7 +60,6 @@ class TbTDataParams(_AcqBPMsSignalsParams):
             stg += stmp("hkick", "same", "(current value will not be changed)")
         else:
             stg += ftmp("hkick", self.hkick, "[mrad]")
-        stg += ftmp("pingh_calibration", self.pingh_calibration, "")
 
         dly = self.trigpingh_delay_raw
         if dly is None:
@@ -78,7 +74,6 @@ class TbTDataParams(_AcqBPMsSignalsParams):
             stg += stmp("vkick", "same", "(current value will not be changed)")
         else:
             stg += ftmp("vkick", self.vkick, "[mrad]")
-        stg += ftmp("pingv_calibration", self.pingv_calibration, "")
         dly = self.trigpingv_delay_raw
         if dly is None:
             stg += stmp(
@@ -92,32 +87,14 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         return stg
 
     @property
-    def hkick(self):
-        """Horizontal kick."""
-        return self._hkick
+    def pingers2kick(self):
+        """."""
+        return self._pingers2kick
 
-    @hkick.setter
-    def hkick(self, kick):
-        self._hkick = kick
-        if kick != 0:
-            if "h" not in self.pingers2kick:
-                self.pingers2kick += "h"
-        else:
-            self.pingers2kick = self.pingers2kick.replace("h", "")
-
-    @property
-    def vkick(self):
-        """Vertical kick."""
-        return self._vkick
-
-    @vkick.setter
-    def vkick(self, kick):
-        self._vkick = kick
-        if kick != 0:
-            if "v" not in self.pingers2kick:
-                self.pingers2kick += "v"
-        else:
-            self.pingers2kick = self.pingers2kick.replace("v", "")
+    @pingers2kick.setter
+    def pingers2kick(self, val):
+        """Must be 'h', 'v' or 'vh'/'hv'."""
+        self._pingers2kick = str(val).lower()
 
 
 class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
@@ -152,12 +129,14 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
     def create_devices(self):
         """."""
         _AcqBPMsSignals.create_devices(self)
-        self.devices["pingh"] = PowerSupplyPU(
-            PowerSupplyPU.DEVICES.SI_INJ_DPKCKR
+        self.devices["pingh"] = _PowerSupplyPU(
+            _PowerSupplyPU.DEVICES.SI_INJ_DPKCKR
         )
-        self.devices["trigpingh"] = Trigger(self.PINGERH_TRIGGER)
-        self.devices["pingv"] = PowerSupplyPU(PowerSupplyPU.DEVICES.SI_PING_V)
-        self.devices["trigpingv"] = Trigger(self.PINGERV_TRIGGER)
+        self.devices["trigpingh"] = _Trigger(self.PINGERH_TRIGGER)
+        self.devices["pingv"] = _PowerSupplyPU(
+            _PowerSupplyPU.DEVICES.SI_PING_V
+        )
+        self.devices["trigpingv"] = _Trigger(self.PINGERV_TRIGGER)
 
     def get_timing_state(self):
         """."""
@@ -211,16 +190,13 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
 
     def get_magnets_strength(self):
         """."""
-        pingh_cal = self.params.pingh_calibration
-        pingv_cal = self.params.pingv_calibration
-
         if self.devices["pingh"].pwrstate:
-            pingh_str = self.devices["pingh"].strength / pingh_cal
+            pingh_str = self.devices["pingh"].strength
         else:
             pingh_str = None
 
         if self.devices["pingv"].pwrstate:
-            pingv_str = self.devices["pingv"].strength / pingv_cal
+            pingv_str = self.devices["pingv"].strength
         else:
             pingv_str = None
 
@@ -298,12 +274,10 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         # first, strengths are only set. No waiting reaching the desired values
         # (i.e. timeout = 0)
         if hkick is not None:
-            hkick *= self.params.pingh_calibration
             print(f"Setting pingh strength to {hkick:.3f} mrad...")
             pingh.strength = hkick
 
         if vkick is not None:
-            vkick *= self.params.pingv_calibration
             print(f"Setting pingv strength to {hkick:.3f} mrad...")
             pingv.strength = vkick
 
@@ -504,7 +478,8 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
 
 class TbTDataAnalysis(MeasureTbTData):
     """."""
-
+    PINGH_CALIBRATION = 1.5416651659146232  # pingers calibration factors
+    PINGV_CALIBRATION = 1.02267573  # should be in the mags exc. curve
     SYNCH_TUNE = 0.004713  # check this
 
     def __init__(self, filename="", isonline=False):
@@ -532,6 +507,7 @@ class TbTDataAnalysis(MeasureTbTData):
         self.fitting_data = None
         self.pca_data = None
         self.ica_data = None
+        self._bpms_names = None
 
         if filename:
             self.load_and_apply(filename)
@@ -1343,8 +1319,11 @@ class TbTDataAnalysis(MeasureTbTData):
         trajy = self.trajy[:, bpm_index]
         trajsum = self.trajsum[:, bpm_index]
 
+        if self._bpms_names is None:
+            self._bpms_names = SOFBFactory.create("SI").bpm_names
+
         fig, ax = _mplt.subplots(1, 3, figsize=(15, 5))
-        name = self.params.BPMS_NAMES[bpm_index]
+        name = self._bpms_names[bpm_index]
         fig.suptitle(
             f"{self.acq_rate.upper()} acq. at BPM {bpm_index:03d} ({name})"
         )
