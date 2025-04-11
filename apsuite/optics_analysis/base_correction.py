@@ -27,7 +27,7 @@ class BaseCorr():
     GROUPING = _get_namedtuple('Grouping', ['Individual', 'TwoKnobs'])
     CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
 
-    def __init__(self, model, acc=None, method=None, grouping=None):
+    def __init__(self, model, acc=None, method=None, grouping=None, idcs_out=None):
         """."""
         self.model = model
         self.acc = acc.upper()
@@ -37,6 +37,7 @@ class BaseCorr():
         self.fam = None
         self.method = method
         self.grouping = grouping
+        self.idcs_out = idcs_out
 
     @property
     def grouping(self):
@@ -96,8 +97,9 @@ class BaseCorr():
             for mag in self.fam[knb]['index']:
                 stren_seg = []
                 for seg in mag:
-                    stren_seg.append(getattr(
-                        model[seg], self._STRENGTH_TYPE))
+                    if self.idcs_out is None or seg not in self.idcs_out:
+                        stren_seg.append(getattr(
+                            model[seg], self._STRENGTH_TYPE))
                 stren_mag.append(sum(stren_seg))
             stren.append(_np.mean(stren_mag))
         return _np.array(stren)
@@ -168,12 +170,13 @@ class BaseCorr():
                 delta = delta_stren[idx_knb]
             for mag in self.fam[knb]['index']:
                 for seg in mag:
-                    stren = getattr(model[seg], self._STRENGTH_TYPE)
-                    if self._method == BaseCorr.METHODS.Proportional:
-                        stren *= (1 + delta/len(mag))
-                    else:
-                        stren += delta/len(mag)
-                    setattr(model[seg], self._STRENGTH_TYPE, stren)
+                    if self.idcs_out is None or seg not in self.idcs_out:
+                        stren = getattr(model[seg], self._STRENGTH_TYPE)
+                        if self._method == BaseCorr.METHODS.Proportional:
+                            stren *= (1 + delta/len(mag))
+                        else:
+                            stren += delta/len(mag)
+                        setattr(model[seg], self._STRENGTH_TYPE, stren)
 
     def _group_2knobs_matrix(self, jacobian_matrix=None):
         """."""
