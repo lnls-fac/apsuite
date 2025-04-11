@@ -197,5 +197,5 @@ class PSO(_Optimize):
         _log.info('Finished!')
         _log.info('Best Obj. Func. Found:' + str(f_old[idx_min_old]))
 
-        self.best_positions = _np.array(best_pos_hstry)
-        self.best_objfuncs = _np.array(best_fig_hstry)
+        self.positions_best = _np.array(best_pos_hstry)
+        self.objfuncs_best = _np.array(best_fig_hstry)

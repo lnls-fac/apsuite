@@ -20,12 +20,14 @@ class TuneCorr(BaseCorr):
     OPTICS = _get_namedtuple('Optics', ['EdwardsTeng', 'Twiss'])
 
     def __init__(self, model, acc, qf_knobs=None, qd_knobs=None,
-                 method=None, grouping=None, type_optics=None):
+                 method=None, grouping=None, type_optics=None, idcs_out=None):
         """."""
         super().__init__(
-            model=model, acc=acc, method=method, grouping=grouping)
+            model=model, acc=acc, method=method, grouping=grouping,
+            idcs_out=idcs_out)
         self._type_optics = TuneCorr.OPTICS.EdwardsTeng
         self.type_optics = type_optics
+        self.idcs_out = idcs_out
         if self.type_optics == self.OPTICS.EdwardsTeng:
             self._optics_func = pyaccel.optics.calc_edwards_teng
         elif self._type_optics == self.OPTICS.Twiss:
@@ -100,7 +102,8 @@ class TuneCorr(BaseCorr):
             modcopy = model[:]
             for nmag in self.fam[knb]['index']:
                 for seg in nmag:
-                    modcopy[seg].KL += delta/len(nmag)
+                    if self.idcs_out is None or seg not in self.idcs_out:
+                        modcopy[seg].KL += delta/len(nmag)
             nu = self.get_tunes(model=modcopy)
             tune_matrix[:, idx] = (nu-nu0)/delta
         return tune_matrix

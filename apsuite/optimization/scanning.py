@@ -45,10 +45,10 @@ class SimpleScan(_Optimize):
         high = self.params.limit_upper
         delta = high - low
 
-        self.best_objfuncs = _np.zeros(size, dtype=float)
-        self.best_positions = _np.zeros((size, num_dims), dtype=float)
+        self.objfuncs_best = _np.zeros(size, dtype=float)
+        self.positions_best = _np.zeros((size, num_dims), dtype=float)
         for i in range(size):
             ivec = _np.unravel_index(i, shape)
             pos = low + (delta * ivec)/(num_pts - 1)
-            self.best_positions[i] = pos
-            self.best_objfuncs[i] = self._objective_func(pos)
+            self.positions_best[i] = pos
+            self.objfuncs_best[i] = self._objective_func(pos)
