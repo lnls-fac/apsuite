@@ -1,12 +1,11 @@
 """."""
-from threading import Event as _Event
 import logging as _log
 import sys as _sys
 from copy import deepcopy as _dcopy
+from threading import Event as _Event
 
 from epics.ca import CAThread as _Thread
-
-from mathphys.functions import save as _save, load as _load
+from mathphys.functions import load as _load, save as _save
 
 import apsuite.commisslib as _commisslib
 
@@ -58,6 +57,7 @@ class DataBaseClass:
                 {'.h5', '.hdf5', '.hdf', '.hd5'} for HDF5 files.
             overwrite (bool, optional): Whether to overwrite existing file.
                 Defaults to False.
+            compress (bool, optional): Whether to compress data before saving.
 
         """
         _save(self.to_dict(), fname, overwrite=overwrite, compress=compress)
@@ -112,7 +112,7 @@ class ParamsBaseClass:
         """Update all relevant info from dictionary.
 
         Args:
-            info (dict): dictionary with all relevant info.
+            params_dict (dict): dictionary with all relevant info.
 
         Returns:
             keys_not_used (set): Set containing keys not used.
@@ -144,6 +144,17 @@ class MeasBaseClass(DataBaseClass):
         conn = all([dev.connected for dev in self.devices.values()])
         conn &= all([pv.connected for pv in self.pvs.values()])
         return conn
+
+    @property
+    def disconnected_pvnames(self):
+        """Return set with disconnected PV names."""
+        pvs = set()
+        for dev in self.devices.values():
+            pvs |= dev.disconnected_pvnames
+        for pv in self.pvs.values():
+            if not pv.connected:
+                pvs.add(pv.pvname)
+        return pvs
 
     def wait_for_connection(self, timeout=None):
         """."""

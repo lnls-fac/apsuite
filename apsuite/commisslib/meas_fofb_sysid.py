@@ -44,6 +44,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         self.svd_levels_rf_enbllist = _np.ones(1, dtype=bool)
         self.svd_levels_respmat = _np.zeros((320, 161))
         self.svd_levels_singmode_idx = 0
+        self.svd_levels_ampmax = 5000
         # prbs fofbacc levels
         self.prbs_fofbacc_enbl = False
         self.prbs_fofbacc_lvl0 = _np.zeros(160)
@@ -58,7 +59,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         self.prbs_corrs_to_get_data = _np.ones(160, dtype=bool)
         # power supply current loop
         self.corr_currloop_kp = 5000000*_np.ones(160)
-        self.corr_currloop_ti = 2000*_np.ones(160)
+        self.corr_currloop_ki = 2000*_np.ones(160)
 
     def __str__(self):
         ftmp = '{0:26s} = {1:9.6f}  {2:s}\n'.format
@@ -98,6 +99,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         stg += stmp('svd_levels_rf_enbllist',
                     str(self.svd_levels_rf_enbllist), '')
         stg += stmp('svd_levels_respmat', str(self.svd_levels_respmat), '')
+        stg += dtmp('svd_levels_ampmax', self.svd_levels_ampmax, '')
         stg += dtmp(
             'svd_levels_singmode_idx', self.svd_levels_singmode_idx, '')
         stg += stmp('prbs_fofbacc_enbl', str(self.prbs_fofbacc_enbl), '')
@@ -109,7 +111,7 @@ class FOFBSysIdAcqParams(_ParamsBaseClass):
         stg += stmp('prbs_bpmposy_lvl0', str(self.prbs_bpmposy_lvl0), '')
         stg += stmp('prbs_bpmposy_lvl1', str(self.prbs_bpmposy_lvl1), '')
         stg += stmp('corr_currloop_kp', str(self.corr_currloop_kp), '')
-        stg += stmp('corr_currloop_ti', str(self.corr_currloop_ti), '')
+        stg += stmp('corr_currloop_ki', str(self.corr_currloop_ki), '')
         return stg
 
 
@@ -217,12 +219,13 @@ class FOFBSysIdAcq(_BaseClass):
         matc /= 1e3
         return respm
 
-    def get_levels_corrs_from_svd(self, lvl0, lvl1):
+    def get_levels_corrs_from_svd(self, lvl0, lvl1=None):
         """Get levels from SVD for corrector devices.
 
         Args:
             lvl0 (int): maximum level for PRBS level 0
-            lvl1 (int): maximum level for PRBS level 1
+            lvl1 (optional, int): maximum level for PRBS level 1
+                If None, we consider level1 = -level0. Defaults to None.
 
         Returns:
             lvls0 (numpy.ndarray, 160):
@@ -241,18 +244,22 @@ class FOFBSysIdAcq(_BaseClass):
         *_, v = self._calc_svd(respm)
         vs = v[singval]
         vs /= _np.abs(vs).max()
+        if lvl1 is None:
+            lvl1 = - lvl0
         amp = (lvl1-lvl0)/2
         off = (lvl1+lvl0)/2
         lvls0 = off - amp * vs
         lvls1 = off + amp * vs
         return lvls0[:-1], lvls1[:-1]
 
-    def get_levels_bpms_from_svd(self, lvl0, lvl1, ampmin=0):
+    def get_levels_bpms_from_svd(self, ampmax, lvl0, lvl1=None):
         """Get levels from SVD for BPMs devices.
 
         Args:
-            lvl0 (int): maximum level for PRBS level 0
-            lvl1 (int): maximum level for PRBS level 1
+            lvl0 (int): minimum level for PRBS level 0
+            lvl1 (optional, int): minimum level for PRBS level 1
+                If None, we consider level1 = -level0. Defaults to None.
+            ampmax (int): maximum level after SV scaling
 
         Returns:
             lvls0x (numpy.ndarray, SI_NUM_BPMS):
@@ -276,26 +283,40 @@ class FOFBSysIdAcq(_BaseClass):
 
         u, s, _ = self._calc_svd(respm)
         us = u[:, singval]
-        us /= _np.abs(us).max()
         ss = s[singval]
-        ss /= _np.abs(s).max()
-        amp = (lvl1-lvl0)/2
-        off = (lvl1+lvl0)/2
-        # Scales the amplitude with its corresponding singular value
-        # (normalized). The amplitudes are saturated to 'ampmin'.
-        amp = max(amp * ss, ampmin)
-        lvls0 = off - amp * us
-        lvls1 = off + amp * us
-        lvls0x, lvls1x = lvls0[:SI_NUM_BPMS], lvls1[:SI_NUM_BPMS]
-        lvls0y, lvls1y = lvls0[SI_NUM_BPMS:], lvls1[SI_NUM_BPMS:]
-        return lvls0x, lvls0y, lvls1x, lvls1y
+        ss /= _np.abs(s).min()
 
-    def get_levels_corrs_indiv_exc(self, corrname, lvl0, lvl1):
+        if lvl1 is None:
+            amp = _np.abs(lvl0)
+            # Scales the amplitude with its corresponding singular value
+            # (normalized to the lesser one).
+            # The amplitudes are saturated to 'ampmax'.
+            amp = min(amp * ss, ampmax)
+            lvls0 = - amp * us
+            lvls0x, lvls0y = lvls0[:SI_NUM_BPMS], lvls0[SI_NUM_BPMS:],
+            return lvls0x, lvls0y
+
+        else:
+            amp = (lvl1-lvl0)/2
+            off = (lvl1+lvl0)/2
+            # Scales the amplitude with its corresponding singular value
+            # (normalized to the lesser one).
+            # The amplitudes are saturated to 'ampmax'.
+            amp = min(amp * ss, ampmax)
+            lvls0 = off - amp * us
+            lvls1 = off + amp * us
+            lvls0x, lvls1x = lvls0[:SI_NUM_BPMS], lvls1[:SI_NUM_BPMS]
+            lvls0y, lvls1y = lvls0[SI_NUM_BPMS:], lvls1[SI_NUM_BPMS:]
+            return lvls0x, lvls0y, lvls1x, lvls1y
+
+    def get_levels_corrs_indiv_exc(self, corrname, lvl0, lvl1=None):
         """Get levels for excitation with only one corrector."""
         famsysid = self.devices['famsysid']
         corrindex = famsysid.psnames.index(corrname)
         lvls0 = _np.zeros(len(famsysid.psnames))
         lvls0[corrindex] = lvl0
+        if lvl1 is None:
+            lvl1 = -lvl0
         lvls1 = _np.zeros(len(famsysid.psnames))
         lvls1[corrindex] = lvl1
         return lvls0, lvls1
@@ -404,7 +425,7 @@ class FOFBSysIdAcq(_BaseClass):
         """Check whether data is valid."""
         return self.devices['famsysid'].check_data_valid()
 
-    def acquire_data(self):
+    def acquire_data(self, wait_time=None):
         """Acquire data."""
         ret = self.prepare_acquisition()
         if ret < 0:
@@ -417,6 +438,9 @@ class FOFBSysIdAcq(_BaseClass):
         self.devices['famsysid'].update_initial_timestamps(
             bpmenbl=self.params.prbs_bpms_to_get_data,
             correnbl=self.params.prbs_corrs_to_get_data)
+
+        if wait_time is not None:
+            _time.sleep(wait_time)
 
         self.trigger_timing_signal()
 
@@ -432,7 +456,7 @@ class FOFBSysIdAcq(_BaseClass):
 
         ret = self.check_data_valid()
         if ret < 0:
-            print(f'FOFB controller 1 TimeFrameData is not monotonic.')
+            print('FOFB controller 1 TimeFrameData is not monotonic.')
             return False
         if ret > 0:
             print(
@@ -465,12 +489,20 @@ class FOFBSysIdAcq(_BaseClass):
         data['prbs_fofbacc_lvl0'] = famsysid.prbs_fofbacc_lvl0
         data['prbs_fofbacc_lvl1'] = famsysid.prbs_fofbacc_lvl1
         data['prbs_bpmpos_enbl'] = famsysid.prbs_bpmpos_enbl
-        data['prbs_bpmposx_lvl0'] = famsysid.prbs_bpmposx_lvl0
-        data['prbs_bpmposx_lvl1'] = famsysid.prbs_bpmposx_lvl1
-        data['prbs_bpmposy_lvl0'] = famsysid.prbs_bpmposy_lvl0
-        data['prbs_bpmposy_lvl1'] = famsysid.prbs_bpmposy_lvl1
+        data['prbs_bpmposx_lvl0_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposx_lvl0, -1
+            )
+        data['prbs_bpmposx_lvl1_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposx_lvl1, -1
+            )
+        data['prbs_bpmposy_lvl0_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposy_lvl0, -1
+            )
+        data['prbs_bpmposy_lvl1_beam_order'] = _np.roll(
+            famsysid.prbs_bpmposy_lvl1, -1
+            )
         data['corr_currloop_kp'] = famsysid.currloop_kp
-        data['corr_currloop_ti'] = famsysid.currloop_ti
+        data['corr_currloop_ki'] = famsysid.currloop_ki
 
         # acquisition
         orbx, orby, currdata, kickdata = famsysid.get_data(
@@ -500,6 +532,7 @@ class FOFBSysIdAcq(_BaseClass):
         data['fofb_respmat'] = fofb.respmat
         data['fofb_respmat_mon'] = fofb.respmat_mon
         data['fofb_invrespmat_mon'] = fofb.invrespmat_mon
+        data['psconfig_mat'] = fofb.psconfig_mat
 
         # sofb
         sofb = self.devices['sofb']
