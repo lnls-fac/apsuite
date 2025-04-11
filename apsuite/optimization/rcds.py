@@ -2,6 +2,7 @@
 import logging as _log
 
 import numpy as _np
+import matplotlib.pyplot as _mplt
 
 from mathphys.functions import get_namedtuple as _get_namedtuple
 
@@ -18,7 +19,7 @@ class RCDSParams(_OptimizeParams):
         """."""
         super().__init__()
         self._boundary_policy = self.BoundaryPolicy.ToNaN
-        self.initial_stepsize = 0.1  # in normalized units.
+        self.initial_stepsize = 0.01  # in normalized units.
         self.noise_level = 0.0  # in units of the objective function.
         self.tolerance = 1e-5  # in relative units.
         self.orthogonality_threshold = 0.9
@@ -127,6 +128,24 @@ class RCDS(_Optimize):
         """."""
         super().__init__(
             RCDSParams(), use_thread=use_thread, isonline=isonline)
+        self.num_iterations = 0
+        self.num_evals_by_iter = []
+        self.final_search_directions = None
+
+    def to_dict(self) -> dict:
+        """."""
+        dic = super().to_dict()
+        dic['num_iterations'] = self.num_iterations
+        dic['num_evals_by_iter'] = self.num_evals_by_iter
+        dic['final_search_directions'] = self.final_search_directions
+        return dic
+
+    def from_dict(self, info: dict):
+        """."""
+        super().from_dict(info)
+        self.num_iterations = info['num_iterations']
+        self.num_evals_by_iter = info['num_evals_by_iter']
+        self.final_search_directions = info['final_search_directions']
 
     def bracketing_min(self, pos0, func0, dir, step):
         """Bracket the minimum.
@@ -284,7 +303,7 @@ class RCDS(_Optimize):
 
     def _objective_func(self, pos):
         pos = self.params.denormalize_positions(pos)
-        return super()._objective_func(pos)[0]
+        return super()._objective_func(pos)
 
     def _initialization(self):
         """."""
@@ -292,11 +311,13 @@ class RCDS(_Optimize):
 
     def _finalization(self):
         """."""
+        self._get_cumul_optima_idcs()
+        idx = self.objfuncs_cumul_optima_idcs[-1]
         stg = '\n Finished! \n'
-        stg += f'Number of iterations: {iter+1:04d}\n'
+        stg += f'Number of iterations: {self.num_iterations:04d}\n'
         stg += f'Number of evaluations: {self.num_objective_evals:04d}\n'
-        init_func = self.data['best_objfuncs'][0]
-        func_min = self.data['best_objfuncs'][-1]
+        init_func = self.objfuncs_evaluated[0]
+        func_min = self.objfuncs_evaluated[idx]
         stg += f'f_0 = {init_func:.3g}\n'
         stg += f'f_min = {func_min:.3g}\n'
         stg += f'f_min/f0 = {func_min/init_func:.3g}\n'
@@ -328,9 +349,11 @@ class RCDS(_Optimize):
         _log.info(f'Starting Optimization. Initial ObjFun: {func0:.3g}')
         for iter in range(max_iters):
             _log.info(f'\nIteration {iter+1:04d}/{max_iters:04d}')
+            break_loop = False
             max_decr = 0
             max_decr_dir = 0
 
+            num_evaluations = len(self.objfuncs_evaluated)
             # NOTE: where does this step division come from?
             # Not in numerical recipes. Check Powell' method again!
             step /= 1.20
@@ -413,14 +436,14 @@ class RCDS(_Optimize):
 
             hist_best_pos.append(pos_min)
             hist_best_func.append(func_min)
-            self.data['best_positions'] = self.params.denormalize_positions(
+            self.positions_best = self.params.denormalize_positions(
                 _np.array(hist_best_pos, ndmin=2))
-            self.data['best_objfuncs'] = _np.array(hist_best_func, ndmin=2)
+            self.objfuncs_best = hist_best_func
 
             _tmp_sdirs = self.params.denormalize_positions(
                 search_dirs, is_pos=False)
             _tmp_sdirs /= _np.linalg.norm(_tmp_sdirs, axis=0)
-            self.data['final_search_directions'] = _tmp_sdirs
+            self.final_search_directions = _tmp_sdirs
 
             # Numerical recipes does:
             # cond = 2*(func0-func_min) <= \
@@ -431,15 +454,91 @@ class RCDS(_Optimize):
                 _log.info(
                     f'Exiting: Init ObjFun = {func0:.3g},  '
                     f'Final ObjFun = {func_min:.3g}')
-                break
+                break_loop = True
             elif self._stopevt.is_set():
-                break
+                break_loop = True
             elif self._num_objective_evals > max_evals:
                 _log.info('Exiting: Maximum number of evaluations reached.')
-                break
+                break_loop = True
 
             func0 = func_min
             pos0 = pos_min
+            self.num_iterations = iter + 1
+            evals_by_iter = len(self.objfuncs_evaluated) - num_evaluations
+            self.num_evals_by_iter.append(evals_by_iter)
             _log.info(
                 f'End of iteration {iter+1:04d}: '
                 f'Final ObjFun = {func_min:.3g}')
+            if break_loop:
+                break
+
+    def plot_history(self):
+        """Plot the history of obj. func. and knobs throughout evaluations.
+
+        Objective function values and knobs values during evaluations are
+        shown in solid lines with transparency, circular markers with no
+        filling signal cumulative optima found during the evaluations and solid
+        filling circular markers refer to RCDS parabolic model inferences at
+        the end of an iteration (guess for the optimum).
+
+        Returns:
+            fig, ax: matplolib figure and axes
+        """
+        opt_idcs, pos_cum_opt, objfuncs_cum_opt = self.get_cumul_optima()
+        iters_idcs = _np.concatenate(([0], _np.cumsum(self.num_evals_by_iter)))
+
+        fig, axs = _mplt.subplots(2, 1, figsize=(10, 10), sharex=True)
+        ax = axs[0]
+        ax.plot(
+            self.objfuncs_evaluated,
+            color="C0", alpha=0.4,
+            label="evaluation",
+        )
+        ax.plot(
+            opt_idcs, objfuncs_cum_opt,
+            "o", mfc="none",
+            color="C0",
+            label="cumulated optima",
+        )
+
+        ax.plot(
+            iters_idcs,
+            self.objfuncs_best,
+            "o", color="C0",
+            label="end of iter. optima")
+
+        ax.set_ylabel("objective function")
+        ax.set_xlabel("evaluations")
+
+        ax.legend()
+
+        ax = axs[1]
+        colors = _mplt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+        for i, knob in enumerate(_np.array(self.positions_evaluated).T):
+            color = colors[i % len(colors)]
+
+            ax.plot(knob, alpha=0.4, color=color)
+            ax.plot(
+                opt_idcs,
+                pos_cum_opt[:, i],
+                "o", mfc="none",
+                color=color,
+                label=f"dir {i + 1:2d} - cumulated optima"
+
+            )
+            ax.plot(
+                iters_idcs,
+                self.positions_best[:, i], 'o',
+                color=color,
+                label=f"dir {i + 1:2d} - end of iter. optima"
+                )
+
+        ax.set_ylabel("knobs values")
+        ax.set_xlabel("evaluations")
+        ax.legend()
+
+        fig.tight_layout()
+        fig.show()
+
+        return fig, axs

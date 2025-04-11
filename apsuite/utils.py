@@ -145,6 +145,17 @@ class MeasBaseClass(DataBaseClass):
         conn &= all([pv.connected for pv in self.pvs.values()])
         return conn
 
+    @property
+    def disconnected_pvnames(self):
+        """Return set with disconnected PV names."""
+        pvs = set()
+        for dev in self.devices.values():
+            pvs |= dev.disconnected_pvnames
+        for pv in self.pvs.values():
+            if not pv.connected:
+                pvs.add(pv.pvname)
+        return pvs
+
     def wait_for_connection(self, timeout=None):
         """."""
         obs = list(self.devices.values()) + list(self.pvs.values())

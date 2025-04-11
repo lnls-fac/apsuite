@@ -7,7 +7,8 @@ import operator as _opr
 
 import numpy as _np
 import matplotlib.pyplot as _mplt
-import scipy.optimize as _scyopt
+from scipy.signal import find_peaks as _find_peaks, \
+    savgol_filter as _savgol_filter
 
 from mathphys.functions import save as _save, load as _load
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
@@ -340,7 +341,7 @@ class MeasACORM(_ThreadBaseClass):
 
     def save_loco_input_data(
             self, respmat_name: str, overwrite=False, save2servconf=False,
-            extra_kwargs=None):
+            extra_kwargs=None, matrix=None):
         """Save in `.pickle` format a dictionary with all LOCO input data.
 
         Args:
@@ -364,13 +365,14 @@ class MeasACORM(_ThreadBaseClass):
         data['tuney'] = bpms_anly['tuney']
         data['stored_current'] = bpms_anly['stored_current']
         data['bpm_variation'] = bpms_anly['bpm_variation']
-        mat = self.build_respmat()
-        data['respmat'] = mat
+        if matrix is None:
+            matrix = self.build_respmat()
+        data['respmat'] = matrix
         data.update(extra_kwargs or dict())
         if save2servconf:
             data['orbmat_name'] = respmat_name
             mat = self.save_respmat_to_configdb(respmat_name, mat=mat)
-        _save(data, f'loco_input_{respmat_name:s}', overwrite=overwrite)
+        _save(data, f'{respmat_name:s}', overwrite=overwrite)
 
     def save_analysis_dictionary(self, filename, overwrite=False):
         """Save internal analysis dict to file.
@@ -1069,7 +1071,7 @@ class MeasACORM(_ThreadBaseClass):
             'mV:AL:REF-SP', 'mV:AMPREF:MIN:S', 'PL:REF:S', 'PHSREF:MIN:S',
             'COND:DC:S', 'COND:DC', 'PULSE:S', 'PULSE',
             ]
-        self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SI, props2init=props)
+        self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SIA, props2init=props)
         # Create Tune object:
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self._log(f'ET: = {_time.time()-t00:.2f}s')
@@ -1495,13 +1497,6 @@ class MeasACORM(_ThreadBaseClass):
     # ---------------- Data Processing methods ----------------
 
     def _process_rf_step(self, data, transition_length=10):
-        def _fitting_model(tim, *params):
-            idx1, idx2, idx3, amp1, amp2 = params
-            y = _np.zeros(tim.size)
-            y[int(idx1):int(idx2)] = amp1
-            y[int(idx2):int(idx3)] = amp2
-            return y
-
         t0_ = _time.time()
         self._log('Processing RF Step...', end='')
         fsamp = data['sampling_frequency']
@@ -1529,41 +1524,34 @@ class MeasACORM(_ThreadBaseClass):
 
         tim = _np.arange(orbx.shape[0]) * dtim
         anly['time'] = tim
-
-        # fit average horizontal orbit to find transition indices
-        excit_time = data['excit_time']
-        dly = data['step_delay']
         kick = data['step_kick']
-        idx1 = (tim > dly).nonzero()[0][0]
-        idx2 = (tim > (excit_time/2 + dly)).nonzero()[0][0]
-        idx3 = (tim > (excit_time + dly)).nonzero()[0][0]
+
         etax_avg = 0.033e6  # average dispersion function, in [um]
         rf_freq = data['rf_frequency']
         mom_compac = data.get('mom_compac', _asparams.SI_MOM_COMPACT)
+        amp = kick * etax_avg / mom_compac / rf_freq
+        avg_orbx_smoothed = _savgol_filter(
+            orbx.mean(axis=1), window_length=5, polyorder=2
+        )  # TODO: use only dispersive BPMs for averaging
+        peaks_neg = _find_peaks(avg_orbx_smoothed, amp/2)[0]
+        peaks_pos = _find_peaks(-avg_orbx_smoothed, amp/2)[0]
 
-        amp1 = -kick * etax_avg / mom_compac / rf_freq
-        amp2 = kick * etax_avg / mom_compac / rf_freq
-        par0 = [idx1, idx2, idx3, amp1, amp2]
-        par, _ = _scyopt.curve_fit(
-            _fitting_model, tim, orbx.mean(axis=1), p0=par0)
-        idx1, idx2, idx3, amp1, amp2 = par
-        idx1 = int(idx1)
-        idx2 = int(idx2)
-        idx3 = int(idx3)
-        par = idx1, idx2, idx3, amp1, amp2
-        anly['params_fit_init'] = par0
-        anly['params_fit'] = par
+        idx1 = peaks_neg[0]
+        idx2 = peaks_neg[-1]
+        idx3 = peaks_pos[0]
+        idx4 = peaks_pos[-1]
+
         anly['idx1'] = idx1
         anly['idx2'] = idx2
         anly['idx3'] = idx3
-        anly['amp1'] = amp1
-        anly['amp2'] = amp2
+        anly['idx4'] = idx4
+        anly['amp'] = amp
         anly['transition_length'] = transition_length
 
         sec1_ini = idx1 + transition_length
         sec1_fin = idx2 - transition_length
-        sec2_ini = idx2 + transition_length
-        sec2_fin = idx3 - transition_length
+        sec2_ini = idx3 + transition_length
+        sec2_fin = idx4 - transition_length
         anly['sec1_ini'] = sec1_ini
         anly['sec1_fin'] = sec1_fin
         anly['sec2_ini'] = sec2_ini
@@ -1577,8 +1565,8 @@ class MeasACORM(_ThreadBaseClass):
         anly['orby_neg'] = orby_neg
         anly['orbx_pos'] = orbx_pos
         anly['orby_pos'] = orby_pos
-        anly['mat_colx'] = (orbx_pos - orbx_neg) / kick / 2
-        anly['mat_coly'] = (orby_pos - orby_neg) / kick / 2
+        anly['mat_colsx'] = (orbx_pos - orbx_neg) / kick / 2
+        anly['mat_colsy'] = (orby_pos - orby_neg) / kick / 2
 
         self._log(f'Done! ET: {_time.time()-t0_:2f}s')
         return anly

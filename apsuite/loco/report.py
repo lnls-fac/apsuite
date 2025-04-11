@@ -1,6 +1,7 @@
 """Create LOCO Report."""
 
 from apsuite.loco.analysis import LOCOAnalysis
+from apsuite.loco.utils import LOCOUtils
 from fpdf import FPDF
 import datetime
 
@@ -286,6 +287,8 @@ class LOCOReport(FPDF):
         loco_data, orm_fit, *_ = loco_anly.get_loco_results()
         loco_data['setup'] = loco_anly.loco_setup
         config = loco_data['config']
+        config.matrix = LOCOUtils.apply_all_gain(
+            config.matrix, config.gain_bpm, config.roll_bpm, config.gain_corr)
         dnomi = config.matrix - config.goalmat
         dloco = orm_fit - config.goalmat
 
@@ -309,8 +312,8 @@ class LOCOReport(FPDF):
         self._df_emits = loco_anly.emittance_and_coupling()
 
         loco_anly.calc_twiss()
-        self._df_tunes, self._df_betabeat = loco_anly.beta_and_tune(twiss=True)
-        self._df_disp = loco_anly.dispersion(twiss=True)
+        self._df_tunes, self._df_betabeat = loco_anly.beta_and_tune()
+        self._df_disp = loco_anly.dispersion()
 
         # loco_anly.calc_edteng()
         # self._df_tunes, self._df_betabeat = \

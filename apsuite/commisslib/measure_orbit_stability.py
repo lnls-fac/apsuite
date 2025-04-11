@@ -4,6 +4,9 @@ import scipy.fft as _sp_fft
 import matplotlib.pyplot as _plt
 import datetime as _datetime
 
+from pymodels import si as _si
+import pyaccel as _pa
+
 import siriuspy.clientconfigdb as _sconf
 
 from .. import asparams as _asparams
@@ -366,6 +369,80 @@ class OrbitAnalysis(_AcqBPMsSignals):
         orby -= orby.mean(axis=0)[None, :]
         self.orbx, self.orby = orbx, orby
 
+    def calculate_rms_orb(self, freq_min=1e-1, freq_max=1e3):
+        """Calculates the RMS orbit for each BPM within a frequency range.
+
+        Args:
+            freq_min (float, optional): Lower frequency limit. Defaults to
+                1e-1 Hz. If freq_min is None while freq_max is not None,
+                freq_min is set to the the lowest frequency in the spectrum.
+            freq_max (float, optional): Upper frequency limit. Defaults to 1e3
+                Hz. If freq_max is None while freq_min is not None, freq_max
+                is set to the highest freqnency in the spectrum. If both
+                freq_min and freq_max are `None`, the whole spectrum is
+                considered.
+
+        Returns:
+            orbx_rms (nbpms-array): horizontal RMS orbit for each BPM
+            orby_rms (nbpms-array): vertical RMS orbit for each BPM
+
+        """
+        if freq_min is None and freq_max is None:
+            orbx_rms = self.analysis["orbx_filtered"].std(axis=0)
+            orby_rms = self.analysis["orby_filtered"].std(axis=0)
+            return orbx_rms, orby_rms
+
+        orbx_freq = self.analysis["orbx_freq"]
+        orby_freq = self.analysis["orby_freq"]
+
+        orbx_ipsd = self.analysis["orbx_ipsd"]
+        orby_ipsd = self.analysis["orby_ipsd"]
+
+        freq_min = freq_min or orbx_freq.min()
+        freq_max = freq_max or orbx_freq.max()
+        idcs = (orbx_freq >= freq_min) & (orbx_freq <= freq_max)
+        orbx_rms = _np.sqrt(
+            orbx_ipsd[idcs, :][-1]**2 - orbx_ipsd[idcs, :][0]**2
+        )
+
+        freq_min = freq_min or orby_freq.min()
+        freq_max = freq_max or orby_freq.max()
+        idcs = (orby_freq >= freq_min) & (orby_freq <= freq_max)
+        orby_rms = _np.sqrt(
+            orby_ipsd[idcs, :][-1]**2 - orby_ipsd[idcs, :][0]**2
+        )
+
+        return orbx_rms, orby_rms
+
+    def get_beamsizes(self, model=None):
+        """Calculates transverse beam sizes at BPMs for a given model.
+
+        Uses Ohmi Envelope formalism.
+
+        Args:
+            model (accelerator.accelerator, optional): Input model. Defaults to
+                None, in which case SIRIUS model with fitted vertical
+                dispersion and coupling is used.
+
+        Returns:
+            horizontal_beamsize (Nbpms-array): horizontal beam sizes at BPMs,
+                in micrometers.
+            vertical_beamsize (Nbpms-array): vertical beam sizes at BPMs, in
+                micrometers.
+        """
+        if model is None:
+            model = _si.create_accelerator()
+            model = _si.fitted_models.vertical_dispersion_and_coupling(model)
+
+        bpms_idcs = _pa.lattice.flatten(
+            _si.get_family_data(model)["BPM"]["index"]
+        )
+        eqparam = _pa.optics.EqParamsFromBeamEnvelope(model)
+
+        hor_sizes = _np.sqrt(eqparam.envelopes[bpms_idcs, 0, 0]) * 1e6
+        ver_sizes = _np.sqrt(eqparam.envelopes[bpms_idcs, 2, 2]) * 1e6
+        return hor_sizes, ver_sizes
+
     # plotting methods
     def plot_orbit_spectrum(
             self, bpmidx=0, orbx=None, orby=None,
@@ -493,6 +570,74 @@ class OrbitAnalysis(_AcqBPMsSignals):
             fig.savefig(figname, dpi=300, format='pdf')
         return fig, axs
 
+    def plot_rms_orb_by_bpm(
+            self, orbx_rms=None, orby_rms=None, title='', label='', figname='',
+            fig=None, axs='None', color='C0', freq_min=1e-1, freq_max=1e3,
+            beamsize_units=True, hor_sizes=None, ver_sizes=None):
+        """Plot integrated PSD within a specified range (RMS Orbit) at BPMs.
+
+        Args:
+            orbx_rms (n-array, optional): orbx integrated PSD. Defaults to
+                None, in which case it is calculated.
+            orby_rms (n-array, optional): orby integrated PSD. Defaults to
+                None, in which case it is calculated.
+            title (str, optional): Figure title. Defaults to ''.
+            label (str, optional): Curve label. Defaults to ''.
+            figname (str, optional): Figure name. Defaults to ''.
+            fig (matplotlib.pyplot.figure, optional): fig object. Defaults to
+                None, in which case it is created.
+            axs (matplotlib.axes, optional): axes object. Defaults to 'None',
+                in which case it is created.
+            color (str, optional): curve color. Defaults to 'C0'.
+            freq_min (float, optional): Lower limit of the frequency range over
+                which the PSD is integrated. Defaults to 1e-1 Hz.
+            freq_max (float, optional): Upper limit of the frequency range
+                over which the PSD is integrated. Defaults to 1e3 Hz.
+            beamsize_units (bool, optional): Whether to plot in micrometers
+                (False) or as a percentage of the corresponding beam size
+                (True). Defaults to True.
+            hor_sizes (160-array, optional): horizontal beam sizes at BPMs.
+                Defaults to None and it is calculated.
+            ver_sizes (160-array, optional): vertical beam sizes at BPMs.
+                Defaults to None and it is caculated.
+
+        Returns:
+            fig (matplotlib.pyplot.figure): figure object
+            axs (matplotlib.axes): axes object
+        """
+        if orbx_rms is None or orby_rms is None:
+            orbx_rms, orby_rms = self.calculate_rms_orb(freq_min, freq_max)
+
+        if beamsize_units and (hor_sizes is None and ver_sizes is None):
+            hor_sizes, ver_sizes = self.get_beamsizes()
+            orbx_rms /= hor_sizes
+            orbx_rms *= 100
+            orby_rms /= ver_sizes
+            orby_rms *= 100
+
+        if fig is None or axs is None:
+            fig, axs = _plt.subplots(2, 1, figsize=(18, 6))
+
+        axs[0].plot(orbx_rms, "o-", mfc='none', color=color, label=label)
+        axs[1].plot(orby_rms, "o-", mfc='none', color=color, label=label)
+
+        if beamsize_units:
+            axs[0].set_ylabel("RMS hor. orbit \n [\% of hor. beam size]")
+            axs[1].set_ylabel("RMS vert. orbit \n [\% of vert. beam size]")
+        else:
+            axs[0].set_ylabel(r"RMS hor. orbit [$\mu$m]")
+            axs[1].set_ylabel(r"RMS vert. orbit [$\mu$m]")
+
+        axs[0].legend(loc='best')
+        axs[1].set_xlabel("BPM index")
+
+        if title:
+            axs[0].set_title(title)
+
+        if figname:
+            fig.savefig(figname, dpi=300, format='pdf')
+        return fig, axs
+
     def plot_energy_spectrum(
             self, denergy=None,
             title='', label='', figname='', fig=None, axs=None, color='C0',
@@ -524,7 +669,8 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
     def plot_energy_integrated_psd(
             self, denergy_spec=None, freq=None, inverse=True,
-            title='', label='', figname='', fig=None, axs=None, color='C0'):
+            title='', label='', figname='', fig=None, axs=None, color='C0',
+            plot_rfjitter=True):
         """."""
         if denergy_spec is None:
             intpsd = self.analysis['energy_ipsd']
@@ -537,14 +683,15 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
         if fig is None or axs is None:
             fig, axs = _plt.subplots(1, 1, figsize=(12, 6))
-        freq = freq/1e3
+
         axs.plot(freq, intpsd*100, label=label, color=color)
-        self._plot_ripple_rfjitter_harmonics(freq, axs)
+        if plot_rfjitter:
+            self._plot_ripple_rfjitter_harmonics(freq, axs)
         axs.legend(
             loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
         if title:
             axs.set_title(title)
-        axs.set_xlabel('Frequency [kHz]')
+        axs.set_xlabel('Frequency [Hz]')
         axs.set_ylabel(r'Sqrt of Int. Spec. [$\%$]')
         fig.tight_layout()
         if figname:
