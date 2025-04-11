@@ -49,7 +49,7 @@ class _FitInjTrajBase(_BaseClass):
     def calc_traj(self, x0, xl0=0, y0=0, yl0=0, delta=0, size=160):
         """."""
         rin = np.array([x0, xl0, y0, yl0, delta, 0])
-        rout, *_ = pyaccel.tracking.linepass(
+        rout, *_ = pyaccel.tracking.line_pass(
             self.model, rin, self.bpm_idx[:size])
         return rout[0, :], rout[2, :]
 
@@ -161,7 +161,7 @@ class _FitInjTrajBase(_BaseClass):
             cutoff=self.params.simul_cutoff)
         bun += np.array([x0, xl0, y0, yl0, delta, 0])[:, None]
 
-        rout, *_ = pyaccel.tracking.linepass(
+        rout, *_ = pyaccel.tracking.line_pass(
             self.simul_model, bun, indices=self.bpm_idx)
 
         trajx, trajy = rout[0], rout[2]

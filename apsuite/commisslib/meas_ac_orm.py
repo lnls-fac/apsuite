@@ -7,7 +7,8 @@ import operator as _opr
 
 import numpy as _np
 import matplotlib.pyplot as _mplt
-import scipy.optimize as _scyopt
+from scipy.signal import find_peaks as _find_peaks, \
+    savgol_filter as _savgol_filter
 
 from mathphys.functions import save as _save, load as _load
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
@@ -180,6 +181,10 @@ class MeasACORM(_ThreadBaseClass):
             freqs (numpy.ndarray): array with frequencies to fit.
             num_cycles (numpy.ndarray, optional): number of cycles of each
                 frequency. If not provided, all data range will be considered.
+            idx_ini (int|list|tuple|numpy.ndarray, optional): starting index
+                for fitting. If it is an iterable, must have the same size as
+                freqs. Defaults to None, which means the first index will be
+                the starting point.
 
         Returns:
             numpy.ndarray: fitting matrix (len(tim), 2*len(freqs))
@@ -229,14 +234,22 @@ class MeasACORM(_ThreadBaseClass):
                 columns of data.
             freqs (numpy.ndarray, K): K frequencies to fit Fourier components.
             dtim (numpy.ndarray, N): time vector for data columns.
-            num_cycles (num.ndarray, K): number of cycles of each frequency.
-                If not provided, all data range will be considered.
+            num_cycles (num.ndarray, K, optional): number of cycles of each
+                frequency. If not provided, all data range will be considered.
+                Not used if pinv is not None.
+            idx_ini (int|list|tuple|numpy.ndarray, optional): starting index
+                for fitting. If it is an iterable, must have the same size as
+                freqs. Defaults to None, which means the first index will be
+                the starting point. Not used if pinv is not None.
+            pinv (numpy.ndarray, Mx2K, optional): if provided must be the
+                pseudo inverve of the fitting matrix. Defaults to None, which
+                means the fitting matrix and its pseudo-inverse will be
+                calculated.
 
         Returns:
-            numpy.ndarray, KxM: Fourier amplitudes.
-            numpy.ndarray, KxM: Fourier phases (phase==0 means pure sine).
-            numpy.ndarray, KxM: Fourier cosine coefficients.
-            numpy.ndarray, KxM: Fourier sine coefficients.
+            cos (numpy.ndarray, KxM): Fourier cosine coefficients.
+            sin (numpy.ndarray, KxM): Fourier sine coefficients.
+            pinv (numpy.ndarray, Mx2K): pseudo-inverse of fitting matrix.
 
         """
         if pinv is None:
@@ -327,7 +340,8 @@ class MeasACORM(_ThreadBaseClass):
         return corr
 
     def save_loco_input_data(
-            self, respmat_name: str, overwrite=False, save2servconf=False):
+            self, respmat_name: str, overwrite=False, save2servconf=False,
+            extra_kwargs=None, matrix=None):
         """Save in `.pickle` format a dictionary with all LOCO input data.
 
         Args:
@@ -337,6 +351,8 @@ class MeasACORM(_ThreadBaseClass):
                 Defaults to False.
             save2servconf (bool, optional): whether to save response matrix to
                 configDB server. Defaults to False.
+            extra_kwargs (dict, optional): extra keyword arguments to save to
+                loco input file. Defaults to None:
 
         """
         bpms_anly = self.analysis['bpms_noise']
@@ -349,12 +365,14 @@ class MeasACORM(_ThreadBaseClass):
         data['tuney'] = bpms_anly['tuney']
         data['stored_current'] = bpms_anly['stored_current']
         data['bpm_variation'] = bpms_anly['bpm_variation']
-        mat = self.build_respmat()
-        data['respmat'] = mat
+        if matrix is None:
+            matrix = self.build_respmat()
+        data['respmat'] = matrix
+        data.update(extra_kwargs or dict())
         if save2servconf:
             data['orbmat_name'] = respmat_name
             mat = self.save_respmat_to_configdb(respmat_name, mat=mat)
-        _save(data, f'loco_input_{respmat_name:s}', overwrite=overwrite)
+        _save(data, f'{respmat_name:s}', overwrite=overwrite)
 
     def save_analysis_dictionary(self, filename, overwrite=False):
         """Save internal analysis dict to file.
@@ -438,15 +456,18 @@ class MeasACORM(_ThreadBaseClass):
         Args:
             mag_idx_ini ([type], optional): initial index of orbit waveform
                 where magnets excitation start. Defaults to None.
-            mag_min_freq ([type], optional): Frequencies below this value will
-                be filtered out before fitting of magnets excitation.`None`
-                means no high pass filter will be applied. Defaults to `None`.
-            mag_max_freq ([type], optional): Frequencies above this value will
-                be filtered out before fitting of magnets excitation. `None`
-                means no low pass filter will be applied. Defaults to `None`.
-            rf_transition_length (int, optional): Number of indices to ignore
+            rf_step_trans_len (int, optional): Number of indices to ignore
                 right before or after RF frequency changes in RF line
-                measurements. Defaults to 10.
+                measurements. Defaults to 10. Only used if step mode was used
+                as RFMode in measurement.
+            rf_phase_central_freq (float, optional): central frequency around
+                which data will be filtered in RF line analysis. Defaults to
+                None, which means the peak frequency in the range [1700, 2300]
+                Hz will be used. Only used if phase mode was used as RFMode in
+                measurement.
+            rf_phase_window (float, optional): frequency width of the filter
+                in RF line analysis. Defaults to 10Hz. Only used if phase mode
+                was used as RFMode in measurement.
 
         """
         self.analysis['magnets'] = self._process_magnets(
@@ -1050,7 +1071,7 @@ class MeasACORM(_ThreadBaseClass):
             'mV:AL:REF-SP', 'mV:AMPREF:MIN:S', 'PL:REF:S', 'PHSREF:MIN:S',
             'COND:DC:S', 'COND:DC', 'PULSE:S', 'PULSE',
             ]
-        self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SI, props2init=props)
+        self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SIA, props2init=props)
         # Create Tune object:
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self._log(f'ET: = {_time.time()-t00:.2f}s')
@@ -1113,7 +1134,7 @@ class MeasACORM(_ThreadBaseClass):
 
         self.data['magnets'] = self._do_measure_magnets()
         self._set_timing_state(tim_state)
-        self._log(f'All measurements finished!!')
+        self._log('All measurements finished!!')
 
     def _do_measure_bpms_noise(self):
         self._meas_finished_ok = True
@@ -1130,9 +1151,11 @@ class MeasACORM(_ThreadBaseClass):
         nr_points = int(_np.ceil(nr_points))
         ret = self._config_bpms(nr_points, rate='FAcq')
         if ret < 0:
-            self._log(f'BPM {-ret-1:d} did not finish last acquisition.')
+            idx = -int(ret)-1
+            self._log(f'BPM {idx:d} did not finish last acquisition.')
         elif ret > 0:
-            self._log(f'BPM {ret-1:d} is not ready for acquisition.')
+            idx = int(ret)-1
+            self._log(f'BPM {idx:d} is not ready for acquisition.')
         if ret:
             self._meas_finished_ok = False
         self._config_timing()
@@ -1140,23 +1163,30 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         self._log('    Sending Trigger signal...', end='')
-        self.bpms.mturn_reset_flags_and_update_initial_timestamps()
+        self.bpms.reset_mturn_initial_state()
         self.devices['evt_study'].cmd_external_trigger()
         self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         self._log('    Waiting BPMs to update...', end='')
-        ret = self.bpms.mturn_wait_update(timeout=par.timeout_bpms)
-        if ret:
-            self._log(
-                'Problem: timed out waiting BPMs update. '
-                f'Error code: {ret:d}')
+        ret = self.bpms.wait_update_mturn(timeout=par.timeout_bpms)
+        if ret != 0:
+            if ret > 0:
+                tag = self.bpms.bpm_names[int(ret)-1]
+                pos = self.bpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                self._log(
+                    'Problem: This BPM did not update: ' + tag
+                    + ', signal ' + pos)
+            elif ret == -1:
+                self._log('Problem: Initial timestamps were not defined.')
+            elif ret == -2:
+                self._log('Problem: signals size changed.')
             self._meas_finished_ok = False
         self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
-        _time.sleep(0.1)
+        _time.sleep(0.5)
         data = self.get_general_data()
         data.update(self.get_bpms_data())
         data['ch_freqs'] = par.corrs_ch_freqs
@@ -1199,7 +1229,7 @@ class MeasACORM(_ThreadBaseClass):
 
         t00 = _time.time()
         self._log('    Sending Trigger signal...', end='')
-        self.bpms.mturn_reset_flags_and_update_initial_timestamps()
+        self.bpms.reset_mturn_initial_state()
         self.devices['evt_study'].cmd_external_trigger()
         self._log(f'    Done! ET: {_time.time()-t00:.2f}s')
 
@@ -1214,11 +1244,18 @@ class MeasACORM(_ThreadBaseClass):
         # Wait BPMs PV to update with new data
         t00 = _time.time()
         self._log('    Waiting BPMs to update...', end='')
-        ret = self.bpms.mturn_wait_update(timeout=par.timeout_bpms)
-        if ret:
-            self._log(
-                'Problem: timed out waiting BPMs update. '
-                f'Error code: {ret:d}')
+        ret = self.bpms.wait_update_mturn(timeout=par.timeout_bpms)
+        if ret != 0:
+            if ret > 0:
+                tag = self.bpms.bpm_names[int(ret)-1]
+                pos = self.bpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                self._log(
+                    'Problem: This BPM did not update: ' + tag
+                    + ', signal ' + pos)
+            elif ret == -1:
+                self._log('Problem: Initial timestamps were not defined.')
+            elif ret == -2:
+                self._log('Problem: signals size changed.')
             self._meas_finished_ok = False
         self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
@@ -1238,7 +1275,7 @@ class MeasACORM(_ThreadBaseClass):
             self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
         # get data
-        _time.sleep(0.1)
+        _time.sleep(0.5)
         data.update(self.get_general_data())
         data.update(self.get_bpms_data())
         data['mode'] = par.rf_mode
@@ -1392,21 +1429,28 @@ class MeasACORM(_ThreadBaseClass):
             # send event through timing system to start acquisitions
             t00 = _time.time()
             self._log('    Sending Timing signal...', end='')
-            self.bpms.mturn_reset_flags_and_update_initial_timestamps()
+            self.bpms.reset_mturn_initial_state()
             self.devices['evt_study'].cmd_external_trigger()
             self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # Wait BPMs PV to update with new data
             t00 = _time.time()
             self._log('    Waiting BPMs to update...', end='')
-            ret = self.bpms.mturn_wait_update(timeout=self.params.timeout_bpms)
-            if ret:
-                self._log(
-                    'Problem: timed out waiting BPMs update. '
-                    f'Error code: {ret:d}')
+            ret = self.bpms.wait_update_mturn(timeout=self.params.timeout_bpms)
+            if ret != 0:
+                if ret > 0:
+                    tag = self.bpms.bpm_names[int(ret)-1]
+                    pos = self.bpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                    self._log(
+                        'Problem: This BPM did not update: ' + tag
+                        + ', signal ' + pos)
+                elif ret == -1:
+                    self._log('Problem: Initial timestamps were not defined.')
+                elif ret == -2:
+                    self._log('Problem: signals size changed.')
                 self._meas_finished_ok = False
                 break
-            _time.sleep(0.1)
+            _time.sleep(0.5)
             self._log(f'Done! ET: {_time.time()-t00:.2f}s')
 
             # get data for each sector separately:
@@ -1453,13 +1497,6 @@ class MeasACORM(_ThreadBaseClass):
     # ---------------- Data Processing methods ----------------
 
     def _process_rf_step(self, data, transition_length=10):
-        def _fitting_model(tim, *params):
-            idx1, idx2, idx3, amp1, amp2 = params
-            y = _np.zeros(tim.size)
-            y[int(idx1):int(idx2)] = amp1
-            y[int(idx2):int(idx3)] = amp2
-            return y
-
         t0_ = _time.time()
         self._log('Processing RF Step...', end='')
         fsamp = data['sampling_frequency']
@@ -1487,41 +1524,34 @@ class MeasACORM(_ThreadBaseClass):
 
         tim = _np.arange(orbx.shape[0]) * dtim
         anly['time'] = tim
-
-        # fit average horizontal orbit to find transition indices
-        excit_time = data['excit_time']
-        dly = data['step_delay']
         kick = data['step_kick']
-        idx1 = (tim > dly).nonzero()[0][0]
-        idx2 = (tim > (excit_time/2 + dly)).nonzero()[0][0]
-        idx3 = (tim > (excit_time + dly)).nonzero()[0][0]
+
         etax_avg = 0.033e6  # average dispersion function, in [um]
         rf_freq = data['rf_frequency']
         mom_compac = data.get('mom_compac', _asparams.SI_MOM_COMPACT)
+        amp = kick * etax_avg / mom_compac / rf_freq
+        avg_orbx_smoothed = _savgol_filter(
+            orbx.mean(axis=1), window_length=5, polyorder=2
+        )  # TODO: use only dispersive BPMs for averaging
+        peaks_neg = _find_peaks(avg_orbx_smoothed, amp/2)[0]
+        peaks_pos = _find_peaks(-avg_orbx_smoothed, amp/2)[0]
 
-        amp1 = -kick * etax_avg / mom_compac / rf_freq
-        amp2 = kick * etax_avg / mom_compac / rf_freq
-        par0 = [idx1, idx2, idx3, amp1, amp2]
-        par, _ = _scyopt.curve_fit(
-            _fitting_model, tim, orbx.mean(axis=1), p0=par0)
-        idx1, idx2, idx3, amp1, amp2 = par
-        idx1 = int(idx1)
-        idx2 = int(idx2)
-        idx3 = int(idx3)
-        par = idx1, idx2, idx3, amp1, amp2
-        anly['params_fit_init'] = par0
-        anly['params_fit'] = par
+        idx1 = peaks_neg[0]
+        idx2 = peaks_neg[-1]
+        idx3 = peaks_pos[0]
+        idx4 = peaks_pos[-1]
+
         anly['idx1'] = idx1
         anly['idx2'] = idx2
         anly['idx3'] = idx3
-        anly['amp1'] = amp1
-        anly['amp2'] = amp2
+        anly['idx4'] = idx4
+        anly['amp'] = amp
         anly['transition_length'] = transition_length
 
         sec1_ini = idx1 + transition_length
         sec1_fin = idx2 - transition_length
-        sec2_ini = idx2 + transition_length
-        sec2_fin = idx3 - transition_length
+        sec2_ini = idx3 + transition_length
+        sec2_fin = idx4 - transition_length
         anly['sec1_ini'] = sec1_ini
         anly['sec1_fin'] = sec1_fin
         anly['sec2_ini'] = sec2_ini
@@ -1535,8 +1565,8 @@ class MeasACORM(_ThreadBaseClass):
         anly['orby_neg'] = orby_neg
         anly['orbx_pos'] = orbx_pos
         anly['orby_pos'] = orby_pos
-        anly['mat_colx'] = (orbx_pos - orbx_neg) / kick / 2
-        anly['mat_coly'] = (orby_pos - orby_neg) / kick / 2
+        anly['mat_colsx'] = (orbx_pos - orbx_neg) / kick / 2
+        anly['mat_colsy'] = (orby_pos - orby_neg) / kick / 2
 
         self._log(f'Done! ET: {_time.time()-t0_:2f}s')
         return anly
@@ -1872,7 +1902,7 @@ class MeasACORM(_ThreadBaseClass):
     # ----------------- BPMs related methods -----------------------
 
     def _config_bpms(self, nr_points, rate='FAcq'):
-        return self.bpms.mturn_config_acquisition(
+        return self.bpms.config_mturn_acquisition(
             acq_rate=rate, nr_points_before=0, nr_points_after=nr_points,
             repeat=False, external=True)
 

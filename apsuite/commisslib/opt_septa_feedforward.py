@@ -66,7 +66,8 @@ class OptSeptaFFParams(_RCDSParams):
         return stg
 
     def update_limits_and_directions(
-            self, ps_low=-1, ps_high=1, dly_low=-50, dly_high=50):
+            self, ps_low=-1, ps_high=1, dly_low=-50, dly_high=50,
+            around_init_pos=False):
         """."""
         init_pos = self.initial_position
         self.initial_search_directions = _np.eye(init_pos.size)
@@ -75,6 +76,9 @@ class OptSeptaFFParams(_RCDSParams):
         if 'dly' in self.optim_params.lower():
             self.limit_lower[-1] = dly_low
             self.limit_upper[-1] = dly_high
+        if around_init_pos:
+            self.limit_lower += init_pos
+            self.limit_upper += init_pos
 
 
 class OptSeptaFF(_RCDS):
@@ -104,14 +108,14 @@ class OptSeptaFF(_RCDS):
             return 0.0
 
         res = self.get_residue_vector()
-        objective = _np.sum(res*res)/res.size  # res.std()**2
-
+        objective = self.get_residue_from_vector(res)
         self.data['obj_funcs'].append(objective)
         return objective
 
-    def get_residue_vector(self):
+    def get_residue_vector(self, orb=None):
         """."""
-        orb = self.measure_multiturn_orbit()
+        if orb is None:
+            orb = self.measure_multiturn_orbit()
 
         slc_orb = slice(
             self.params.orbit_index_start, self.params.orbit_index_stop)
@@ -122,12 +126,16 @@ class OptSeptaFF(_RCDS):
         if 'x' in self.params.orbit_planes.lower():
             ox_ = orb[slc_orb, :160][:, slc_bpm].copy()
             ox_ -= orb[:20, :160][:, slc_bpm].mean(axis=0)[None, :]
-            res.append(ox_)
+            res.append(ox_.T.ravel())
         if 'y' in self.params.orbit_planes.lower():
             oy_ = orb[slc_orb, 160:][:, slc_bpm].copy()
             oy_ -= orb[:20, 160:][:, slc_bpm].mean(axis=0)[None, :]
-            res.append(oy_)
+            res.append(oy_.T.ravel())
         return _np.hstack(res)
+
+    def get_residue_from_vector(self, res):
+        """."""
+        return _np.sum(res*res)/res.size
 
     def measure_objective_function_noise(self, nr_evals, pos=None):
         """."""
@@ -158,47 +166,47 @@ class OptSeptaFF(_RCDS):
         if 'm2cv' in self.params.optim_params:
             m2cv = self.devices['ps_m2cv']
             pos.append(m2cv.wfm[stt:end])
+        pos = _np.array(pos).T.ravel()
         if 'dly' in self.params.optim_params:
-            pos.append(self.devices['trigger'].delay)
-        return _np.hstack(pos)
+            pos = _np.r_[pos, self.devices['trigger'].delay]
+        return pos
 
     def apply_position_to_machine(self, pos):
         """."""
         stt = self.params.wfm_index_start
         end = self.params.wfm_index_stop
 
+        if 'dly' in self.params.optim_params:
+            self.devices['trigger'].delay = pos[-1]
+            pos = pos[:-1]
+
         npts_wfm = end - stt
-        pstt, pend = 0, npts_wfm
+        nr_corr = pos.size // npts_wfm
+        pstt = 0
         if 'm1ch' in self.params.optim_params:
             m1ch = self.devices['ps_m1ch']
             wfm = m1ch.wfm
-            wfm[stt:end] = pos[pstt:pend]
+            wfm[stt:end] = pos[pstt::nr_corr]
             m1ch.wfm = wfm
-            pstt += npts_wfm
-            pend += npts_wfm
+            pstt += 1
         if 'm2ch' in self.params.optim_params:
             m2ch = self.devices['ps_m2ch']
             wfm = m2ch.wfm
-            wfm[stt:end] = pos[pstt:pend]
+            wfm[stt:end] = pos[pstt::nr_corr]
             m2ch.wfm = wfm
-            pstt += npts_wfm
-            pend += npts_wfm
+            pstt += 1
         if 'm1cv' in self.params.optim_params:
             m1cv = self.devices['ps_m1cv']
             wfm = m1cv.wfm
-            wfm[stt:end] = pos[pstt:pend]
+            wfm[stt:end] = pos[pstt::nr_corr]
             m1cv.wfm = wfm
-            pstt += npts_wfm
-            pend += npts_wfm
+            pstt += 1
         if 'm2cv' in self.params.optim_params:
             m2cv = self.devices['ps_m2cv']
             wfm = m2cv.wfm
-            wfm[stt:end] = pos[pstt:pend]
+            wfm[stt:end] = pos[pstt::nr_corr]
             m2cv.wfm = wfm
-            pstt += npts_wfm
-            pend += npts_wfm
-        if 'dly' in self.params.optim_params:
-            self.devices['trigger'].delay = pos[-1]
+            pstt += 1
 
     def measure_multiturn_orbit(self, do_reset=True):
         """."""
@@ -208,7 +216,7 @@ class OptSeptaFF(_RCDS):
             sofb.cmd_reset()
             sofb.nr_points = nr_avg
             _time.sleep(0.2)
-            sofb.wait_buffer(timeout=nr_avg*0.5*2)
+            sofb.wait_buffer(timeout=nr_avg*0.5*8)
         orbx = sofb.mt_trajx.reshape(-1, 160)
         orby = sofb.mt_trajy.reshape(-1, 160)
 
