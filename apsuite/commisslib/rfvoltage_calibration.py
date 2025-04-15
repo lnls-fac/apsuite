@@ -23,7 +23,7 @@ class RFCalibrationParams(_ParamsBaseClass):
         self.voltage_incrate = self.VoltIncRates.vel_0p5
         self.cbmode2drive = 432
         # TODO: UPDATE WITH NEW CONVERSION
-        self.conv_physics2hardware = [103/1.15, 125/1.15]  # [mV/MV]
+        self.conv_physics2hardware = [105/1.1767, 125/1.1161]  # [mV/MV]
         self.restore_initial_state = True
 
     def __str__(self):
