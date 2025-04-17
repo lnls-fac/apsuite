@@ -30,6 +30,17 @@ BOINJ_KNOBS = {
     "BO-Fam:PS-B-2:WfmOffset-SP"     : [-0.05, 0.05],  # [A]
 }
 
+BOINJ_OBSERVABLES = [
+    "LINAC:Temperatura-Mon",  # LINAC env temp
+    "LA-CN:H1MPS-1:A1Temp1",  # Accelerating strurctures
+    "LA-CN:H1MPS-1:K1Temp1",  # (K1 body)
+    "LA-CN:H1MPS-1:K1Temp2",  # (K1 Waveguide)
+    "LA-CN:H1MPS-1:K2Temp1",  # (K2 body)
+    "LA-CN:H1MPS-1:K2Temp2",  # (K2 Waveguide)
+    "TB-04:PU-InjSept-BG:Temp-Mon",   # septa
+    "TB-04:PU-InjSept-ED:Temp-Mon",   # septa
+]
+
 SIINJEFF_PVNAME = "SI-Glob:AP-CurrInfo:InjEff-Mon"
 SIINJ_KNOBS = {
     #        knob                   [lim_low, lim_high]  unit
@@ -46,6 +57,10 @@ SIINJ_KNOBS = {
     "TS-04:PS-CV-2:Current-SP"        : [-0.25, 0.25],  # [A]
     "RA-RaBO01:RF-LLRF:RmpPhsTop-SP"  : [-5, 5],        # [deg]
 }
+
+SIINJ_OBSERVABLES = [
+    # to be implemented
+]
 
 
 class InjNudgesBaseParams(_ParamsBaseClass):
@@ -119,6 +134,7 @@ class BOInjNudgesParams(InjNudgesBaseParams):
         super().__init__()
         self.injeff_pvname = BOINJEFF_PVNAME
         self.knobs_lims = BOINJ_KNOBS
+        self.observables_pvs_names = BOINJ_OBSERVABLES
 
 
 class SIInjNudgesParams(InjNudgesBaseParams):
@@ -128,6 +144,7 @@ class SIInjNudgesParams(InjNudgesBaseParams):
         super().__init__()
         self.injeff_pvname = SIINJEFF_PVNAME
         self.knobs_lims = SIINJ_KNOBS
+        self.observables_pvs_names = SIINJ_OBSERVABLES
 
 
 class InjNudges(_BaseClass):
@@ -156,6 +173,7 @@ class InjNudges(_BaseClass):
         pvs_names = [self.params.injeff_pvname]
         pvs_names += [self.params.si_curr_pvname]
         pvs_names += self.params.knobs_pvsnames
+        pvs_names += self.params.observables_pvs_names
 
         pvs = {}
         for pv_name in pvs_names:
