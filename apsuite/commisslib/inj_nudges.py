@@ -116,6 +116,7 @@ class InjNudgesBaseParams(_ParamsBaseClass):
         stg += stmp("filename2use", self.filename2use, "")
         stg += stmp("injeff_pvname", self.injeff_pvname, "")
         stg += "\n"
+        stg += "Knobs & limits\n"
         stg += "        knob                   [lim_low, lim_high]\n"
         for kn in self.knobs_pvsnames:
             stg += f"{kn:<35s} : {self.knobs_lims[kn]}\n"
@@ -123,7 +124,7 @@ class InjNudgesBaseParams(_ParamsBaseClass):
         stg += "\n"
         stg += "other observables\n"
         for pvname in self.observables_pvs_names:
-            stg += f"{pvname:<30s}"
+            stg += f"{pvname:<30s}\n"
         return stg
 
 
