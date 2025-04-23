@@ -1,13 +1,13 @@
 """."""
 
+from copy import deepcopy as _deepcopy
+
 import matplotlib.pyplot as _plt
 import numpy as _np
 from mathphys.imgproc import Image2D_ROI as _Image2D_ROI
 from scipy.interpolate import griddata as _griddata, interp1d as _interp1d
-from scipy.spatial import (
-    ConvexHull as _ConvexHull,
-    HalfspaceIntersection as _HalfspaceIntersection,
-)
+from scipy.spatial import ConvexHull as _ConvexHull, \
+    HalfspaceIntersection as _HalfspaceIntersection
 
 
 def plot_lines(lines, fig=None, ax=None, **kwargs):
@@ -472,9 +472,10 @@ class DistribReconstruction(ConvexPolygon):
     def __init__(self, matrices, projs, projs_bins):
         """."""
         super().__init__(matrices, projs_bins)
-        self.projs = projs
+        self._projs = projs
         self._updated_lambda_list = None
         self._convergence_info = None
+        self._initial_lambda_list = None
 
     @property
     def initial_lambda_list(self):
@@ -483,12 +484,28 @@ class DistribReconstruction(ConvexPolygon):
         If the projection bin values are non-zero, the Lagrange multiplier is
         set to one. Otherwise, the Lagrange multiplier is set to zero.
         """
+        if self._initial_lambda_list is not None:
+            return _deepcopy(self._initial_lambda_list)
         lambda_list = []
-        for proj in self.projs:
+        for proj in self._projs:
             lambda_proj = _np.ones_like(proj, dtype="float")
             lambda_proj[proj == 0] = 0
             lambda_list.append(lambda_proj)
         return lambda_list
+
+    @initial_lambda_list.setter
+    def initial_lambda_list(self, value):
+        """."""
+        if len(value) != len(self._projs):
+            raise ValueError(
+                'Length of value must match length of projections.'
+            )
+        for i, (lamb, prj) in enumerate(zip(value, self._projs)):
+            if len(lamb) != len(prj):
+                raise ValueError(
+                    f'Length of {i}th lambda must match length of {i}th proj.'
+                )
+        self._initial_lambda_list = _deepcopy(value)
 
     @property
     def updated_lambda_list(self):
@@ -502,10 +519,12 @@ class DistribReconstruction(ConvexPolygon):
     @property
     def selected_cvxs_in_distrib(self):
         """Selects convexes whose initial Lagrange multupliers is non-zero."""
+        if self._initial_lambda_list is None:
+            return self.dict_idcs_to_cvx()
         selecteds = dict()
         for idcs, convex in self.dict_idcs_to_cvx().items():
             for j, m in enumerate(idcs):
-                if not bool(self.initial_lambda_list[j][m]):
+                if not bool(self._initial_lambda_list[j][m]):
                     break
             else:
                 selecteds[idcs] = convex
@@ -523,8 +542,34 @@ class DistribReconstruction(ConvexPolygon):
     @property
     def convexes_properties(self):
         """."""
+        return self.get_convexes_properties()
+
+    @property
+    def projs_from_reconstruction(self):
+        """."""
+        if self._updated_lambda_list is None:
+            sent = "Distribution not reconstructed. "
+            sent += "Please call 'recontruct_distribution' first."
+            raise ValueError(sent)
+        idcs_to_cvx = self.dict_idcs_to_cvx()
+        lambda_list = self.updated_lambda_list
+        projs_calc = []
+
+        for j in range(self.nr_projs):
+            p = []
+            for m in range(self.nr_bins[j]):
+                p.append(
+                    self.get_proj_value_from_lambda(
+                        j, m, lambda_list, idcs_to_cvx
+                    )
+                )
+            projs_calc.append(_np.array(p))
+        return projs_calc
+
+    def get_convexes_properties(self, idx_to_cvx=None):
+        """."""
         properties = {}
-        idx_to_cvx = self.dict_idcs_to_cvx()
+        idx_to_cvx = idx_to_cvx or self.dict_idcs_to_cvx()
 
         for idcs, convex in idx_to_cvx.items():
             points = convex.points
@@ -555,28 +600,6 @@ class DistribReconstruction(ConvexPolygon):
             for i, value in enumerate(properties.values()):
                 value["distribution_value"] = distrib[i]
             return properties
-
-    @property
-    def projs_from_reconstruction(self):
-        """."""
-        if self._updated_lambda_list is None:
-            sent = "Distribution not reconstructed. "
-            sent += "Please call 'recontruct_distribution' first."
-            raise ValueError(sent)
-        idcs_to_cvx = self.dict_idcs_to_cvx()
-        lambda_list = self.updated_lambda_list
-        projs_calc = []
-
-        for j in range(self.nr_projs):
-            p = []
-            for m in range(self.nr_bins[j]):
-                p.append(
-                    self.get_proj_value_from_lambda(
-                        j, m, lambda_list, idcs_to_cvx
-                    )
-                )
-            projs_calc.append(_np.array(p))
-        return projs_calc
 
     def reconstruct_distrib_in_regular_grid(self, gridx, gridy):
         """Interpolates distribution in a regular lattice."""
@@ -663,7 +686,7 @@ class DistribReconstruction(ConvexPolygon):
                     k[j] for k in selecteds_in_distrib.keys()
                 ])
                 for m in idcs_m:
-                    true_proj = self.projs[j][m]
+                    true_proj = self._projs[j][m]
                     new_proj = self.get_proj_value_from_lambda(
                         j, m, lambda_list, selecteds_in_distrib
                     )
@@ -675,6 +698,91 @@ class DistribReconstruction(ConvexPolygon):
             if not i % 10 or converged:
                 convergence.append([i, max_frac])
                 print(f"{i:04d}/{nr_iter:04d} -> {max_frac:.4f}")
+            if converged:
+                break
+
+        self._updated_lambda_list = lambda_list
+        self._convergence_info = convergence
+        sent = "Distribution rescontructed. "
+        sent += "Call 'convexes_properties' "
+        sent += "to get distribution values."
+        print(sent)
+
+    def reconstruct_distribution(
+        self, nr_iter=1000, tol=0.001, gain=0.05, thres=1, rcond=None,
+    ):
+        """Finds values for Lagrange multipliers using a interative process.
+
+        This method updates the Lagrange multipliers initial values
+        (`lambda_list`) based on the projection values. It employs an iterative
+        algorithm that adjusts the distribution until convergence is reached or
+        the maximum number of iterations is completed. In each iteration "i",
+        the value of "lambda" for the j-th projection and m-th bin is updated
+        based on the measured projection value and the calculated projection
+        value. The update follows the formula:
+        lambda_(i + 1) = ln(G_meas / G_calc) + lambda_(i).
+        G_calc is obtained from lambda_(i) values.
+
+        Args:
+        nr_iter (int, optional): The maximum number of iterations to perform.
+            Default is 1000.
+        tol (float, optional): The tolerance level for convergence.
+            The iteration stops when the projection relative value
+            (G_meas / G_calc) is below this value. Default is 0.001.
+        weight (float, optional): A weighting factor that influences the
+            adjustment of the distribution values based on the difference
+            between measured and calculated projections. Default is 1.
+
+        Returns:
+            None: The method updates the internal attributes
+                `_updated_lambda_list` and `_convergence_info`.
+        """
+        lambda_list = self.initial_lambda_list
+        selecteds_in_distrib = self.selected_cvxs_in_distrib
+        idcs = list(selecteds_in_distrib.keys())
+        projs_goal = _np.hstack(self._projs)
+        nr_bins = self.nr_bins
+        tot_bins = _np.r_[0, _np.cumsum(nr_bins)]
+
+        convergence = []
+        for itr in range(nr_iter):
+            self._updated_lambda_list = lambda_list
+            propties = self.get_convexes_properties(
+                idx_to_cvx=selecteds_in_distrib
+            )
+            dists = {k: v['distribution_value'] for k, v in propties.items()}
+            areas = {k: v['area'] for k, v in propties.items()}
+            projs = _np.hstack(self.projs_from_reconstruction)
+
+            resp_mat = _np.zeros((tot_bins[-1], tot_bins[-1]), dtype=float)
+            for j, n in enumerate(nr_bins):
+                for l in range(n):
+                    idc_fil = [idx for idx in idcs if idx[j] == l]
+                    for idx in idc_fil:
+                        idx = tuple(idx)
+                        term = dists[idx] * areas[idx]
+                        for r, s in enumerate(idx):
+                            resp_mat[tot_bins[r] + s, tot_bins[j] + l] += term
+
+            dlamb, res, rank, svs = _np.linalg.lstsq(
+                resp_mat, projs_goal - projs, rcond=rcond,
+            )
+            svs /= svs[0]
+
+            dlamb *= gain
+            dlamb *= thres / max(thres, _np.abs(dlamb).max())
+            lamb = _np.hstack(lambda_list) + dlamb
+            lambda_list = _np.split(lamb, tot_bins[1:-1])
+
+            nonzer = _np.abs(lamb) > 0
+            max_frac = _np.abs(dlamb[nonzer]/lamb[nonzer]).max()
+            converged = max_frac < tol
+            if not itr % 1 or converged:
+                convergence.append([itr, max_frac])
+                print(
+                    f"{itr+1:04d}/{nr_iter:04d} -> {max_frac:.4f}, "
+                    f"{_np.sum(svs > rcond):.4g}"
+                )
             if converged:
                 break
 
