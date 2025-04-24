@@ -613,6 +613,9 @@ class DistribReconstruction(ConvexPolygon):
         lambda_(i + 1) = ln(G_meas / G_calc) + lambda_(i).
         G_calc is obtained from lambda_(i) values.
 
+        NOTE: The use of this method is not recommended. Please, try
+        reconstruct_distribution instead.
+
         Args:
         nr_iter (int, optional): The maximum number of iterations to perform.
             Default is 1000.
@@ -662,39 +665,52 @@ class DistribReconstruction(ConvexPolygon):
 
     def reconstruct_distribution(
         self,
-        nr_iter=1000,
-        tol=0.001,
-        gain=0.05,
-        max_change=1,
+        nr_iter=100,
+        tol=1e-5,
+        gain=1.0,
+        max_step=1.0,
         min_rchi2=1e-4,
-        rcond=None,
+        rcond=1e-3,
         fancy_init=False,
     ):
-        """Finds values for Lagrange multipliers using a interative process.
+        """Find values for Lagrange multipliers using Newton's method.
 
-        This method updates the Lagrange multipliers initial values
-        (`lagmults`) based on the projection values. It employs an iterative
-        algorithm that adjusts the distribution until convergence is reached or
-        the maximum number of iterations is completed. In each iteration "i",
-        the value of "lambda" for the j-th projection and m-th bin is updated
-        based on the measured projection value and the calculated projection
-        value. The update follows the formula:
-        lambda_(i + 1) = ln(G_meas / G_calc) + lambda_(i).
-        G_calc is obtained from lambda_(i) values.
+        This algorithm uses the Newton method to find the best Lagrange
+        multipliers that explain all projections, using the MENT framework.
+        The chi**2 is the sum of the squares of the difference between the
+        projections precited by the model and the measured/input/goal
+        projections provided at the object initialization.
+
+        At the end of the process, the property lagmult will be updated with
+        the last value of the Lagrange multipliers found by this iterative
+        process and the related methods of this object will provide the
+        predicted distributions and projections.
 
         Args:
-        nr_iter (int, optional): The maximum number of iterations to perform.
-            Default is 1000.
-        tol (float, optional): The tolerance level for convergence.
-            The iteration stops when the projection relative value
-            (G_meas / G_calc) is below this value. Default is 0.001.
-        weight (float, optional): A weighting factor that influences the
-            adjustment of the distribution values based on the difference
-            between measured and calculated projections. Default is 1.
-
-        Returns:
-            None: The method updates the internal attributes
-                `_lagmults` and `_convergence_info`.
+            nr_iter (int, optional): Maximum number of iterations of Newton's
+                iterative method. Defaults to 100.
+            tol (float, optional): If the maximum relative change of the
+                Lagrange multipliers is lower than this value, the iterations
+                are interrupted. Defaults to 1e-5.
+            gain (float, optional): Learning rate for the Newton's method.
+                Only this fraction of the variations of the Lagrange
+                multipliers in each step will be applied. Defaults to 1.0.
+            max_step (float, optional): If even after multiplying the
+                variation of the Lagrange multipliers by the gain, the maximum
+                variation still exceeds this value, the change vector will be
+                re-scaled such that its maximum is equal to this value. This
+                is useful for the first iterations of the algorithm, when
+                generally the search vector is far from the minimum.
+                Defaults to 1.0.
+            min_rchi2 (float, optional): If the relative chi**2 is lower than
+                this value, the iterations are interrupted. Defaults to 1e-4.
+            rcond (float, optional): Condition value used for singular value
+                selection of the Jacobian at each step. Please, check
+                documentation of numpy.linalg.lstsq for more details.
+                Defaults to 1e-3.
+            fancy_init (bool, optional): If True, the initial guess for the
+                Lagrange multipliers will be based on the projections values.
+                Otherwise, they will be initialized to one. Defaults to False.
         """
         self._lagmults = self.get_lagmults_guess(fancy=fancy_init)
 
@@ -721,7 +737,7 @@ class DistribReconstruction(ConvexPolygon):
             svs /= svs[0]
 
             dlg *= gain
-            dlg *= max_change / max(max_change, _np.abs(dlg).max())
+            dlg *= max_step / max(max_step, _np.abs(dlg).max())
             lamb = _np.hstack(self._lagmults) + dlg
             self._lagmults = _np.split(lamb, tot_bins[1:-1])
 
@@ -740,18 +756,15 @@ class DistribReconstruction(ConvexPolygon):
                 convergence.append([itr, max_rchg, nsv, rchi2])
                 print(
                     f"{itr+1:04d}/{nr_iter:04d} -> "
-                    f'max. rel. change={max_rchg:9.2e}, '
+                    f'max. rel. change={max_rchg:8.2e}, '
                     f"nr_svs={nsv:04d}/{svs.size:04d}, "
-                    f'rel. chi_square={rchi2:9.2e}'
+                    f'rel. chi_square={rchi2:8.2e}'
                 )
             if converged:
                 break
 
         self._convergence_info = convergence
-        sent = "Distribution rescontructed. "
-        sent += "Call 'convexes_properties' "
-        sent += "to get distribution values."
-        print(sent)
+        print('Finished!')
 
     def _calc_respmat(self, idcs, distrib, areas, tot_bins):
         rmat = _np.zeros((tot_bins[-1], tot_bins[-1]), dtype=float)
