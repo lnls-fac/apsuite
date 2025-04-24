@@ -486,12 +486,7 @@ class DistribReconstruction(ConvexPolygon):
         """
         if self._initial_lambda_list is not None:
             return _deepcopy(self._initial_lambda_list)
-        lambda_list = []
-        for proj in self._projs:
-            lambda_proj = _np.ones_like(proj, dtype="float")
-            lambda_proj[proj == 0] = 0
-            lambda_list.append(lambda_proj)
-        return lambda_list
+        return self.get_initial_guess_for_lagrange_mult(fancy=False)
 
     @initial_lambda_list.setter
     def initial_lambda_list(self, value):
@@ -566,6 +561,19 @@ class DistribReconstruction(ConvexPolygon):
             projs_calc.append(_np.array(p))
         return projs_calc
 
+    def get_initial_guess_for_lagrange_mult(self, fancy=False):
+        """."""
+        lambda_list = []
+        for proj in self._projs:
+            lambda_proj = _np.ones_like(proj, dtype="float")
+            idx = proj == 0
+            lambda_proj[idx] = -_np.inf
+            if fancy:
+                lambda_proj[~idx] = _np.log(proj[~idx])
+
+            lambda_list.append(lambda_proj)
+        return lambda_list
+
     def get_convexes_properties(self, idx_to_cvx=None):
         """."""
         properties = {}
@@ -600,6 +608,25 @@ class DistribReconstruction(ConvexPolygon):
             for i, value in enumerate(properties.values()):
                 value["distribution_value"] = distrib[i]
             return properties
+
+    def get_convexes_distribution(
+        self, lambda_list=None, idx_to_cvx=None, as_dict=True
+    ):
+        """."""
+        lambda_list = lambda_list or self.updated_lambda_list
+        idx_to_cvx = idx_to_cvx or self.dict_idcs_to_cvx()
+
+        distrib = dict() if as_dict else []
+        fun = distrib.update if as_dict else distrib.append
+        for idcs in idx_to_cvx.keys():
+            val = self.get_distrib_value_from_lambda(idcs, lambda_list)
+            val = (idcs, val) if as_dict else val
+            fun(val)
+        distrib = distrib if as_dict else _np.array(distrib)
+        areas = _np.array([v["area"] for v in properties.values()])
+        distrib /= _np.sum(distrib * areas)
+
+
 
     def reconstruct_distrib_in_regular_grid(self, gridx, gridy):
         """Interpolates distribution in a regular lattice."""
@@ -710,6 +737,7 @@ class DistribReconstruction(ConvexPolygon):
 
     def reconstruct_distribution(
         self, nr_iter=1000, tol=0.001, gain=0.05, thres=1, rcond=None,
+        fancy_init=False,
     ):
         """Finds values for Lagrange multipliers using a interative process.
 
@@ -737,7 +765,9 @@ class DistribReconstruction(ConvexPolygon):
             None: The method updates the internal attributes
                 `_updated_lambda_list` and `_convergence_info`.
         """
-        lambda_list = self.initial_lambda_list
+        lambda_list = self.get_initial_guess_for_lagrange_mult(
+            fancy=fancy_init
+        )
         selecteds_in_distrib = self.selected_cvxs_in_distrib
         idcs = list(selecteds_in_distrib.keys())
         projs_goal = _np.hstack(self._projs)
@@ -755,14 +785,14 @@ class DistribReconstruction(ConvexPolygon):
             projs = _np.hstack(self.projs_from_reconstruction)
 
             resp_mat = _np.zeros((tot_bins[-1], tot_bins[-1]), dtype=float)
-            for j, n in enumerate(nr_bins):
+            for k, n in enumerate(nr_bins):
                 for l in range(n):
-                    idc_fil = [idx for idx in idcs if idx[j] == l]
+                    idc_fil = [idx for idx in idcs if idx[k] == l]
                     for idx in idc_fil:
                         idx = tuple(idx)
                         term = dists[idx] * areas[idx]
                         for r, s in enumerate(idx):
-                            resp_mat[tot_bins[r] + s, tot_bins[j] + l] += term
+                            resp_mat[tot_bins[r] + s, tot_bins[k] + l] += term
 
             dlamb, res, rank, svs = _np.linalg.lstsq(
                 resp_mat, projs_goal - projs, rcond=rcond,
@@ -780,8 +810,8 @@ class DistribReconstruction(ConvexPolygon):
             if not itr % 1 or converged:
                 convergence.append([itr, max_frac])
                 print(
-                    f"{itr+1:04d}/{nr_iter:04d} -> {max_frac:.4f}, "
-                    f"{_np.sum(svs > rcond):.4g}"
+                    f"{itr+1:04d}/{nr_iter:04d} -> {max_frac:9.2e}, "
+                    f"nr_svs={_np.sum(svs > rcond):04d}/{svs.size:04d}"
                 )
             if converged:
                 break
