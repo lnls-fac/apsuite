@@ -716,7 +716,7 @@ class DistribReconstruction(ConvexPolygon):
 
         convergence = []
         for itr in range(nr_iter):
-            rmat = self._calc_respmat(idcs, distrib, areas, tot_bins, nr_bins)
+            rmat = self._calc_respmat(idcs, distrib, areas, tot_bins)
             dlg, _, _, svs = _np.linalg.lstsq(rmat, res, rcond=rcond)
             svs /= svs[0]
 
@@ -753,16 +753,14 @@ class DistribReconstruction(ConvexPolygon):
         sent += "to get distribution values."
         print(sent)
 
-    def _calc_respmat(self, idcs, distrib, areas, tot_bins, nr_bins):
+    def _calc_respmat(self, idcs, distrib, areas, tot_bins):
         rmat = _np.zeros((tot_bins[-1], tot_bins[-1]), dtype=float)
-        for k, n in enumerate(nr_bins):
-            for l in range(n):
-                idc_fil = [idx for idx in idcs if idx[k] == l]
-                for idx in idc_fil:
-                    idx = tuple(idx)
-                    term = distrib[idx] * areas[idx]
-                    for r, s in enumerate(idx):
-                        rmat[tot_bins[r] + s, tot_bins[k] + l] += term
+        for idx in idcs:
+            idx = tuple(idx)
+            term = distrib[idx] * areas[idx]
+            for k, l in enumerate(idx):
+                for r, s in enumerate(idx):
+                    rmat[tot_bins[r] + s, tot_bins[k] + l] += term
         return rmat
 
     def _get_projection_at_bin(self, nr_proj, nr_bin, lagmults, convexes):
