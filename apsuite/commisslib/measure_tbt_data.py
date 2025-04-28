@@ -29,9 +29,10 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         super().__init__()
         self.signals2acq = "XYS"
         self.acq_rate = "TbT"
-        self.nrpoints_before = 100
-        self.nrpoints_after = 2000
+        self.nrpoints_before = 50
+        self.nrpoints_after = 750
         self.restore_init_state = True
+        self.do_pulse_evg = True
 
         self.mags_strength_rtol = 0.05
         self._pingers2kick = ""  # 'h', 'v' or 'hv'
