@@ -355,6 +355,32 @@ class ConvexPolygon:
             mask[idx] = True
             self._proj_masks.append(mask)
 
+    def _subdivide_main_convex_alternative(self, convex_list, nrpts=100):
+        convex = convex_list[0]
+        lines = self.lines
+
+        pts = convex.points
+        linx = _np.linspace(pts[:, 0].min(), pts[:, 0].max(), nrpts+1)
+        liny = _np.linspace(pts[:, 1].min(), pts[:, 1].max(), nrpts+1)
+        linx = (linx[1:] + linx[:-1]) / 2
+        liny = (liny[1:] + liny[:-1]) / 2
+
+        gridx, gridy = _np.meshgrid(linx, liny, copy=False)
+        pts = _np.ones((3, gridx.size), dtype=float)
+        pts[0] = gridx.ravel()
+        pts[1] = gridy.ravel()
+
+        sel = _np.ones(pts.shape[1], dtype=bool)
+        idcs = []
+        for i, lins in enumerate(lines):
+            res = lins @ pts
+            boo = res * _np.sign(res[0, :]) > 0
+            idcs.append(boo.sum(axis=0) - 1)
+            sel &= ~boo.all(axis=0)
+        idcs = _np.array(idcs)
+        idcs[:, sel] = -1
+        pts = pts[:2]
+
     def _subdivide_main_convex(
         self, convex_list: list, lines=None, proj_num=0, indices=None
     ):
