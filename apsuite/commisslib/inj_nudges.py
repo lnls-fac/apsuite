@@ -10,7 +10,10 @@ from siriuspy.epics import PV as _PV
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _BaseClass
 
+import warnings
+
 BOINJEFF_PVNAME = "BO-Glob:AP-CurrInfo:RampEff-Mon"
+BOINJ_DCCT_WFM = "BO-35D:DI-DCCT:RawReadings-Mon"
 BOINJ_KNOBS = {
     #        knob                   [lim_low, lim_high]  unit
     "BO-01D:PU-InjKckr:Voltage-SP"   : [-1, 1],        # [V]
@@ -130,12 +133,37 @@ class InjNudgesBaseParams(_ParamsBaseClass):
 
 class BOInjNudgesParams(InjNudgesBaseParams):
     """."""
-    def __init__(self):
+    def __init__(self, use_dcct_wfm=False):
         """."""
         super().__init__()
-        self.injeff_pvname = BOINJEFF_PVNAME
         self.knobs_lims = BOINJ_KNOBS
-        self.observables_pvs_names = BOINJ_OBSERVABLES
+        self._default_injeff_pvname = BOINJEFF_PVNAME
+        self._dcct_wfm_pvname = BOINJ_DCCT_WFM
+        self._base_observables = BOINJ_OBSERVABLES
+
+        self._use_dcct_wfm = None
+        self.use_dcct_wfm = use_dcct_wfm
+
+    @property
+    def use_dcct_wfm(self):
+        """."""
+        return self._use_dcct_wfm
+
+    @use_dcct_wfm.setter
+    def use_dcct_wfm(self, val):
+        # TODO: currently, setting this to True/False changes the
+        # observables_pvs_names in such a manner that any changes made by the
+        # user are lost and the default observables are restored.
+        self._use_dcct_wfm = val
+        if val:
+            self.injeff_pvname = self._dcct_wfm_pvname
+            self.observables_pvs_names = self._base_observables
+        else:
+            self.injeff_pvname = self._default_injeff_pvname
+            obs = list(self._base_observables)
+            if self._dcct_wfm_pvname not in obs:
+                obs.append(self._dcct_wfm_pvname)
+            self.observables_pvs_names = obs
 
 
 class SIInjNudgesParams(InjNudgesBaseParams):
@@ -150,15 +178,18 @@ class SIInjNudgesParams(InjNudgesBaseParams):
 
 class InjNudges(_BaseClass):
     """."""
-    def __init__(self, isonline=True, inj_system="BO"):
+    def __init__(self, isonline=True, inj_system="BO", use_dcct_wfm=False):
         """."""
         super().__init__(
             self, target=self.do_measure, isonline=isonline
         )
         if inj_system.lower() == "bo":
-            self.params = BOInjNudgesParams()
+            self.params = BOInjNudgesParams(use_dcct_wfm=use_dcct_wfm)
         elif inj_system.lower() == "si":
             self.params = SIInjNudgesParams()
+            warnings.warn(
+                "use_dcct_wfm not supported for SI, ignoring it", stacklevel=2
+            )
         else:
             raise ValueError("Injection system must be SI or BO.")
 
@@ -230,7 +261,8 @@ class InjNudges(_BaseClass):
         )
         event.wait(timeout=(60 + 2) * self.params.num_inj_samples)
         injeff_pv.clear_callbacks()
-
+        if len(effs) == 0:
+            return None
         mean, sigma = _np.mean(effs), _np.std(effs)
 
         print(f"\t\tmean injeff {mean:3.2f} +- {sigma:.2f} %")
@@ -244,7 +276,11 @@ class InjNudges(_BaseClass):
         """Callback function to be added to the injeff PV."""
         tmstp = _Time.fromtimestamp(_time.time())
         datetime = tmstp.strftime("%Y-%m-%d %H:%M:%S")
-        print(f"\t\t{datetime} inj. eff.: {value:3.2f}%, SI curr.:")
+        measurement = "inj. eff."
+        if getattr(self.params, "use_dcct_wfm", False):
+            value = _np.linalg.norm(value)
+            measurement = "avg. rms dcct wfm"
+        print(f"\t\t{datetime} {measurement}.: {value:3.2f}%, SI curr.:")
 
         pvvals.append(self.get_pvs_tmtsp_and_vals())
         tim.append(timestamp)
