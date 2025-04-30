@@ -74,7 +74,7 @@ class InjNudgesBaseParams(_ParamsBaseClass):
         self.pv_connection_timeout = 3
         self.num_inj_samples = 3
         self.num_attempts_per_ref = 5
-        self.min_topup_current = 198.5  # [mA]
+        self.topup_current = 198.5  # [mA]
         self.filename2use = "inj_nudges"
 
         self._knobs_lims = None
@@ -115,7 +115,7 @@ class InjNudgesBaseParams(_ParamsBaseClass):
         )
         stg += dtmp("num_inj_samples", self.num_inj_samples, "")
         stg += dtmp("num_attempts_per_ref", self.num_attempts_per_ref, "")
-        stg += ftmp("min_topup_current", self.min_topup_current, "mA")
+        stg += ftmp("topup_current", self.topup_current, "mA")
         stg += stmp("filename2use", self.filename2use, "")
         stg += stmp("injeff_pvname", self.injeff_pvname, "")
         stg += "\n"
@@ -158,12 +158,15 @@ class BOInjNudgesParams(InjNudgesBaseParams):
         if val:
             self.injeff_pvname = self._dcct_wfm_pvname
             self.observables_pvs_names = self._base_observables
+            self.measurement, self.units = "rms dcct wfm", "mA"
         else:
             self.injeff_pvname = self._default_injeff_pvname
             obs = list(self._base_observables)
             if self._dcct_wfm_pvname not in obs:
                 obs.append(self._dcct_wfm_pvname)
             self.observables_pvs_names = obs
+            self.measurement, self.units = "inj. eff.", "%"
+
 
 
 class SIInjNudgesParams(InjNudgesBaseParams):
@@ -249,49 +252,54 @@ class InjNudges(_BaseClass):
 
     def acquire_efficiencies(self, ref_mean=None, ref_sigma=None):
         """."""
+        def _on_change(
+            timestamp, value, tim, effs, pvvals, event,
+            ref_mean, ref_sigma, si_curr_pv, **kwargs
+        ):
+            """Callback function to be added to the injeff PV."""
+            tmstp = _Time.fromtimestamp(_time.time())
+            dttime = tmstp.strftime("%Y-%m-%d %H:%M:%S")
+
+            if getattr(self.params, "use_dcct_wfm", False):
+                value = value[:500]  # discard abrupt ending of the ramp
+                value = _np.linalg.norm(value) / _np.sqrt(len(value))
+            meas, units = self.params.measurement, self.params.units
+            stg = f"\t\t{dttime} {meas}: {value:3.2f} {units}"
+            stg += f", SI curr.: {si_curr_pv.value:3.1f} mA"
+            print(stg)
+
+            pvvals.append(self.get_pvs_tmtsp_and_vals())
+            tim.append(timestamp)
+            effs.append(value)
+
+            if len(effs) >= self.params.num_inj_samples:
+                event.set()
+            if None in (ref_mean, ref_sigma):
+                return  # What to do?
+            if len(effs) > 1 and (_np.mean(effs) < ref_mean - ref_sigma):
+                event.set()
+
         print("\tacquiring inj. effs. ...")
 
         injeff_pv = self.pvs[self.params.injeff_pvname]
+        si_curr_pv = self.pvs[self.params.si_curr_pvname]
         tim, effs, pvvals = [], [], []
         event = _threading.Event()  # signals acqs. are finished
 
         injeff_pv.add_callback(
-            self, self.on_change, tim=tim, effs=effs, pvvals=pvvals,
-            event=event, ref_mean=ref_mean, ref_sigma=ref_sigma
+            _on_change, tim=tim, effs=effs, pvvals=pvvals,
+            event=event, ref_mean=ref_mean, ref_sigma=ref_sigma,
+            si_curr_pv=si_curr_pv
         )
         event.wait(timeout=(60 + 2) * self.params.num_inj_samples)
         injeff_pv.clear_callbacks()
         if len(effs) == 0:
             return None
         mean, sigma = _np.mean(effs), _np.std(effs)
-
-        print(f"\t\tmean injeff {mean:3.2f} +- {sigma:.2f} %")
+        meas, unit = self.params.measurement, self.params.units
+        print(f"\t\tmean {meas} {mean:3.2f} +- {sigma:.2f} {unit}")
         print("\tacquisitions finished.")
         return tim, effs, mean, sigma, pvvals
-
-    def on_change(
-            self, timestamp, value, tim, effs, pvvals, event,
-            ref_mean, ref_sigma, **kwargs
-    ):
-        """Callback function to be added to the injeff PV."""
-        tmstp = _Time.fromtimestamp(_time.time())
-        datetime = tmstp.strftime("%Y-%m-%d %H:%M:%S")
-        measurement = "inj. eff."
-        if getattr(self.params, "use_dcct_wfm", False):
-            value = _np.linalg.norm(value)
-            measurement = "avg. rms dcct wfm"
-        print(f"\t\t{datetime} {measurement}.: {value:3.2f}%, SI curr.:")
-
-        pvvals.append(self.get_pvs_tmtsp_and_vals())
-        tim.append(timestamp)
-        effs.append(value)
-
-        if len(effs) >= self.params.num_inj_samples:
-            event.set()
-        if None in (ref_mean, ref_sigma):
-            return  # What to do?
-        if len(effs) > 1 and (_np.mean(effs) < ref_mean - ref_sigma):
-            event.set()
 
     def recover_topup(self, pos_good, sleep_time=30):
         """."""
@@ -330,12 +338,11 @@ class InjNudges(_BaseClass):
         evg = self.devices["evg"]
 
         while True:
-
             delta_pos = self.get_knobs_nudges()
-
             i = _np.random.randint(len(delta_pos))
             dposi = float(delta_pos[i])
             knobi_name = self.params.knobs_pvsnames[i]
+
             print("")
             print(f"Nudging {knobi_name} in {dposi:2.2f}")
             posi0 = pos[knobi_name].copy()
@@ -369,10 +376,11 @@ class InjNudges(_BaseClass):
             self.data["pvvals"] = pvvals
 
             if mean_injeff - sigma_injeff >= ref_mean - ref_sigma:
-                print(f"\tchanges in {knobi_name} improved injeff!")
+                meas = self.params.measurement
+                print(f"\tchanges in {knobi_name} improved {meas}!")
                 ref_mean, ref_sigma = mean_injeff, sigma_injeff
                 fails_w_same_ref = 0
-                print(f"\tnew reference injeff: {ref_mean:3.3f} %")
+                print(f"\tnew reference {meas}: {ref_mean:3.3f} %")
             else:
                 print(f"\treverting changes in {knobi_name}...")
                 fails_w_same_ref += 1
