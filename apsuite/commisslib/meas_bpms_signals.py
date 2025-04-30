@@ -20,6 +20,7 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
         """."""
         self.trigbpm_delay = None
         self.trigbpm_nrpulses = 1
+        self.do_pulse_evg = True
         self._timing_event = "Study"
         self.event_delay = None
         self.event_mode = "External"
@@ -44,6 +45,7 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
         else:
             stg += ftmp("trigbpm_delay", dly, "[us]")
         stg += dtmp("trigbpm_nrpulses", self.trigbpm_nrpulses, "")
+        stg += stmp("do_pulse_evg", str(self.do_pulse_evg), "")
         stg += stmp("timing_event", self.timing_event, "")
         dly = self.event_delay
         if dly is None:
@@ -148,6 +150,8 @@ class AcqBPMsSignals(_BaseClass):
         state["trigbpm_source"] = trigbpm.source_str
         state["trigbpm_nrpulses"] = trigbpm.nr_pulses
         state["trigbpm_delay"] = trigbpm.delay
+        if self.params.do_pulse_evg:
+            state["evg_nrpulses"] = self.devices["evg"].nrpulses
 
         evt = self._get_event(self.params.timing_event)
         if evt is not None:
@@ -182,6 +186,24 @@ class AcqBPMsSignals(_BaseClass):
             evt.mode = state.get("evt_mode", self.params.event_mode)
             self.devices["evg"].cmd_update_events()
 
+        nrpul = 1 if self.params.do_pulse_evg else None
+        nrpul = state.get("evg_nrpulses", nrpul)
+        if nrpul is not None:
+            evg = self.devices["evg"]
+            evg.set_nrpulses(nrpul)
+            evg.cmd_update_events()  # need to be called 2x?
+
+    def trigger_timing_signal(self):
+        """."""
+        if not self.params.do_pulse_evg:
+            print("Waiting for trigger event to be fired.")
+            return
+        evt = self._get_event(self.params.timing_event)
+        if evt is not None and evt.mode_str == "External":
+            evt.cmd_external_trigger()
+        else:
+            self.devices["evg"].cmd_turn_on_injection()
+
     def prepare_bpms_acquisition(self):
         """."""
         fambpms = self.devices["fambpms"]
@@ -206,8 +228,7 @@ class AcqBPMsSignals(_BaseClass):
 
         fambpms.reset_mturn_initial_state()
 
-        # NOTE: user must trigger timing event
-        print("Ready for acquisition. Waiting for trigger event.")
+        self.trigger_timing_signal()
 
         time0 = _time.time()
         ret = fambpms.wait_update_mturn(timeout=self.params.timeout)
