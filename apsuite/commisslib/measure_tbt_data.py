@@ -595,11 +595,11 @@ class TbTDataAnalysis(MeasureTbTData):
             data["timing_state"]["trigpingh_source"],
             "",
         )
-        stg += dtmp(
-            "trigpingh_delay_raw",
-            data["timing_state"]["trigpingh_delay_raw"],
-            ""
-        )
+        # stg += dtmp(
+        #     "trigpingh_delay_raw",
+        #     data["timing_state"]["trigpingh_delay_raw"],
+        #     ""
+        # )
         stg += stmp("pingh_pwr", data["magnets_state"]["pingh_pwr"], "")
 
         stg += stmp(
@@ -616,11 +616,11 @@ class TbTDataAnalysis(MeasureTbTData):
             data["timing_state"]["trigpingv_source"],
             "",
         )
-        stg += dtmp(
-            "trigpingv_delay_raw",
-            data["timing_state"]["trigpingv_delay_raw"],
-            ""
-        )
+        # stg += dtmp(
+        #     "trigpingv_delay_raw",
+        #     data["timing_state"]["trigpingv_delay_raw"],
+        #     ""
+        # )
         stg += stmp("pingv_pwr", data["magnets_state"]["pingv_pwr"], "")
 
         stg += stmp(
