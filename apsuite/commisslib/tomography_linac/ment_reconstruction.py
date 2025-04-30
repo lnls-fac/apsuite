@@ -149,8 +149,9 @@ class ScreenProcess:
                 - (bin_size_x, bin_size_y) (tuple of float): The calculated bin
                 sizes for X and Y axes.
         """
-        projx = _np.sum(self.image, axis=0)[slice(*self.roix)]
-        projy = _np.sum(self.image, axis=1)[slice(*self.roiy)]
+        img = self.image[slice(*self.roiy), slice(*self.roix)]
+        projx = _np.sum(img, axis=0)
+        projy = _np.sum(img, axis=1)
         x, y = self.positions
         x = x[slice(*self.roix)]
         y = y[slice(*self.roiy)]
@@ -255,6 +256,7 @@ class ConvexPolygon:
         self.lines = lines
         self.nr_projs = len(lines)
         self._main_convex = None
+        self._proj_masks = [_np.ones(n, dtype=bool) for n in self.nr_bins]
         self._convexes = dict()
 
     @property
@@ -315,38 +317,13 @@ class ConvexPolygon:
 
         return hull
 
-    def subdivide_main_convex(
-        self, convex_list: list, lines=None, level=0, indices=None
-    ):
-        """Recursively subdivides the main convex hull."""
-        if self._main_convex is None:
-            sent = "Convex hull not calculated. "
-            sent += "Please call 'find_convex_from_borders' first."
-            raise ValueError(sent)
-
-        if indices is None:
-            indices = [[] for _ in convex_list]
-
-        if lines is None:
-            lines = self.lines
-
-        if level >= len(lines):
-            self._convexes = {
-                tuple(idx): c for c, idx in zip(convex_list, indices)
-            }
-            return convex_list, indices
-
-        new_list = []
-        new_idcs = []
-
-        for elem, index in zip(convex_list, indices):
-            subdivided, sub_indices = self._subdivide_convex(
-                elem, lines[level][1:-1, :]
-            )
-            new_list.extend(subdivided)
-            new_idcs.extend([index + [sub_idx] for sub_idx in sub_indices])
-
-        return self.subdivide_main_convex(new_list, lines, level + 1, new_idcs)
+    def subdivide_main_convex(self):
+        """Subdivides the main convex hull."""
+        conv_list, indices = self._subdivide_main_convex([self._main_convex])
+        self._convexes = {
+            tuple(idx): c for c, idx in zip(conv_list, indices)
+        }
+        self._update_proj_masks()
 
     def get_convexes_propty(self, propty_name='area', convexes=None):
         """."""
@@ -367,6 +344,48 @@ class ConvexPolygon:
                 ppt = convex.volume
             propties[tuple(idcs)] = ppt
         return propties
+
+    def _update_proj_masks(self):
+        idcs = zip(*list(self._convexes.keys()))
+        self._proj_masks = []
+        nr_bins = self.nr_bins
+        for i, idx in enumerate(idcs):
+            idx = list(set(idx))
+            mask = _np.zeros(nr_bins[i], dtype=bool)
+            mask[idx] = True
+            self._proj_masks.append(mask)
+
+    def _subdivide_main_convex(
+        self, convex_list: list, lines=None, proj_num=0, indices=None
+    ):
+        """Recursively subdivides the main convex hull."""
+        if self._main_convex is None:
+            sent = "Convex hull not calculated. "
+            sent += "Please call 'find_convex_from_borders' first."
+            raise ValueError(sent)
+
+        if indices is None:
+            indices = [[] for _ in convex_list]
+
+        if lines is None:
+            lines = self.lines
+
+        if proj_num >= len(lines):
+            return convex_list, indices
+
+        new_list = []
+        new_idcs = []
+
+        for elem, index in zip(convex_list, indices):
+            subdivided, sub_indices = self._subdivide_convex(
+                elem, lines[proj_num][1:-1, :]
+            )
+            new_list.extend(subdivided)
+            new_idcs.extend([index + [sub_idx] for sub_idx in sub_indices])
+
+        return self._subdivide_main_convex(
+            new_list, lines, proj_num + 1, new_idcs
+        )
 
     def _subdivide_convex(self, hull, line_eqs):
         convex_list = [hull]
@@ -460,6 +479,11 @@ class DistribReconstruction(ConvexPolygon):
         self._init_lagmults = None
 
     @property
+    def projs_meas(self):
+        """."""
+        return self._projs
+
+    @property
     def init_lagmults(self):
         """Define a initial list for Lagrange multipliers.
 
@@ -483,6 +507,8 @@ class DistribReconstruction(ConvexPolygon):
                     f'Length of {i}th lambda must match length of {i}th proj.'
                 )
         self._init_lagmults = _deepcopy(value)
+        for msk, lag in zip(self._proj_masks, self._init_lagmults):
+            lag[~msk] = -_np.inf
 
     @property
     def lagmults(self):
@@ -509,19 +535,19 @@ class DistribReconstruction(ConvexPolygon):
         selected = dict()
         for idx, convex in self.convexes.items():
             for j, m in enumerate(idx):
-                if not bool(self._init_lagmults[j][m]):
+                if _np.isinf(self._init_lagmults[j][m]):
                     break
             else:
                 selected[idx] = convex
         return selected
 
-    def get_model_projections(self):
+    def get_model_projections(self, convexes=None):
         """."""
         if self._lagmults is None:
             sent = "Distribution not reconstructed. "
             sent += "Please call 'recontruct_distribution' first."
             raise ValueError(sent)
-        convexes = self.convexes
+        convexes = convexes or self.convexes
         lagmults = self.lagmults
         projs_calc = []
         nr_bins = self.nr_bins
@@ -538,12 +564,12 @@ class DistribReconstruction(ConvexPolygon):
     def get_lagmults_guess(self, fancy=False):
         """."""
         lagmults = []
-        for proj in self._projs:
-            lambda_proj = _np.ones_like(proj, dtype="float")
-            idx = proj == 0
-            lambda_proj[idx] = -_np.inf
+        for i, proj in enumerate(self._projs):
+            lambda_proj = _np.ones_like(proj, dtype=float)
+            idx = (proj != 0) & self._proj_masks[i]
+            lambda_proj[~idx] = -_np.inf
             if fancy:
-                lambda_proj[~idx] = _np.log(proj[~idx])
+                lambda_proj[idx] = _np.log(proj[idx])
 
             lagmults.append(lambda_proj)
         return lagmults
@@ -713,6 +739,7 @@ class DistribReconstruction(ConvexPolygon):
                 Otherwise, they will be initialized to one. Defaults to False.
         """
         self._lagmults = self.get_lagmults_guess(fancy=fancy_init)
+        self.init_lagmults = self._lagmults
 
         convexes_sel = self.select_non_trivial_convexes()
         idcs = list(convexes_sel.keys())
@@ -727,7 +754,7 @@ class DistribReconstruction(ConvexPolygon):
         distrib = self.get_convexes_propty(
             propty_name='distrib', convexes=convexes_sel, areas=areas
         )
-        pjs = _np.hstack(self.get_model_projections())
+        pjs = _np.hstack(self.get_model_projections(convexes=convexes_sel))
         res = pj_g - pjs
 
         convergence = []
@@ -744,7 +771,7 @@ class DistribReconstruction(ConvexPolygon):
             distrib = self.get_convexes_propty(
                 propty_name='distrib', convexes=convexes_sel, areas=areas
             )
-            pjs = _np.hstack(self.get_model_projections())
+            pjs = _np.hstack(self.get_model_projections(convexes=convexes_sel))
             res = pj_g - pjs
             rchi2 = _np.sum(res * res) / max_chi2
 
@@ -772,16 +799,22 @@ class DistribReconstruction(ConvexPolygon):
             idx = tuple(idx)
             term = distrib[idx] * areas[idx]
             for k, l in enumerate(idx):
+                id_kl = tot_bins[k] + l
                 for r, s in enumerate(idx):
-                    rmat[tot_bins[r] + s, tot_bins[k] + l] += term
+                    rmat[tot_bins[r] + s, id_kl] += term
         return rmat
 
-    def _get_projection_at_bin(self, nr_proj, nr_bin, lagmults, convexes):
+    def _get_projection_at_bin(self, nproj, nbin, lagmults, convexes):
         """Calculates projections values from Lagrange multipliers."""
-        cvx_sel = {k: v for k, v in convexes.items() if k[nr_proj] == nr_bin}
+        if not self._proj_masks[nproj][nbin] or self._projs[nproj][nbin] == 0:
+            return self._projs[nproj][nbin]
+
+        cvx_sel = {k: v for k, v in convexes.items() if k[nproj] == nbin}
         if not cvx_sel:
-            print(nr_proj, nr_bin)
-            return 1
+            raise RuntimeError(
+                f'Tried to access nproj={nproj} and nbin={nbin} '
+                'but it is not in convexes list.'
+            )
         proj_value = 0
         for idcs, convex in cvx_sel.items():
             proj_value += convex.volume * self._get_distrib_at_bin(
