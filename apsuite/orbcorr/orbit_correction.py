@@ -70,6 +70,9 @@ class OrbitCorr:
             pass
         else:
             raise ValueError('Corretion system must be "SOFB" or "FOFB"')
+        if self.params.enblrf and model.cavity_on is False:
+            raise Exception("It is necessary to turn the cavity on if it is"
+                            " to be used in correction..")
 
         self.params.enbllistch = _np.ones(
             self.respm.ch_idx.size, dtype=bool)
@@ -261,8 +264,6 @@ class OrbitCorr:
     def set_kicks(self, kicks):
         """."""
         model = self.respm.model
-        cav = model.cavity_on
-        model.cavity_on = True
         nch = len(self.respm.ch_idx)
         ncv = len(self.respm.cv_idx)
 
@@ -274,7 +275,6 @@ class OrbitCorr:
             model[idx].vkick_polynom = kickcv[i]
         if self.params.enblrf:
             model[self.respm.rf_idx[0]].frequency = kickrf
-        model.cavity_on = cav
 
     def _process_kicks(self, dkicks):
         chidx = self.respm.ch_idx
