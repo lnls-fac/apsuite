@@ -189,15 +189,8 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
 
     def get_magnets_strength(self):
         """."""
-        if self.devices["pingh"].pwrstate:
-            pingh_str = self.devices["pingh"].strength
-        else:
-            pingh_str = None
-
-        if self.devices["pingv"].pwrstate:
-            pingv_str = self.devices["pingv"].strength
-        else:
-            pingv_str = None
+        pingh_str = self.devices["pingh"].strength
+        pingv_str = self.devices["pingv"].strength
 
         return pingh_str, pingv_str
 
@@ -221,9 +214,12 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         pingh, pingv = self.devices["pingh"], self.devices["pingv"]
 
         print("Setting magnets states...")
+        pingh_ok, pingv_ok = True, True
         # make sure mags are on to set their strengths
-        pingh_ok = pingh.cmd_turn_on(timeout=timeout)
-        pingv_ok = pingv.cmd_turn_on(timeout=timeout)
+        if "h" in self.params.pingers2kick:
+            pingh_ok = pingh.cmd_turn_on(timeout=timeout)
+        if "v" in self.params.pingers2kick:
+            pingv_ok = pingv.cmd_turn_on(timeout=timeout)
 
         if not pingh_ok or not pingv_ok:
             print("\tpingers could not be turned-on for setting strengths.")
@@ -243,8 +239,8 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
             return False
 
         pingh_ok, pingv_ok = self.set_magnets_strength(
-            hkick=state["pingh_strength"],
-            vkick=state["pingv_strength"],
+            hkick=state.get("pingh_strength", None),
+            vkick=state.get("pingv_strength", None),
             wait_mon=wait_mon
         )
 
@@ -252,25 +248,24 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
             print("\tpingers strenghts could not be set.")
             return False
 
-        if not state["pingh_pwr"]:
-            print()
+        if not state.get("pingh_pwr", True):
             pingh_ok = pingh.cmd_turn_off(timeout=self.params.magnets_timeout)
 
-        if not state["pingv_pwr"]:
+        if not state.get("pingv_pwr", True):
             pingv_ok = pingv.cmd_turn_off(timeout=self.params.magnets_timeout)
 
         if not pingh_ok or not pingv_ok:
             print("\tfailed at setting magnets power-state")
             return False
 
-        if state["pingh_pulse"]:
+        if state.get("pingh_pulse", False):
             pingh_ok = pingh.cmd_turn_on_pulse(timeout)
         else:
             pingh_ok = pingh.cmd_turn_off_pulse(timeout)
         if not pingh_ok:
             print("\tpingh pulse-status could not be set")
 
-        if state["pingv_pulse"]:
+        if state.get("pingv_pulse", False):
             pingv_ok = pingv.cmd_turn_on_pulse(timeout)
         else:
             pingv_ok = pingv.cmd_turn_off_pulse(timeout)
@@ -293,7 +288,7 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
             pingh.strength = hkick
 
         if vkick is not None:
-            print(f"\tSetting pingv strength to {hkick:.3f} mrad...")
+            print(f"\tSetting pingv strength to {vkick:.3f} mrad...")
             pingv.strength = vkick
 
         if not wait_mon:
@@ -606,7 +601,7 @@ class TbTDataAnalysis(MeasureTbTData):
         stg += stmp(
             "pingh_pulse", data["magnets_state"]["pingh_pulse"], ""
         )
-        stg += ftmp("hkick", data["magnets_strengths"][0], "mrad")
+        stg += ftmp("hkick", data["magnets_state"]["pingh_strength"], "mrad")
         stg += "\n"
 
         stg += stmp(
@@ -627,7 +622,7 @@ class TbTDataAnalysis(MeasureTbTData):
         stg += stmp(
             "pingv_pulse", data["magnets_state"]["pingv_pulse"], ""
         )
-        stg += ftmp("vkick", data["magnets_strengths"][1], "mrad")
+        stg += ftmp("vkick", data["magnets_state"]["pingv_strength"], "mrad")
 
         return stg
 
