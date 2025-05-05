@@ -71,8 +71,10 @@ class OrbitCorr:
         else:
             raise ValueError('Corretion system must be "SOFB" or "FOFB"')
         if self.params.enblrf and model.cavity_on is False:
-            raise Exception("It is necessary to turn the cavity on if it is"
-                            " to be used in correction..")
+            raise ValueError(
+                "It is necessary to turn on the cavity if it is "
+                "to be used in correction."
+            )
 
         self.params.enbllistch = _np.ones(
             self.respm.ch_idx.size, dtype=bool)
