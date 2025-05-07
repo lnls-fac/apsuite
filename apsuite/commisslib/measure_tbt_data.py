@@ -1289,7 +1289,7 @@ class TbTDataAnalysis(MeasureTbTData):
 
         return fig, axs
 
-    def plot_trajs(self, bpm_index=0, timescale=0, compare_fit=False):
+    def plot_trajs(self, bpm_index=0, timescale=2, compare_fit=False):
         """Plot trajectories and sum-signal at a given BPM and timescale.
 
         Args:
@@ -1301,7 +1301,7 @@ class TbTDataAnalysis(MeasureTbTData):
                     modulation
                 timescale = 2 : ~ 2000 turns; transverse decoherence
                     modulations
-            Defaults to 0.
+            Defaults to 2.
             compare_fit (bool, optional): whether to plot acquisitions and the
             fitting and the fit residue. Defaults to False.
 
@@ -1319,20 +1319,17 @@ class TbTDataAnalysis(MeasureTbTData):
 
         if not timescale:
             nmax_x, nmax_y = int(1 / self.tunex), int(1 / self.tuney)
-            slicex = (nr_pre, nr_pre + nmax_x + 1)
-            slicey = (nr_pre, nr_pre + nmax_y + 1)
-            slicesum = (nr_pre, nr_pre + max(nmax_x, nmax_y) + 1)
+            begin = max(nr_pre - 5, 0)
+            slicex = (begin, nr_pre + nmax_x + 1)
+            slicey = (begin, nr_pre + nmax_y + 1)
+            slicesum = (begin, nr_pre + max(nmax_x, nmax_y) + 1)
 
         nmax = int(1 / self.SYNCH_TUNE)
         if timescale == 1:
-            slicex = (nr_pre, nr_pre + nmax + 1)
-            slicey = slicex
-            slicesum = slicex
+            slicex = slicey = slicesum = (0, nr_pre + nmax + 1)
 
         elif timescale == 2:
-            slicex = (nr_pre + nmax, nr_pre + nr_post + 1)
-            slicey = slicex
-            slicesum = slicex
+            slicex = slicey = slicesum = (0, nr_pre + nr_post + 1)
 
         trajx = self.trajx[:, bpm_index]
         trajy = self.trajy[:, bpm_index]
