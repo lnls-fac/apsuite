@@ -683,10 +683,16 @@ class TbTDataAnalysis(MeasureTbTData):
         trajy = data.get("orby", None).copy() * 1e-3
         trajsum = data.get("sumdata", None).copy()
 
+        if trajsum is not None:
+            self.trajsum = trajsum
+
         # zero mean in samples dimension
-        trajx -= trajx.mean(axis=0)[None, :]
-        trajy -= trajy.mean(axis=0)[None, :]
-        self.trajx, self.trajy, self.trajsum = trajx, trajy, trajsum
+        if trajx is not None:
+            trajx -= trajx.mean(axis=0)[None, :]
+            self.trajx = trajx
+        if trajy is not None:
+            trajy -= trajy.mean(axis=0)[None, :]
+            self.trajy = trajy
 
         self.nrsamples_pre = data.get("nrsamples_pre", None)
         self.nrsamples_post = data.get("nrsamples_post", None)
