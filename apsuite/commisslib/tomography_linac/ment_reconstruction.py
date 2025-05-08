@@ -21,13 +21,10 @@ def plot_lines(lines, fig=None, ax=None, **kwargs):
     if fig is None or ax is None:
         fig, ax = _plt.subplots(1, 1)
 
-    for line in lines:
-        if _np.isclose(line[1], 0):
-            ax.axvline(-line[2] / line[0], **kwargs)
+    for a, b, c in lines:
+        if _np.isclose(b, 0):
+            ax.axvline(-c / a, **kwargs)
         else:
-            a = line[0]
-            b = line[1]
-            c = line[2]
             ax.axline((0, -c / b), slope=-a / b, **kwargs)
 
     return fig, ax
@@ -287,9 +284,7 @@ class DistribReconstruction(_BaseClass):
         self.data['matrices'] = matrices
         self.data['projs_bins'] = projs_bins
         self.data['lines'] = lines
-        self.data['main_convex'] = self._find_main_convex(
-            feasible_point=[0, 0]
-        )
+        self.data['main_convex'] = self._find_main_convex()
         self.data['projs'] = projs
         self.populate_main_convex()
 
@@ -300,9 +295,9 @@ class DistribReconstruction(_BaseClass):
         stg += '\n\n'
         stg += f'number of projections: {self.nr_projs:d}\n'
         stg += f'number of bins per projection: {self.nr_bins}\n'
-        stg += f'gridx num points = {self.model_gridx.shape[1]:d}\n'
-        stg += f'gridy num points = {self.model_gridy.shape[0]:d}\n'
-        stg += f'total num points = {self.model_gridy.size:d}\n'
+        stg += f'gridx # points = {self.model_gridx.shape[1]:d}\n'
+        stg += f'gridy # points = {self.model_gridy.shape[0]:d}\n'
+        stg += f'total # points = {self.model_gridy.size:d}\n'
         return stg
 
     @property
@@ -339,6 +334,11 @@ class DistribReconstruction(_BaseClass):
     def raveled_lines(self):
         """Unpack the projections bin lines in an array."""
         return _np.vstack(self.lines)
+
+    @property
+    def matrices(self):
+        """."""
+        return self.data['matrices']
 
     @property
     def projs_meas(self):
@@ -420,38 +420,12 @@ class DistribReconstruction(_BaseClass):
         gdx, gdy = self.model_gridx, self.model_gridy
         return (gdy[1, 0] - gdy[0, 0]) * (gdx[0, 1] - gdx[0, 0])
 
-    def populate_main_convex(self):
-        """Populate the main convex hull with grid points."""
-        nrpts = self.params.nrpts_per_bin
-        pts = self.main_convex.points
-        linx = self._suggest_grid(pts, plane=0, npts=nrpts)
-        liny = self._suggest_grid(pts, plane=1, npts=nrpts)
-
-        gridx, gridy = _np.meshgrid(linx, liny, copy=False)
-        pts = _np.ones((3, gridx.size), dtype=float)
-        pts[0] = gridx.ravel()
-        pts[1] = gridy.ravel()
-
-        sel = _np.ones(pts.shape[1], dtype=bool)
-        idcs = []
-        for lins in self.lines:
-            res = lins @ pts
-            boo = res * _np.sign(res[0, :]) > 0
-            idcs.append(boo.sum(axis=0) - 1)
-            sel &= ~boo.all(axis=0)
-        idcs = _np.array(idcs)
-        idcs[:, ~sel] = -1
-
-        self.data['gridx'] = gridx
-        self.data['gridy'] = gridy
-        self.data['indices'] = idcs
-
     def get_interior_grid_points_selection(self):
         """."""
         return self.model_indices[0] != -1
 
     def get_non_trivial_grid_points_selection(self):
-        """Selects convexes whose initial Lagrange multupliers are non-zero."""
+        """Selects convexes whose initial Lagrange multupliers are finite."""
         sel = _np.ones(self.model_gridx.size, dtype=bool)
         if 'init_lagmults' not in self.data:
             return sel
@@ -492,7 +466,9 @@ class DistribReconstruction(_BaseClass):
             lagmults.append(lambda_proj)
         return lagmults
 
-    def get_model_distribution(self, selection=None, normalize=True):
+    def get_model_distribution(
+        self, raveled=True, selection=None, normalize=True
+    ):
         """."""
         if 'lagmults' not in self.data:
             sent = "Distribution not reconstructed. "
@@ -511,9 +487,39 @@ class DistribReconstruction(_BaseClass):
             lambs += lagmults[i][idcs]
         distrib = _np.zeros(sel.size, dtype=float)
         distrib[sel] = _np.exp(lambs)
+
         if normalize:
             distrib /= distrib.sum() * self.model_grid_area
+
+        if not raveled:
+            return distrib.reshape(self.model_gridx.shape)
         return distrib
+
+    def populate_main_convex(self):
+        """Populate the main convex hull with grid points."""
+        nrpts = self.params.nrpts_per_bin
+        pts = self.main_convex.points
+        linx = self._suggest_grid(pts, plane=0, npts=nrpts)
+        liny = self._suggest_grid(pts, plane=1, npts=nrpts)
+
+        gridx, gridy = _np.meshgrid(linx, liny, copy=False)
+        pts = _np.ones((3, gridx.size), dtype=float)
+        pts[0] = gridx.ravel()
+        pts[1] = gridy.ravel()
+
+        sel = _np.ones(pts.shape[1], dtype=bool)
+        idcs = []
+        for lins in self.lines:
+            res = lins @ pts
+            boo = res * _np.sign(res[0, :]) > 0
+            idcs.append(boo.sum(axis=0) - 1)
+            sel &= ~boo.all(axis=0)
+        idcs = _np.array(idcs)
+        idcs[:, ~sel] = -1
+
+        self.data['gridx'] = gridx
+        self.data['gridy'] = gridy
+        self.data['indices'] = idcs
 
     def reconstruct_distribution(self):
         """Find values for Lagrange multipliers using Newton's method.
@@ -622,6 +628,86 @@ class DistribReconstruction(_BaseClass):
         self.data['convergence_info'] = convergence
         print('Finished!')
 
+    # ---------------------- methods for visualization ----------------------
+
+    def plot_distribution(
+        self,
+        fig=None,
+        ax=None,
+        cmap='jet',
+        plot_lines=False,
+        lines_kwargs=None
+    ):
+        """."""
+        if ax is None:
+            fig, ax = _plt.subplots(1, 1)
+        gridx = self.model_gridx
+        gridy = self.model_gridy
+        distrib = self.get_model_distribution()
+        distrib = distrib.reshape(gridx.shape)
+
+        if plot_lines:
+            lines_kwargs = lines_kwargs or dict(color='k', lw=0.1, alpha=0.5)
+            fig, ax = plot_lines(
+                self.raveled_lines, fig=fig, ax=ax, **lines_kwargs
+            )
+
+        ax.pcolormesh(gridx, gridy, distrib, cmap=cmap)
+        ax.set_title("Recontruction from Projections")
+        return fig, ax
+
+    def plot_lagrange_multipliers(self, fig=None, ax=None, plot_init=True):
+        """."""
+        if ax is None:
+            fig, ax = _plt.subplots(1, 1)
+
+        init_lagmults = self.init_lagmults
+        lagmults = self.lagmults
+        for j in range(self.nr_projs):
+            ax.plot(lagmults[j], "-o", label=f"proj. {j}")
+            if plot_init:
+                ax.plot(init_lagmults[j], "--", color=f'C{j:d}')
+
+        ax.set_title("Lagrange Multipliers")
+        ax.grid(ls="--", alpha=0.5)
+        ax.legend()
+        return fig, ax
+
+    def plot_projections(self, ncols=3, figsize=None):
+        """."""
+        projs_calc = self.get_model_projections()
+        bins = self.projs_bins
+        projs_meas = self.projs_meas
+
+        nr_projs = self.nr_projs
+
+        nrows = nr_projs // ncols + int(bool(nr_projs % ncols))
+
+        figsize = figsize or (2.5*ncols, 2*nrows)
+        fig, axs = _plt.subplots(nrows, ncols, figsize=figsize, sharex=True)
+        axs_r = _np.array(axs).ravel()
+
+        for i, ax in enumerate(axs_r):
+            if i >= nr_projs:
+                ax.set_visible(False)
+                continue
+            x_plot = ScreenProcess.bin_to_position(bins[i])
+            ax.plot(x_plot, projs_meas[i], "-o", label="meas.")
+            ax.plot(x_plot, projs_calc[i], "-o", label="calc.")
+            if not i:
+                ax.legend()
+            ax.set_title(f"Projection {i}")
+            ax.grid(ls="--", alpha=0.5)
+
+        for row in range(nrows):
+            axs[row, 0].set_ylabel("Proj.")
+        for col in range(ncols):
+            row = -1 if col + (nrows - 1) * ncols < nr_projs else -2
+            axs[row, col].set_xlabel("x")
+        return fig, axs
+
+    # ------------------------- Auxiliary Methods -------------------------
+
     def _calc_respmat(self, selection, distrib, tot_bins):
         rmat = _np.zeros((tot_bins[-1], tot_bins[-1]), dtype=float)
         idcs = self.model_indices[:, selection]
@@ -651,7 +737,7 @@ class DistribReconstruction(_BaseClass):
         lin = _np.linspace(min_, max_, npts + 1)
         return (lin[1:] + lin[:-1]) / 2
 
-    def _find_main_convex(self, feasible_point):
+    def _find_main_convex(self, feasible_point=(0, 0)):
         """Find the convex hull from a feasible point."""
         feasible_point = _np.array(feasible_point)
         sign = _np.sign(self.border_lines @ _np.r_[feasible_point, 1])
