@@ -703,7 +703,9 @@ class TbTDataAnalysis(MeasureTbTData):
         self.sampling_freq = data.get("sampling_frequency", None)
         self.switching_freq = data.get("switching_frequency", None)
 
-    def linear_optics_analysis(self):
+    def linear_optics_analysis(
+        self, method="PCA", compare_meas2model=True
+    ):  # TODO: Missing kwargs for each method
         """Linear optics (beta-beating & phase adv. errors) analysis.
 
         Determines beta-functions and phase-advances on BPMs via sinusoidal
@@ -711,13 +713,46 @@ class TbTDataAnalysis(MeasureTbTData):
         spatio-temporal modal analysis using Principal Components Analysis
         (PCA) and Independent Components Analysis (ICA).
         """
-        self.harmonic_analysis()
-        self.principal_components_analysis()
-        self.independent_components_analysis()
+        if method.lower() == "fitting":
+            self.harmonic_analysis()
+            data = self.fitting_data
+        elif method.lower() == "pca":
+            self.principal_components_analysis(calc_optics=True)
+            data = self.pca_data
+        elif method.lower() == "ica":
+            self.independent_components_analysis()
+            data = self.ica_data
 
-    def harmonic_analysis(
-        self, guess_tunes=True, plot=True, compare_meas2model=True
-    ):
+        betax = data["betax"]
+        betay = data["betay"]
+        phasex = data["phasex"]
+        phasey = data["phasey"]
+
+        betax_model = self.model_optics["betax"]
+        betay_model = self.model_optics["betay"]
+        phasex_model = self.model_optics["phasex"]
+        phasey_model = self.model_optics["phasey"]
+
+        self.plot_betabeat_and_phase_error(
+            betax_model,
+            betax,
+            phasex_model,
+            phasex,
+            title=f"{method} Optics Analysis: betax & phasex",
+            compare_meas2model=compare_meas2model,
+            bpms2use=self.bpms2use,
+        )
+        self.plot_betabeat_and_phase_error(
+            betay_model,
+            betay,
+            phasey_model,
+            phasey,
+            title=f"{method} Optics Analysis: betay & phasey",
+            compare_meas2model=compare_meas2model,
+            bpms2use=self.bpms2use,
+        )
+
+    def harmonic_analysis(self, guess_tunes=True):
         r"""Linear optics analysis using sinusoidal model for TbT data.
 
         TbT motion at the i-th turn and j-th BPM  in the timescale of less
@@ -814,7 +849,6 @@ class TbTDataAnalysis(MeasureTbTData):
             if self.model_optics is None:
                 self._get_nominal_optics(tunes=(tunex + 49.0, tuney + 14.0))
             beta_model = self.model_optics["beta" + label]
-            phases_model = self.model_optics["phase" + label]
 
             # fit beta-function & action from fitted amplitudes & nominal beta
             beta_fit, action = self.calc_beta_and_action(amps, beta_model)
@@ -837,23 +871,9 @@ class TbTDataAnalysis(MeasureTbTData):
             fitting_data["traj" + label + "_final_fit"] = final_fit
             fitting_data["fitting" + label + "_residue"] = residue
 
-            # Plot results (beta_beating and phase adv. error)
-            if plot:
-                title = f"Sinusoidal fit analysis - beta{label} & phase{label}"
-                self.plot_betabeat_and_phase_error(
-                    beta_model,
-                    beta_fit,
-                    phases_model,
-                    phases_fit,
-                    title=title,
-                    compare_meas2model=compare_meas2model,
-                    bpms2use=self.bpms2use,
-                )
         self.fitting_data = fitting_data
 
-    def principal_components_analysis(
-        self, stackxy=True, planes="xy", plot=True, compare_meas2model=True
-    ):
+    def principal_components_analysis(self, calc_optics=True):
         r"""Peform linear optics analysis Principal Components Analysis (PCA).
 
         Calculates beta-functions and betatron phase-advance at the BPMs using
@@ -917,167 +937,94 @@ class TbTDataAnalysis(MeasureTbTData):
         [3] Scikit-learn examples. "Blind Source Separation using FastICA".
             https://scikit-learn.org/stable/auto_examples/decomposition/plot_ica_blind_source_separation.html#sphx-glr-auto-examples-decomposition-plot-ica-blind-source-separation-py
         """
-        tunes = self.tunex + 49.0, self.tuney + 14.0
-        if self.model_optics is None:
-            self._get_nominal_optics(tunes)
-
-        # get model optics
-        betax_model = self.model_optics["betax"]
-        betay_model = self.model_optics["betay"]
-        phasex_model = self.model_optics["phasex"]
-        phasey_model = self.model_optics["phasey"]
-
         pca_data = dict()
-        if stackxy:
-            traj = _np.concatenate((self.trajx, self.trajy), axis=1)
-            # perform PCA via SVD of history matrix
-            umat, svals, vtmat = self.calc_svd(traj, full_matrices=False)
 
-            # collect source signals and mixing matrix
-            signals = umat * _np.sqrt(traj.shape[0] - 1)  # data signals
-            mixing_matrix = vtmat.T @ _np.diag(svals)
-            mixing_matrix /= _np.sqrt(traj.shape[0] - 1)
+        traj = _np.concatenate((self.trajx, self.trajy), axis=1)
+        # perform PCA via SVD of history matrix
+        umat, svals, vtmat = self.calc_svd(traj, full_matrices=False)
 
-            # calulate tunes of the source signals
-            spec1, tunes1 = self.calc_spectrum(signals[:, 0], axis=0)
-            spec2, tunes2 = self.calc_spectrum(signals[:, 2], axis=0)
-            # modes 0 & 1 and modes 2 & 3 have have equal spectra
-            # therefore, it suffices to analyze mode 0 and mode 2 only
+        # collect source signals and mixing matrix
+        signals = umat * _np.sqrt(traj.shape[0] - 1)  # data signals
+        mixing_matrix = vtmat.T @ _np.diag(svals)
+        mixing_matrix /= _np.sqrt(traj.shape[0] - 1)
 
-            tune1 = tunes1[_np.argmax(_np.abs(spec1))]
-            tune2 = tunes2[_np.argmax(_np.abs(spec2))]
+        # calulate tunes of the source signals
+        spec1, tunes1 = self.calc_spectrum(signals[:, 0], axis=0)
+        spec2, tunes2 = self.calc_spectrum(signals[:, 2], axis=0)
+        # modes 0 & 1 and modes 2 & 3 have have equal spectra
+        # therefore, it suffices to analyze mode 0 and mode 2 only
 
-            # identify which signal is which (x or y)
-            xidcs, yidcs = self.identify_modes(
-                tune1, tune2, self.tunex, self.tuney
-            )
+        tune1 = tunes1[_np.argmax(_np.abs(spec1))]
+        tune2 = tunes2[_np.argmax(_np.abs(spec2))]
 
-            # extract betatron sine & cosine modes fom mixing matrix
-            sin_modex = mixing_matrix[:160, xidcs[-1]]
-            cos_modex = mixing_matrix[:160, xidcs[0]]
-            sin_modey = mixing_matrix[160:, yidcs[-1]]
-            cos_modey = mixing_matrix[160:, yidcs[0]]
+        # identify which signal is which (x or y)
+        xidcs, yidcs = self.identify_modes(
+            tune1, tune2, self.tunex, self.tuney
+        )
 
-            # calculate beta function & phase from betatron modes
-            betax, phasex = self.get_beta_and_phase_from_betatron_modes(
-                sin_modex, cos_modex, betax_model
-            )
-            betay, phasey = self.get_beta_and_phase_from_betatron_modes(
-                sin_modey, cos_modey, betay_model
-            )
+        pca_data["singular_values"] = svals
+        pca_data["source_signals"] = signals
+        pca_data["mixing_matrix"] = mixing_matrix
+        pca_data["xidcs"] = xidcs
+        pca_data["yidcs"] = yidcs
 
-            # concatenate results
-            beta = _np.concatenate((betax, betay))
-            phase = _np.concatenate((phasex, phasey))
-
-            # calculate signal variance
-            signalx = _np.sqrt(_np.sum(svals[xidcs[0] : xidcs[1] + 1] ** 2))
-            signaly = _np.sqrt(_np.sum(svals[yidcs[0] : yidcs[1] + 1] ** 2))
-            # and signal noise
-            noise = _np.sqrt(_np.sum(svals[3:] ** 2))
-            snrx, snry = signalx / noise, signaly / noise
-
-            # calculate error bars as in Appendix A of
-            # Wang, Chun-xi and Sajaev, Vadim and Yao, Chih-Yuan. Phase advance
-            # and ${\beta}$ function measurements using model-independent
-            # analysis. Phys. Rev. ST Accel. Beams. Vol 6, issue 10.
-            # DOI 10.1103/PhysRevSTAB.6.104001
-
-            nrsamples = self.nrsamples_pre + self.nrsamples_post
-            phasex_error = 1 / snrx / _np.sqrt(nrsamples)
-            phasex_error *= _np.sqrt(betax_model.mean() / 2 / betax_model)
-            betax_error = 2 * betax_model * phasex_error
-
-            phasey_error = 1 / snry / _np.sqrt(nrsamples)
-            phasey_error *= _np.sqrt(betay_model.mean() / 2 / betay_model)
-            betay_error = 2 * betay_model * phasey_error
-
-            # TODO: plot stacked data
-            # plot_results
-            if plot:
-                self.plot_betabeat_and_phase_error(
-                    _np.concatenate((betax_model, betay_model)),
-                    beta,
-                    _np.concatenate((phasex_model, phasey_model)),
-                    phase,
-                    title="PCA Analysis: beta & phase (stacked x/y)",
-                    compare_meas2model=compare_meas2model,
-                    bpms2use=self.bpms2use,
-                )
-
-            # save analysis data
-            pca_data["singular_values"] = svals
-            pca_data["source_signals"] = signals
-            pca_data["mixing_matrix"] = mixing_matrix
-            pca_data["xidcs"] = xidcs
-            pca_data["yidcs"] = yidcs
-            pca_data["beta"] = beta
-            pca_data["phase"] = phase
-            pca_data["snrx"] = snrx
-            pca_data["snry"] = snry
-            pca_data["beta_err"] = _np.concatenate((betax_error, betay_error))
-            pca_data["phase_err"] = _np.concatenate(
-                (phasex_error, phasey_error)
-            )
+        if not calc_optics:
             self.pca_data = pca_data
             return
 
-        for plane in planes:
-            if plane == "x":
-                traj = self.trajx
-            else:
-                traj = self.trajy
+        if self.model_optics is None:
+            tunes = self.tunex + 49.0, self.tuney + 14.0
+            self._get_nominal_optics(tunes)
 
-            # get model optics
-            beta_model = self.model_optics["beta" + plane]
-            phase_model = self.model_optics["phase" + plane]
+        betax_model = self.model_optics["betax"]
+        betay_model = self.model_optics["betay"]
 
-            # perform PCA via SVD of history matrix
-            umat, svals, vtmat = self.calc_svd(traj, full_matrices=False)
+        # extract betatron sine & cosine modes fom mixing matrix
+        sin_modex = mixing_matrix[:160, xidcs[-1]]
+        cos_modex = mixing_matrix[:160, xidcs[0]]
+        sin_modey = mixing_matrix[160:, yidcs[-1]]
+        cos_modey = mixing_matrix[160:, yidcs[0]]
 
-            # collect source signals and mixing matrix
-            signals = umat * _np.sqrt(traj.shape[0] - 1)  # data signals
-            mixing_matrix = vtmat.T @ _np.diag(svals)
-            mixing_matrix /= _np.sqrt(traj.shape[0] - 1)
+        # calculate beta function & phase from betatron modes
+        betax, phasex = self.get_beta_and_phase_from_betatron_modes(
+            sin_modex, cos_modex, betax_model
+        )
+        betay, phasey = self.get_beta_and_phase_from_betatron_modes(
+            sin_modey, cos_modey, betay_model
+        )
 
-            # determine betatron sine and cosine modes
-            sin_mode = mixing_matrix[:, 1]  # check this
-            cos_mode = mixing_matrix[:, 0]
+        # calculate signal variance
+        signalx = _np.sqrt(_np.sum(svals[xidcs[0] : xidcs[1] + 1] ** 2))
+        signaly = _np.sqrt(_np.sum(svals[yidcs[0] : yidcs[1] + 1] ** 2))
+        # and signal noise
+        noise = _np.sqrt(_np.sum(svals[3:] ** 2))
+        snrx, snry = signalx / noise, signaly / noise
 
-            # calculate beta function & phase from betatron modes
-            beta, phase = self.get_beta_and_phase_from_betatron_modes(
-                sin_mode, cos_mode, beta_model
-            )
+        # calculate error bars as in Appendix A of
+        # Wang, Chun-xi and Sajaev, Vadim and Yao, Chih-Yuan. Phase advance
+        # and ${\beta}$ function measurements using model-independent
+        # analysis. Phys. Rev. ST Accel. Beams. Vol 6, issue 10.
+        # DOI 10.1103/PhysRevSTAB.6.104001
 
-            signal = _np.sqrt(_np.sum(svals[:2] ** 2))  # signal variance
-            noise = _np.sqrt(_np.sum(svals[2:] ** 2))  # white noise
-            snr = signal / noise
-            nrsamples = self.nrsamples_pre + self.nrsamples_post
-            phase_error = 1 / snr / _np.sqrt(nrsamples)
-            phase_error *= _np.sqrt(beta_model.mean() / 2 / beta_model)
-            beta_error = 2 * beta_model * phase_error
+        nrsamples = self.nrsamples_pre + self.nrsamples_post
+        phasex_error = 1 / snrx / _np.sqrt(nrsamples)
+        phasex_error *= _np.sqrt(betax_model.mean() / 2 / betax_model)
+        betax_error = 2 * betax_model * phasex_error
 
-            # plot_results
-            if plot:
-                self.plot_betabeat_and_phase_error(
-                    beta_model,
-                    beta,
-                    phase_model,
-                    phase,
-                    title=f"PCA Analysis: beta{plane} & phase{plane}",
-                    compare_meas2model=compare_meas2model,
-                    bpms2use=self.bpms2use,
-                )
+        phasey_error = 1 / snry / _np.sqrt(nrsamples)
+        phasey_error *= _np.sqrt(betay_model.mean() / 2 / betay_model)
+        betay_error = 2 * betay_model * phasey_error
 
-            # save analysis data
-            pca_data["singular_values_" + plane] = svals
-            pca_data["source_signals_" + plane] = signals
-            pca_data["mixing_matrix_" + plane] = mixing_matrix
-            pca_data["beta" + plane] = beta
-            pca_data["phase" + plane] = phase
-            pca_data["snr" + plane] = snr
-            pca_data["beta" + plane + "_err"] = beta_error
-            pca_data["phase" + plane + "_err"] = phase_error
+        pca_data["betax"] = betax
+        pca_data["betay"] = betay
+        pca_data["phasex"] = phasex
+        pca_data["phasey"] = phasey
+        pca_data["snrx"] = snrx
+        pca_data["snry"] = snry
+        pca_data["betax_err"] = betax_error
+        pca_data["betay_err"] = betay_error
+        pca_data["phasex_err"] = phasex_error
+        pca_data["phasex_err"] = phasey_error
         self.pca_data = pca_data
 
     def identify_modes(self, tune1, tune2, tunex, tuney):
@@ -1411,10 +1358,14 @@ class TbTDataAnalysis(MeasureTbTData):
 
     def plot_modal_analysis(self):
         """."""
-        # TODO: reuse code from `principal_components_analysis`
-        trajs = _np.concatenate((self.trajx, self.trajy), axis=1)
+        if self.pca_data is None:
+            self.principal_components_analysis(calc_optics=False)
 
-        u, s, vt = self.calc_svd(trajs, full_matrices=False)
+        s = self.pca_data["singular_values"]
+        u = self.pca_data["source_signals"]
+        vt = self.pca_data["mixing_matrix"].T
+        xidcs = self.pca_data["xidcs"]
+        yidcs = self.pca_data["yidcs"]
 
         fig = _mplt.figure(figsize=(14, 12))
 
@@ -1433,69 +1384,105 @@ class TbTDataAnalysis(MeasureTbTData):
         spec2 = fig.add_subplot(gs[3, 1], sharex=spec1, sharey=spec1)
 
         svals.plot(s, "o", color="k", mfc="none")
+        idx = _np.arange(len(s))
+        sel = _np.array(xidcs)
+        svals.plot(
+            idx[sel], s[sel], "o", color="b",
+            mfc="none", label="hor. signals singular values"
+        )
+        sel = _np.array(yidcs)
+        svals.plot(
+            idx[sel], s[sel], "o", color="r",
+            mfc="none", label='ver. signals singular values')
         svals.set_title("singular values spectrum")
         svals.set_yscale("log")
+        svals.legend()
 
-        var.plot(_np.cumsum(s) / _np.sum(s), "o", color="k", mfc="none")
+        variance = _np.cumsum(s) / _np.sum(s)
+        var.plot(variance, "o", color="k", mfc="none")
+        idx = _np.arange(len(variance))
+        sel = _np.array(xidcs)
+        var.plot(idx[sel], variance[sel], "o", color="b", mfc="none")
+
+        sel = _np.array(yidcs)
+        var.plot(idx[sel], variance[sel], "o", color="r", mfc="none")
+
         var.set_title("explained variance")
         var.set_xlabel("rank")
 
-        source1.plot(u[:, 0], label="mode 0")
-        source1.plot(u[:, 1], label="mode 1")
-        source1.set_title("temporal modes - axis 1")
+        source1.plot(u[:, xidcs[0]], label="hor. mode 0")
+        source1.plot(u[:, xidcs[1]], label="hor. mode 1")
+        source1.set_title("temporal modes - hor. source signals")
         source1.set_xlabel("turns index")
         source1.legend()
 
-        source2.plot(u[:, 2], label="mode 2")
-        source2.plot(u[:, 3], label="mode 3")
-        source2.set_title("temporal modes - axis 2")
+        source2.plot(u[:, yidcs[0]], label="ver. mode 0")
+        source2.plot(u[:, yidcs[1]], label="ver. mode 1")
+        source2.set_title("temporal modes - ver. source signals")
         source2.set_xlabel("turns index")
         source2.legend()
 
-        spatial1.plot(vt.T[:, 0], label="mode 0")
-        spatial1.plot(vt.T[:, 1], label="mode 1")
-        spatial1.set_title("spatial modes - axis 1")
+        spatial1.plot(vt.T[:, xidcs[0]], label="hor. mode 0")
+        spatial1.plot(vt.T[:, xidcs[1]], label="hor. mode 1")
+        spatial1.set_title("spatial modes - hor. source signals")
         spatial1.set_xlabel("BPMs index (H/V)")
         spatial1.legend()
 
-        spatial2.plot(vt.T[:, 2], label="mode 2")
-        spatial2.plot(vt.T[:, 3], label="mode 3")
-        spatial2.set_title("spatial modes - axis 2")
+        spatial2.plot(vt.T[:, yidcs[0]], label="ver. mode 0")
+        spatial2.plot(vt.T[:, yidcs[1]], label="ver. mode 1")
+        spatial2.set_title("spatial modes - ver. source signals")
         spatial2.set_xlabel("BPMs index (H/V)")
         spatial2.legend()
 
         freq, fourier = _np.fft.rfftfreq(n=u.shape[0]), _np.fft.rfft(u, axis=0)
 
+        specx = _np.abs(fourier)[:, _np.array(xidcs)]
         spec1.plot(
-            freq,
-            _np.abs(fourier)[:, 0],
-            "o-",
-            color="C0",
-            mfc="none",
-            label="mode 0",
+            freq, specx[:, 0], "o-", color="b",
+            mfc="none", label="hor. mode 0"
         )
         spec1.plot(
-            freq, _np.abs(fourier)[:, 1], "x-", color="C0", label="mode 1"
+            freq, specx[:, 1], "x-", color="b",
+            label="hor. mode 1"
         )
-        spec1.set_title("temporal modes spectrum - axis 1")
+        spec1.set_title("temporal modes spectrum - hor. source signals")
         spec1.set_xlabel("fractional tune")
         spec1.legend()
+        peak_idx = _np.argmax(specx[:, 0])
+        peak_val = specx[peak_idx, 0]
+        peak_freq = freq[peak_idx]
+        spec1.annotate(
+            f"hor. tune = {peak_freq:.4f}",
+            xy=(peak_freq, peak_val),
+            xytext=(peak_freq + 0.05, 0.9 * peak_val),
+            arrowprops=dict(arrowstyle="->", color="k"),
+            bbox=dict(boxstyle="round,pad=0.2", fc="w", ec="k", lw=0.5),
+            fontsize=10,
+        )
 
+        specy = _np.abs(fourier)[:, _np.array(yidcs)]
         spec2.plot(
-            freq,
-            _np.abs(fourier)[:, 2],
-            "o-",
-            color="C1",
-            mfc="none",
-            label="mode 2",
+            freq, specy[:, 0], "o-", color="r",
+            mfc="none", label="ver. mode 0",
         )
         spec2.plot(
-            freq, _np.abs(fourier)[:, 3], "x-", color="C1", label="mode 3"
+            freq, specy[:, 1], "x-", color="r",
+            label="ver. mode 1"
         )
-        spec2.set_title("temporal modes spectrum - axis 2")
+        spec2.set_title("temporal modes spectrum - ver. source signals")
         spec2.set_xlabel("fractional tune")
         spec2.legend()
-
+        peak_idx = _np.argmax(specy[:, 0])
+        peak_val = specy[peak_idx, 0]
+        peak_freq = freq[peak_idx]
+        spec2.annotate(
+            f"ver. tune = {peak_freq:.4f}",
+            xy=(peak_freq, peak_val),
+            xytext=(peak_freq + 0.05, 0.9 * peak_val),
+            arrowprops=dict(arrowstyle="->", color="k"),
+            bbox=dict(boxstyle="round,pad=0.2", fc="w", ec="k", lw=0.5),
+            fontsize=10,
+        )
         _mplt.tight_layout()
 
         _mplt.show()
