@@ -208,7 +208,6 @@ class LOCOAnalysis:
         kickx=15,
         kicky=15 * 1.5,
         kickrf=15 * 5 * 1e6,
-        save=False,
         fname=None,
     ):
         """."""
@@ -311,8 +310,8 @@ class LOCOAnalysis:
         axy.legend(loc="upper right", fontsize=11)
         ayx.legend(loc="upper right", fontsize=11)
         ayy.legend(loc="upper right", fontsize=11)
-        if save:
-            fig.savefig(fname + ".png", dpi=DEFAULT_FIG_DPI, format="png")
+        if fname:
+            fig.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
 
     def plot_3d_fitting(self, diff1, diff2, fname):
         """."""
@@ -364,10 +363,11 @@ class LOCOAnalysis:
         ax2.set_zlabel(r"$|\chi|$ [$\mu$m]", labelpad=15)
         ax2.set_title("Measured - LOCO Fit")
         plt.tight_layout()
-        fig.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
+        if fname:
+            fig.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
 
     def plot_quadrupoles_gradients_by_family(
-        self, nom_model, fit_model, save=False, fname=None
+        self, nom_model, fit_model, fname=None
     ):
         """."""
         fig = plt.figure(figsize=(12, 5))
@@ -436,18 +436,13 @@ class LOCOAnalysis:
         ax1.legend(loc="upper left", bbox_to_anchor=(1, 1.0))
         ax1.grid(alpha=0.5, linestyle="--")
         plt.tight_layout()
-        if save:
-            if fname is None:
-                fig.savefig(
-                    "quadrupoles_gradients.png",
-                    format="png",
-                    dpi=DEFAULT_FIG_DPI,
-                )
-            else:
-                fig.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
+        if fname:
+            fig.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
         return df_stats
 
-    def save_quadrupoles_variations(self, nom_model, fit_model, fname=""):
+    def save_quadrupoles_variations(
+        self, nom_model, fit_model, fname_family, fname_trims
+    ):
         """."""
         fam = self.famdata
         qn = np.array(fam["QN"]["index"]).ravel()
@@ -470,20 +465,14 @@ class LOCOAnalysis:
         for famname in quad_families:
             quadfam_averages[famname] = np.mean(dkl[quadfam_idx[famname]])
 
-        _save(
-            data=quadfam_averages,
-            fname="quad_family_average" + fname,
-            overwrite=True,
-        )
+        _save(data=quadfam_averages, fname=fname_family, overwrite=False)
 
         dkl_no_average = dkl
         for qnames in quad_families:
             idx_list = quadfam_idx[qnames]
             dkl_no_average[idx_list] -= quadfam_averages[qnames]
 
-        np.savetxt(
-            "quad_trims_deltakl_no_average_" + fname + "_.txt", dkl_no_average
-        )
+        np.savetxt(fname_trims + ".txt", dkl_no_average)
 
     def save_skew_quadrupoles_variations(self, nom_model, fit_model, fname=""):
         """."""
@@ -497,10 +486,10 @@ class LOCOAnalysis:
         ).flatten()
         dksl = ksl_fit - ksl_nom
 
-        np.savetxt("skewquad_deltaksl_" + fname + "_.txt", dksl)
+        np.savetxt(fname + ".txt", dksl)
 
     def plot_quadrupoles_gradients_by_s(
-        self, nom_model, fit_model, save=False, fname=None
+        self, nom_model, fit_model, fname=None
     ):
         """."""
         fig = plt.figure(figsize=(12, 4))
@@ -533,20 +522,11 @@ class LOCOAnalysis:
         ax1.set_ylabel("$\Delta K/K_0$ [%]")
         ax1.set_title("Quadrupoles changes along the ring")
         plt.tight_layout()
-        if save:
-            if fname is None:
-                fig.savefig(
-                    "quadrupoles_gradients.png",
-                    format="png",
-                    dpi=DEFAULT_FIG_DPI,
-                )
-            else:
-                fig.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
+        if fname:
+            fig.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
         return kfit, knom, perc
 
-    def plot_skew_quadrupoles(
-        self, nom_model, fit_model, save=False, fname=None
-    ):
+    def plot_skew_quadrupoles(self, nom_model, fit_model, fname=None):
         """."""
         _ = plt.figure(figsize=(12, 4))
         gs = mpl_gs.GridSpec(1, 1)
@@ -579,18 +559,11 @@ class LOCOAnalysis:
         ax1.set_ylabel("$\Delta$KsL [1/m]")
         ax1.set_title("Skew quadrupoles changes along the ring")
         plt.tight_layout()
-        if save:
-            if fname is None:
-                plt.savefig(
-                    "skew_quadrupoles_skew_gradients.png",
-                    format="png",
-                    dpi=DEFAULT_FIG_DPI,
-                )
-            else:
-                plt.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
+        if fname:
+            plt.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
         return kfit, knom, percentage
 
-    def plot_gain(self, save=False, fname=None):
+    def plot_gain(self, fname=None):
         """."""
         _, axs = plt.subplots(3, 1, figsize=(14, 14))
 
@@ -659,13 +632,10 @@ class LOCOAnalysis:
             axs[2], xdelta=xdelta, yloc=gain_corr.max()
         )
         plt.tight_layout()
-        if save:
-            if fname is None:
-                plt.savefig("gains.png", format="png", dpi=DEFAULT_FIG_DPI)
-            else:
-                plt.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
+        if fname:
+            plt.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
 
-    def beta_and_tune(self, twiss=False):
+    def beta_and_tune(self, twiss=False, fname=None):
         """."""
         names = ["betax", "betay", "mux", "muy"]
         nom, fit = self.twi_nom, self.twi_fit
@@ -712,7 +682,8 @@ class LOCOAnalysis:
         ax.legend(loc="lower right", fontsize=10)
         ax.grid(alpha=0.5, linestyle="--")
         plt.tight_layout()
-        plt.savefig("beta_beating.png", dpi=DEFAULT_FIG_DPI)
+        if fname:
+            plt.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
 
         tunex_meas = 49 + round(self.loco_setup["tunex"], 4)
         tuney_meas = 14 + round(self.loco_setup["tuney"], 4)
@@ -757,7 +728,7 @@ class LOCOAnalysis:
         df_betabeat.loc[:, tmp.columns] = np.round(tmp, 4)
         return df_tunes.round(4), df_betabeat
 
-    def dispersion(self, disp_meas=None, twiss=False):
+    def dispersion(self, disp_meas=None, twiss=False, fname=None):
         """."""
         _ = plt.figure(figsize=(14, 6))
         gs = mpl_gs.GridSpec(2, 1)
@@ -853,7 +824,8 @@ class LOCOAnalysis:
         self._create_sectors_vlines(ax1, xdelta=xdelta, annotate=False)
         self._create_sectors_vlines(ax2, xdelta=xdelta, yloc=max_val * 0.9)
         plt.tight_layout()
-        plt.savefig("dispersion.png", dpi=DEFAULT_FIG_DPI)
+        if fname:
+            plt.savefig(fname + ".png", format="png", dpi=DEFAULT_FIG_DPI)
         return df_disp
 
     def emittance_and_coupling(self):

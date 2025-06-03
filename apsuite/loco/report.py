@@ -305,7 +305,7 @@ class LOCOReport(FPDF):
             )
             self.ln(tab_h)
 
-    def create_report(self, fname_report, fname_setup, fname_fit, folder=None):
+    def create_report(self, fname_setup, fname_fit, folder=None):
         """."""
         if folder is not None:
             fname_setup = folder + fname_setup
@@ -323,37 +323,37 @@ class LOCOReport(FPDF):
         dnomi = config.matrix - config.goalmat
         dloco = orm_fit - config.goalmat
 
-        label = fname_report
         loco_anly.plot_histogram(
-            dnomi, dloco, save=True, fname="histogram" + label
+            dnomi, dloco, fname=folder + "histogram"
         )
-        loco_anly.plot_3d_fitting(dnomi, dloco, fname="3dplot" + label)
+        loco_anly.plot_3d_fitting(
+            dnomi, dloco, fname=folder + "3dplot"
+        )
 
         df_quad_stats = loco_anly.plot_quadrupoles_gradients_by_family(
             nom_model=mod,
             fit_model=loco_data["fit_model"],
-            save=True,
-            fname="quad_by_family" + label,
+            fname=folder + "quad_by_family"
         )
         self._df_quad_stats = df_quad_stats
         loco_anly.plot_quadrupoles_gradients_by_s(
             nom_model=mod,
             fit_model=loco_data["fit_model"],
-            save=True,
-            fname="quad_by_s" + label,
+            fname=folder + "quad_by_s"
         )
         loco_anly.plot_skew_quadrupoles(
-            mod,
-            loco_data["fit_model"],
-            save=True,
-            fname="skewquad_by_s" + label,
+            mod, loco_data["fit_model"], fname=folder + "skewquad_by_s"
         )
-        loco_anly.plot_gain(save=True, fname="gains" + label)
+        loco_anly.plot_gain(fname=folder + "gains")
         self._df_emits = loco_anly.emittance_and_coupling()
 
         loco_anly.calc_twiss()
-        self._df_tunes, self._df_betabeat = loco_anly.beta_and_tune()
-        self._df_disp = loco_anly.dispersion()
+        self._df_tunes, self._df_betabeat = loco_anly.beta_and_tune(
+            fname=folder + "beta_beating"
+        )
+        self._df_disp = loco_anly.dispersion(
+            fname=folder + "dispersion_function"
+        )
 
         # loco_anly.calc_edteng()
         # self._df_tunes, self._df_betabeat = \
@@ -361,10 +361,13 @@ class LOCOReport(FPDF):
         # self._df_disp = loco_anly.dispersion(twiss=False)
 
         loco_anly.save_quadrupoles_variations(
-            mod, loco_data["fit_model"], fname=label
+            mod,
+            loco_data["fit_model"],
+            fname_family=folder + "quad_family_average",
+            fname_trims=folder + "quad_trims_deltakl_zero_average",
         )
         loco_anly.save_skew_quadrupoles_variations(
-            mod, loco_data["fit_model"], fname=label
+            mod, loco_data["fit_model"], fname=folder + "skewquad_deltaksl"
         )
 
         self.loco_data = loco_data
@@ -376,4 +379,4 @@ class LOCOReport(FPDF):
         self.add_skewquadfit_ang_gains()
         self.add_tune_emit_and_optics()
 
-        self.output("report_" + label + ".pdf", "F")
+        self.output(folder + "report.pdf", "F")
