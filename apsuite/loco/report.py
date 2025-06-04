@@ -207,8 +207,9 @@ class LOCOReport(FPDF):
         self.page_title("Fitting indicators")
         img_w = self.WIDTH - 30
         _xp = (self.WIDTH - img_w) / 2
-        self.image("3dplot.png", x=_xp, y=40, w=img_w)
-        self.image("histogram.png", x=_xp - 5, y=140, w=img_w)
+        fldr = self._folder
+        self.image(fldr + "3dplot.png", x=_xp, y=40, w=img_w)
+        self.image(fldr + "histogram.png", x=_xp - 5, y=140, w=img_w)
 
     def add_quadfit(self):
         """."""
@@ -216,8 +217,9 @@ class LOCOReport(FPDF):
         self.page_title("Normal quadrupoles variations")
         img_w = self.WIDTH - 30
         _xp = (self.WIDTH - img_w) / 2
-        self.image("quad_by_family.png", x=_xp, y=110, w=img_w)
-        self.image("quad_by_s.png", x=_xp, y=200, w=img_w)
+        fldr = self._folder
+        self.image(fldr + "quad_by_family.png", x=_xp, y=110, w=img_w)
+        self.image(fldr + "quad_by_s.png", x=_xp, y=200, w=img_w)
         self.df_to_table(self._df_quad_stats)
 
     def add_skewquadfit_ang_gains(self):
@@ -226,11 +228,12 @@ class LOCOReport(FPDF):
         self.page_title("Skew quadrupoles variations")
         img_w = self.WIDTH - 30
         _xp = (self.WIDTH - img_w) / 2
-        self.image("skewquad_by_s.png", x=_xp, y=30, w=img_w)
+        fldr = self._folder
+        self.image(fldr + "skewquad_by_s.png", x=_xp, y=30, w=img_w)
         self.page_title("Gains: BPMs and correctors", loc_y=90)
         img_w = self.WIDTH - 30
         _xp = (self.WIDTH - img_w) / 2
-        self.image("gains.png", x=_xp, y=100, w=img_w)
+        self.image(fldr + "gains.png", x=_xp, y=100, w=img_w)
 
     def add_tune_emit_and_optics(self):
         """."""
@@ -245,7 +248,8 @@ class LOCOReport(FPDF):
         img_w = self.WIDTH - 30
         img_x = (self.WIDTH - img_w) / 2
         img_y = 90
-        self.image("beta_beating.png", x=img_x, y=img_y, w=img_w)
+        fldr = self._folder
+        self.image(fldr + "beta_beating.png", x=img_x, y=img_y, w=img_w)
         self.set_y(150)
         self.page_title("Optics: dispersion")
         self.df_to_table(self._df_disp, tw=22, th=5)
@@ -253,7 +257,13 @@ class LOCOReport(FPDF):
         img_h = self.HEIGHT * 0.3
         img_x = (self.WIDTH - img_w) / 2
         img_y = 185
-        self.image("dispersion.png", x=img_x, y=img_y, w=img_w, h=img_h)
+        self.image(
+            fldr + "dispersion_function.png",
+            x=img_x,
+            y=img_y,
+            w=img_w,
+            h=img_h,
+        )
 
     def df_to_table(self, df, tw=30, th=5, nr_tables=1, idx_table=0):
         """."""
@@ -310,6 +320,8 @@ class LOCOReport(FPDF):
         if folder is not None:
             fname_setup = folder + fname_setup
             fname_fit = folder + fname_fit
+        else:
+            folder = ""
         loco_anly = LOCOAnalysis(fname_setup=fname_setup, fname_fit=fname_fit)
 
         loco_anly.get_setup()
@@ -323,23 +335,19 @@ class LOCOReport(FPDF):
         dnomi = config.matrix - config.goalmat
         dloco = orm_fit - config.goalmat
 
-        loco_anly.plot_histogram(
-            dnomi, dloco, fname=folder + "histogram"
-        )
-        loco_anly.plot_3d_fitting(
-            dnomi, dloco, fname=folder + "3dplot"
-        )
+        loco_anly.plot_histogram(dnomi, dloco, fname=folder + "histogram")
+        loco_anly.plot_3d_fitting(dnomi, dloco, fname=folder + "3dplot")
 
         df_quad_stats = loco_anly.plot_quadrupoles_gradients_by_family(
             nom_model=mod,
             fit_model=loco_data["fit_model"],
-            fname=folder + "quad_by_family"
+            fname=folder + "quad_by_family",
         )
         self._df_quad_stats = df_quad_stats
         loco_anly.plot_quadrupoles_gradients_by_s(
             nom_model=mod,
             fit_model=loco_data["fit_model"],
-            fname=folder + "quad_by_s"
+            fname=folder + "quad_by_s",
         )
         loco_anly.plot_skew_quadrupoles(
             mod, loco_data["fit_model"], fname=folder + "skewquad_by_s"
@@ -372,6 +380,7 @@ class LOCOReport(FPDF):
 
         self.loco_data = loco_data
         self.loco_analysis = loco_anly
+        self._folder = folder
 
         self.add_fingerprint_and_config()
         self.add_histogram()
