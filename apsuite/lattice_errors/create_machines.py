@@ -1,5 +1,6 @@
 import numpy as _np
 import copy as _copy
+import multiprocessing as _mp
 
 import pyaccel as _pyaccel
 import pymodels as _pymodels
@@ -843,7 +844,67 @@ class GenerateMachines:
 
         return step_data, orbf, orb0, kicks, corr_stts
 
-    def generate_machines(self, nr_steps=5):
+    def _parallel_generate_machine(self, arglist):
+        mach, nr_steps, bba_quad_idcs, shared_dict = arglist
+
+        print('Machine ', mach)
+        step_data = dict()
+        if self.params.force_orb_correction:
+            res = self._corr_machines_ramping_sv(
+                mach, nr_steps, bba_quad_idcs, step_data)
+        else:
+            res = self._corr_machines_fix_sv(
+                mach, nr_steps, bba_quad_idcs, step_data)
+        step_data, orbf, orb0, kicks_, corr_status = res
+
+        # Save last orbit corr data
+        step_dict = dict()
+        step_dict['orbcorr_status'] = corr_status
+        step_dict['ref_orb'] = orb0
+        step_dict['orbit'] = orbf
+        step_dict['corr_kicks'] = kicks_
+        step_data['step_' + str(nr_steps + 2)] = step_dict
+
+        # Do optics corrections:
+        step_dict = step_data['step_' + str(nr_steps + 2)]
+        if self.do_opt_corr:
+            self._do_all_opt_corrections(mach)
+
+        # Apply multipoles errors
+        self.apply_multipoles_errors(1, mach)
+
+        # Correct multipoles errors
+        if self.corr_multipoles:
+            self._correct_orbit_once(orb0, mach)
+
+            if self.do_opt_corr:
+                self._do_all_opt_corrections(mach)
+
+        edteng, *_ = _pyaccel.optics.calc_edwards_teng(self.models[mach])
+        twiss, *_ = _pyaccel.optics.calc_twiss(self.models[mach])
+        twiss0, *_ = _pyaccel.optics.calc_twiss(self.nominal_model)
+
+        dbetax = (twiss.betax - twiss0.betax)/twiss0.betax
+        dbetay = (twiss.betay - twiss0.betay)/twiss0.betay
+        step_dict['orbcorr_status'] = corr_status
+        step_dict['ref_orb'] = orb0
+        step_dict['orbit'] = orbf
+        step_dict['corr_kicks'] = kicks_
+        step_dict['twiss'] = twiss
+        step_dict['edteng'] = edteng
+        step_dict['betabeatingx'] = dbetax
+        step_dict['betabeatingy'] = dbetay
+        step_data['step_final'] = step_dict
+
+        model_dict = dict()
+        model_dict['model'] = self.models[mach]
+        model_dict['data'] = step_data
+        shared_dict['orbcorr_params'] = self.orbcorr_params
+        shared_dict[mach] = model_dict
+        self.machines_data = dict(shared_dict)
+        self.save_machines()
+
+    def generate_machines(self, nr_steps=5, parallel=True):
         """Generate all random machines.
 
         Args:
@@ -860,65 +921,19 @@ class GenerateMachines:
         # Create models
         self.models = self._create_models(self.nr_mach)
 
-        data = dict()
         self.original_numsingval = _copy.copy(self.orbcorr_params.numsingval)
-        for mach in range(self.nr_mach):
-            print('Machine ', mach)
-            step_data = dict()
-            if self.params.force_orb_correction:
-                res = self._corr_machines_ramping_sv(
-                    mach, nr_steps, bba_quad_idcs, step_data)
-            else:
-                res = self._corr_machines_fix_sv(
-                    mach, nr_steps, bba_quad_idcs, step_data)
-            step_data, orbf, orb0, kicks_, corr_status = res
+        # for mach in range(self.nr_mach):
+        
+        with _mp.Manager() as manager:
+            shared_dict = manager.dict()
 
-            # Save last orbit corr data
-            step_dict = dict()
-            step_dict['orbcorr_status'] = corr_status
-            step_dict['ref_orb'] = orb0
-            step_dict['orbit'] = orbf
-            step_dict['corr_kicks'] = kicks_
-            step_data['step_' + str(nr_steps + 2)] = step_dict
+            arglist = [(mach, nr_steps, bba_quad_idcs, shared_dict) for mach in range(self.nr_mach)]
 
-            # Do optics corrections:
-            step_dict = step_data['step_' + str(nr_steps + 2)]
-            if self.do_opt_corr:
-                self._do_all_opt_corrections(mach)
+            with _mp.Pool(processes=2 if parallel else 1) as pool:
+                pool.map(self._parallel_generate_machine, arglist)
 
-            # Apply multipoles errors
-            self.apply_multipoles_errors(1, mach)
-
-            # Correct multipoles errors
-            if self.corr_multipoles:
-                self._correct_orbit_once(orb0, mach)
-
-                if self.do_opt_corr:
-                    self._do_all_opt_corrections(mach)
-
-            edteng, *_ = _pyaccel.optics.calc_edwards_teng(self.models[mach])
-            twiss, *_ = _pyaccel.optics.calc_twiss(self.models[mach])
-            twiss0, *_ = _pyaccel.optics.calc_twiss(self.nominal_model)
-
-            dbetax = (twiss.betax - twiss0.betax)/twiss0.betax
-            dbetay = (twiss.betay - twiss0.betay)/twiss0.betay
-            step_dict['orbcorr_status'] = corr_status
-            step_dict['ref_orb'] = orb0
-            step_dict['orbit'] = orbf
-            step_dict['corr_kicks'] = kicks_
-            step_dict['twiss'] = twiss
-            step_dict['edteng'] = edteng
-            step_dict['betabeatingx'] = dbetax
-            step_dict['betabeatingy'] = dbetay
-            step_data['step_final'] = step_dict
-
-            model_dict = dict()
-            model_dict['model'] = self.models[mach]
-            model_dict['data'] = step_data
-            data['orbcorr_params'] = self.orbcorr_params
-            data[mach] = model_dict
-            self.machines_data = data
-            self.save_machines()
+            data = dict(shared_dict)
+            
         return data
 
     def insert_kickmap(self, model):
