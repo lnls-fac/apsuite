@@ -318,7 +318,6 @@ class LOCOReport(FPDF):
     def create_report(self, fname_setup, fname_fit, folder=None):
         """."""
         if folder is not None:
-            fname_setup = folder + fname_setup
             fname_fit = folder + fname_fit
         else:
             folder = ""
