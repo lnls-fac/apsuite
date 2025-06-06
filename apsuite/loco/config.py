@@ -129,6 +129,9 @@ class LOCOConfig:
         stg += stmp(
             "Constraint delta KL step", self.constraint_deltakl_step, ""
         )
+        stg += etmp(
+            "Constraint delta KL normalization", self.deltakl_normalization, ""
+        )
         stg += stmp("Singular values method", self.svd_method_str, "")
 
         if self.svd_method == LOCOConfig.SVD.Selection:
