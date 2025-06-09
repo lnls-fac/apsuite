@@ -1,5 +1,6 @@
 """."""
 import re as _re
+import time
 from collections import OrderedDict as _OrderedDict
 import numpy as _np
 from siriuspy.namesys import SiriusPVName as _PVName
@@ -20,7 +21,9 @@ class _Utils(_BaseClass):
 
     def apply_delta_strengths(
             self, delta_strengths, magname_filter=None,
-            percentage=0, apply=False, print_change=False):
+            percentage=0, apply=False, print_change=False,
+            timeout=10, wait_mon=False
+    ):
         """."""
         mags, init = self.get_strengths(magname_filter)
         dstren = _np.asarray(delta_strengths)
@@ -39,22 +42,30 @@ class _Utils(_BaseClass):
                 percentage=percentage, magnets=mags,
                 init_strength=init, implem_strength=implem)
         if apply:
-            self._implement_changes(magnets=mags, strengths=implem)
-        return init
+            return self._implement_changes(
+                magnets=mags, strengths=implem,
+                timeout=timeout, wait_mon=wait_mon
+            )
+        return True
 
     def apply_strengths(
             self, strengths, magname_filter=None,
-            percentage=0, apply=False, print_change=False):
+            percentage=0, apply=False, print_change=False,
+            timeout=10, wait_mon=False
+    ):
         """."""
         _, init = self.get_strengths(magname_filter)
         dstren = _np.asarray(strengths) - init
-        self.apply_delta_strengths(
+        return self.apply_delta_strengths(
             delta_strengths=dstren, magname_filter=magname_filter,
-            percentage=percentage, apply=apply, print_change=print_change)
-        return init
+            percentage=percentage, apply=apply, print_change=print_change,
+            timeout=timeout, wait_mon=wait_mon
+            )
 
     def apply_factor(
-            self, magname_filter=None, factor=1, apply=False):
+            self, magname_filter=None, factor=1, apply=False,
+            timeout=10, wait_mon=False,
+    ):
         """."""
         mags, init = self.get_strengths(magname_filter)
         implem = factor * init
@@ -62,12 +73,17 @@ class _Utils(_BaseClass):
             'Factor {:9.3f} will be applied in {:10s} magnets'.format(
                 factor, magname_filter))
         if apply:
-            self._implement_changes(magnets=mags, strengths=implem)
-        return init
+            return self._implement_changes(
+                magnets=mags, strengths=implem,
+                timeout=timeout, wait_mon=wait_mon
+            )
+        return True
 
     def change_average_strengths(
             self, magname_filter=None,
-            average=None, percentage=0, apply=False):
+            average=None, percentage=0, apply=False,
+            timeout=10, wait_mon=False
+    ):
         """."""
         mags, init = self.get_strengths(magname_filter)
         curr_ave = _np.mean(init)
@@ -79,8 +95,11 @@ class _Utils(_BaseClass):
         print('             goal average: {:+.4f}'.format(goal_ave))
         print('percentage of application: {:5.1f} %'.format(percentage))
         if apply:
-            self._implement_changes(magnets=mags, strengths=implem)
-        return init
+            return self._implement_changes(
+                magnets=mags, strengths=implem,
+                timeout=timeout, wait_mon=wait_mon,
+            )
+        return True
 
     def _print_current_status(self, magnets, goal_strength):
         """."""
@@ -105,11 +124,36 @@ class _Utils(_BaseClass):
                 '{:17s}:  {:9.4f} -> {:9.4f}  [{:7.4}%]'.format(
                     self.devices[mag].devname, ini, imp, perc))
 
-    def _implement_changes(self, magnets, strengths):
+    def _implement_changes(
+        self, magnets, strengths, timeout=10, wait_mon=False
+    ):
         """."""
+        t0 = time.time()
         for mag, stren in zip(magnets, strengths):
             self.devices[mag].strength = stren
-        print('applied!')
+
+        remaining_timeout = max(0.5, timeout - (time.time() - t0))
+
+        ok = True
+        for mag, stren in zip(magnets, strengths):
+            t0 = time.time()
+            success = self.devices[mag].set_strength(
+                stren, tol=1e-3,
+                timeout=remaining_timeout,
+                wait_mon=wait_mon
+            )
+            if not success:
+                print(f"Magnet {mag} timed-out!")
+            ok &= success
+            remaining_timeout = max(
+                0.5, remaining_timeout - (time.time() - t0)
+            )
+
+        print(
+            "application succesfull for all magnets!" if ok
+            else "application failed for some magnets!"
+        )
+        return ok
 
     def _create_devices(self, devices_names):
         """."""
@@ -294,7 +338,9 @@ class SISetTrimStrengths(_Utils):
 
     def apply_model_strengths(
             self, magname_filter, goal_model, ref_model=None,
-            percentage=0, apply=False, print_change=True):
+            percentage=0, apply=False, print_change=True,
+            timeout=10, wait_mon=False
+    ):
         """."""
         mags, init = self.get_strengths(magname_filter)
         refmod = ref_model or self.model
@@ -332,8 +378,11 @@ class SISetTrimStrengths(_Utils):
                 percentage=percentage, magnets=mags,
                 init_strength=init, implem_strength=implem)
         if apply:
-            self._implement_changes(magnets=mags, strengths=implem)
-        return init
+            return self._implement_changes(
+                magnets=mags, strengths=implem,
+                timeout=timeout, wait_mon=wait_mon
+            )
+        return True
 
     # private methods
     def _get_quad_names(self):
