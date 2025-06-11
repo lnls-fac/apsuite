@@ -132,6 +132,7 @@ class LOCOReport(FPDF):
             ("Jacobian manipulation", cfg.inv_method_str),
             ("Constraint delta KL total", cfg.constraint_deltakl_total),
             ("Constraint delta KL step", cfg.constraint_deltakl_step),
+            ("Constraint delta KL normalization ", cfg.deltakl_normalization),
             ("Nr. of BPMs", cfg.nr_bpm),
             ("Nr. of CHs", cfg.nr_ch),
             ("Nr. of CVs", cfg.nr_cv),
