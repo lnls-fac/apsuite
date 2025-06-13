@@ -24,6 +24,7 @@ class _Utils(_BaseClass):
         self,
         delta_strengths,
         magname_filter=None,
+        init_strengths=None,
         percentage=0,
         apply=False,
         print_change=False,
@@ -32,6 +33,8 @@ class _Utils(_BaseClass):
     ):
         """."""
         mags, init = self.get_strengths(magname_filter)
+        if init_strengths is not None:
+            init = _np.asarray(init_strengths)
         dstren = _np.asarray(delta_strengths)
         if len(dstren) != len(mags):
             raise ValueError(
@@ -65,6 +68,7 @@ class _Utils(_BaseClass):
         self,
         strengths,
         magname_filter=None,
+        init_strengths=None,
         percentage=0,
         apply=False,
         print_change=False,
@@ -72,11 +76,15 @@ class _Utils(_BaseClass):
         wait_mon=False,
     ):
         """."""
-        _, init = self.get_strengths(magname_filter)
+        if init_strengths is None:
+            _, init = self.get_strengths(magname_filter)
+        init = _np.asarray(init_strengths)
         dstren = _np.asarray(strengths) - init
+
         return self.apply_delta_strengths(
             delta_strengths=dstren,
             magname_filter=magname_filter,
+            init_strengths=init,
             percentage=percentage,
             apply=apply,
             print_change=print_change,
@@ -88,12 +96,15 @@ class _Utils(_BaseClass):
         self,
         magname_filter=None,
         factor=1,
+        init_strengths=None,
         apply=False,
         timeout=10,
         wait_mon=False,
     ):
         """."""
         mags, init = self.get_strengths(magname_filter)
+        if init_strengths is not None:
+            init = _np.asarray(init_strengths)
         implem = factor * init
         print(
             "Factor {:9.3f} will be applied in {:10s} magnets".format(
@@ -112,6 +123,7 @@ class _Utils(_BaseClass):
     def change_average_strengths(
         self,
         magname_filter=None,
+        init_strengths=None,
         average=None,
         percentage=0,
         apply=False,
@@ -120,6 +132,8 @@ class _Utils(_BaseClass):
     ):
         """."""
         mags, init = self.get_strengths(magname_filter)
+        if init_strengths is not None:
+            init = _np.asarray(init_strengths)
         curr_ave = _np.mean(init)
         # If average is None, the applied average kicks will be unchanged
         goal_ave = curr_ave if average is None else average
