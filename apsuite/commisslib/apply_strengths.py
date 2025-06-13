@@ -24,7 +24,7 @@ class _Utils(_BaseClass):
         self,
         delta_strengths,
         magname_filter=None,
-        init_strengths=None,
+        ref_strengths=None,
         percentage=0,
         apply=False,
         print_change=False,
@@ -32,19 +32,21 @@ class _Utils(_BaseClass):
         wait_mon=False,
     ):
         """."""
-        mags, init = self.get_strengths(magname_filter)
-        if init_strengths is not None:
-            init = _np.asarray(init_strengths)
+        mags, init_strengths = self.get_strengths(magname_filter)
+        if ref_strengths is not None:
+            ref = _np.asarray(ref_strengths)
+        else:
+            ref = init_strengths
         dstren = _np.asarray(delta_strengths)
         if len(dstren) != len(mags):
             raise ValueError(
                 "delta strength vector length is incompatible with \
                 number of magnets"
             )
-        implem = init + dstren * (percentage / 100)
+        implem = ref + dstren * (percentage / 100)
         if print_change:
             self._print_current_status(
-                magnets=mags, goal_strength=init + dstren
+                magnets=mags, goal_strength=ref + dstren
             )
             print()
             print("percentage of application: {:5.1f} %".format(percentage))
@@ -52,7 +54,7 @@ class _Utils(_BaseClass):
             self._print_strengths_to_be_implemented(
                 percentage=percentage,
                 magnets=mags,
-                init_strength=init,
+                init_strengths=init_strengths,
                 implem_strength=implem,
             )
         if apply:
@@ -68,7 +70,7 @@ class _Utils(_BaseClass):
         self,
         strengths,
         magname_filter=None,
-        init_strengths=None,
+        ref_strengths=None,
         percentage=0,
         apply=False,
         print_change=False,
@@ -76,15 +78,17 @@ class _Utils(_BaseClass):
         wait_mon=False,
     ):
         """."""
-        if init_strengths is None:
-            _, init = self.get_strengths(magname_filter)
-        init = _np.asarray(init_strengths)
-        dstren = _np.asarray(strengths) - init
+        _, init_strengths = self.get_strengths(magname_filter)
+        if ref_strengths is not None:
+            ref = _np.asarray(ref_strengths)
+        else:
+            ref = init_strengths
+        dstren = _np.asarray(strengths) - ref
 
         return self.apply_delta_strengths(
             delta_strengths=dstren,
             magname_filter=magname_filter,
-            init_strengths=init,
+            ref_strengths=ref,
             percentage=percentage,
             apply=apply,
             print_change=print_change,
@@ -96,16 +100,18 @@ class _Utils(_BaseClass):
         self,
         magname_filter=None,
         factor=1,
-        init_strengths=None,
+        ref_strengths=None,
         apply=False,
         timeout=10,
         wait_mon=False,
     ):
         """."""
-        mags, init = self.get_strengths(magname_filter)
-        if init_strengths is not None:
-            init = _np.asarray(init_strengths)
-        implem = factor * init
+        mags, init_strengths = self.get_strengths(magname_filter)
+        if ref_strengths is not None:
+            ref = _np.asarray(ref_strengths)
+        else:
+            ref = init_strengths
+        implem = factor * ref
         print(
             "Factor {:9.3f} will be applied in {:10s} magnets".format(
                 factor, magname_filter
@@ -123,7 +129,7 @@ class _Utils(_BaseClass):
     def change_average_strengths(
         self,
         magname_filter=None,
-        init_strengths=None,
+        ref_strengths=None,
         average=None,
         percentage=0,
         apply=False,
@@ -131,14 +137,16 @@ class _Utils(_BaseClass):
         wait_mon=False,
     ):
         """."""
-        mags, init = self.get_strengths(magname_filter)
-        if init_strengths is not None:
-            init = _np.asarray(init_strengths)
-        curr_ave = _np.mean(init)
+        mags, init_strengths = self.get_strengths(magname_filter)
+        if ref_strengths is not None:
+            ref = _np.asarray(ref_strengths)
+        else:
+            ref = init_strengths
+        curr_ave = _np.mean(ref)
         # If average is None, the applied average kicks will be unchanged
         goal_ave = curr_ave if average is None else average
         diff = (goal_ave - curr_ave) * percentage / 100
-        implem = init + diff
+        implem = ref + diff
         print("           actual average: {:+.4f}".format(curr_ave))
         print("             goal average: {:+.4f}".format(goal_ave))
         print("percentage of application: {:5.1f} %".format(percentage))
@@ -171,12 +179,12 @@ class _Utils(_BaseClass):
             )
 
     def _print_strengths_to_be_implemented(
-        self, percentage, magnets, init_strength, implem_strength
+        self, percentage, magnets, init_strengths, implem_strength
     ):
         """."""
         print("-- to be implemented --")
         print("percentage: {:5.1f}%".format(percentage))
-        for mag, ini, imp in zip(magnets, init_strength, implem_strength):
+        for mag, ini, imp in zip(magnets, init_strengths, implem_strength):
             perc = (imp - ini) / ini * 100
             print(
                 "{:17s}:  {:9.4f} -> {:9.4f}  [{:7.4}%]".format(
@@ -446,7 +454,7 @@ class SISetTrimStrengths(_Utils):
             self._print_strengths_to_be_implemented(
                 percentage=percentage,
                 magnets=mags,
-                init_strength=init,
+                init_strengths=init,
                 implem_strength=implem,
             )
         if apply:
