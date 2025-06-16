@@ -32,7 +32,7 @@ class TbTDataParams(_AcqBPMsSignalsParams):
         self.nrpoints_before = 50
         self.nrpoints_after = 750
         self.restore_init_state = True
-        self.do_pulse_evg = True
+        self.do_pulse_evg = False
 
         self.mags_strength_rtol = 0.05
         self._pingers2kick = ""  # 'h', 'v' or 'hv'
@@ -120,10 +120,16 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         )
 
         self._meas_finished_ok = True
+        self._init_timing_state = dict()
+        self._init_magnets_state = dict()
 
-        if self.isonline:
-            self._init_magnets_state = self.get_magnets_state()
-            self._init_timing_state = self.get_timing_state()
+    @property
+    def init_timing_state(self):
+        return self._init_timing_state
+
+    @property
+    def init_magnets_state(self):
+        return self._init_magnets_state
 
     def create_devices(self):
         """."""
@@ -417,6 +423,13 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
         data["init_timing_state"] = self._init_timing_state
         return data
 
+    def update_initial_states(self):
+        """."""
+        if not self.connected:
+            raise RuntimeError("Not connected yet!")
+        self._init_timing_state = self.get_timing_state()
+        self._init_magnets_state = self.get_magnets_state()
+
     def _restore_and_exit(self, timing_state=None, magnets_state=None):
         """Restore timing and magnets state and exit the measurement."""
         print("Restoring machine initial state.")
@@ -430,8 +443,6 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
             # no need to wait_mon if exiting anyways. wait_mon is critical to
             # prevent meas starting before magnets reach the required strentgh
             print(f"\tMagnets restored: {mags_ok}")
-
-        print("Measurement finished.")
 
     def check_machine_restored(self):
         """."""
@@ -555,9 +566,12 @@ class TbTDataAnalysis(MeasureTbTData):
         stg += "\n"
         stg += "EVT state\n"
 
-        stg += stmp("evt_mode", data["timing_state"]["evt_mode"], "")
-        stg += stmp("evt_delay", data["timing_state"]["evt_delay"], "")
-
+        stg += stmp("event_mode", data["timing_state"]["event_mode"], "")
+        stg += dtmp(
+            "event_delay_raw",
+            int(data["timing_state"]["event_delay_raw"]),
+            ""
+        )
         stg += "\n"
         stg += "BPMs state\n"
         stg += "\n"
@@ -570,13 +584,15 @@ class TbTDataAnalysis(MeasureTbTData):
         stg += stmp(
             "trigbpm_source", data["timing_state"]["trigbpm_source"], ""
         )
-        stg += stmp(
+        stg += dtmp(
             "trigbpm_nrpulses",
             data["timing_state"]["trigbpm_nrpulses"],
             "",
         )
-        stg += stmp(
-            "trigbpm_delay", data["timing_state"]["trigbpm_delay"], ""
+        stg += dtmp(
+            "trigbpm_delay_raw",
+            int(data["timing_state"]["trigbpm_delay_raw"]),
+            ""
         )
 
         stg += "\n"
