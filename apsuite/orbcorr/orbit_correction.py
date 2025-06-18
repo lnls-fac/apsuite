@@ -60,7 +60,6 @@ class OrbitCorr:
         dim = '6d' if self.params.use6dorb else '4d'
         self.respm = OrbRespmat(
             model=model, acc=self.acc, dim=dim, corr_system=corr_system)
-        self.respm.model.cavity_on = True
         self.params.enbllistbpm = _np.ones(
             self.respm.bpm_idx.size*2, dtype=bool)
         if corr_system == 'FOFB':
@@ -71,6 +70,11 @@ class OrbitCorr:
             pass
         else:
             raise ValueError('Corretion system must be "SOFB" or "FOFB"')
+        if self.params.enblrf and model.cavity_on is False:
+            raise ValueError(
+                "It is necessary to turn on the cavity if it is "
+                "to be used in correction."
+            )
 
         self.params.enbllistch = _np.ones(
             self.respm.ch_idx.size, dtype=bool)
