@@ -2,12 +2,13 @@
 
 import datetime as _datetime
 import time as _time
+import warnings
 
 import matplotlib.gridspec as _gridspec
 import matplotlib.pyplot as _mplt
 import numpy as _np
 import pyaccel as _pa
-# from mathphys.sobi import SOBI as _SOBI  # unfinished work in mathphys
+from mathphys.sobi import SOBI as _SOBI  # unfinished work in mathphys
 from pymodels import si as _si
 from scipy.optimize import curve_fit as _curve_fit
 from siriuspy.devices import PowerSupplyPU as _PowerSupplyPU, \
@@ -720,7 +721,7 @@ class TbTDataAnalysis(MeasureTbTData):
         self.switching_freq = data.get("switching_frequency", None)
 
     def linear_optics_analysis(
-        self, method="PCA", compare_meas2model=True
+        self, method="PCA", compare_meas2model=True, **kwargs
     ):  # TODO: Missing kwargs for each method
         """Linear optics (beta-beating & phase adv. errors) analysis.
 
@@ -736,7 +737,7 @@ class TbTDataAnalysis(MeasureTbTData):
             self.principal_components_analysis(calc_optics=True)
             data = self.pca_data
         elif method.lower() == "ica":
-            self.independent_components_analysis()
+            self.independent_components_analysis(calc_optics=True, **kwargs)
             data = self.ica_data
 
         betax = data["betax"]
@@ -1125,154 +1126,189 @@ class TbTDataAnalysis(MeasureTbTData):
         cos_mode_idx = idcs[1]
         return sin_mode_idx, cos_mode_idx
 
-    # def independent_components_analysis(
-    #     self,
-    #     n_components=4,
-    #     method="SOBI",
-    #     plot=True,
-    #     compare_meas2model=True,
-    #     **kwargs
-    # ):
-    #     r"""Peforms Independent Components Analysis (ICA).
+    def independent_components_analysis(
+        self,
+        n_components=4,
+        ica_method="SOBI",
+        calc_optics=True,
+        **kwargs
+    ):
+        r"""Peforms Independent Components Analysis (ICA).
 
-    #     Calculates beta-functions and betatron phase-advance at the BPMs using
-    #     ICA.
+        Calculates beta-functions and betatron phase-advance at the BPMs using
+        ICA.
 
-    #     ICA aims to identify the linear transformation (unmixing matrix)
-    #     revealing statistically independent source signals. Just as in PCA,
-    #     the beatron motion sine and cosine modes can be used to calculate
-    #     beta-functions and BPMs phase advances.
+        ICA aims to identify the linear transformation (unmixing matrix)
+        revealing statistically independent source signals. Just as in PCA,
+        the beatron motion sine and cosine modes can be used to calculate
+        beta-functions and BPMs phase advances.
 
-    #     While PCA aims to identify the linear transformation revealing
-    #     uncorrelated source signals, ICA seeks the transformation
-    #     revealing statistically independent signals, a requirement much
-    #     stronger than uncorrelatedness.
+        While PCA aims to identify the linear transformation revealing
+        uncorrelated source signals, ICA seeks the transformation
+        revealing statistically independent signals, a requirement much
+        stronger than uncorrelatedness.
 
-    #     ICA often performs better at blind source separation for linear
-    #     mixtures of sinals with non-gaussian distributions, which is relevant
-    #     for when several source signals have similar variance. This method
-    #     thus is generally more robust at betatron motion identification when
-    #     there are contaminating signals, bad acquisitions or similar variance
-    #     between horizontal and vertical modes (partticularly relevant when
-    #     betatron coupling is significant).
+        ICA often performs better at blind source separation for linear
+        mixtures of sinals with non-gaussian distributions, which is relevant
+        for when several source signals have similar variance. This method
+        thus is generally more robust at betatron motion identification when
+        there are contaminating signals, bad acquisitions or similar variance
+        between horizontal and vertical modes (partticularly relevant when
+        betatron coupling is significant).
 
-    #     ICA can be implemented with second-order blind source identification
-    #     (SOBI) [1], based on simultaneous diagonalization of the time-shifted
-    #     data covariance matrices or with information-theoretic
-    #     approaches seeking the maximization of the statistical indpendence of
-    #     the estimated source signals [2]. We use the latter, as implemented in
-    #     scikit-learn's FastICA [3,4].
+        ICA can be implemented with second-order blind source identification
+        (SOBI) [1], based on simultaneous diagonalization of the time-shifted
+        data covariance matrices or with information-theoretic
+        approaches seeking the maximization of the statistical indpendence of
+        the estimated source signals [2]. We use the latter, as implemented in
+        scikit-learn's FastICA [3,4].
 
-    #     The variance convention is the same as in PCA analysis: whiten source
-    #     signals, with the mixing matrix containing the modes energy/variance
-    #     [4].
+        The variance convention is the same as in PCA analysis: whiten source
+        signals, with the mixing matrix containing the modes energy/variance
+        [4].
 
-    #     Args:
-    #         n_components (int, optional): number of independent components to
-    #         decompose the data
+        Args:
+            n_components (int, optional): number of independent components to
+            decompose the data
 
-    #         plot (bool, optiional): whether to plot the analysis results.
-    #         Defaults to True
+            plot (bool, optiional): whether to plot the analysis results.
+            Defaults to True
 
-    #         compare_meas2model (bool, optional): whether to plot measured and
-    #         nominal beta-functions and BPMs phase-advance, as well as
-    #         beta-beting and phase-advance errors or plot only beta-beating and
-    #         phase-advance-errors. Defaults to True
+            compare_meas2model (bool, optional): whether to plot measured and
+            nominal beta-functions and BPMs phase-advance, as well as
+            beta-beting and phase-advance errors or plot only beta-beating and
+            phase-advance-errors. Defaults to True
 
-    #     References:
+        References:
 
-    #     [1] Huang, X. Beam-Based Correction and Optimization for Accelerators,
-    #         Section 5.2.3. CRC Press. 2020.
+        [1] Huang, X. Beam-Based Correction and Optimization for Accelerators,
+            Section 5.2.3. CRC Press. 2020.
 
-    #     [2] A. Hyvärinen, E. Oja. Independent component analysis: algorithms
-    #         and applications. Neural Networks. Volume 13, Issues 4-5, 2000,
-    #         Pages 411-430, https://doi.org/10.1016/S0893-6080(00)00026-5.
+        [2] A. Hyvärinen, E. Oja. Independent component analysis: algorithms
+            and applications. Neural Networks. Volume 13, Issues 4-5, 2000,
+            Pages 411-430, https://doi.org/10.1016/S0893-6080(00)00026-5.
 
-    #     [3] scikit-learn.decomposition.FastICA documentation.
-    #         https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.FastICA.html
+        [3] scikit-learn.decomposition.FastICA documentation.
+            https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.FastICA.html
 
-    #     [4] Scikit-learn examples. "Blind Source Separation using FastICA"
-    #         https://scikit-learn.org/stable/auto_examples/decomposition/plot_ica_blind_source_separation.html#sphx-glr-auto-examples-decomposition-plot-ica-blind-source-separation-py
-    #     """
-    #     ica_data = dict()
+        [4] Scikit-learn examples. "Blind Source Separation using FastICA"
+            https://scikit-learn.org/stable/auto_examples/decomposition/plot_ica_blind_source_separation.html#sphx-glr-auto-examples-decomposition-plot-ica-blind-source-separation-py
+        """
+        ica_data = dict()
 
-    #     traj = _np.concatenate((self.trajx, self.trajy), axis=1)
+        traj = _np.concatenate((self.trajx, self.trajy), axis=1)
 
-    #     # perform Independent Component Analysis (ICA)
-    #     if method.lower() == "fastica":
-    #         ica_ = _FastICA
-    #     elif method.lower() == "sobi":
-    #         ica_ = _SOBI
-    #     else:
-    #         ica_ = _SOBI
-    #         raise Warning("Unknown ICA method. Using SOBI.")
+        # perform Independent Component Analysis (ICA)
+        if ica_method.lower() == "fastica":
+            ica_ = _FastICA
+        elif ica_method.lower() == "sobi":
+            ica_ = _SOBI
+        else:
+            ica_ = _SOBI
+            warnings.warn("Unknown ICA method. Using SOBI.")
 
-    #     ica = ica_(n_components=n_components, **kwargs)
+        ica = ica_(n_components=n_components, **kwargs)
 
-    #     # collect source signals & mixing matrix
-    #     signals = ica.fit_transform(traj)
-    #     mixing_matrix = ica.mixing_
+        # collect source signals & mixing matrix
+        signals = ica.fit_transform(traj)
+        mixing_matrix = ica.mixing_
 
-    #     # determine betatron modes from mixing matrix
-    #     # largest variance should be contained in the betatron modes
-    #     idcs = _np.argsort(_np.std(mixing_matrix, axis=0))[-4:]
+        # determine betatron modes from mixing matrix
+        # largest variance should be contained in the betatron modes
+        # 4 modes = 2 modes for hor. & ver. planes, each
+        idcs = _np.argsort(_np.std(mixing_matrix, axis=0))[-4:]
+        betatron_temp_modes = signals[:, idcs]
+        betatron_spatial_modes = mixing_matrix[:, idcs]
 
-    #     # calulate tunes of the source signals
-    #     spec0, tunes0 = self.calc_spectrum(signals[:, 0], axis=0)
-    #     spec1, tunes1 = self.calc_spectrum(signals[:, 1], axis=0)
-    #     spec2, tunes2 = self.calc_spectrum(signals[:, 2], axis=0)
-    #     spec3, tunes3 = self.calc_spectrum(signals[:, 3], axis=0)
+        # calulate tunes of the source signals
+        spec0, tunes0 = self.calc_spectrum(betatron_temp_modes[:, 0], axis=0)
+        spec1, tunes1 = self.calc_spectrum(betatron_temp_modes[:, 1], axis=0)
+        spec2, tunes2 = self.calc_spectrum(betatron_temp_modes[:, 2], axis=0)
+        spec3, tunes3 = self.calc_spectrum(betatron_temp_modes[:, 3], axis=0)
 
-    #     tune0 = tunes0[_np.argmax(_np.abs(spec0))]
-    #     tune1 = tunes1[_np.argmax(_np.abs(spec1))]
-    #     tune2 = tunes2[_np.argmax(_np.abs(spec2))]
-    #     tune3 = tunes3[_np.argmax(_np.abs(spec3))]
+        tune0 = tunes0[_np.argmax(_np.abs(spec0))]
+        tune1 = tunes1[_np.argmax(_np.abs(spec1))]
+        tune2 = tunes2[_np.argmax(_np.abs(spec2))]
+        tune3 = tunes3[_np.argmax(_np.abs(spec3))]
 
-    #     # identify which signal is which (x or y)
-    #     xidcs, yidcs = self.identify_modes(
-    #         tune1, tune2, self.tunex, self.tuney
+        # identify which signal is which (x or y)
+        xidcs, yidcs = self.identify_modes_planes(
+            tunes=[tune0, tune1, tune2, tune3],
+            tunex=self.tunex,
+            tuney=self.tuney,
+        )
 
-    #     sin_mode = mixing_matrix[:, idcs[0]]
-    #     cos_mode = mixing_matrix[:, idcs[-1]]
+        # extract betatron modes fom mixing matrix
+        xspatial_modes = betatron_spatial_modes[:, xidcs]
+        xtemp_modes = betatron_temp_modes[:, xidcs]
 
-    #     # determine which betatron mode is the sine & which is cosine
-    #     # sine mode starts off close to zero
-    #     if _np.abs(sin_mode[0]) > _np.abs(cos_mode[0]):
-    #         cos_mode, sin_mode = sin_mode, cos_mode
-    #         idcs[0], idcs[1] = idcs[1], idcs[0]
+        yspatial_modes = betatron_spatial_modes[:, yidcs]
+        ytemp_modes = betatron_temp_modes[:, yidcs]
 
-    #     ica_data = dict()
-    #     if self.model_optics is None:
-    #         tunes = self.tunex + 49.0, self.tuney + 14.0
-    #         self._get_nominal_optics(tunes)
+        # determine sin and cos modes temporal modes
+        # sin/cos temporal modes correspond to cos/sin spatial modes
+        # spatial modes are used for calc. optics
+        # as in Xiaobiao's book , eqs. 5.31-5.32 (PCA), 5.55 (ICA)
+        sinx_idx, cosx_idx = self.identify_sin_cos_modes(
+            sources=xtemp_modes, plane="hor",
+        )
+        siny_idx, cosy_idx = self.identify_sin_cos_modes(
+            sources=ytemp_modes, plane="ver",
+        )
 
-    #     # get model optics
-    #     beta_model = self.model_optics["beta" + label]
-    #     phase_model = self.model_optics["phase" + label]
+        sin_temp_modex = xtemp_modes[:, sinx_idx]  # cos/sin spatial mode
+        cos_temp_modex = xtemp_modes[:, cosx_idx]  # corresponds to
+        sin_spatial_modex = xspatial_modes[:, cosx_idx]  # sin/cos temp.
+        cos_spatial_modex = xspatial_modes[:, sinx_idx]
 
-    #     # calculate beta function & phase from betatron modes
-    #     beta, phase = self.get_beta_and_phase_from_betatron_modes(
-    #         sin_mode, cos_mode, beta_model
-    #     )
+        sin_temp_modey = ytemp_modes[:, siny_idx]
+        cos_temp_modey = ytemp_modes[:, cosy_idx]
+        sin_spatial_modey = yspatial_modes[:, cosy_idx]
+        cos_spatial_modey = yspatial_modes[:, siny_idx]
 
-    #     # plot results
-    #     if plot:
-    #         self.plot_betabeat_and_phase_error(
-    #             beta_model,
-    #             beta,
-    #             phase_model,
-    #             phase,
-    #             title=f"ICA Analysis: beta{label} & phase{label}",
-    #             compare_meas2model=compare_meas2model,
-    #             bpms2use=self.bpms2use,
-    #         )
+        ica_data["source_signals"] = signals
+        ica_data["mixing_matrix"] = mixing_matrix
+        ica_data["betatron_temp_modes"] = betatron_temp_modes
+        ica_data["betatron_spatial_modes"] = betatron_spatial_modes
+        ica_data["xidcs"] = xidcs
+        ica_data["yidcs"] = yidcs
+        ica_data["sin_spatial_modex"] = sin_spatial_modex
+        ica_data["cos_spatial_modex"] = cos_spatial_modex
+        ica_data["sin_temp_modex"] = sin_temp_modex
+        ica_data["cos_temp_modex"] = cos_temp_modex
+        ica_data["sin_spatial_modey"] = sin_spatial_modey
+        ica_data["cos_spatial_modey"] = cos_spatial_modey
+        ica_data["sin_temp_modey"] = sin_temp_modey
+        ica_data["cos_temp_modey"] = cos_temp_modey
 
-    #     # save results
-    #     ica_data["source_signals_" + label] = signals
-    #     ica_data["mixing_matrix_" + label] = mixing_matrix
-    #     ica_data["beta" + label] = beta
-    #     ica_data["phase" + label] = phase
-    #     self.ica_data = ica_data
+        if not calc_optics:
+            self.ica_data = ica_data
+            return
+
+        if self.model_optics is None:
+            tunes = self.tunex + 49.0, self.tuney + 14.0
+            self._get_nominal_optics(tunes)
+
+        betax_model = self.model_optics["betax"]
+        betay_model = self.model_optics["betay"]
+
+        # calculate beta function & phase from spatial betatron modes
+        betax, phasex = self.get_beta_and_phase_from_betatron_modes(
+            sin_spatial_modex[:160], cos_spatial_modex[:160], betax_model
+        )
+        betay, phasey = self.get_beta_and_phase_from_betatron_modes(
+            sin_spatial_modey[160:], cos_spatial_modey[160:], betay_model
+        )
+
+        # save results
+        ica_data["betax"] = betax
+        ica_data["betay"] = betay
+        ica_data["phasex"] = phasex
+        ica_data["phasey"] = phasey
+        # TODO: error bars can be calculated similarly to PCA's case
+        # however, variance is not explictly available as singular values
+        # it must be extracted from the spatial modes.
+        self.ica_data = ica_data
 
     def equilibrium_params_analysis(self):
         """."""
@@ -1427,25 +1463,39 @@ class TbTDataAnalysis(MeasureTbTData):
         _mplt.show()
         return fig, ax
 
-    def plot_modal_analysis(self):
+    def plot_modal_analysis(self, method="PCA", **kwargs):
         """."""
         if self.pca_data is None:
             self.principal_components_analysis(calc_optics=False)
+        if method.lower() == "pca":
+            data = self.pca_data
+            u = data["source_signals"]
+        elif method.lower() == "ica":
+            if self.ica_data is None:
+                self.independent_components_analysis(
+                    calc_optics=False, **kwargs
+                )
+            data = self.ica_data
+            u = data["betatron_temp_modes"]
+        else:
+            raise ValueError("Unknown modal analysis method.")
 
         s = self.pca_data["singular_values"]
-        u = self.pca_data["source_signals"]
-        xidcs = self.pca_data["xidcs"]
-        yidcs = self.pca_data["yidcs"]
+        s_xidcs = self.pca_data["xidcs"]
+        s_yidcs = self.pca_data["xidcs"]
 
-        sin_temp_modex = self.pca_data["sin_temp_modex"]
-        sin_temp_modey = self.pca_data["sin_temp_modey"]
-        cos_temp_modex = self.pca_data["cos_temp_modex"]
-        cos_temp_modey = self.pca_data["cos_temp_modey"]
+        xidcs = data["xidcs"]
+        yidcs = data["yidcs"]
 
-        sin_spatial_modex = self.pca_data["sin_spatial_modex"]
-        sin_spatial_modey = self.pca_data["sin_spatial_modey"]
-        cos_spatial_modex = self.pca_data["cos_spatial_modex"]
-        cos_spatial_modey = self.pca_data["cos_spatial_modey"]
+        sin_temp_modex = data["sin_temp_modex"]
+        sin_temp_modey = data["sin_temp_modey"]
+        cos_temp_modex = data["cos_temp_modex"]
+        cos_temp_modey = data["cos_temp_modey"]
+
+        sin_spatial_modex = data["sin_spatial_modex"]
+        sin_spatial_modey = data["sin_spatial_modey"]
+        cos_spatial_modex = data["cos_spatial_modex"]
+        cos_spatial_modey = data["cos_spatial_modey"]
 
         fig = _mplt.figure(figsize=(14, 12))
 
@@ -1465,12 +1515,12 @@ class TbTDataAnalysis(MeasureTbTData):
 
         svals.plot(s, "o", color="k", mfc="none")
         idx = _np.arange(len(s))
-        sel = _np.array(xidcs)
+        sel = _np.array(s_xidcs)
         svals.plot(
             idx[sel], s[sel], "o", color="b",
             mfc="none", label="hor. signals singular values"
         )
-        sel = _np.array(yidcs)
+        sel = _np.array(s_yidcs)
         svals.plot(
             idx[sel], s[sel], "o", color="r",
             mfc="none", label='ver. signals singular values')
