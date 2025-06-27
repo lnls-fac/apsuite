@@ -1113,7 +1113,7 @@ class TbTDataAnalysis(MeasureTbTData):
             init, fin = self.trajx_turns_slice
             tune = self.tunex
         else:
-            init, fin = self.trajx_turns_slice
+            init, fin = self.trajy_turns_slice
             tune = self.tuney
 
         n = _np.arange(fin-init)
@@ -1482,7 +1482,7 @@ class TbTDataAnalysis(MeasureTbTData):
 
         s = self.pca_data["singular_values"]
         s_xidcs = self.pca_data["xidcs"]
-        s_yidcs = self.pca_data["xidcs"]
+        s_yidcs = self.pca_data["yidcs"]
 
         xidcs = data["xidcs"]
         yidcs = data["yidcs"]
