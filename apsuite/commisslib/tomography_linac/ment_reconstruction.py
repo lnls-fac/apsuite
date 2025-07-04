@@ -1,7 +1,7 @@
 """Script for implementation of the Maximum Entropy (MENT) algorithm.
 
 The algorithm reconstructs 2D-distribution given a set of 1D-projections, using
-the method of constrained optmization with Lagrange multipliers.
+the method of constrained optimization with Lagrange multipliers.
 
 [1] G. Minerbo, “MENT: A maximum entropy algorithm for reconstructing a source
 from projection data”, Computer Graphics and Image Processing, vol. 10, no. 1,
@@ -268,7 +268,7 @@ class Params(_ParamsBase):
 
 
 class DistribReconstruction(_BaseClass):
-    """Class for reconstructing 2D-distributions based on a convex mesh.
+    """Class for reconstructing 2D-distributions based on a regular grid.
 
     Each projection is represented by a set of bins (proj_bins) and has a
     matrix associated. For each projection bin, a set of paralel lines that
