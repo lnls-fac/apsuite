@@ -31,20 +31,27 @@ def plot_lines(lines, fig=None, ax=None, **kwargs):
 
 
 def plot_convex(
-    hull: _ConvexHull, color="r", marker="o", fig=None, ax=None, **kwargs
+    hull: _ConvexHull,
+    fig=None,
+    ax=None,
+    fill=False,
+    fill_kwargs=None,
+    **kwargs
 ):
     """Plots a convex hull."""
     if fig is None or ax is None:
         fig, ax = _plt.subplots(1, 1)
 
-    for simplex in hull.simplices:
-        ax.plot(
-            hull.points[simplex, 0],
-            hull.points[simplex, 1],
-            marker=marker,
-            color=color,
-            **kwargs,
-        )
+    pts = hull.points[hull.vertices]
+    pts = _np.append(pts, [pts[0]], axis=0)
+
+    lin = ax.plot(pts[:, 0], pts[:, 1], **kwargs)
+
+    if fill:
+        fill_kwargs = fill_kwargs or dict()
+        fill_kwargs['alpha'] = fill_kwargs.get('alpha', 0.5)
+        fill_kwargs['color'] = fill_kwargs.get('color', lin.get_color())
+        ax.fill(pts[:, 0], pts[:, 1], **fill_kwargs)
 
     return fig, ax
 
