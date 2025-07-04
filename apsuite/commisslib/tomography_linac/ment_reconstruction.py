@@ -1,4 +1,17 @@
-"""."""
+"""Script for implementation of the Maximum Entropy (MENT) algorithm.
+
+The algorithm reconstructs 2D-distribution given a set of 1D-projections, using
+the method of constrained optmization with Lagrange multipliers.
+
+[1] G. Minerbo, “MENT: A maximum entropy algorithm for reconstructing a source
+from projection data”, Computer Graphics and Image Processing, vol. 10, no. 1,
+pp. 48-68, May 1979. doi:10.1016/0146-664X(79)90034-0.
+
+[2] O. Silveira and F. de Sá, "MENT algorithm for transverse phase space
+reconstruction at SIRIUS", in Proc. IPAC'25, Taipei, Taiwan, Jun. 2025,
+pp. 2708-2711. doi:10.18429/JACoW-IPAC25-THPM035.
+"""
+
 
 from copy import deepcopy as _deepcopy
 
