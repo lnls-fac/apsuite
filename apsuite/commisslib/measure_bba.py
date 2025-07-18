@@ -1555,6 +1555,7 @@ class DoBBA(_BaseClass):
 
     # #### private methods ####
     def _do_bba(self):
+        self.data["bpms2dobba"] = self.bpms2dobba
         tini = _datetime.datetime.fromtimestamp(_time.time())
         print(
             "Starting measurement at {:s}".format(
