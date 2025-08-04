@@ -279,16 +279,22 @@ class OrbitCorr:
             model[self.respm.rf_idx[0]].frequency = kickrf
 
     def _process_kicks(self, dkicks):
-        chidx = self.respm.ch_idx
-        cvidx = self.respm.cv_idx
-
         par = self.params
+
+        chidx = self.respm.ch_idx[par.enbllistch]
+        cvidx = self.respm.cv_idx[par.enbllistcv]
 
         # if kicks are larger the maximum tolerated raise error
         kicks = self.get_kicks()
         nch = len(chidx)
         ncv = len(cvidx)
-        kickch, kickcv, kickrf = kicks[:nch], kicks[nch:nch+ncv], kicks[-1]
+
+        kickch, kickcv = kicks[:nch], kicks[nch:nch+ncv]
+        kickrf = _np.array([kicks[-1]])
+        kickch = kickch[par.enbllistch]
+        kickcv = kickcv[par.enbllistcv]
+        kickrf = kickrf[[par.enblrf]]
+
         cond = _np.any(_np.abs(kickch) >= par.maxkickch)
         cond &= _np.any(_np.abs(kickcv) >= par.maxkickcv)
         if par.enblrf:
