@@ -289,8 +289,6 @@ class OrbitCorr:
         ncv = len(cvidx)
 
         kickch, kickcv, kickrf = kicks[:nch], kicks[nch:nch+ncv], kicks[-1]
-        # kickch = kickch[par.enbllistch]
-        # kickcv = kickcv[par.enbllistcv]
 
         cond = _np.any(_np.abs(kickch) >= par.maxkickch)
         cond &= _np.any(_np.abs(kickcv) >= par.maxkickcv)
@@ -303,8 +301,6 @@ class OrbitCorr:
         dkickrf = dkicks[-1]
         maskch = dkickch != 0
         maskcv = dkickcv != 0
-        # dkickch = dkickch[par.enbllistch]
-        # dkickcv = dkickcv[par.enbllistcv]
 
         # apply factor to dkicks in case they are larger than maximum delta:
         coef_ch = min(
