@@ -281,19 +281,17 @@ class OrbitCorr:
     def _process_kicks(self, dkicks):
         par = self.params
 
-        chidx = self.respm.ch_idx[par.enbllistch]
-        cvidx = self.respm.cv_idx[par.enbllistcv]
+        chidx = self.respm.ch_idx
+        cvidx = self.respm.cv_idx
 
         # if kicks are larger the maximum tolerated raise error
         kicks = self.get_kicks()
         nch = len(chidx)
         ncv = len(cvidx)
 
-        kickch, kickcv = kicks[:nch], kicks[nch:nch+ncv]
-        kickrf = _np.array([kicks[-1]])
+        kickch, kickcv, kickrf = kicks[:nch], kicks[nch:nch+ncv], kicks[-1]
         kickch = kickch[par.enbllistch]
         kickcv = kickcv[par.enbllistcv]
-        kickrf = kickrf[[par.enblrf]]
 
         cond = _np.any(_np.abs(kickch) >= par.maxkickch)
         cond &= _np.any(_np.abs(kickcv) >= par.maxkickcv)
@@ -304,6 +302,8 @@ class OrbitCorr:
 
         dkickch, dkickcv = dkicks[:nch], dkicks[nch:nch+ncv]
         dkickrf = dkicks[-1]
+        dkickch = dkickch[par.enbllistch]
+        dkickcv = dkickcv[par.enbllistcv]
 
         # apply factor to dkicks in case they are larger than maximum delta:
         coef_ch = min(
@@ -351,7 +351,7 @@ class OrbitCorr:
             dkickrf *= coef_rf
         saturation_flag = _np.isclose(min_coef, 0)
 
-        kicks[:nch] += dkickch
-        kicks[nch:nch+ncv] += dkickcv
+        kicks[:nch][par.enbllistch] += dkickch
+        kicks[nch:nch+ncv][par.enbllistcv] += dkickcv
         kicks[-1] += dkickrf
         return kicks, saturation_flag
