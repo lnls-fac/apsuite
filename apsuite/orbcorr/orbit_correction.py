@@ -303,10 +303,20 @@ class OrbitCorr:
         maskcv = dkickcv != 0
 
         # apply factor to dkicks in case they are larger than maximum delta:
-        coef_ch = min(
-            par.corrgainch, par.maxdeltakickch/_np.abs(dkickch).max())
-        coef_cv = min(
-            par.corrgaincv, par.maxdeltakickcv/_np.abs(dkickcv).max())
+        if maskch.any():
+            coef_ch = min(
+                par.corrgainch,
+                par.maxdeltakickch/_np.abs(dkickch[maskch]).max())
+        else:
+            coef_ch = par.corrgainch
+
+        if maskcv.any():
+            coef_cv = min(
+                par.corrgaincv,
+                par.maxdeltakickcv/_np.abs(dkickcv[maskcv]).max())
+        else:
+            coef_cv = par.corrgaincv
+
         coef_rf = 1.0
         if par.enblrf and dkickrf != 0:
             coef_rf = min(
@@ -320,15 +330,17 @@ class OrbitCorr:
         # has a positive and a negative value. We must consider only
         # the positive one and take the minimum value along the columns
         # to be the multiplicative factor:
-        que = [(-par.maxkickch - kickch[maskch]) / dkickch[maskch], ]
-        que.append((par.maxkickch - kickch[maskch]) / dkickch[maskch])
-        que = _np.max(que, axis=0)
-        coef_ch = max(min(_np.min(que), coef_ch), 0)
+        if maskch.any():
+            que = [(-par.maxkickch - kickch[maskch]) / dkickch[maskch], ]
+            que.append((par.maxkickch - kickch[maskch]) / dkickch[maskch])
+            que = _np.max(que, axis=0)
+            coef_ch = max(min(_np.min(que), coef_ch), 0)
 
-        que = [(-par.maxkickcv - kickcv[maskcv]) / dkickcv[maskcv], ]
-        que.append((par.maxkickcv - kickcv[maskcv]) / dkickcv[maskcv])
-        que = _np.max(que, axis=0)
-        coef_cv = max(min(_np.min(que), coef_cv), 0)
+        if maskch.any():
+            que = [(-par.maxkickcv - kickcv[maskcv]) / dkickcv[maskcv], ]
+            que.append((par.maxkickcv - kickcv[maskcv]) / dkickcv[maskcv])
+            que = _np.max(que, axis=0)
+            coef_cv = max(min(_np.min(que), coef_cv), 0)
 
         if self.params.enblrf and dkickrf != 0:
             que = [(-par.maxkickrf - kickrf) / dkickrf, ]
