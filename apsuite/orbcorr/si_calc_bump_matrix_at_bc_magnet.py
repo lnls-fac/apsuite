@@ -7,14 +7,16 @@ import matplotlib.gridspec as mgs
 from pymodels import si
 import pyaccel
 from . import OrbitCorr
+from . import CorrParams
 
 
-def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6):
+def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6, n_bpms_out=2):
     """."""
     bpm1_sec_index = 3
     bpm2_sec_index = 4
 
     mod = si.create_accelerator()
+    mod.cavity_on = True
     orbcorr = OrbitCorr(mod, 'SI')
     orbcorr.params.tolerance = 1e-9
     orbcorr.params.minsingval = minsingval
@@ -28,8 +30,20 @@ def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6):
 
     idcs = np.array(
         [bpm1_sec_index, bpm2_sec_index,
-        160+bpm1_sec_index, 160+bpm2_sec_index])
+            160+bpm1_sec_index, 160+bpm2_sec_index])
     idcs += 8*mcidx
+
+    # remove closest BPMS
+    idlist = np.arange(0, 160, 1)
+    idcs_ignore = list()
+    for i in np.arange(n_bpms_out):
+        idcs_ignore.append(idlist[bpm1_sec_index + 8*mcidx - (i+1)])
+        idcs_ignore.append(idlist[bpm2_sec_index + 8*mcidx + (i+1)])
+    idcs_ignore = np.array(idcs_ignore)
+    idcs_ignore = np.tile(idcs_ignore, 2)
+    idcs_ignore[n_bpms_out*2:] += 160
+    if idcs_ignore.size != 0:
+        orbcorr.params.enbllistbpm[idcs_ignore] = False
 
     matbc = np.zeros((4, 4), dtype=float)
     mator = np.zeros((4, 4), dtype=float)
@@ -86,13 +100,18 @@ def test_matrices():
     mplt.show()
 
 
-def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0):
+def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0,
+               n_bpms_out=2):
     """."""
-    _, _, mful = calc_matrices(minsingval=0.2, mcidx=0)
+    bpm1_sec_index = 3
+    bpm2_sec_index = 4
+
+    _, _, mful = calc_matrices(minsingval=0.2, mcidx=bcidx)
 
     vec = np.array([posx, angx, posy, angy])
 
     mod = si.create_accelerator()
+    mod.cavity_on = True
     orbcorr = OrbitCorr(mod, 'SI')
     orbcorr.params.tolerance = 1e-9
     orbcorr.params.minsingval = 0.2
@@ -100,13 +119,22 @@ def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0):
     mci = pyaccel.lattice.find_indices(
         orbcorr.respm.model, 'fam_name', 'mc')[bcidx]
 
-    idcs = np.array([3, 4, 160+3, 160+4])
+    idcs = np.array(
+        [bpm1_sec_index, bpm2_sec_index,
+            160+bpm1_sec_index, 160+bpm2_sec_index])
     idcs += 8*bcidx
 
-    idcs_ignore = np.array([1, 2, 5, 6])
-    idcs_ignore = np.r_[idcs_ignore, 160 + idcs_ignore]
-    idcs_ignore += 8*bcidx
-    orbcorr.params.enbllistbpm[idcs_ignore] = False
+    # remove closest BPMS
+    idlist = np.arange(0, 160, 1)
+    idcs_ignore = list()
+    for i in np.arange(n_bpms_out):
+        idcs_ignore.append(idlist[bpm1_sec_index + 8*bcidx - (i+1)])
+        idcs_ignore.append(idlist[bpm2_sec_index + 8*bcidx + (i+1)])
+    idcs_ignore = np.array(idcs_ignore)
+    idcs_ignore = np.tile(idcs_ignore, 2)
+    idcs_ignore[n_bpms_out*2:] += 160
+    if idcs_ignore.size != 0:
+        orbcorr.params.enbllistbpm[idcs_ignore] = False
 
     gorb = orbcorr.get_orbit()
 
