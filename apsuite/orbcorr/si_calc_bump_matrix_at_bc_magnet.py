@@ -10,7 +10,7 @@ from . import OrbitCorr
 from . import CorrParams
 
 
-def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6, n_bpms_out=2):
+def calc_matrices(minsingval=0.2, mbcidx=0, deltax=10e-6, n_bpms_out=2):
     """."""
     bpm1_sec_index = 3
     bpm2_sec_index = 4
@@ -21,9 +21,9 @@ def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6, n_bpms_out=2):
     orbcorr.params.tolerance = 1e-9
     orbcorr.params.minsingval = minsingval
 
-    mcidx = max(min(mcidx, 19), 0)
+    mbcidx = max(min(mbcidx, 19), 0)
     mci = pyaccel.lattice.find_indices(
-        orbcorr.respm.model, 'fam_name', 'mc')[mcidx]
+        orbcorr.respm.model, 'fam_name', 'mc')[mbcidx]
 
     orb0 = orbcorr.get_orbit()
     kicks0 = orbcorr.get_kicks()
@@ -31,14 +31,14 @@ def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6, n_bpms_out=2):
     idcs = np.array(
         [bpm1_sec_index, bpm2_sec_index,
             160+bpm1_sec_index, 160+bpm2_sec_index])
-    idcs += 8*mcidx
+    idcs += 8*mbcidx
 
     # remove closest BPMS
     idlist = np.arange(0, 160, 1)
     idcs_ignore = list()
     for i in np.arange(n_bpms_out):
-        idcs_ignore.append(idlist[bpm1_sec_index + 8*mcidx - (i+1)])
-        idcs_ignore.append(idlist[bpm2_sec_index + 8*mcidx + (i+1)])
+        idcs_ignore.append(idlist[bpm1_sec_index + 8*mbcidx - (i+1)])
+        idcs_ignore.append(idlist[bpm2_sec_index + 8*mbcidx + (i+1)])
     idcs_ignore = np.array(idcs_ignore)
     idcs_ignore = np.tile(idcs_ignore, 2)
     idcs_ignore[n_bpms_out*2:] += 160
@@ -74,9 +74,9 @@ def calc_matrices(minsingval=0.2, mcidx=0, deltax=10e-6, n_bpms_out=2):
 
 def test_matrices():
     """."""
-    mbc0, mor0, mful0 = calc_matrices(minsingval=0.2, mcidx=0)
-    mbc1, mor1, mful1 = calc_matrices(minsingval=2, mcidx=0)
-    mbc2, mor2, mful2 = calc_matrices(minsingval=20, mcidx=0)
+    mbc0, mor0, mful0 = calc_matrices(minsingval=0.2, mbcidx=0)
+    mbc1, mor1, mful1 = calc_matrices(minsingval=2, mbcidx=0)
+    mbc2, mor2, mful2 = calc_matrices(minsingval=20, mbcidx=0)
 
     fig = mplt.figure(figsize=(6, 9))
     gs = mgs.GridSpec(3, 1)
@@ -100,13 +100,13 @@ def test_matrices():
     mplt.show()
 
 
-def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0,
+def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, mbcidx=0,
                n_bpms_out=2):
     """."""
     bpm1_sec_index = 3
     bpm2_sec_index = 4
 
-    _, _, mful = calc_matrices(minsingval=0.2, mcidx=bcidx)
+    _, _, mful = calc_matrices(minsingval=0.2, mbcidx=mbcidx)
 
     vec = np.array([posx, angx, posy, angy])
 
@@ -117,19 +117,19 @@ def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, bcidx=0,
     orbcorr.params.minsingval = 0.2
 
     mci = pyaccel.lattice.find_indices(
-        orbcorr.respm.model, 'fam_name', 'mc')[bcidx]
+        orbcorr.respm.model, 'fam_name', 'mc')[mbcidx]
 
     idcs = np.array(
         [bpm1_sec_index, bpm2_sec_index,
             160+bpm1_sec_index, 160+bpm2_sec_index])
-    idcs += 8*bcidx
+    idcs += 8*mbcidx
 
     # remove closest BPMS
     idlist = np.arange(0, 160, 1)
     idcs_ignore = list()
     for i in np.arange(n_bpms_out):
-        idcs_ignore.append(idlist[bpm1_sec_index + 8*bcidx - (i+1)])
-        idcs_ignore.append(idlist[bpm2_sec_index + 8*bcidx + (i+1)])
+        idcs_ignore.append(idlist[bpm1_sec_index + 8*mbcidx - (i+1)])
+        idcs_ignore.append(idlist[bpm2_sec_index + 8*mbcidx + (i+1)])
     idcs_ignore = np.array(idcs_ignore)
     idcs_ignore = np.tile(idcs_ignore, 2)
     idcs_ignore[n_bpms_out*2:] += 160
