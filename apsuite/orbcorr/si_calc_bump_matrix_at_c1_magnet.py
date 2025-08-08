@@ -79,36 +79,47 @@ def calc_matrices(minsingval=0.2, mb1idx=0, deltax=10e-6, n_bpms_out=3):
     return matb2, mator, matful
 
 
-def test_matrices():
+def test_matrices(flag_n_bpms=True, flag_singvals=True):
     """."""
-    mbc0, mor0, mful0 = calc_matrices(minsingval=0.2, mb1idx=0)
-    mbc1, mor1, mful1 = calc_matrices(minsingval=2, mb1idx=0)
-    mbc2, mor2, mful2 = calc_matrices(minsingval=20, mb1idx=0)
+    ms_i2s = []
+    ms_i2r = []
+    ms_s2r = []
+    cases = []
+    svals = 0.2
+    if flag_n_bpms:
+        for n_bpms in [0, 1, 2]:
+            cases.append((n_bpms, svals))
+            m_i2s, m_i2r, m_s2r = calc_matrices(
+                minsingval=svals, mb1idx=0, n_bpms_out=n_bpms
+            )
+            ms_i2s.append(m_i2s)
+            ms_i2r.append(m_i2r)
+            ms_s2r.append(m_s2r)
 
-    fig = mplt.figure(figsize=(6, 9))
-    gs = mgs.GridSpec(3, 1)
+    n_bpms = 0
+    if flag_singvals:
+        for svals in [0.2, 2, 20]:
+            cases.append((n_bpms, svals))
+            m_i2s, m_i2r, m_s2r = calc_matrices(
+                minsingval=svals, mb1idx=0, n_bpms_out=n_bpms
+            )
+            ms_i2s.append(m_i2s)
+            ms_i2r.append(m_i2r)
+            ms_s2r.append(m_s2r)
 
-    abc = fig.add_subplot(gs[0, 0])
-    aor = fig.add_subplot(gs[1, 0])
-    apr = fig.add_subplot(gs[2, 0])
+    fig, (a_i2s, a_i2r, a_s2r) = mplt.subplots(3, 1, figsize=(6, 9))
 
-    abc.plot(mbc0.ravel(), '-o')
-    abc.plot(mbc1.ravel(), '-o')
-    abc.plot(mbc2.ravel(), '-o')
+    for m_i2s, m_i2r, m_s2r, case in zip(ms_i2s, ms_i2r, ms_s2r, cases):
+        lab = f'nbpm={case[0]:d} svals={case[1]:.2f}'
+        a_i2s.plot(m_i2s.ravel(), '-o', label=lab)
+        a_i2r.plot(m_i2r.ravel(), '-o', label=lab)
+        a_s2r.plot(m_s2r.ravel(), '-o', label=lab)
 
-    aor.plot(mor0.ravel(), '-o')
-    aor.plot(mor1.ravel(), '-o')
-    aor.plot(mor2.ravel(), '-o')
-
-    apr.plot(mful0.ravel(), '-o')
-    apr.plot(mful1.ravel(), '-o')
-    apr.plot(mful2.ravel(), '-o')
-
-    mplt.show()
+    a_i2r.legend(loc='lower center', bbox_to_anchor=(0.5, 1))
+    fig.tight_layout()
+    return fig, (a_i2s, a_i2r, a_s2r)
 
 
-def test_bumps(angx=50e-6, angy=50e-6, posx=100e-6, posy=100e-6, mb1idx=0,
-               n_bpms_out=3):
     """."""
     bpm1_sec_index = 0
     bpm2_sec_index = 1
