@@ -2,7 +2,6 @@
 
 import numpy as np
 import matplotlib.pyplot as mplt
-import matplotlib.gridspec as mgs
 
 from pymodels import si
 import pyaccel
@@ -18,7 +17,8 @@ def calc_matrices(minsingval=0.2, mb1idx=0, deltax=10e-6, n_bpms_out=3):
 
     mod = si.create_accelerator()
     mod.cavity_on = True
-    orbcorr = OrbitCorr(mod, 'SI')
+    orbcorr = OrbitCorr(mod, 'SI', use6dorb=True)
+    orbcorr.params.enblrf = True
     orbcorr.params.tolerance = 1e-9
     orbcorr.params.minsingval = minsingval
 
@@ -61,14 +61,15 @@ def calc_matrices(minsingval=0.2, mb1idx=0, deltax=10e-6, n_bpms_out=3):
         gorb[idx] += deltax/2
         orbcorr.correct_orbit(goal_orbit=gorb)
         orbp = orbcorr.get_orbit()[idcs]
-        b2p = pyaccel.tracking.find_orbit6(
-            orbcorr.respm.model, indices='open')
+        b2p = pyaccel.tracking.find_orbit(
+            orbcorr.respm.model, indices='open'
+        )
         b2p = b2p[0:4, mb1i]
 
         gorb[idx] -= deltax
         orbcorr.correct_orbit(goal_orbit=gorb)
         orbn = orbcorr.get_orbit()[idcs]
-        b2n = pyaccel.tracking.find_orbit6(
+        b2n = pyaccel.tracking.find_orbit(
             orbcorr.respm.model, indices='open')
         b2n = b2n[0:4, mb1i]
 
@@ -120,17 +121,30 @@ def test_matrices(flag_n_bpms=True, flag_singvals=True):
     return fig, (a_i2s, a_i2r, a_s2r)
 
 
+def test_bumps(
+    angx=50e-6,
+    angy=50e-6,
+    posx=100e-6,
+    posy=100e-6,
+    mb1idx=0,
+    n_bpms_out=3,
+    m_s2r=None
+):
     """."""
     bpm1_sec_index = 0
     bpm2_sec_index = 1
 
-    _, _, mful = calc_matrices(minsingval=0.2, mb1idx=mb1idx)
+    if m_s2r is None:
+        _, _, m_s2r = calc_matrices(
+            minsingval=0.2, mb1idx=mb1idx, n_bpms_out=n_bpms_out
+        )
 
     vec = np.array([posx, angx, posy, angy])
 
     mod = si.create_accelerator()
     mod.cavity_on = True
-    orbcorr = OrbitCorr(mod, 'SI')
+    orbcorr = OrbitCorr(mod, 'SI', use6dorb=True)
+    orbcorr.params.enblrf = True
     orbcorr.params.tolerance = 1e-9
     orbcorr.params.minsingval = 0.2
 
@@ -162,18 +176,13 @@ def test_matrices(flag_n_bpms=True, flag_singvals=True):
 
     gorb = orbcorr.get_orbit()
 
-    x = np.dot(mful, vec)
+    x = np.dot(m_s2r, vec)
     gorb[idcs] = x
     orbcorr.correct_orbit(goal_orbit=gorb)
-    xres = pyaccel.tracking.find_orbit6(
+    xres = pyaccel.tracking.find_orbit(
         orbcorr.respm.model, indices='open')[0:4, mci]
 
-    fig = mplt.figure(figsize=(6, 9))
-    gs = mgs.GridSpec(3, 1)
-
-    ax = fig.add_subplot(gs[0, 0])
-    ay = fig.add_subplot(gs[1, 0])
-    az = fig.add_subplot(gs[2, 0])
+    fig, (ax, ay, az) = mplt.subplots(3, 1, figsize=(6, 9))
 
     ax.plot(1e6*vec, '-o')
     ax.plot(1e6*xres, '-o')
@@ -181,4 +190,5 @@ def test_matrices(flag_n_bpms=True, flag_singvals=True):
     ay.plot(orbcorr.get_kicks()[:-1]*1e6)
     az.plot(orbcorr.get_orbit()*1e6)
 
-    mplt.show()
+    fig.tight_layout()
+    return fig, (ax, ay, az)
