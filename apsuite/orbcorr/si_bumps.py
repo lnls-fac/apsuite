@@ -25,10 +25,27 @@ BPM_SEC_IDCS = {
     'SP': [-1, 0],
 }
 
+SS_NUMBERS = {
+    'SA': np.arange(1, 20, 4),
+    'SB': np.arange(2, 22, 2),
+    'SP': np.arange(3, 20, 4),
+}
+
 
 def _get_sec_bpm_indices(section_type='C1'):
     bdict = BPM_SEC_IDCS
     return bdict[section_type][0], bdict[section_type][1]
+
+
+def print_ss_section():
+    """Print straight section numbers."""
+    print('Straight section numbers: ')
+    print('SA:', end=' ')
+    print(SS_NUMBERS['SA'])
+    print('SB:', end=' ')
+    print(SS_NUMBERS['SB'])
+    print('SP:', end=' ')
+    print(SS_NUMBERS['SP'])
 
 
 def get_bpm_indices(section_type='C1', sidx=0):
@@ -77,7 +94,7 @@ def get_closest_bpms_indices(section_type='C1', sidx=0, n_bpms_out=2):
     return idcs_ignore
 
 
-def get_removed_corrs_indices(section_type='C1', sidx=0):
+def get_btwbpm_corrs_indices(section_type='C1', sidx=0):
     """Get correctors indices between BPMs and source.
 
     Args:
@@ -120,15 +137,70 @@ def get_source_marker_index(model, section_type='C1', sidx=0):
     """
     if 'S' not in section_type:
         nr = 1 if (section_type == 'BC') else 2
-        mbend = pyaccel.lattice.find_indices(
+        marker = pyaccel.lattice.find_indices(
             model, 'fam_name', MARKER_NAMES[section_type])[nr*sidx]
     else:
         mia = pyaccel.lattice.find_indices(model, 'fam_name', 'mia')
         mib = pyaccel.lattice.find_indices(model, 'fam_name', 'mib')
         mip = pyaccel.lattice.find_indices(model, 'fam_name', 'mip')
         idcs = np.sort(mia + mib + mip)
-        mbend = idcs[sidx]
-    return mbend
+
+        if sidx % 4 == 0:
+            if section_type != 'SA':
+                raise ValueError(
+                    'section {:.0f} is a SA section!'.format(sidx+1))
+
+        elif ((sidx - 1) % 4 == 0) or ((sidx - 3) % 4 == 0):
+            if section_type != 'SB':
+                raise ValueError(
+                    'section {:.0f} is a SB section!'.format(sidx+1))
+
+        elif (sidx-2) % 4 == 0:
+            if section_type != 'SP':
+                raise ValueError(
+                    'section {:.0f} is a SP section!'.format(sidx+1))
+
+        marker = idcs[sidx]
+    return marker
+
+
+def remove_corrs_btwbpm(orbcorr, section_type='C1', sidx=0):
+    """Remove correctors between BPMs.
+
+    Args:
+        orbcorr (OrbCorr object): OrbCorr object
+        section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+            Defaults to 'C1'.
+        sidx (int): Section indice. Defaults to 0.
+
+    Returns:
+        orbcorr: OrbCorr object
+    """
+    ch_idcs, cv_idcs = get_btwbpm_corrs_indices(section_type, sidx)
+    if len(ch_idcs) != 0:
+        orbcorr.params.enbllistch[ch_idcs] = False
+    if len(cv_idcs) != 0:
+        orbcorr.params.enbllistcv[cv_idcs] = False
+    return orbcorr
+
+
+def remove_closest_bpms(orbcorr, section_type='C1', sidx=0, n_bpms_out=2):
+    """Remove closest BPMs form orbit correction.
+
+    Args:
+        orbcorr (OrbCorr object): OrbCorr object
+        section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+            Defaults to 'C1'.
+        sidx (int): Section indice. Defaults to 0.
+        n_bpms_out (int): Nr of BPMs to remove from each side. Defaults to 2.
+
+    Returns:
+        orbcorr: OrbCorr object
+    """
+    idcs_ignore = get_closest_bpms_indices(section_type, sidx, n_bpms_out)
+    if idcs_ignore.size != 0:
+        orbcorr.params.enbllistbpm[idcs_ignore] = False
+    return orbcorr
 
 
 def calc_matrices(section_type='C1',
@@ -150,7 +222,8 @@ def calc_matrices(section_type='C1',
     # Get source marker idx
     sidx = max(min(section_nr, 20), 1)
     sidx -= 1
-    mbend = get_source_marker_index(orbcorr.respm.model, section_type, sidx)
+    marker = get_source_marker_index(orbcorr.respm.model,
+                                     section_type, sidx)
 
     orb0 = orbcorr.get_orbit()
     kicks0 = orbcorr.get_kicks()
@@ -159,16 +232,10 @@ def calc_matrices(section_type='C1',
     idcs = get_bpm_indices(section_type, sidx)
 
     # remove corrs between BPMs
-    ch_idcs, cv_idcs = get_removed_corrs_indices(section_type, sidx)
-    if len(ch_idcs) != 0:
-        orbcorr.params.enbllistch[ch_idcs] = False
-    if len(cv_idcs) != 0:
-        orbcorr.params.enbllistcv[cv_idcs] = False
+    orbcorr = remove_corrs_btwbpm(orbcorr, section_type, sidx)
 
     # remove closest BPMS
-    idcs_ignore = get_closest_bpms_indices(section_type, sidx, n_bpms_out)
-    if idcs_ignore.size != 0:
-        orbcorr.params.enbllistbpm[idcs_ignore] = False
+    orbcorr = remove_closest_bpms(orbcorr, section_type, sidx, n_bpms_out)
 
     mat_i2s = np.zeros((4, 4), dtype=float)
     mat_i2r = np.zeros((4, 4), dtype=float)
@@ -182,14 +249,14 @@ def calc_matrices(section_type='C1',
         b2p = pyaccel.tracking.find_orbit(
             orbcorr.respm.model, indices='open'
         )
-        b2p = b2p[0:4, mbend]
+        b2p = b2p[0:4, marker]
 
         gorb[idx] -= deltax
         orbcorr.correct_orbit(goal_orbit=gorb)
         orbn = orbcorr.get_orbit()[idcs]
         b2n = pyaccel.tracking.find_orbit(
             orbcorr.respm.model, indices='open')
-        b2n = b2n[0:4, mbend]
+        b2n = b2n[0:4, marker]
 
         mat_i2s[:, i] = (b2p - b2n) / deltax
         mat_i2r[:, i] = (orbp - orbn) / deltax
@@ -270,23 +337,17 @@ def test_bumps(
     orbcorr.params.minsingval = 0.2
 
     # Get source marker idx
-    mbend = get_source_marker_index(orbcorr.respm.model,
-                                    section_type, sidx)
+    marker = get_source_marker_index(orbcorr.respm.model,
+                                     section_type, sidx)
 
     # Get BPM indices
     idcs = get_bpm_indices(section_type, sidx)
 
     # remove corrs between BPMs
-    ch_idcs, cv_idcs = get_removed_corrs_indices(section_type, sidx)
-    if len(ch_idcs) != 0:
-        orbcorr.params.enbllistch[ch_idcs] = False
-    if len(cv_idcs) != 0:
-        orbcorr.params.enbllistcv[cv_idcs] = False
+    orbcorr = remove_corrs_btwbpm(orbcorr, section_type, sidx)
 
     # remove closest BPMS
-    idcs_ignore = get_closest_bpms_indices(section_type, sidx, n_bpms_out)
-    if idcs_ignore.size != 0:
-        orbcorr.params.enbllistbpm[idcs_ignore] = False
+    orbcorr = remove_closest_bpms(orbcorr, section_type, sidx, n_bpms_out)
 
     gorb = orbcorr.get_orbit()
 
@@ -294,7 +355,7 @@ def test_bumps(
     gorb[idcs] = x
     orbcorr.correct_orbit(goal_orbit=gorb)
     xres = pyaccel.tracking.find_orbit(
-        orbcorr.respm.model, indices='open')[0:4, mbend]
+        orbcorr.respm.model, indices='open')[0:4, marker]
 
     fig, (ax, ay, az) = mplt.subplots(3, 1, figsize=(6, 9))
 
