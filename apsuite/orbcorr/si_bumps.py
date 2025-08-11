@@ -8,56 +8,136 @@ import pyaccel
 from . import OrbitCorr
 
 MARKER_NAMES = {
-    'B1': 'B1_SRC',
-    'B2': 'B2_SRC',
+    'C1': 'B1_SRC',
+    'C2': 'B2_SRC',
     'BC': 'mc',
+    'SA': 'mia',
+    'SB': 'mib',
+    'SP': 'mip',
 }
 
-BENDING_BPM_SEC_IDCS = {
-    'B1': [0, 1],
-    'B2': [2, 3],
+BPM_SEC_IDCS = {
+    'C1': [0, 1],
+    'C2': [2, 3],
     'BC': [3, 4],
+    'SA': [-1, 0],
+    'SB': [-1, 0],
+    'SP': [-1, 0],
 }
 
 
-def _get_sec_bpm_indices(bending_type='B1'):
-    bdict = BENDING_BPM_SEC_IDCS
-    return bdict[bending_type][0], bdict[bending_type][1]
+def _get_sec_bpm_indices(section_type='C1'):
+    bdict = BPM_SEC_IDCS
+    return bdict[section_type][0], bdict[section_type][1]
 
 
-def _get_closest_bpms_indices(bending_type='B1', bidx=0, n_bpms_out=2):
-    bpm1_sec_index, bpm2_sec_index = _get_sec_bpm_indices(bending_type)
+def get_bpm_indices(section_type='C1', sidx=0):
+    """Get BPMs indices to set orbit for bump.
+
+    Args:
+        section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+            Defaults to 'C1'.
+        sidx (int): Section indice. Defaults to 0.
+
+    Returns:
+        1d numpy array: Indices of the BPMs where orbit bump will be applied.
+    """
+    bpm1_sec_index, bpm2_sec_index = _get_sec_bpm_indices(section_type)
+    idlist = np.arange(0, 160, 1)
+    idcs = np.zeros(2, dtype=int)
+    idcs[0] = idlist[bpm1_sec_index + 8*sidx]
+    idcs[1] = idlist[bpm2_sec_index + 8*sidx]
+    idcs = np.array(idcs)
+    idcs = np.tile(idcs, 2)
+    idcs[2:] += 160
+    return idcs
+
+
+def get_closest_bpms_indices(section_type='C1', sidx=0, n_bpms_out=2):
+    """Get closest BPMs indices to remove from orbit correction.
+
+    Args:
+        section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+            Defaults to 'C1'.
+        sidx (int): Section indice. Defaults to 0.
+        n_bpms_out (int): Nr of BPMs to remove from each side. Defaults to 2.
+
+    Returns:
+        1d numpy array: Indices of the closest BPMS.
+    """
+    bpm1_sec_index, bpm2_sec_index = _get_sec_bpm_indices(section_type)
     idlist = np.arange(0, 160, 1)
     idcs_ignore = list()
     for i in np.arange(n_bpms_out):
-        idcs_ignore.append(idlist[bpm1_sec_index + 8*bidx - (i+1)])
-        idcs_ignore.append(idlist[bpm2_sec_index + 8*bidx + (i+1)])
+        idcs_ignore.append(idlist[bpm1_sec_index + 8*sidx - (i+1)])
+        idcs_ignore.append(idlist[bpm2_sec_index + 8*sidx + (i+1)])
     idcs_ignore = np.array(idcs_ignore)
     idcs_ignore = np.tile(idcs_ignore, 2)
     idcs_ignore[n_bpms_out*2:] += 160
     return idcs_ignore
 
 
-def _get_removed_corrs_indices(bending_type='B1', bidx=0):
-    ch_idcs = dict()
-    cv_idcs = dict()
-    ch_idcs['B1'] = [bidx*6 + 0, bidx*6 + 1]
-    cv_idcs['B1'] = [bidx*8 + 0, bidx*8 + 1]
+def get_removed_corrs_indices(section_type='C1', sidx=0):
+    """Get correctors indices between BPMs and source.
 
-    ch_idcs['B2'] = [bidx*6 + 2]
-    cv_idcs['B2'] = [bidx*8 + 2, bidx*8 + 3]
+    Args:
+       section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+            Defaults to 'C1'.
+       sidx (int): Section indice. Defaults to 0.
 
-    ch_idcs['BC'] = []
-    cv_idcs['BC'] = []
+    Returns:
+        1d numpy array: Indices of the corrector to be removed from correction.
+    """
+    if 'S' in section_type:
+        return [], []
 
-    return ch_idcs[bending_type], cv_idcs[bending_type]
+    else:
+        ch_idcs = dict()
+        cv_idcs = dict()
+        ch_idcs['C1'] = [sidx*6 + 0, sidx*6 + 1]
+        cv_idcs['C1'] = [sidx*8 + 0, sidx*8 + 1]
+
+        ch_idcs['C2'] = [sidx*6 + 2]
+        cv_idcs['C2'] = [sidx*8 + 2, sidx*8 + 3]
+
+        ch_idcs['BC'] = []
+        cv_idcs['BC'] = []
+
+        return ch_idcs[section_type], cv_idcs[section_type]
 
 
-def calc_matrices(bending_type='B1', minsingval=0.2, bidx=0,
-                  deltax=10e-6, n_bpms_out=3):
+def get_source_marker_index(model, section_type='C1', sidx=0):
+    """Get source marker index in the model.
+
+    Args:
+        model (Pymodels object): SIRIUS model
+        section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+            Defaults to 'C1'.
+        sidx (int): Section indice. Defaults to 0.
+
+    Returns:
+        1d numpy array: Indice of source marker in the model.
+    """
+    if 'S' not in section_type:
+        nr = 1 if (section_type == 'BC') else 2
+        mbend = pyaccel.lattice.find_indices(
+            model, 'fam_name', MARKER_NAMES[section_type])[nr*sidx]
+    else:
+        mia = pyaccel.lattice.find_indices(model, 'fam_name', 'mia')
+        mib = pyaccel.lattice.find_indices(model, 'fam_name', 'mib')
+        mip = pyaccel.lattice.find_indices(model, 'fam_name', 'mip')
+        idcs = np.sort(mia + mib + mip)
+        mbend = idcs[sidx]
+    return mbend
+
+
+def calc_matrices(section_type='C1',
+                  section_nr=1,
+                  n_bpms_out=3,
+                  minsingval=0.2,
+                  deltax=10e-6,):
     """."""
     # NOTE: valid only for bendings in subsectors C1, C2 or BC
-    bpm1_sec_index, bpm2_sec_index = _get_sec_bpm_indices(bending_type)
 
     # Create accelerator and orbcorr
     mod = si.create_accelerator()
@@ -68,29 +148,25 @@ def calc_matrices(bending_type='B1', minsingval=0.2, bidx=0,
     orbcorr.params.minsingval = minsingval
 
     # Get source marker idx
-    bidx = max(min(bidx, 19), 0)
-    nr = 1 if bending_type == 'BC' else 2
-    mbend = pyaccel.lattice.find_indices(
-        orbcorr.respm.model, 'fam_name', MARKER_NAMES[bending_type])[nr*bidx]
+    sidx = max(min(section_nr, 20), 1)
+    sidx -= 1
+    mbend = get_source_marker_index(orbcorr.respm.model, section_type, sidx)
 
     orb0 = orbcorr.get_orbit()
     kicks0 = orbcorr.get_kicks()
 
     # Get BPM indices
-    idcs = np.array(
-        [bpm1_sec_index, bpm2_sec_index,
-         160+bpm1_sec_index, 160+bpm2_sec_index])
-    idcs += 8*bidx
+    idcs = get_bpm_indices(section_type, sidx)
 
     # remove corrs between BPMs
-    ch_idcs, cv_idcs = _get_removed_corrs_indices(bending_type, bidx)
+    ch_idcs, cv_idcs = get_removed_corrs_indices(section_type, sidx)
     if len(ch_idcs) != 0:
         orbcorr.params.enbllistch[ch_idcs] = False
     if len(cv_idcs) != 0:
         orbcorr.params.enbllistcv[cv_idcs] = False
 
     # remove closest BPMS
-    idcs_ignore = _get_closest_bpms_indices(bending_type, bidx, n_bpms_out)
+    idcs_ignore = get_closest_bpms_indices(section_type, sidx, n_bpms_out)
     if idcs_ignore.size != 0:
         orbcorr.params.enbllistbpm[idcs_ignore] = False
 
@@ -133,7 +209,7 @@ def test_matrices(flag_n_bpms=True, flag_singvals=True):
         for n_bpms in [0, 1, 2]:
             cases.append((n_bpms, svals))
             m_i2s, m_i2r, m_s2r = calc_matrices(
-                minsingval=svals, bidx=0, n_bpms_out=n_bpms
+                minsingval=svals, sidx=0, n_bpms_out=n_bpms
             )
             ms_i2s.append(m_i2s)
             ms_i2r.append(m_i2r)
@@ -144,7 +220,7 @@ def test_matrices(flag_n_bpms=True, flag_singvals=True):
         for svals in [0.2, 2, 20]:
             cases.append((n_bpms, svals))
             m_i2s, m_i2r, m_s2r = calc_matrices(
-                minsingval=svals, bidx=0, n_bpms_out=n_bpms
+                minsingval=svals, sidx=0, n_bpms_out=n_bpms
             )
             ms_i2s.append(m_i2s)
             ms_i2r.append(m_i2r)
@@ -164,25 +240,25 @@ def test_matrices(flag_n_bpms=True, flag_singvals=True):
 
 
 def test_bumps(
-    bending_type='B1',
-    bidx=0,
+    section_type='C1',
+    section_nr=1,
+    n_bpms_out=3,
     angx=50e-6,
     angy=50e-6,
     posx=100e-6,
     posy=100e-6,
-    n_bpms_out=3,
     m_s2r=None
 ):
     """."""
-    bpm1_sec_index, bpm2_sec_index = _get_sec_bpm_indices(bending_type)
-
     # Get bump matrices
     if m_s2r is None:
         _, _, m_s2r = calc_matrices(
-            bending_type=bending_type, minsingval=0.2,
-            bidx=bidx, n_bpms_out=n_bpms_out
+            section_type=section_type, minsingval=0.2,
+            section_nr=section_nr, n_bpms_out=n_bpms_out
         )
 
+    sidx = max(min(section_nr, 20), 1)
+    sidx -= 1
     vec = np.array([posx, angx, posy, angy])
 
     # Create accelerator and orbcorr
@@ -194,25 +270,21 @@ def test_bumps(
     orbcorr.params.minsingval = 0.2
 
     # Get source marker idx
-    nr = 1 if bending_type == 'BC' else 2
-    mbend = pyaccel.lattice.find_indices(
-        orbcorr.respm.model, 'fam_name', MARKER_NAMES[bending_type])[nr*bidx]
+    mbend = get_source_marker_index(orbcorr.respm.model,
+                                    section_type, sidx)
 
     # Get BPM indices
-    idcs = np.array(
-        [bpm1_sec_index, bpm2_sec_index,
-         160+bpm1_sec_index, 160+bpm2_sec_index])
-    idcs += 8*bidx
+    idcs = get_bpm_indices(section_type, sidx)
 
     # remove corrs between BPMs
-    ch_idcs, cv_idcs = _get_removed_corrs_indices(bending_type, bidx)
+    ch_idcs, cv_idcs = get_removed_corrs_indices(section_type, sidx)
     if len(ch_idcs) != 0:
         orbcorr.params.enbllistch[ch_idcs] = False
     if len(cv_idcs) != 0:
         orbcorr.params.enbllistcv[cv_idcs] = False
 
     # remove closest BPMS
-    idcs_ignore = _get_closest_bpms_indices(bending_type, bidx, n_bpms_out)
+    idcs_ignore = get_closest_bpms_indices(section_type, sidx, n_bpms_out)
     if idcs_ignore.size != 0:
         orbcorr.params.enbllistbpm[idcs_ignore] = False
 
