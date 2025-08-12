@@ -371,7 +371,27 @@ class SiCalcBumps:
                       use_ss_tfm=False,
                       minsingval=0.2,
                       deltax=10e-6,):
-        """."""
+        """Calculate bump matrices.
+
+        Args:
+            section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+                Defaults to None.
+            section_nr (int): Section number. Defaults to None.
+            n_bpms_out (int): Nr of BPMs to remove from each side.
+              Defaults to None.
+            use_ss_tfm (bool, optional): Use straight section transfer matrix.
+              Defaults to False.
+            minsingval (float, optional): Minimum singular value.
+                Defaults to 0.2.
+            deltax (float, optional): delta kick to calculate jacobian.
+              Defaults to 10e-6.
+
+        Raises:
+            ValueError: The cavity mus be turned ON in the model.
+
+        Returns:
+            2d numpy arrays: Bump matrices
+        """
         # NOTE: valid only for bendings in subsectors C1, C2 or BC
 
         if section_type is None:
@@ -447,8 +467,22 @@ class SiCalcBumps:
         self.mat_s2r = mat_s2r
         return mat_i2s, mat_i2r, mat_s2r
 
-    def test_matrices(self, flag_n_bpms=True, flag_singvals=True):
-        """."""
+    def test_matrices(self, section_type=None, section_nr=None,
+                      flag_n_bpms=True, flag_singvals=True):
+        """Test bump matrices with diferent parameters.
+
+        Args:
+            section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+                Defaults to None.
+            section_nr (int): Section number. Defaults to None.
+            flag_n_bpms (bool, optional): Test with different bpms number.
+                Defaults to True.
+            flag_singvals (bool, optional): Test with different singular 
+                values. Defaults to True.
+
+        Returns:
+            matplotlib figure: Matplotlib figure object and axis
+        """
         ms_i2s = []
         ms_i2r = []
         ms_s2r = []
@@ -458,7 +492,8 @@ class SiCalcBumps:
             for n_bpms in [0, 1, 2]:
                 cases.append((n_bpms, svals))
                 m_i2s, m_i2r, m_s2r = self.calc_matrices(
-                    minsingval=svals, sidx=0, n_bpms_out=n_bpms
+                    minsingval=svals, section_nr=section_nr,
+                    section_type=section_type, n_bpms_out=n_bpms
                 )
                 ms_i2s.append(m_i2s)
                 ms_i2r.append(m_i2r)
@@ -469,7 +504,8 @@ class SiCalcBumps:
             for svals in [0.2, 2, 20]:
                 cases.append((n_bpms, svals))
                 m_i2s, m_i2r, m_s2r = self.calc_matrices(
-                    minsingval=svals, sidx=0, n_bpms_out=n_bpms
+                    minsingval=svals, section_nr=section_nr,
+                    section_type=section_type, n_bpms_out=n_bpms
                 )
                 ms_i2s.append(m_i2s)
                 ms_i2r.append(m_i2r)
@@ -487,19 +523,39 @@ class SiCalcBumps:
         fig.tight_layout()
         return fig, (a_i2s, a_i2r, a_s2r)
 
-    def test_bumps(
-                self,
-                section_type=None,
-                section_nr=None,
-                n_bpms_out=None,
-                m_s2r=None,
-                use_ss_tfm=False,
-                angx=50e-6,
-                angy=50e-6,
-                posx=100e-6,
-                posy=100e-6,
-    ):
-        """."""
+    def calculate_bumps(self,
+                        section_type=None,
+                        section_nr=None,
+                        n_bpms_out=None,
+                        m_s2r=None,
+                        use_ss_tfm=False,
+                        posx=0,
+                        angx=0,
+                        posy=0,
+                        angy=0,):
+        """Calculate bumps.
+
+        Args:
+            section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+                Defaults to None.
+            section_nr (int): Section number. Defaults to None.
+            n_bpms_out (int): Nr of BPMs to remove from each side.
+              Defaults to None.
+            m_s2r (_type_, optional): Matrix source to real orbit @ BPM.
+              Defaults to None.
+            use_ss_tfm (bool, optional): Use straight section transfer matrix.
+              Defaults to False.
+            posx (float): Horizontal position [um]. Defaults to 0.
+            angx (float): Horizontal angle [urad]. Defaults to 0.
+            posy (float): Vertical position [um]. Defaults to 0.
+            angy (float): Vertical angle [urad]. Defaults to 0.
+
+        Raises:
+            ValueError: The cavity mus be turned ON in the model.
+
+        Returns:
+            1d numpy array: Goal orbit with bump
+        """
         if section_type is None:
             section_type = self.section_type
         if section_nr is None:
@@ -529,10 +585,6 @@ class SiCalcBumps:
         orbcorr.params.tolerance = 1e-9
         orbcorr.params.minsingval = 0.2
 
-        # Get source marker idx
-        marker = self.get_source_marker_idx(orbcorr.respm.model,
-                                            section_type, sidx)
-
         # Get BPM indices
         idcs = self.get_bpm_indices(section_type, sidx)
 
@@ -547,23 +599,80 @@ class SiCalcBumps:
 
         x = np.dot(m_s2r, vec)
         gorb[idcs] = x
+        return gorb, orbcorr
+
+    def test_bumps(
+                self,
+                section_type=None,
+                section_nr=None,
+                n_bpms_out=None,
+                m_s2r=None,
+                use_ss_tfm=False,
+                plot_results=True,
+                posx=100e-6,
+                angx=50e-6,
+                posy=100e-6,
+                angy=50e-6,):
+        """Compare desired bump with bump to be applied.
+
+        Args:
+            section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+                Defaults to None.
+            section_nr (int): Section number. Defaults to None.
+            n_bpms_out (int): Nr of BPMs to remove from each side.
+              Defaults to None.
+            m_s2r (_type_, optional): Matrix source to real orbit @ BPM.
+              Defaults to None.
+            use_ss_tfm (bool, optional): Use straight section transfer matrix.
+              Defaults to False.
+            plot_results (bool, optional): _description_. Defaults to True.
+            posx (float): Horizontal position [um]. Defaults to 100e-6.
+            angx (float): Horizontal angle [urad]. Defaults to 50e-6.
+            posy (float): Vertical position [um]. Defaults to 100e-6.
+            angy (float): Vertical angle [urad]. Defaults to 50e-6.
+
+        Returns:
+            tuple 1d numpy array: bump at source, kicks necessary to
+            implement bump, orbit in the whole ring
+        """
+        if section_type is None:
+            section_type = self.section_type
+        if section_nr is None:
+            section_nr = self.section_nr
+        if n_bpms_out is None:
+            n_bpms_out = self.n_bpms_out
+
+        sidx = max(min(section_nr, 20), 1)
+        sidx -= 1
+
+        gorb, orbcorr = self.calculate_bumps(section_type, section_nr,
+                                             n_bpms_out, m_s2r, use_ss_tfm,
+                                             posx, angx, posy, angy)
+
+        vec = np.array([posx, angx, posy, angy])
         orbcorr.correct_orbit(goal_orbit=gorb)
+        marker = self.get_source_marker_idx(orbcorr.respm.model,
+                                            section_type, sidx)
         xres = pyaccel.tracking.find_orbit(
             orbcorr.respm.model, indices='open')[0:4, marker]
 
-        fig, (ax, ay, az) = mplt.subplots(3, 1, figsize=(6, 9))
+        kicks = orbcorr.get_kicks()[:-1]*1e6
+        orbit = orbcorr.get_orbit()*1e6
+        if plot_results:
+            fig, (ax, ay, az) = mplt.subplots(3, 1, figsize=(6, 9))
 
-        ax.plot(1e6*vec, '-o', label='Input bump (posx, angx, posy, angy)')
-        ax.plot(1e6*xres, '-o', label='Resultant bump ')
-        ax.legend()
+            ax.plot(1e6*vec, '-o', label='Input bump (posx, angx, posy, angy)')
+            ax.plot(1e6*xres, '-o', label='Resultant bump ')
+            ax.legend()
 
-        ay.plot(orbcorr.get_kicks()[:-1]*1e6)
-        ay.set_ylabel('Corr. kicks [urad]')
-        ay.set_xlabel('Corr idx')
+            ay.plot(kicks)
+            ay.set_ylabel('Corr. kicks [urad]')
+            ay.set_xlabel('Corr idx')
 
-        az.plot(orbcorr.get_orbit()*1e6)
-        az.set_ylabel('Orbit [urad]')
-        az.set_xlabel('BPMS idx')
+            az.plot(orbit)
+            az.set_ylabel('Orbit [urad]')
+            az.set_xlabel('BPMS idx')
 
-        fig.tight_layout()
-        return fig, (ax, ay, az)
+            fig.tight_layout()
+            mplt.show()
+        return xres, kicks, orbit
