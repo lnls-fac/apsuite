@@ -8,7 +8,7 @@ import matplotlib.gridspec as _gridspec
 import matplotlib.pyplot as _mplt
 import numpy as _np
 import pyaccel as _pa
-from mathphys.sobi import SOBI as _SOBI  # unfinished work in mathphys
+# from mathphys.sobi import SOBI as _SOBI  # unfinished work in mathphys
 from pymodels import si as _si
 from scipy.optimize import curve_fit as _curve_fit
 from siriuspy.devices import PowerSupplyPU as _PowerSupplyPU, \
@@ -126,10 +126,12 @@ class MeasureTbTData(_ThreadBaseClass, _AcqBPMsSignals):
 
     @property
     def init_timing_state(self):
+        """."""
         return self._init_timing_state
 
     @property
     def init_magnets_state(self):
+        """."""
         return self._init_magnets_state
 
     def create_devices(self):
