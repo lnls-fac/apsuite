@@ -11,6 +11,12 @@ from . import OrbitCorr
 class SiCalcBumps:
     """Class to calculate bumps and related tools."""
 
+    SS_LENGTHS = {
+        'SA': 7.0358,
+        'SB': 6.1758,
+        'SP': 6.1758,
+    }
+
     MARKER_NAMES = {
         'C1': 'B1_SRC',
         'C2': 'B2_SRC',
@@ -140,6 +146,17 @@ class SiCalcBumps:
     @mat_s2r.setter
     def mat_s2r(self, value):
         self._mat_s2r = value
+
+    @staticmethod
+    def _get_matrix_ss_section(leng):
+        return np.array(
+            [
+                [1, -leng / 2, 0, 0],
+                [1, leng / 2, 0, 0],
+                [0, 0, 1, -leng / 2],
+                [0, 0, 1, leng / 2],
+            ]
+        )
 
     def _get_sec_bpm_indices(self, section_type=None):
         if section_type is None:
@@ -351,6 +368,7 @@ class SiCalcBumps:
                       section_type=None,
                       section_nr=None,
                       n_bpms_out=None,
+                      use_ss_tfm=False,
                       minsingval=0.2,
                       deltax=10e-6,):
         """."""
@@ -362,6 +380,12 @@ class SiCalcBumps:
             section_nr = self.section_nr
         if n_bpms_out is None:
             n_bpms_out = self.n_bpms_out
+
+        if 'S' in section_type and use_ss_tfm:
+            length = self.SS_LENGTHS[section_type]
+            mat_s2r = self._get_matrix_ss_section(length)
+            self.mat_s2r = mat_s2r
+            return None, None, mat_s2r
 
         # Create accelerator and orbcorr
         if self.model is None:
@@ -469,6 +493,7 @@ class SiCalcBumps:
                 section_nr=None,
                 n_bpms_out=None,
                 m_s2r=None,
+                use_ss_tfm=False,
                 angx=50e-6,
                 angy=50e-6,
                 posx=100e-6,
@@ -486,7 +511,8 @@ class SiCalcBumps:
         if m_s2r is None:
             _, _, m_s2r = self.calc_matrices(
                 section_type=section_type, minsingval=0.2,
-                section_nr=section_nr, n_bpms_out=n_bpms_out
+                section_nr=section_nr, n_bpms_out=n_bpms_out,
+                use_ss_tfm=use_ss_tfm
             )
         sidx = max(min(section_nr, 20), 1)
         sidx -= 1
