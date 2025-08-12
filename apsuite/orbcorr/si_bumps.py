@@ -252,19 +252,18 @@ class SiCalcBumps:
         if 'S' in section_type:
             return [], []
 
-        else:
-            ch_idcs = dict()
-            cv_idcs = dict()
-            ch_idcs['C1'] = [sidx*6 + 0, sidx*6 + 1]
-            cv_idcs['C1'] = [sidx*8 + 0, sidx*8 + 1]
+        ch_idcs = dict()
+        cv_idcs = dict()
+        ch_idcs['C1'] = [sidx*6 + 0, sidx*6 + 1]
+        cv_idcs['C1'] = [sidx*8 + 0, sidx*8 + 1]
 
-            ch_idcs['C2'] = [sidx*6 + 2]
-            cv_idcs['C2'] = [sidx*8 + 2, sidx*8 + 3]
+        ch_idcs['C2'] = [sidx*6 + 2]
+        cv_idcs['C2'] = [sidx*8 + 2, sidx*8 + 3]
 
-            ch_idcs['BC'] = []
-            cv_idcs['BC'] = []
+        ch_idcs['BC'] = []
+        cv_idcs['BC'] = []
 
-            return ch_idcs[section_type], cv_idcs[section_type]
+        return ch_idcs[section_type], cv_idcs[section_type]
 
     def get_source_marker_idx(self, model=None, section_type=None, sidx=None):
         """Get source marker index in the model.
@@ -288,28 +287,29 @@ class SiCalcBumps:
             nr = 1 if (section_type == 'BC') else 2
             marker = pyaccel.lattice.find_indices(
                 model, 'fam_name', self.MARKER_NAMES[section_type])[nr*sidx]
-        else:
-            mia = pyaccel.lattice.find_indices(model, 'fam_name', 'mia')
-            mib = pyaccel.lattice.find_indices(model, 'fam_name', 'mib')
-            mip = pyaccel.lattice.find_indices(model, 'fam_name', 'mip')
-            idcs = np.sort(mia + mib + mip)
+            return marker
 
-            if sidx % 4 == 0:
-                if section_type != 'SA':
-                    raise ValueError(
-                        'section {:.0f} is a SA section!'.format(sidx+1))
+        mia = pyaccel.lattice.find_indices(model, 'fam_name', 'mia')
+        mib = pyaccel.lattice.find_indices(model, 'fam_name', 'mib')
+        mip = pyaccel.lattice.find_indices(model, 'fam_name', 'mip')
+        idcs = np.sort(mia + mib + mip)
 
-            elif ((sidx - 1) % 4 == 0) or ((sidx - 3) % 4 == 0):
-                if section_type != 'SB':
-                    raise ValueError(
-                        'section {:.0f} is a SB section!'.format(sidx+1))
+        if sidx % 4 == 0:
+            if section_type != 'SA':
+                raise ValueError(
+                    'section {:.0f} is a SA section!'.format(sidx+1))
 
-            elif (sidx-2) % 4 == 0:
-                if section_type != 'SP':
-                    raise ValueError(
-                        'section {:.0f} is a SP section!'.format(sidx+1))
+        elif ((sidx - 1) % 4 == 0) or ((sidx - 3) % 4 == 0):
+            if section_type != 'SB':
+                raise ValueError(
+                    'section {:.0f} is a SB section!'.format(sidx+1))
 
-            marker = idcs[sidx]
+        elif (sidx-2) % 4 == 0:
+            if section_type != 'SP':
+                raise ValueError(
+                    'section {:.0f} is a SP section!'.format(sidx+1))
+
+        marker = idcs[sidx]
         return marker
 
     def remove_corrs_btwbpm(self, orbcorr, section_type=None, sidx=None):
