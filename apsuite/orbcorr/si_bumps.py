@@ -35,12 +35,111 @@ class SiCalcBumps:
         'SP': np.arange(3, 20, 4),
     }
 
-    def __init__(self, model, section_type, section_nr, n_bpms_out):
+    def __init__(self, model=None, section_type=None, section_nr=None,
+                 n_bpms_out=None):
         """."""
-        self.section_type = section_type
-        self.section_nr = section_nr
-        self.n_bpms_out = n_bpms_out
-        self.model = model
+        self._section_type = section_type
+        self._section_nr = section_nr
+        self._n_bpms_out = n_bpms_out
+        self._model = model
+        self._mat_i2s = None
+        self._mat_i2r = None
+        self._mat_s2r = None
+
+    @property
+    def section_type(self):
+        """Type of section where the bump will be applied.
+
+        Returns:
+            str: C1, C2, BC, SA, SB, SP
+        """
+        return self._section_type
+
+    @section_type.setter
+    def section_type(self, value):
+        self.section_type_ = value
+
+    @property
+    def section_nr(self):
+        """Number of the section where the bump will be applied.
+
+        Returns:
+            int: Section number
+        """
+        return self._section_nr
+
+    @section_nr.setter
+    def section_nr(self, value):
+        self._section_nr = value
+
+    @property
+    def n_bpms_out(self):
+        """Number of BPMs to remove from each side.
+
+        Returns:
+           int: Number of BPMs to be removed from each side
+             of the BPMs used in the bump.
+        """
+        return self._n_bpms_out
+
+    @n_bpms_out.setter
+    def n_bpms_out(self, value):
+        self._n_bpms_out = value
+
+    @property
+    def model(self):
+        """SIRIUS pymodels object.
+
+        Returns:
+            SI pymodels object: Sirius storage ring model
+        """
+        return self._model
+
+    @model.setter
+    def model(self, value):
+        self._model = value
+
+    @property
+    def mat_i2s(self):
+        """Matrix relating ideal orbit @ BPMs and orbit at source.
+
+        Returns:
+            2d numpy array: Square matrix relating ideal orbit
+                @ BPMs used in the bump and at source.
+        """
+        return self._mat_i2s
+
+    @mat_i2s.setter
+    def mat_i2s(self, value):
+        self._mat_i2s = value
+
+    @property
+    def mat_i2r(self):
+        """Matrix relating ideal and real orbit @ BPMS.
+
+        Returns:
+            2d numpy array: Square matrix relating ideal and real orbit
+                @ BPMs used in the bump.
+        """
+        return self._mat_i2r
+
+    @mat_i2r.setter
+    def mat_i2r(self, value):
+        self._mat_i2r = value
+
+    @property
+    def mat_s2r(self):
+        """Matrix relating orbit @ source and real orbit @ BPMs.
+
+        Returns:
+            2d numpy array: Square matrix relating orbit at source
+              and real orbit at the BPMs used in the bump.
+        """
+        return self._mat_s2r
+
+    @mat_s2r.setter
+    def mat_s2r(self, value):
+        self._mat_s2r = value
 
     def _get_sec_bpm_indices(self, section_type=None):
         if section_type is None:
@@ -196,213 +295,249 @@ class SiCalcBumps:
             marker = idcs[sidx]
         return marker
 
+    def remove_corrs_btwbpm(self, orbcorr, section_type=None, sidx=None):
+        """Remove correctors between BPMs.
 
-def remove_corrs_btwbpm(orbcorr, section_type='C1', sidx=0):
-    """Remove correctors between BPMs.
+        Args:
+            orbcorr (OrbCorr object): OrbCorr object
+            section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+                Defaults to None.
+            sidx (int): Section indice. Defaults to None.
 
-    Args:
-        orbcorr (OrbCorr object): OrbCorr object
-        section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
-            Defaults to 'C1'.
-        sidx (int): Section indice. Defaults to 0.
+        Returns:
+            orbcorr: OrbCorr object
+        """
+        if section_type is None:
+            section_type = self.section_type
+        if sidx is None:
+            sidx = self.section_nr - 1
+        ch_idcs, cv_idcs = self.get_btwbpm_corrs_indices(section_type, sidx)
+        if len(ch_idcs) != 0:
+            orbcorr.params.enbllistch[ch_idcs] = False
+        if len(cv_idcs) != 0:
+            orbcorr.params.enbllistcv[cv_idcs] = False
+        return orbcorr
 
-    Returns:
-        orbcorr: OrbCorr object
-    """
-    ch_idcs, cv_idcs = get_btwbpm_corrs_indices(section_type, sidx)
-    if len(ch_idcs) != 0:
-        orbcorr.params.enbllistch[ch_idcs] = False
-    if len(cv_idcs) != 0:
-        orbcorr.params.enbllistcv[cv_idcs] = False
-    return orbcorr
+    def remove_closest_bpms(self, orbcorr,
+                            section_type=None,
+                            sidx=None,
+                            n_bpms_out=None):
+        """Remove closest BPMs form orbit correction.
 
+        Args:
+            orbcorr (OrbCorr object): OrbCorr object
+            section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
+                Defaults to None.
+            sidx (int): Section indice. Defaults to None.
+            n_bpms_out (int): Nr of BPMs to remove from each side.
+              Defaults to None.
 
-def remove_closest_bpms(orbcorr, section_type='C1', sidx=0, n_bpms_out=2):
-    """Remove closest BPMs form orbit correction.
+        Returns:
+            orbcorr: OrbCorr object
+        """
+        if section_type is None:
+            section_type = self.section_type
+        if sidx is None:
+            sidx = self.section_nr - 1
+        if n_bpms_out is None:
+            n_bpms_out = self.n_bpms_out
+        idcs_ignore = self.get_closest_bpms_indices(section_type, sidx,
+                                                    n_bpms_out)
+        if idcs_ignore.size != 0:
+            orbcorr.params.enbllistbpm[idcs_ignore] = False
+        return orbcorr
 
-    Args:
-        orbcorr (OrbCorr object): OrbCorr object
-        section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
-            Defaults to 'C1'.
-        sidx (int): Section indice. Defaults to 0.
-        n_bpms_out (int): Nr of BPMs to remove from each side. Defaults to 2.
+    def calc_matrices(self,
+                      section_type=None,
+                      section_nr=None,
+                      n_bpms_out=None,
+                      minsingval=0.2,
+                      deltax=10e-6,):
+        """."""
+        # NOTE: valid only for bendings in subsectors C1, C2 or BC
 
-    Returns:
-        orbcorr: OrbCorr object
-    """
-    idcs_ignore = get_closest_bpms_indices(section_type, sidx, n_bpms_out)
-    if idcs_ignore.size != 0:
-        orbcorr.params.enbllistbpm[idcs_ignore] = False
-    return orbcorr
+        if section_type is None:
+            section_type = self.section_type
+        if section_nr is None:
+            section_nr = self.section_nr
+        if n_bpms_out is None:
+            n_bpms_out = self.n_bpms_out
 
+        # Create accelerator and orbcorr
+        if self.model is None:
+            mod = si.create_accelerator()
+            mod.cavity_on = True
+        elif self.model.cavity_on is False:
+            raise ValueError('Model cavity must be turned on!')
+        orbcorr = OrbitCorr(mod, 'SI', use6dorb=True)
+        orbcorr.params.enblrf = True
+        orbcorr.params.tolerance = 1e-9
+        orbcorr.params.minsingval = minsingval
 
-def calc_matrices(section_type='C1',
-                  section_nr=1,
-                  n_bpms_out=3,
-                  minsingval=0.2,
-                  deltax=10e-6,):
-    """."""
-    # NOTE: valid only for bendings in subsectors C1, C2 or BC
+        # Get source marker idx
+        sidx = max(min(section_nr, 20), 1)
+        sidx -= 1
+        marker = self.get_source_marker_idx(orbcorr.respm.model,
+                                            section_type, sidx)
 
-    # Create accelerator and orbcorr
-    mod = si.create_accelerator()
-    mod.cavity_on = True
-    orbcorr = OrbitCorr(mod, 'SI', use6dorb=True)
-    orbcorr.params.enblrf = True
-    orbcorr.params.tolerance = 1e-9
-    orbcorr.params.minsingval = minsingval
+        orb0 = orbcorr.get_orbit()
+        kicks0 = orbcorr.get_kicks()
 
-    # Get source marker idx
-    sidx = max(min(section_nr, 20), 1)
-    sidx -= 1
-    marker = get_source_marker_idx(orbcorr.respm.model,
-                                     section_type, sidx)
+        # Get BPM indices
+        idcs = self.get_bpm_indices(section_type, sidx)
 
-    orb0 = orbcorr.get_orbit()
-    kicks0 = orbcorr.get_kicks()
+        # remove corrs between BPMs
+        orbcorr = self.remove_corrs_btwbpm(orbcorr, section_type, sidx)
 
-    # Get BPM indices
-    idcs = get_bpm_indices(section_type, sidx)
+        # remove closest BPMS
+        orbcorr = self.remove_closest_bpms(orbcorr, section_type, sidx,
+                                           n_bpms_out)
 
-    # remove corrs between BPMs
-    orbcorr = remove_corrs_btwbpm(orbcorr, section_type, sidx)
+        mat_i2s = np.zeros((4, 4), dtype=float)
+        mat_i2r = np.zeros((4, 4), dtype=float)
+        for i, idx in enumerate(idcs):
+            gorb = orb0.copy()
+            orbcorr.set_kicks(kicks0)
 
-    # remove closest BPMS
-    orbcorr = remove_closest_bpms(orbcorr, section_type, sidx, n_bpms_out)
-
-    mat_i2s = np.zeros((4, 4), dtype=float)
-    mat_i2r = np.zeros((4, 4), dtype=float)
-    for i, idx in enumerate(idcs):
-        gorb = orb0.copy()
-        orbcorr.set_kicks(kicks0)
-
-        gorb[idx] += deltax/2
-        orbcorr.correct_orbit(goal_orbit=gorb)
-        orbp = orbcorr.get_orbit()[idcs]
-        b2p = pyaccel.tracking.find_orbit(
-            orbcorr.respm.model, indices='open'
-        )
-        b2p = b2p[0:4, marker]
-
-        gorb[idx] -= deltax
-        orbcorr.correct_orbit(goal_orbit=gorb)
-        orbn = orbcorr.get_orbit()[idcs]
-        b2n = pyaccel.tracking.find_orbit(
-            orbcorr.respm.model, indices='open')
-        b2n = b2n[0:4, marker]
-
-        mat_i2s[:, i] = (b2p - b2n) / deltax
-        mat_i2r[:, i] = (orbp - orbn) / deltax
-
-    mat_s2r = np.linalg.solve(mat_i2s.T, mat_i2r.T).T
-    return mat_i2s, mat_i2r, mat_s2r
-
-
-def test_matrices(flag_n_bpms=True, flag_singvals=True):
-    """."""
-    ms_i2s = []
-    ms_i2r = []
-    ms_s2r = []
-    cases = []
-    svals = 0.2
-    if flag_n_bpms:
-        for n_bpms in [0, 1, 2]:
-            cases.append((n_bpms, svals))
-            m_i2s, m_i2r, m_s2r = calc_matrices(
-                minsingval=svals, sidx=0, n_bpms_out=n_bpms
+            gorb[idx] += deltax/2
+            orbcorr.correct_orbit(goal_orbit=gorb)
+            orbp = orbcorr.get_orbit()[idcs]
+            b2p = pyaccel.tracking.find_orbit(
+                orbcorr.respm.model, indices='open'
             )
-            ms_i2s.append(m_i2s)
-            ms_i2r.append(m_i2r)
-            ms_s2r.append(m_s2r)
+            b2p = b2p[0:4, marker]
 
-    n_bpms = 0
-    if flag_singvals:
-        for svals in [0.2, 2, 20]:
-            cases.append((n_bpms, svals))
-            m_i2s, m_i2r, m_s2r = calc_matrices(
-                minsingval=svals, sidx=0, n_bpms_out=n_bpms
+            gorb[idx] -= deltax
+            orbcorr.correct_orbit(goal_orbit=gorb)
+            orbn = orbcorr.get_orbit()[idcs]
+            b2n = pyaccel.tracking.find_orbit(
+                orbcorr.respm.model, indices='open')
+            b2n = b2n[0:4, marker]
+
+            mat_i2s[:, i] = (b2p - b2n) / deltax
+            mat_i2r[:, i] = (orbp - orbn) / deltax
+
+        mat_s2r = np.linalg.solve(mat_i2s.T, mat_i2r.T).T
+        self.mat_i2s = mat_i2s
+        self.mat_i2r = mat_i2r
+        self.mat_s2r = mat_s2r
+        return mat_i2s, mat_i2r, mat_s2r
+
+    def test_matrices(self, flag_n_bpms=True, flag_singvals=True):
+        """."""
+        ms_i2s = []
+        ms_i2r = []
+        ms_s2r = []
+        cases = []
+        svals = 0.2
+        if flag_n_bpms:
+            for n_bpms in [0, 1, 2]:
+                cases.append((n_bpms, svals))
+                m_i2s, m_i2r, m_s2r = self.calc_matrices(
+                    minsingval=svals, sidx=0, n_bpms_out=n_bpms
+                )
+                ms_i2s.append(m_i2s)
+                ms_i2r.append(m_i2r)
+                ms_s2r.append(m_s2r)
+
+        n_bpms = 0
+        if flag_singvals:
+            for svals in [0.2, 2, 20]:
+                cases.append((n_bpms, svals))
+                m_i2s, m_i2r, m_s2r = self.calc_matrices(
+                    minsingval=svals, sidx=0, n_bpms_out=n_bpms
+                )
+                ms_i2s.append(m_i2s)
+                ms_i2r.append(m_i2r)
+                ms_s2r.append(m_s2r)
+
+        fig, (a_i2s, a_i2r, a_s2r) = mplt.subplots(3, 1, figsize=(6, 9))
+
+        for m_i2s, m_i2r, m_s2r, case in zip(ms_i2s, ms_i2r, ms_s2r, cases):
+            lab = f'nbpm={case[0]:d} svals={case[1]:.2f}'
+            a_i2s.plot(m_i2s.ravel(), '-o', label=lab)
+            a_i2r.plot(m_i2r.ravel(), '-o', label=lab)
+            a_s2r.plot(m_s2r.ravel(), '-o', label=lab)
+
+        a_i2r.legend(loc='lower center', bbox_to_anchor=(0.5, 1))
+        fig.tight_layout()
+        return fig, (a_i2s, a_i2r, a_s2r)
+
+    def test_bumps(
+                self,
+                section_type=None,
+                section_nr=None,
+                n_bpms_out=None,
+                m_s2r=None,
+                angx=50e-6,
+                angy=50e-6,
+                posx=100e-6,
+                posy=100e-6,
+    ):
+        """."""
+        if section_type is None:
+            section_type = self.section_type
+        if section_nr is None:
+            section_nr = self.section_nr
+        if n_bpms_out is None:
+            n_bpms_out = self.n_bpms_out
+
+        # Get bump matrices
+        if m_s2r is None:
+            _, _, m_s2r = self.calc_matrices(
+                section_type=section_type, minsingval=0.2,
+                section_nr=section_nr, n_bpms_out=n_bpms_out
             )
-            ms_i2s.append(m_i2s)
-            ms_i2r.append(m_i2r)
-            ms_s2r.append(m_s2r)
+        sidx = max(min(section_nr, 20), 1)
+        sidx -= 1
+        vec = np.array([posx, angx, posy, angy])
 
-    fig, (a_i2s, a_i2r, a_s2r) = mplt.subplots(3, 1, figsize=(6, 9))
+        # Create accelerator and orbcorr
+        if self.model is None:
+            mod = si.create_accelerator()
+            mod.cavity_on = True
+        elif self.model.cavity_on is False:
+            raise ValueError('Model cavity must be turned on!')
+        orbcorr = OrbitCorr(mod, 'SI', use6dorb=True)
+        orbcorr.params.enblrf = True
+        orbcorr.params.tolerance = 1e-9
+        orbcorr.params.minsingval = 0.2
 
-    for m_i2s, m_i2r, m_s2r, case in zip(ms_i2s, ms_i2r, ms_s2r, cases):
-        lab = f'nbpm={case[0]:d} svals={case[1]:.2f}'
-        a_i2s.plot(m_i2s.ravel(), '-o', label=lab)
-        a_i2r.plot(m_i2r.ravel(), '-o', label=lab)
-        a_s2r.plot(m_s2r.ravel(), '-o', label=lab)
+        # Get source marker idx
+        marker = self.get_source_marker_idx(orbcorr.respm.model,
+                                            section_type, sidx)
 
-    a_i2r.legend(loc='lower center', bbox_to_anchor=(0.5, 1))
-    fig.tight_layout()
-    return fig, (a_i2s, a_i2r, a_s2r)
+        # Get BPM indices
+        idcs = self.get_bpm_indices(section_type, sidx)
 
+        # remove corrs between BPMs
+        orbcorr = self.remove_corrs_btwbpm(orbcorr, section_type, sidx)
 
-def test_bumps(
-    section_type='C1',
-    section_nr=1,
-    n_bpms_out=3,
-    angx=50e-6,
-    angy=50e-6,
-    posx=100e-6,
-    posy=100e-6,
-    m_s2r=None
-):
-    """."""
-    # Get bump matrices
-    if m_s2r is None:
-        _, _, m_s2r = calc_matrices(
-            section_type=section_type, minsingval=0.2,
-            section_nr=section_nr, n_bpms_out=n_bpms_out
-        )
+        # remove closest BPMS
+        orbcorr = self.remove_closest_bpms(orbcorr, section_type, sidx,
+                                           n_bpms_out)
 
-    sidx = max(min(section_nr, 20), 1)
-    sidx -= 1
-    vec = np.array([posx, angx, posy, angy])
+        gorb = orbcorr.get_orbit()
 
-    # Create accelerator and orbcorr
-    mod = si.create_accelerator()
-    mod.cavity_on = True
-    orbcorr = OrbitCorr(mod, 'SI', use6dorb=True)
-    orbcorr.params.enblrf = True
-    orbcorr.params.tolerance = 1e-9
-    orbcorr.params.minsingval = 0.2
+        x = np.dot(m_s2r, vec)
+        gorb[idcs] = x
+        orbcorr.correct_orbit(goal_orbit=gorb)
+        xres = pyaccel.tracking.find_orbit(
+            orbcorr.respm.model, indices='open')[0:4, marker]
 
-    # Get source marker idx
-    marker = get_source_marker_idx(orbcorr.respm.model,
-                                     section_type, sidx)
+        fig, (ax, ay, az) = mplt.subplots(3, 1, figsize=(6, 9))
 
-    # Get BPM indices
-    idcs = get_bpm_indices(section_type, sidx)
+        ax.plot(1e6*vec, '-o', label='Input bump (posx, angx, posy, angy)')
+        ax.plot(1e6*xres, '-o', label='Resultant bump ')
+        ax.legend()
 
-    # remove corrs between BPMs
-    orbcorr = remove_corrs_btwbpm(orbcorr, section_type, sidx)
+        ay.plot(orbcorr.get_kicks()[:-1]*1e6)
+        ay.set_ylabel('Corr. kicks [urad]')
+        ay.set_xlabel('Corr idx')
 
-    # remove closest BPMS
-    orbcorr = remove_closest_bpms(orbcorr, section_type, sidx, n_bpms_out)
+        az.plot(orbcorr.get_orbit()*1e6)
+        az.set_ylabel('Orbit [urad]')
+        az.set_xlabel('BPMS idx')
 
-    gorb = orbcorr.get_orbit()
-
-    x = np.dot(m_s2r, vec)
-    gorb[idcs] = x
-    orbcorr.correct_orbit(goal_orbit=gorb)
-    xres = pyaccel.tracking.find_orbit(
-        orbcorr.respm.model, indices='open')[0:4, marker]
-
-    fig, (ax, ay, az) = mplt.subplots(3, 1, figsize=(6, 9))
-
-    ax.plot(1e6*vec, '-o', label='Input bump (posx, angx, posy, angy)')
-    ax.plot(1e6*xres, '-o', label='Resultant bump ')
-    ax.legend()
-
-    ay.plot(orbcorr.get_kicks()[:-1]*1e6)
-    ay.set_ylabel('Corr. kicks [urad]')
-    ay.set_xlabel('Corr idx')
-
-    az.plot(orbcorr.get_orbit()*1e6)
-    az.set_ylabel('Orbit [urad]')
-    az.set_xlabel('BPMS idx')
-
-    fig.tight_layout()
-    return fig, (ax, ay, az)
+        fig.tight_layout()
+        return fig, (ax, ay, az)
