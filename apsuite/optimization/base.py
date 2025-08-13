@@ -1,6 +1,7 @@
 """Simulated Annealing Algorithm for Minimization."""
 import logging as _log
 
+import matplotlib.pyplot as _mplt
 import numpy as _np
 
 from mathphys.functions import get_namedtuple as _get_namedtuple
@@ -196,8 +197,8 @@ class OptimizeParams(_Params):
         wrong = (
             (pos.shape[-1] != self.limit_lower.shape[-1]) or
             (pos.shape[-1] != self.limit_upper.shape[-1]) or
-            _np.any(pos <= self.limit_lower) or
-            _np.any(pos >= self.limit_upper))
+            _np.any(pos < self.limit_lower) or
+            _np.any(pos > self.limit_upper))
         return not wrong
 
 
@@ -211,8 +212,11 @@ class Optimize(_Base):
         self.use_thread = use_thread
 
         self._num_objective_evals = 0
-        self.best_positions = _np.array([], ndmin=2)
-        self.best_objfuncs = _np.array([], ndmin=2)
+        self.positions_evaluated = []
+        self.positions_best = []
+        self.objfuncs_evaluated = []
+        self.objfuncs_best = []
+        self.objfuncs_cumul_optima_idcs = None
 
     def to_dict(self) -> dict:
         """Dump all relevant object properties to dictionary.
@@ -224,8 +228,12 @@ class Optimize(_Base):
         dic = super().to_dict()
         dic['num_objective_evals'] = self.num_objective_evals
         dic['use_thread'] = self.use_thread
-        dic['best_positions'] = self.best_positions
-        dic['best_objfuncs'] = self.best_objfuncs
+        dic['positions_evaluated'] = self.positions_evaluated
+        dic['positions_best'] = self.positions_best
+        dic['objfuncs_evaluated'] = self.objfuncs_evaluated
+        dic['objfuncs_best'] = self.objfuncs_best
+        dic['objfuncs_cumul_optima_idcs'] = self.objfuncs_cumul_optima_idcs
+
         return dic
 
     def from_dict(self, info: dict):
@@ -242,8 +250,11 @@ class Optimize(_Base):
         super().from_dict(info)
         self._num_objective_evals = info['num_objective_evals']
         self.use_thread = info['use_thread']
-        self.best_positions = info['best_positions']
-        self.best_objfuncs = info['best_objfuncs']
+        self.positions_evaluated = info['positions_evaluated']
+        self.positions_best = info['positions_best']
+        self.objfuncs_evaluated = info['objfuncs_evaluated']
+        self.objfuncs_best = info['objfuncs_best']
+        self.objfuncs_cumul_optima_idcs = info["objfuncs_cumul_optima_idcs"]
 
     @property
     def num_objective_evals(self):
@@ -279,13 +290,14 @@ class Optimize(_Base):
         """
         return True
 
-    def _finalization():
+    def _finalization(self):
         """To be called after optimization ends."""
         pass
 
     def _objective_func(self, pos):
         self._num_objective_evals += 1
         pos = self.params.check_and_adjust_boundary(pos)
+        self.positions_evaluated.extend(_np.array(pos, ndmin=2))
         res = []
         for posi in _np.array(pos, ndmin=2):
             if self._stopevt.is_set():
@@ -293,8 +305,24 @@ class Optimize(_Base):
             if _np.any(_np.isnan(posi)):
                 _log.warning('Position out of boundaries. Returning NaN.')
                 res.append(_np.nan)
-            res.append(self.objective_function(posi))
-        return _np.array(res)
+            else:
+                res.append(self.objective_function(posi))
+        res = _np.array(res)
+        # the objective function must be a (m, n)-array
+        # for the m individuals values of the n objectives
+
+        if res.ndim == 1:
+            res.shape = (res.size, 1)
+            # single-obj, multi-individual = column array
+
+        if res.shape == (1, 1):
+            res = res.item()
+            self.objfuncs_evaluated.append(res)
+            # single-obj, single-individual = a scalar
+            return res
+
+        self.objfuncs_evaluated.extend(res)
+        return res
 
     def _target_func(self):
         if not self._initialization():
@@ -306,3 +334,146 @@ class Optimize(_Base):
         except OptimizationAborted:
             _log.info('Exiting: stop event was set.')
         self._finalization()
+
+    def plot_history():
+        """Implement visualization of the optimzation history."""
+        raise NotImplementedError()
+
+    def plot_knobspace_slice(self, dir_idcs=(1, 2), obj_idx=None):
+        """Plot slice of parameter space (knobs space).
+
+        Shows a 2-dimensional slice of the knobs components with the objective
+        function value as a color code.
+
+        Args:
+            dir_idcs (tuple, list): Indices (starting from 1) of the desired
+            knobs directions (components). Eg.: (1,2), (1,3) etc. Defaults to
+            (1, 2).
+
+            obj_idx (int): Index (starting from 0) of the desired objective to
+            consider for the color code indicating the objective landscape.
+
+        Returns:
+            fig, ax: matplotlib fig and ax
+        """
+        idx1, idx2 = dir_idcs
+        idx1 -= 1
+        idx2 -= 1
+
+        pos_eval = _np.array(self.positions_evaluated)
+        pos_best = _np.array(self.positions_best)
+        objfuncs_eval = _np.array(self.objfuncs_evaluated)
+
+        if obj_idx is not None:
+            objfuncs_eval = objfuncs_eval[:, obj_idx]
+
+        _, pos_cum_opt, _ = self.get_cumul_optima(obj_idx)
+
+        knob1_eval = pos_eval[:, idx1]
+        knob2_eval = pos_eval[:, idx2]
+
+        knob1_cum_opt = pos_cum_opt[:, idx1]
+        knob2_cum_opt = pos_cum_opt[:, idx2]
+
+        knob1_enditer = pos_best[:, idx1]
+        knob2_enditer = pos_best[:, idx2]
+
+        fig, ax = _mplt.subplots()
+        scatter = ax.scatter(
+            x=knob1_eval, y=knob2_eval,
+            c=objfuncs_eval,
+            vmin=objfuncs_eval.min(),
+            vmax=objfuncs_eval.max(),
+            label="positions evaluated"
+        )
+
+        ax.plot(
+            knob1_cum_opt,
+            knob2_cum_opt,
+            "o", color="red", mfc="none",
+            label="cumulated optima"
+        )
+
+        ax.plot(
+            knob1_enditer,
+            knob2_enditer,
+            "x", color="red",
+            label="end of iter. optima"
+        )
+
+        ax.plot(
+            knob1_enditer[-1],
+            knob2_enditer[-1],
+            "d", color="magenta",
+            markersize=10,
+            label="end of run optimum"
+        )
+        ax.set_xlabel(f"dir {idx1 + 1}")
+        ax.set_ylabel(f"dir {idx2 + 1}")
+
+        colorbar = fig.colorbar(scatter, ax=ax)
+        if obj_idx is None:
+            colorbar.set_label("objective function value")
+        else:
+            colorbar.set_label(f"objective {obj_idx} value")
+
+        ax.legend()
+        ax.set_title("parameter space slice")
+
+        return fig, ax
+
+    def _get_cumul_optima_idcs(self, obj_idx=None):
+        """Get the indices of the optima found during objfunc evaluations.
+
+        self.objfuncs_cumul_optima_idcs is an m-array with the
+        accumulated optima indices along the `self.objfuncs_evaluated` list
+        for the chosen objective.
+
+        obj_idx (int): index of the desired objective to be compared during
+            the evaluations. Defaults to None (case of single-objective
+            algorithms)
+        """
+        funcs = _np.array(self.objfuncs_evaluated)
+
+        if obj_idx is not None:
+            funcs = funcs[:, obj_idx]
+
+        optima = []
+        mini = _np.inf
+        for i, fun in enumerate(funcs):
+            if not _np.isnan(fun) and fun < mini:
+                optima.append(i)
+                mini = fun
+        self.objfuncs_cumul_optima_idcs = _np.array(optima)
+
+    def get_cumul_optima(self, obj_idx=None):
+        """Get the accumulated optima values & positions.
+
+        For simple single-objective single-individual algorithms, returns the
+        acumulated optima along the objective function evaluations. For multi-
+        objective algorithms, returns the optimal along a certain objective.
+
+        Args:
+            obj_idx (int): index of the objective to be compared. Defaults to
+            None (case of single objective).
+
+        Returns:
+            idcs (m-array): the indices of the m cumulated optima.
+
+            pos ((m, n)-array): the m n-dimensional positions where the
+            cumulated optima of the specified objective happens.
+
+            vals (m-array): the values of the specified objective at the m
+            optima.
+        """
+        if self.objfuncs_cumul_optima_idcs is None:
+            self._get_cumul_optima_idcs(obj_idx)
+        idcs = self.objfuncs_cumul_optima_idcs
+
+        vals = _np.array(self.objfuncs_evaluated)[idcs]
+        pos = _np.array(self.positions_evaluated)[idcs]
+
+        if obj_idx is not None:
+            vals = vals[:, obj_idx]
+
+        return idcs, pos, vals

@@ -116,10 +116,10 @@ class BaseClass(_BaseClass):
         return line
 
     @staticmethod
-    def _calc_dynap(x_in, y_in, lost_plane):
+    def _calc_dynap(x_in, y_in, lost_turn):
         """."""
         shape = x_in.shape
-        nlost = _np.array([l is None for l in lost_plane], dtype=bool)
+        nlost = _np.array([l == -1 for l in lost_turn], dtype=bool)
         nlost = nlost.reshape(shape)
         r_sqr = x_in*x_in + y_in*y_in
         idx = _np.unravel_index(_np.argmin(r_sqr), r_sqr.shape)
@@ -162,7 +162,7 @@ class BaseClass(_BaseClass):
         return x_dyn[ind], y_dyn[ind]
 
     @staticmethod
-    def _calc_frequencies(rout, lost_plane):
+    def _calc_frequencies(rout, lost_turn):
         """."""
         if not rout.size or len(rout.shape) < 3:
             return None, None
@@ -174,7 +174,7 @@ class BaseClass(_BaseClass):
         if left < 1:
             nmult -= 1
 
-        nlost = _np.array([l is None for l in lost_plane], dtype=bool)
+        nlost = _np.array([l == -1 for l in lost_turn], dtype=bool)
 
         nt_ini = nmult * 6 + 1
         x_ini = rout[0, :, :nt_ini]
@@ -199,7 +199,7 @@ class BaseClass(_BaseClass):
         return x_freq, y_freq
 
     @staticmethod
-    def _calc_fmap(rout, lost_plane):
+    def _calc_fmap(rout, lost_turn):
         """."""
         if not rout.size or len(rout.shape) < 3:
             return 7*[None, ]
@@ -211,7 +211,7 @@ class BaseClass(_BaseClass):
         if left < 2:
             nmult -= 1
 
-        nlost = _np.array([l is None for l in lost_plane], dtype=bool)
+        nlost = _np.array([l == -1 for l in lost_turn], dtype=bool)
 
         nt_ini = nmult * 6 + 1
         nt_fin = nmult * 12 + 2

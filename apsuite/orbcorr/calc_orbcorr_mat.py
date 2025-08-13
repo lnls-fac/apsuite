@@ -11,25 +11,25 @@ class OrbRespmat:
     _FREQ_DELTA = 10
     _ENERGY_DELTA = 1e-5
 
-    def __init__(self, model, acc, dim='4d', corr_system='SOFB'):
+    def __init__(self, model, acc='SI', dim='4d', corr_system='SOFB'):
         """."""
         self.model = model
-        self.acc = acc
-        if self.acc == 'BO':
-            # shift booster to start on injection point
-            inj = pyaccel.lattice.find_indices(
-                self.model, 'fam_name', 'InjSept')
-            self.model = pyaccel.lattice.shift(self.model, inj[0])
-            self.fam_data = bo.get_family_data(self.model)
-            self.rf_idx = self._get_idx(self.fam_data['P5Cav']['index'])
-        elif self.acc == 'SI':
-            self.fam_data = si.get_family_data(self.model)
-            self.rf_idx = self._get_idx(self.fam_data['SRFCav']['index'])
+        if dim.lower() in {'4d', '6d'}:
+            self.dim = dim.lower()
         else:
-            raise ValueError('Set models: BO or SI')
-        self.dim = dim
+            raise ValueError('Variable "dim" must be "4d" or "6d"')
+
+        acc = acc.upper()
+        if acc not in {"BO", "SI"}:
+            raise ValueError('Variable "acc" must be "BO" or "SI"')
+
+        self.fam_data = (bo if acc == 'BO' else si).get_family_data(self.model)
+        cav_famname = 'SRFCav' if acc == 'SI' else 'P5Cav'
+        self.rf_idx = self._get_idx(self.fam_data[cav_famname]['index'])
+
         self.bpm_idx = self._get_idx(self.fam_data['BPM']['index'])
-        if corr_system == 'SOFB':
+
+        if corr_system.upper() == 'SOFB':
             self.ch_idx = self._get_idx(self.fam_data['CH']['index'])
             self.cv_idx = self._get_idx(self.fam_data['CV']['index'])
         elif corr_system == 'FOFB':
@@ -38,44 +38,68 @@ class OrbRespmat:
         else:
             raise ValueError('Correction system must be "SOFB" or "FOFB"')
 
-    def get_respm(self):
+    def get_respm(self, add_rfline=True):
         """."""
         cav = self.model.cavity_on
         self.model.cavity_on = self.dim == '6d'
-        if self.dim == '6d':
-            m_mat, t_mat = pyaccel.tracking.find_m66(
-                self.model, indices='open')
-        else:
-            m_mat, t_mat = pyaccel.tracking.find_m44(
-                self.model, indices='open')
+
+        find_m = pyaccel.tracking
+        find_m = find_m.find_m66 if self.dim == '6d' else find_m.find_m44
+        m_mat, t_mat = find_m(self.model, indices='open')
 
         nch = len(self.ch_idx)
         respmat = []
         corrs = np.hstack([self.ch_idx, self.cv_idx])
+
         for idx, corr in enumerate(corrs):
-            rc_mat = t_mat[corr, :, :]
-            rb_mat = t_mat[self.bpm_idx, :, :]
+            rc_mat = t_mat[corr]
+            rb_mat = t_mat[self.bpm_idx]
             corr_len = self.model[corr].length
             kl_stren = self.model[corr].KL
             ksl_stren = self.model[corr].KsL
             respx, respy = self._get_respmat_line(
-                rc_mat, rb_mat, m_mat, corr, corr_len,
-                kxl=kl_stren, kyl=-kl_stren, ksxl=ksl_stren, ksyl=ksl_stren)
-            if idx < nch:
-                respmat.append(respx)
-            else:
-                respmat.append(respy)
+                rc_mat,
+                rb_mat,
+                m_mat,
+                corr,
+                corr_len,
+                kxl=kl_stren,
+                kyl=-kl_stren,
+                ksxl=ksl_stren,
+                ksyl=ksl_stren,
+            )
+            respmat.append(respx if idx < nch else respy)
 
-        rfline = self._get_rfline()  # m/Hz
-        respmat.append(rfline)
+        if add_rfline:
+            respmat.append(self._get_rfline())  # [m/Hz]
+
         respmat = np.array(respmat).T
 
         self.model.cavity_on = cav
         return respmat
 
     def _get_respmat_line(
-            self, rc_mat, rb_mat, m_mat, corr, length,
-            kxl=0, kyl=0, ksxl=0, ksyl=0):
+        self,
+        rc_mat,
+        rb_mat,
+        m_mat,
+        corr,
+        length,
+        kxl=0,
+        kyl=0,
+        ksxl=0,
+        ksyl=0,
+    ):
+        # NOTE: The method for constructing "half_cor" is not the most general
+        # possible, as it only considers quadrupolar elements. An attempt was
+        # made to generalize the method. Initially, it was tried to calculate
+        # "half_cor" by taking the square root of the corrector transfer
+        # matrix. However, the overall performance penalty was too high (23%)
+        # and it couldn't handle correctors with rotation errors properly.
+        # Another possibility is to obtain "half_cor" directly by tracking,
+        # defining a component with the same properties as the corrector,
+        # but with half the length.
+
         # create a symplectic integrator of second order
         # for the last half of the element:
         drift = np.eye(rc_mat.shape[0], dtype=float)
@@ -87,20 +111,31 @@ class OrbRespmat:
         quad[1, 2] = -ksxl/2
         quad[3, 0] = -ksyl/2
         half_cor = drift @ quad @ drift
+
+        # transfer matrix from 0 to the middle of corrector, Rc:
         rc_mat = half_cor @ rc_mat
 
-        mc_mat = np.linalg.solve(
-            rc_mat.T, (rc_mat @ m_mat).T).T  # Mc = Rc M Rc^-1
+        # one tune matrix at the middle of corrector, Mc = Rc * M0 * Rc^-1:
+        mc_mat = np.linalg.solve(rc_mat.T, (rc_mat @ m_mat).T).T
+
+        # inverse: (1-Mc)^-1
         mci_mat = np.eye(mc_mat.shape[0], dtype=float) - mc_mat
 
         small = self.bpm_idx < corr
         large = np.logical_not(small)
 
+        # transfer matrix from corrector to BPM, Rc->b:
+        # first, calculate Rb * Rc^-1
         rcbl_mat = np.linalg.solve(rc_mat.T, rb_mat.transpose((0, 2, 1)))
         rcbl_mat = rcbl_mat.transpose((0, 2, 1))
+
+        # if bpm is before corrector, Rc->b = Rb * Rc^-1 * Mc = Rb * M0 * Rc^-1
         rcbs_mat = rcbl_mat[small] @ mc_mat
+
+        # if bpm is after corrector, Rc->b = Rb * Rc^-1
         rcbl_mat = rcbl_mat[large]
 
+        # closed orbit condition from corrector to bpm Rc->b * (1 - Mc)^(-1)
         rcbl_mat = np.linalg.solve(mci_mat.T, rcbl_mat.transpose((0, 2, 1)))
         rcbl_mat = rcbl_mat.transpose((0, 2, 1))
         rcbs_mat = np.linalg.solve(mci_mat.T, rcbs_mat.transpose((0, 2, 1)))
@@ -170,10 +205,6 @@ class TrajRespmat:
         if acc == 'TB':
             self.fam_data = tb.get_family_data(self.model)
         elif acc == 'BO':
-            # shift booster to start on injection point
-            inj = pyaccel.lattice.find_indices(
-                self.model, 'fam_name', 'InjSept')
-            self.model = pyaccel.lattice.shift(self.model, inj[0])
             self.fam_data = bo.get_family_data(self.model)
         elif acc == 'TS':
             self.fam_data = ts.get_family_data(self.model)

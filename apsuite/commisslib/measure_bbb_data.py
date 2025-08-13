@@ -35,7 +35,8 @@ class UtilClass:
             dft_freq=_np.fft.fftfreq(rawdata.shape[1], d=dtime),
             stored_current=bbb.dcct.current,
             timestamp=_time.time(),
-            cavity_data=UtilClass.get_cavity_data(bbb),
+            cavity_a_data=UtilClass.get_cavity_data(bbb.rfcav_a),
+            cavity_b_data=UtilClass.get_cavity_data(bbb.rfcav_b),
             acqtype=acqtype, downsample=acq.downsample,
             fb_set0=bbb.coeffs.set0, fb_set1=bbb.coeffs.set1,
             fb_set0_desc=bbb.coeffs.set0_desc,
@@ -51,37 +52,19 @@ class UtilClass:
             )
 
     @staticmethod
-    def get_cavity_data(bbb):
+    def get_cavity_data(rfcav):
         """."""
         return dict(
-            temperature={
-                'cell1': bbb.rfcav.dev_cavmon.temp_cell1,
-                'cell2': bbb.rfcav.dev_cavmon.temp_cell2,
-                'cell3': bbb.rfcav.dev_cavmon.temp_cell3,
-                'cell4': bbb.rfcav.dev_cavmon.temp_cell4,
-                'cell5': bbb.rfcav.dev_cavmon.temp_cell5,
-                'cell6': bbb.rfcav.dev_cavmon.temp_cell6,
-                'cell7': bbb.rfcav.dev_cavmon.temp_cell7,
-                'coupler': bbb.rfcav.dev_cavmon.temp_coupler,
-                },
             power={
-                'cell2': bbb.rfcav.dev_cavmon.power_cell2,
-                'cell4': bbb.rfcav.dev_cavmon.power_cell4,
-                'cell6': bbb.rfcav.dev_cavmon.power_cell6,
-                'forward': bbb.rfcav.dev_cavmon.power_forward,
-                'reverse': bbb.rfcav.dev_cavmon.power_reverse,
-                'voltage': bbb.rfcav.dev_cavmon.gap_voltage,
-                },
-            voltage=bbb.rfcav.dev_llrf.voltage_mon,
-            phase=bbb.rfcav.dev_llrf.phase_mon,
-            detune=bbb.rfcav.dev_llrf.detune,
-            detune_error=bbb.rfcav.dev_llrf.detune_error,
-            field_flatness_error=bbb.rfcav.dev_llrf.field_flatness_error,
-            field_flatness_gain1=bbb.rfcav.dev_llrf.field_flatness_gain1,
-            field_flatness_gain2=bbb.rfcav.dev_llrf.field_flatness_gain2,
-            field_flatness_amp1=bbb.rfcav.dev_llrf.field_flatness_amp1,
-            field_flatness_amp2=bbb.rfcav.dev_llrf.field_flatness_amp2,
-            )
+                'forward': rfcav.dev_cavmon.power_forward,
+                'reverse': rfcav.dev_cavmon.power_reverse,
+                'voltage': rfcav.dev_cavmon.gap_voltage,
+            },
+            voltage=rfcav.dev_llrf.voltage_mon,
+            phase=rfcav.dev_llrf.phase_mon,
+            detune=rfcav.dev_llrf.detune,
+            detune_error=rfcav.dev_llrf.detune_error,
+        )
 
     @staticmethod
     def _process_data(data, params, rawdata=None):
@@ -107,22 +90,22 @@ class UtilClass:
         dataraw -= dataraw.mean(axis=1)[:, None]
 
         # get the analytic data vector, via discrete hilbert transform
-        data_anal = _scysig.hilbert(dataraw, axis=1).copy()
+        data_anly = _scysig.hilbert(dataraw, axis=1).copy()
 
         # calculate DFT:
-        data_dft = _np.fft.fft(data_anal, axis=1)
+        data_dft = _np.fft.fft(data_anly, axis=1)
 
         # compensate the different time samplings of each bunch:
         int_freq = int_tune/rev_per
-        dts = _np.arange(data_anal.shape[0])/data_anal.shape[0] * rev_per
+        dts = _np.arange(data_anly.shape[0])/data_anly.shape[0] * rev_per
         comp = _np.exp(-1j*2*_np.pi * (int_freq+freq[None, :])*dts[:, None])
         data_dft *= comp
 
         # get the processed data by inverse DFT
-        data_anal = _np.fft.ifft(data_dft, axis=1)
+        data_anly = _np.fft.ifft(data_dft, axis=1)
 
         # decompose data into even fill eigenvectors:
-        data_modes = _np.fft.fft(data_anal, axis=0) / data_anal.shape[0]
+        data_modes = _np.fft.fft(data_anly, axis=0) / data_anly.shape[0]
 
         analysis = dict()
         analysis['bunch_numbers'] = _np.arange(1, dataraw.shape[0]+1)
@@ -130,7 +113,7 @@ class UtilClass:
         analysis['mode_numbers'] = _np.arange(data_modes.shape[0])
         analysis['time'] = time
         analysis['mode_data'] = data_modes
-        analysis['bunch_data'] = data_anal
+        analysis['bunch_data'] = data_anly
 
         return analysis
 
@@ -141,9 +124,8 @@ class UtilClass:
         sigma_freq = params.bandwidth
         ftype = params.filter_type
 
-        data_dft = _np.fft.fft(data, axis=-1)
-
         if ftype.lower().startswith('gauss'):
+            data_dft = _np.fft.fft(data, axis=-1)
             # Apply Gaussian filter to get only the synchrotron frequency
             H = _np.exp(-(freq - center_freq)**2/2/sigma_freq**2)
             H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
@@ -152,7 +134,9 @@ class UtilClass:
                 data_dft *= H[None, :]
             else:
                 data_dft *= H
-        else:
+            data = _np.fft.ifft(data_dft, axis=-1)
+        elif ftype.lower().startswith('sinc'):
+            data_dft = _np.fft.fft(data, axis=-1)
             indcsp = (freq > center_freq - sigma_freq)
             indcsp &= (freq < center_freq + sigma_freq)
             indcsn = (-freq > center_freq - sigma_freq)
@@ -162,7 +146,11 @@ class UtilClass:
                 data_dft[:, ~indcs] = 0
             else:
                 data_dft[~indcs] = 0
-        return _np.fft.ifft(data_dft, axis=-1)
+            data = _np.fft.ifft(data_dft, axis=-1)
+        elif ftype.lower().startswith('noavg'):
+            data = data.copy()
+            data -= data.mean(axis=-1, keepdims=True)
+        return data
 
     @staticmethod
     def estimate_fitting_intervals(infos, int_type='both', clearance=0):
@@ -273,7 +261,7 @@ class BbBLParams(_ParamsBaseClass):
         super().__init__()
         self.center_frequency = 2090  # [Hz]
         self.bandwidth = 200  # [Hz]
-        self.filter_type = 'gauss'  # (gauss, sinc)
+        self.filter_type = 'gauss'  # (gauss, sinc, noavg, none)
         self.acqtype = 'SRAM'
         self.integer_tune = 0
 
@@ -284,7 +272,8 @@ class BbBLParams(_ParamsBaseClass):
         stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
         st = ftmp('center_frequency  [Hz]', self.center_frequency, '')
         st += ftmp('bandwidth [Hz]', self.bandwidth, '')
-        st += stmp('filter_type', self.filter_type, '[gauss or sinc]')
+        st += stmp(
+            'filter_type', self.filter_type, '[gauss, sinc, noavg, none]')
         st += stmp('acqtype', self.acqtype, '[SRAM or BRAM]')
         st += dtmp('integer_tune', self.integer_tune, '')
         return st
@@ -577,7 +566,7 @@ class BbBAcqData(_BaseClass, UtilClass):
             analysis = self.analysis
 
         data_modes = analysis['mode_data']
-        data_anal = analysis['bunch_data']
+        data_anly = analysis['bunch_data']
         tim = analysis['time']
         mode_nums = analysis['mode_numbers']
         bunch_nums = analysis['bunch_numbers']
@@ -595,7 +584,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         afx = _mplt.subplot(gs[1, 1])
 
         abs_modes = _np.abs(data_modes)
-        abs_dataf = _np.abs(data_anal)
+        abs_dataf = _np.abs(data_anly)
 
         pln = self.devices['bbb'].devname[-1]
         unit = '[°]' if pln == 'L' else '[um]'
@@ -785,24 +774,12 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
                     ', '.join(list(lst.keys())))
             prop.append(lst)
 
-        if isinstance(prop[0], (int, float)):
+        if isinstance(prop[0], (int, float, _np.int64, _np.float64)):
             prop = _np.array(prop)
         elif isinstance(prop[0], (list, tuple)):
             prop = _np.hstack(prop)
         elif isinstance(prop[0], _np.ndarray):
             prop = _np.vstack(prop)
-        else:
-            return prop
-
-        # Make sure the size of the first dimension of the array is equal to
-        # the number of modes measured by repeating values when needed.
-        modes_meas = dic['modes_measured']
-        idcs = []
-        for i, ms in enumerate(modes_meas):
-            idcs.extend([i, ]*len(ms))
-
-        if prop.shape[0] < len(idcs):
-            prop = prop[idcs]
         return prop
 
     def load_merge_and_apply_data(self, fnames):
@@ -811,8 +788,9 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         Args:
             fnames (list): filenames of the saved data.
         """
-        self.clear_data()
         data = dict()
+        data.update(self.data)
+        self.clear_data()
         params = self.params
         for fname in fnames:
             datum = self.load_data(fname)['data']
@@ -970,9 +948,16 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         drive = bbb.drive0 if drive_num == 0 else bbb.drive1
         drive = drive if drive_num != 2 else bbb.drive2
 
+        mask_dr0 = drive.mask
+        mask_fb0 = bbb.feedback.mask
+
+        drive.mask = _np.ones(mask_dr0.size, dtype=bool)
+        bbb.feedback.mask = _np.zeros(mask_dr0.size, dtype=bool)
+
         harm_nr = bbb.info.harmonic_number
+        rev_freq = bbb.info.revolution_freq_nom / 1e3  # [kHz]
         modes_to_measure = self.params.modes_to_measure
-        bunches = _np.arange(harm_nr)
+        sync_freq = self.params.center_frequency / 1e3  # [kHz]
 
         bbb.sram.cmd_data_dump(pv_update=True)
         _time.sleep(self.params.wait_pv_update)
@@ -987,18 +972,19 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             self.data = dict(infos=[], modes_data=[], modes_measured=[])
         for mode in modes_to_measure:
             elt = _time.time()
-            drive.mask = _np.cos(2*_np.pi*bunches*mode/harm_nr) > 0
+            md = mode if mode < harm_nr/2 else harm_nr - mode
+            sig = 1 if mode < harm_nr/2 else -1
+            drive.frequency = md * rev_freq + sig * sync_freq
             _time.sleep(self.params.wait_acquisition)
             bbb.sram.cmd_data_dump(pv_update=True)
             _time.sleep(self.params.wait_pv_update)
 
             infos = self.get_data(bbb, acqtype)
             analysis = self._process_data(infos, self.params)
-            modei = sorted({mode, harm_nr - mode})
-            data = analysis['mode_data'][modei]
+            data = analysis['mode_data'][mode].copy()
             infos.pop('rawdata')
 
-            self.data['modes_measured'].append(modei)
+            self.data['modes_measured'].append(mode)
             self.data['modes_data'].append(data)
             self.data['infos'].append(infos)
 
@@ -1008,13 +994,17 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
                 full=False)
             print(',      '.join([
                 f'mode: {m:03d} --> growth: {gt:+7.2f}'
-                for m, gt in zip(modei, grt.ravel())]), end='')
+                for m, gt in zip([mode], grt.ravel())]), end='')
             elt -= _time.time()
             elt *= -1
             print(f',      ET: {elt:.2f}s')
             if self._stopevt.is_set():
                 print('Stopping...')
                 break
+
+        drive.mask = mask_dr0
+        bbb.feedback.mask = mask_fb0
+
         elt0 -= _time.time()
         elt0 *= -1
         print(f'Finished!!  ET: {elt0/60:.2f}min')
@@ -1048,7 +1038,7 @@ class TuneShiftParams(_ParamsBaseClass):
         self.decay_model = 'exp'
         self.sync_freq = 1800  # [Hz]
         self.bandwidth = 5000  # [Hz]
-        self.filter_type = 'gauss'  # (gauss, sinc)
+        self.filter_type = 'gauss'  # (gauss, sinc, noavg, none)
         self.integer_tuneh = 0
         self.integer_tunev = 0
         self.currents = _np.arange(0.05, 2.1, 0.1)  # mA
@@ -1071,7 +1061,8 @@ class TuneShiftParams(_ParamsBaseClass):
         stg += stmp('decay_model', self.decay_model, '(exp, decoh)')
         stg += ftmp('sync_freq', self.sync_freq, '[Hz]')
         stg += ftmp('bandwidth', self.bandwidth, '[Hz]')
-        stg += stmp('filter_type', self.filter_type, '(gauss, sinc)')
+        stg += stmp(
+            'filter_type', self.filter_type, '(gauss, sinc, noavg, none)')
         stg += dtmp('integer_tuneh', self.integer_tuneh, '')
         stg += dtmp('integer_tunev', self.integer_tunev, '')
         stg += f"{'currents':10s} = ("
@@ -1148,17 +1139,17 @@ class MeasTuneShift(_ThreadBaseClass):
         dataraw -= dataraw.mean()
 
         # get the analytic data vector, via discrete hilbert transform
-        data_anal = _scysig.hilbert(dataraw).copy()
+        data_anly = _scysig.hilbert(dataraw).copy()
 
         # calculate DFT:
-        data_dft = _np.fft.fft(data_anal)
+        data_dft = _np.fft.fft(data_anly)
 
-        time = _np.arange(data_anal.size) * per_rev
-        freq = _np.fft.fftfreq(data_anal.size, d=per_rev)
+        time = _np.arange(data_anly.size) * per_rev
+        freq = _np.fft.fftfreq(data_anly.size, d=per_rev)
         analysis = dict()
         analysis['freq_dft'] = freq
         analysis['time'] = time
-        analysis['bunch_data'] = data_anal
+        analysis['bunch_data'] = data_anly
         analysis['data_dft'] = data_dft
         return analysis
 
@@ -1177,13 +1168,15 @@ class MeasTuneShift(_ThreadBaseClass):
             H += _np.exp(-(freq + center_freq)**2/2/sigma_freq**2)
             H /= H.max()
             data_dft *= H
-        else:
+        elif ftype.lower().startswith('sinc'):
             indcsp = (freq > center_freq - sigma_freq)
             indcsp &= (freq < center_freq + sigma_freq)
             indcsn = (-freq > center_freq - sigma_freq)
             indcsn &= (-freq < center_freq + sigma_freq)
             indcs = indcsp | indcsn
             data_dft[~indcs] = 0
+        elif ftype.lower().startswith('noavg'):
+            data_dft[freq == 0] = 0
         return _np.fft.ifft(data_dft, axis=-1)
 
     @classmethod
