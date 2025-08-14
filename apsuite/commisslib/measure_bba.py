@@ -11,12 +11,17 @@ import numpy as _np
 import pyaccel as _pyacc
 from scipy.optimize import least_squares as _least_squares
 from siriuspy.clientconfigdb import ConfigDBClient
-from siriuspy.devices import CurrInfoSI as _CurrInfoSI, \
-    PowerSupply as _PowerSupply, SOFB as _SOFB
+from siriuspy.devices import (
+    CurrInfoSI as _CurrInfoSI,
+    PowerSupply as _PowerSupply,
+    SOFB as _SOFB,
+)
 from siriuspy.namesys import SiriusPVName as _PVName
 
-from ..utils import ParamsBaseClass as _ParamsBaseClass, \
-    ThreadedMeasBaseClass as _BaseClass
+from ..utils import (
+    ParamsBaseClass as _ParamsBaseClass,
+    ThreadedMeasBaseClass as _BaseClass,
+)
 
 
 class BBAParams(_ParamsBaseClass):
@@ -356,12 +361,12 @@ class BBAParams(_ParamsBaseClass):
         self.deltaorbx = 100  # [um]
         self.deltaorby = 100  # [um]
         self.meas_nrsteps = 8
-        self.quad_deltakl = 0.01  # [1/m]
+        self.quad_deltakl = 0.02  # [1/m]
         self.quad_nrcycles = 1
         self.wait_correctors = 0.3  # [s]
         self.wait_quadrupole = 0.3  # [s]
         self.timeout_wait_orbit = 3  # [s]
-        self.sofb_nrpoints = 10
+        self.sofb_nrpoints = 20
         self.sofb_maxcorriter = 5
         self.sofb_maxorberr = 5  # [um]
 
@@ -460,7 +465,9 @@ class DoBBA(_BaseClass):
             idx = self.data["bpmnames"].index(bpm)
             qname = self.data["quadnames"][idx]
             if qname and qname not in self.devices:
-                self.devices[qname] = _PowerSupply(qname)
+                self.devices[qname] = _PowerSupply(
+                    qname, props2init=("PwrState-Sts", "KL-SP", "KL-RB")
+                )
 
     def get_orbit(self):
         """."""
@@ -880,7 +887,7 @@ class DoBBA(_BaseClass):
         )
 
         ind = self.params.BPMNAMES.index(bpm)
-        bpm_txt = f'{bpm} [{ind:03d}]'
+        bpm_txt = f"{bpm} [{ind:03d}]"
         f.suptitle(bpm_txt, fontsize=20)
 
         alx = _plt.subplot(gs[0, 0])
@@ -1555,6 +1562,7 @@ class DoBBA(_BaseClass):
 
     # #### private methods ####
     def _do_bba(self):
+        self.data["bpms2dobba"] = self.bpms2dobba
         tini = _datetime.datetime.fromtimestamp(_time.time())
         print(
             "Starting measurement at {:s}".format(
