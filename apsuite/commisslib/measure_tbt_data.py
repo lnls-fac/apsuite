@@ -742,34 +742,36 @@ class TbTDataAnalysis(MeasureTbTData):
             self.independent_components_analysis(calc_optics=True, **kwargs)
             data = self.ica_data
 
-        betax = data["betax"]
-        betay = data["betay"]
-        phasex = data["phasex"]
-        phasey = data["phasey"]
+        betay = data.get("betay", None)
+        betax = data.get("betax", None)
+        phasex = data.get("phasex", None)
+        phasey = data.get("phasey", None)
 
-        betax_model = self.model_optics["betax"]
-        betay_model = self.model_optics["betay"]
-        phasex_model = self.model_optics["phasex"]
-        phasey_model = self.model_optics["phasey"]
+        betax_model = self.model_optics.get("betax", None)
+        betay_model = self.model_optics.get("betay", None)
+        phasex_model = self.model_optics.get("phasex", None)
+        phasey_model = self.model_optics.get("phasey", None)
 
-        self.plot_betabeat_and_phase_error(
-            betax_model,
-            betax,
-            phasex_model,
-            phasex,
-            title=f"{method} Optics Analysis: betax & phasex",
-            compare_meas2model=compare_meas2model,
-            bpms2use=self.bpms2use,
-        )
-        self.plot_betabeat_and_phase_error(
-            betay_model,
-            betay,
-            phasey_model,
-            phasey,
-            title=f"{method} Optics Analysis: betay & phasey",
-            compare_meas2model=compare_meas2model,
-            bpms2use=self.bpms2use,
-        )
+        if betax is not None:
+            self.plot_betabeat_and_phase_error(
+                betax_model,
+                betax,
+                phasex_model,
+                phasex,
+                title=f"{method} Optics Analysis: betax & phasex",
+                compare_meas2model=compare_meas2model,
+                bpms2use=self.bpms2use,
+            )
+        if betay is not None:
+            self.plot_betabeat_and_phase_error(
+                betay_model,
+                betay,
+                phasey_model,
+                phasey,
+                title=f"{method} Optics Analysis: betay & phasey",
+                compare_meas2model=compare_meas2model,
+                bpms2use=self.bpms2use,
+            )
 
     def harmonic_analysis(self, guess_tunes=True):
         r"""Linear optics analysis using sinusoidal model for TbT data.
