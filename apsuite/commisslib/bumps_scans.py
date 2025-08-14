@@ -31,6 +31,7 @@ class BumpParams(_ParamsBaseClass):
         self.minsingval = 0.2
         self.bump_residue = 5
         self.bump_max_residue = 10
+        self.fofb_max_kick = 4  # [urad]
 
         self.buffer_sloworb = 20
         self.wait_meas = 2  # [s]
@@ -56,6 +57,7 @@ class BumpParams(_ParamsBaseClass):
         stg += ftmp('minsingval', self.minsingval, '')
         stg += ftmp('bump_residue', self.bump_residue, '')
         stg += ftmp('bump_max_residue', self.bump_max_residue, '')
+        stg += ftmp('fofb_max_kick', self.fofb_max_kick, '[urad]')
 
         stg += dtmp('buffer_sloworb', self.buffer_sloworb, '')
         stg += ftmp('wait_meas', self.wait_meas, '[s]')
@@ -108,13 +110,18 @@ class Bump(_BaseClass):
     def config_sofb(self):
         """."""
         sofb = self.devices['sofb']
+        fofb = self.devices['fofb']
         sofb.nr_points = self.params.buffer_sloworb
         sofb.cmd_change_opmode_to_sloworb()
         sofb.cmd_reset()
         # NOTE: the factor of 8 is because the current version of SOFB is too
         # slow to update multi-turn orbits.
         sofb.wait_buffer(timeout=sofb.nr_points * 0.5 * 8)
-        sofb.cmd_turn_off_autocorr()
+        if self.use_fofb:
+            sofb.cmd_turn_on_autocorr()
+            fofb.cmd_turn_on_loop_state()
+        else:
+            sofb.cmd_turn_off_autocorr()
         self._bpmxenbl = self.devices['sofb'].bpmxenbl
         self._bpmyenbl = self.devices['sofb'].bpmyenbl
 
@@ -135,7 +142,7 @@ class Bump(_BaseClass):
         sofb.bpmxenbl = _np.ones(refx.size, dtype=bool)
         sofb.bpmyenbl = _np.ones(refx.size, dtype=bool)
 
-    def remove_sofb_bpms(self, section_type, section_nr, n_bpms_out):
+    def remove_bpms(self, section_type, section_nr, n_bpms_out):
         sofb = self.devices['sofb']
         idcs_out = self.bumptools.get_closest_bpms_indices(
             section_type=section_type,
@@ -144,6 +151,10 @@ class Bump(_BaseClass):
         )
         sofb.bpmxenbl[idcs_out[: n_bpms_out * 2]] = False
         sofb.bpmyenbl[idcs_out[n_bpms_out * 2 :]] = False
+        if self.params.use_fofb:
+            fofb = self.devices['fofb']
+            fofb.bpmxenbl[idcs_out[: n_bpms_out * 2]] = False
+            fofb.bpmyenbl[idcs_out[n_bpms_out * 2 :]] = False
         _time.sleep(0.5)  # NOTE: For some reason We have to wait here.
 
     def get_orbrms(self, refx, refy, idx):
@@ -152,6 +163,15 @@ class Bump(_BaseClass):
         dorbx = dorbx[idx]
         dorby = dorby[idx]
         return _np.hstack([dorbx, dorby]).std()
+
+    def update_reforb(self, orbx, orby):
+        if self.use_fofb:
+            fofb = self.devices['fofb']
+            fofb.orbx = orbx
+            fofb.orby = orby
+        sofb = self.devices['sofb']
+        sofb.orbx = orbx
+        sofb.orby = orby
 
     def implement_bump(
         self, refx=None, refy=None, agx=0, agy=0, psx=0, psy=0, subsec=None
@@ -167,6 +187,7 @@ class Bump(_BaseClass):
         residue = self.params.orbcorr_residue
         bump_residue = self.params.bump_residue
         bump_max_residue = self.bump_max_residue
+        fofb_max_kick = self.fofb_max_kick
 
         orbx, orby = sofb.si_calculate_bumps(
             refx,
@@ -181,23 +202,36 @@ class Bump(_BaseClass):
         )
         section_type, section_nr = self.subsec_2_sectype_nr(subsec)
 
-        self.remove_sofb_bpms(section_type, section_nr)
+        self.remove_bpms(section_type, section_nr)
 
         idcs_bpm = self.bumptools.get_bpm_indices(
             section_type=section_type, sidx=section_nr - 1
         )
 
         # Set orbit
-        sofb.refx = orbx
-        sofb.refy = orby
+        self.update_reforb(orbx, orby)
 
         # Verify orbit correction
         rms_residue = bump_residue + 1
+        kick = fofb_max_kick - 1
+        if self.use_fofb:
+            fofb = self.devices['fofb']
         print('Waiting orbit...')
-        while rms_residue > bump_residue:
-            _ = sofb.correct_orbit_manually(nr_iters=nr_iters, residue=residue)
+        while rms_residue > bump_residue or kick > fofb_max_kick:
             rms_residue = self.get_orbrms(orbx, orby, idcs_bpm)
-            print(f'    rms_residue = {rms_residue:.3f} um')
+            if self.use_fofb:
+                kick = _np.max((
+                    _np.abs(fofb.kickch_acc),
+                    _np.abs(fofb.kickcv_acc),
+                ))
+            else:
+                _ = sofb.correct_orbit_manually(
+                    nr_iters=nr_iters, residue=residue
+                )
+            print(
+                f'    orb_rms = {rms_residue:.3f} um, '
+                f'maxkick = {kick:.3f} urad'
+            )
             bump_residue *= 1.2
             if bump_residue > bump_max_residue:
                 raise ValueError('Could not correct orbit.')
@@ -222,6 +256,8 @@ class Bump(_BaseClass):
 
         data = list()
         for iter in range(idx.size):
+            if not self.is_beam_alive():
+                break
             x = x_span[idx[iter]]
             y = y_span[idy[iter]]
 
