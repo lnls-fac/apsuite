@@ -361,12 +361,12 @@ class BBAParams(_ParamsBaseClass):
         self.deltaorbx = 100  # [um]
         self.deltaorby = 100  # [um]
         self.meas_nrsteps = 8
-        self.quad_deltakl = 0.01  # [1/m]
+        self.quad_deltakl = 0.02  # [1/m]
         self.quad_nrcycles = 1
         self.wait_correctors = 0.3  # [s]
         self.wait_quadrupole = 0.3  # [s]
         self.timeout_wait_orbit = 3  # [s]
-        self.sofb_nrpoints = 10
+        self.sofb_nrpoints = 20
         self.sofb_maxcorriter = 5
         self.sofb_maxorberr = 5  # [um]
 
