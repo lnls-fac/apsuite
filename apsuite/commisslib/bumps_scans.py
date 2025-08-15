@@ -18,19 +18,17 @@ class BumpParams(_ParamsBaseClass):
     def __init__(self):
         """."""
         _ParamsBaseClass().__init__()
-        self.x_min = 0  # [um] or [urad]
-        self.x_max = 0  # [um] or [urad]
-        self.nr_steps_x = 0
-        self.y_min = 0  # [um] or [urad]
-        self.y_max = 0  # [um] or [urad]
-        self.nr_steps_y = 0
+        self.pts_x = 0  # 1d numpy array [um]
+        self.pts_y = 0  # 1d numpy array [um]
+        self.pts_px = 0  # 1d numpy array [urad]
+        self.pts_py = 0  # 1d numpy array [urad]
         self.subsec = '01C1'
         self.do_angular_bumps = True
 
         self.n_bpms_out = 3
         self.minsingval = 0.2
-        self.bump_residue = 5
-        self.bump_max_residue = 10
+        self.bump_residue = 5  # [um]
+        self.bump_max_residue = 10  # [um]
         self.fofb_max_kick = 4  # [urad]
 
         self.buffer_sloworb = 20
@@ -44,25 +42,25 @@ class BumpParams(_ParamsBaseClass):
         """."""
         dtmp = '{0:20s} = {1:9d}\n'.format
         ftmp = '{0:20s} = {1:9.4f}  {2:s}\n'.format
-        stg = ftmp('x_min', self.x_min, '[um] or [urad]')
-        stg += ftmp('x_max', self.x_max, '[um] or [urad]')
-        stg += dtmp('nr_steps_x', self.nr_steps_x)
-        stg += ftmp('y_min', self.y_min, '[um] or [urad]')
-        stg += ftmp('y_max', self.y_max, '[um] or [urad]')
-        stg += dtmp('nr_steps_y', self.nr_steps_y)
-        stg += dtmp('subsec', self.subsec)
+        stmp = '{0:20s} = {1:9s}  {2:s}\n'.format
+        stg = dtmp('subsec', self.subsec)
         stg += dtmp('do_angular_bumps', self.do_angular_bumps)
 
         stg += dtmp('n_bpms_out', self.n_bpms_out, '')
         stg += ftmp('minsingval', self.minsingval, '')
-        stg += ftmp('bump_residue', self.bump_residue, '')
-        stg += ftmp('bump_max_residue', self.bump_max_residue, '')
+        stg += ftmp('bump_residue', self.bump_residue, '[um]')
+        stg += ftmp('bump_max_residue', self.bump_max_residue, '[um]')
         stg += ftmp('fofb_max_kick', self.fofb_max_kick, '[urad]')
 
         stg += dtmp('buffer_sloworb', self.buffer_sloworb, '')
         stg += ftmp('wait_meas', self.wait_meas, '[s]')
         stg += dtmp('orbcorr_nr_iters', self.orbcorr_nr_iters)
         stg += ftmp('orbcorr_residue', self.orbcorr_residue, '[um]')
+
+        stg += stmp('pts_x', self.pts_x, '[um]')
+        stg += stmp('pts_y', self.pts_y, '[um]')
+        stg += stmp('pts_px', self.pts_px, '[um] or [urad]')
+        stg += stmp('pts_py', self.pts_py, '[um] or [urad]')
         return stg
 
 
@@ -78,7 +76,7 @@ class Bump(_BaseClass):
         self.reforbx = None
         self.reforby = None
         if measurement_func is None:
-            self.measurement_func = self.dummy_meas
+            self.measurement_func = self._dummy_meas
         else:
             self.measurement_func = measurement_func
         self.bumptools = SiCalcBumps()
@@ -89,16 +87,43 @@ class Bump(_BaseClass):
             self._configdb = _ConfigDBClient(config_type='si_orbit')
 
     @staticmethod
-    def dummy_meas():
+    def _dummy_meas():
         print('Not a measurement!')
+
+    def _is_beam_alive(self):
+        if self.devices['currinfo'].storedbeam:
+            return True
+        print('Beam is dead!')
+        self.restore_sofb_reforb()
 
     @staticmethod
     def subsec_2_sectype_nr(subsec):
+        """Convert subsec string to subsec type and number.
+
+        Args:
+            subsec (str): Subsection name. example "02C1"
+
+        Raises:
+            ValueError: Must be a valid section
+
+        Returns:
+            str, int: section type and section number
+        """
         section_nr = int(subsec[:2])
         if not 1 <= section_nr <= 20:
             raise ValueError('Section must be between 01..20.')
         section_type = subsec[2:]
         return section_type, section_nr
+
+    def update_reforb(self, refx, refy):
+        """Update reforb.
+
+        Args:
+            refx (1d numpy array): Horizontal orbit
+            refy (1d numpy array): Vertical orbit
+        """
+        self.reforbx = refx
+        self.reforby = refy
 
     def get_measurement_data(self):
         """."""
@@ -125,13 +150,8 @@ class Bump(_BaseClass):
         self._bpmxenbl = self.devices['sofb'].bpmxenbl
         self._bpmyenbl = self.devices['sofb'].bpmyenbl
 
-    def is_beam_alive(self):
-        if self.devices['currinfo'].storedbeam:
-            return True
-        print('Beam is dead!')
-        self.restore_sofb_reforb()
-
     def restore_sofb_reforb(self):
+        """."""
         sofb = self.devices['sofb']
         clt = self._configdb
         ref_orb = clt.get_config_value('ref_orb')
@@ -143,6 +163,14 @@ class Bump(_BaseClass):
         sofb.bpmyenbl = _np.ones(refx.size, dtype=bool)
 
     def remove_bpms(self, section_type, section_nr, n_bpms_out):
+        """Remove BPMs from correction system.
+
+        Args:
+            section_type (str): Section type. Ex: "C1", "C2"
+            section_nr (int): Number of section
+            n_bpms_out (int): Number of BPMs to remove from each
+             side of the bump.
+        """
         sofb = self.devices['sofb']
         idcs_out = self.bumptools.get_closest_bpms_indices(
             section_type=section_type,
@@ -158,13 +186,29 @@ class Bump(_BaseClass):
         _time.sleep(0.5)  # NOTE: For some reason We have to wait here.
 
     def get_orbrms(self, refx, refy, idx):
+        """Calculate rms of orbit distortion.
+
+        Args:
+            refx (1d numpy array): Horizontal ref. orb
+            refy (1d numpy array): Vertical ref. orb
+            idx (1d numpy array): Indices of BPMs used in bump.
+
+        Returns:
+            float: rms of orbit distortion
+        """
         dorbx = self.devices['sofb'].orbx - refx
         dorby = self.devices['sofb'].orby - refy
         dorbx = dorbx[idx]
         dorby = dorby[idx]
         return _np.hstack([dorbx, dorby]).std()
 
-    def update_reforb(self, orbx, orby):
+    def set_orb(self, orbx, orby):
+        """Update orbit of corr. sytems.
+
+        Args:
+            orbx (1d numpy array): Horizontal orbit
+            orby (1d numpy array): Vertical orbit
+        """
         if self.use_fofb:
             fofb = self.devices['fofb']
             fofb.orbx = orbx
@@ -209,7 +253,7 @@ class Bump(_BaseClass):
         )
 
         # Set orbit
-        self.update_reforb(orbx, orby)
+        self.set_orb(orbx, orby)
 
         # Verify orbit correction
         rms_residue = bump_residue + 1
@@ -238,28 +282,24 @@ class Bump(_BaseClass):
 
         print('Done!')
 
-    def calc_bump_span(self):
-        """."""
-        prms = self.params
-        x_span = _np.linspace(prms.x_min, prms.x_max, prms.nr_stepsx)
-        y_span = _np.linspace(prms.y_min, prms.y_max, prms.nr_stepsy)
-        return x_span, y_span
-
     def _do_scan(self):
         prms = self.params
-        x_span, y_span = self.calc_bump_span()
+        if prms.do_angular_bumps:
+            x_span, y_span = prms.pts_px, prms.pts_py
+        else:
+            x_span, y_span = prms.pts_x, prms.pts_y
 
         # zig-zag type of scan in the y plane
-        idy, idx = _np.meshgrid(range(prms.nr_stepsy), range(prms.nr_stepsx))
+        idy, idx = _np.meshgrid(range(len(x_span)), range(len(y_span)))
         idy[1::2] = _np.flip(idy[1::2])
         idx, idy = idx.ravel(), idy.ravel()
 
         data = list()
-        for iter in range(idx.size):
-            if not self.is_beam_alive():
+        for i in range(idx.size):
+            if not self._is_beam_alive():
                 break
-            x = x_span[idx[iter]]
-            y = y_span[idy[iter]]
+            x = x_span[idx[i]]
+            y = y_span[idy[i]]
 
             self.config_sofb()
             if prms.do_angular_bumps:
