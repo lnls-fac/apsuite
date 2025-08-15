@@ -1,10 +1,8 @@
 """."""
 
-from copy import deepcopy as _dcopy
-from mathphys.functions import get_namedtuple as _get_namedtuple
 import numpy as _np
-
 import pyaccel
+from mathphys.functions import get_namedtuple as _get_namedtuple
 
 from .calc_orbcorr_mat import OrbRespmat
 
@@ -14,7 +12,7 @@ class CorrParams:
 
     RESPMAT_MODE = _get_namedtuple('RespMatMode', ['Full', 'Mxx', 'Myy'])
 
-    def __init__(self):
+    def __init__(self, use6dorb=False):
         """."""
         # The most restrictive of the two below will be the limiting factor:
         self.minsingval = 0.2
@@ -22,7 +20,7 @@ class CorrParams:
         self.tikhonovregconst = 0  # Tikhonov regularization constant
         self.respmatmode = self.RESPMAT_MODE.Full
         self.respmatrflinemult = 1e6  # Mult. factor of RF line in SVD.
-        self.enblrf = True
+        self._enblrf = use6dorb
         self.enbllistbpm = None
         self.enbllistch = None
         self.enbllistcv = None
@@ -43,7 +41,19 @@ class CorrParams:
         self.useglobalcoef = False  # Use same kick factor for all correctors.
         self.updatejacobian = False  # jacobian should update in all iterations
 
-        self.use6dorb = False
+        self.use6dorb = use6dorb
+
+    @property
+    def enblrf(self):
+        """."""
+        return self._enblrf
+
+    @enblrf.setter
+    def enblrf(self, value):
+        val = bool(value)
+        if val is True and self.use6dorb is not True:
+            raise ValueError('Cannot enable RF with use6dorb being False.')
+        self._enblrf = val
 
 
 class OrbitCorr:
@@ -53,13 +63,26 @@ class OrbitCorr:
         'CorrStatus',
         ['Sucess', 'OrbRMSWarning', 'ConvergenceFail', 'SaturationFail'])
 
-    def __init__(self, model, acc, params=None, corr_system='SOFB'):
+    def __init__(
+        self,
+        model,
+        acc,
+        params=None,
+        corr_system='SOFB',
+        use6dorb=True
+    ):
         """."""
         self.acc = acc
-        self.params = params or CorrParams()
-        dim = '6d' if self.params.use6dorb else '4d'
+        if params is not None and params.use6dorb != use6dorb:
+            raise ValueError('Incompatible parameters use6dorb.')
+
+        self.params = params or CorrParams(use6dorb=use6dorb)
         self.respm = OrbRespmat(
-            model=model, acc=self.acc, dim=dim, corr_system=corr_system)
+            model=model,
+            acc=self.acc,
+            use6dorb=use6dorb,
+            corr_system=corr_system
+        )
         self.params.enbllistbpm = _np.ones(
             self.respm.bpm_idx.size*2, dtype=bool)
         if corr_system == 'FOFB':

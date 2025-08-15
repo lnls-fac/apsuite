@@ -11,13 +11,10 @@ class OrbRespmat:
     _FREQ_DELTA = 10
     _ENERGY_DELTA = 1e-5
 
-    def __init__(self, model, acc='SI', dim='4d', corr_system='SOFB'):
+    def __init__(self, model, acc='SI', use6dorb=False, corr_system='SOFB'):
         """."""
         self.model = model
-        if dim.lower() in {'4d', '6d'}:
-            self.dim = dim.lower()
-        else:
-            raise ValueError('Variable "dim" must be "4d" or "6d"')
+        self.use6dorb = use6dorb
 
         acc = acc.upper()
         if acc not in {"BO", "SI"}:
@@ -41,10 +38,10 @@ class OrbRespmat:
     def get_respm(self, add_rfline=True):
         """."""
         cav = self.model.cavity_on
-        self.model.cavity_on = self.dim == '6d'
+        self.model.cavity_on = self.use6dorb
 
         find_m = pyaccel.tracking
-        find_m = find_m.find_m66 if self.dim == '6d' else find_m.find_m44
+        find_m = find_m.find_m66 if self.use6dorb else find_m.find_m44
         m_mat, t_mat = find_m(self.model, indices='open')
 
         nch = len(self.ch_idx)
@@ -162,7 +159,7 @@ class OrbRespmat:
     def _get_rfline(self):
         idx = self.rf_idx[0]
         rffreq = self.model[idx].frequency
-        if self.dim == '6d':
+        if self.use6dorb:
             dfreq = OrbRespmat._FREQ_DELTA
             self.model[idx].frequency = rffreq + dfreq
             orbp = pyaccel.tracking.find_orbit6(self.model, indices='open')
