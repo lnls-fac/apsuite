@@ -397,7 +397,7 @@ class SiCalcBumps:
               Defaults to 10e-6.
 
         Raises:
-            ValueError: The cavity mus be turned ON in the model.
+            ValueError: The cavity must be turned ON in the model.
 
         Returns:
             2d numpy arrays: Bump matrices
@@ -575,7 +575,7 @@ class SiCalcBumps:
             angy (float): Vertical angle [urad]. Defaults to 0.
 
         Raises:
-            ValueError: The cavity mus be turned ON in the model.
+            ValueError: The cavity must be turned ON in the model.
 
         Returns:
             1d numpy array: Goal orbit with bump
