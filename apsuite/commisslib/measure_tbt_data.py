@@ -8,7 +8,6 @@ import matplotlib.gridspec as _gridspec
 import matplotlib.pyplot as _mplt
 import numpy as _np
 import pyaccel as _pa
-# from mathphys.sobi import SOBI as _SOBI  # unfinished work in mathphys
 from pymodels import si as _si
 from scipy.optimize import curve_fit as _curve_fit
 from siriuspy.devices import PowerSupplyPU as _PowerSupplyPU, \
@@ -724,7 +723,7 @@ class TbTDataAnalysis(MeasureTbTData):
 
     def linear_optics_analysis(
         self, method="PCA", compare_meas2model=True, **kwargs
-    ):  # TODO: Missing kwargs for each method
+    ):
         """Linear optics (beta-beating & phase adv. errors) analysis.
 
         Determines beta-functions and phase-advances on BPMs via sinusoidal
@@ -733,7 +732,8 @@ class TbTDataAnalysis(MeasureTbTData):
         (PCA) and Independent Components Analysis (ICA).
         """
         if method.lower() == "fitting":
-            self.harmonic_analysis()
+            # TODO: avoid recalculating if already available
+            self.harmonic_analysis(calc_optics=True, **kwargs)
             data = self.fitting_data
         elif method.lower() == "pca":
             self.principal_components_analysis(calc_optics=True)
@@ -773,7 +773,7 @@ class TbTDataAnalysis(MeasureTbTData):
                 bpms2use=self.bpms2use,
             )
 
-    def harmonic_analysis(self, guess_tunes=True):
+    def harmonic_analysis(self, calc_optics=True, guess_tunes=False):
         r"""Linear optics analysis using sinusoidal model for TbT data.
 
         TbT motion at the i-th turn and j-th BPM  in the timescale of less
@@ -866,31 +866,34 @@ class TbTDataAnalysis(MeasureTbTData):
             tune = params_fit[0]
             amps = _np.array(params_fit[1 : nbpms + 1])
             phases_fit = _np.array(params_fit[-nbpms:])
-
-            if self.model_optics is None:
-                self._get_nominal_optics(tunes=(tunex + 49.0, tuney + 14.0))
-            beta_model = self.model_optics["beta" + label]
-
-            # fit beta-function & action from fitted amplitudes & nominal beta
-            beta_fit, action = self.calc_beta_and_action(amps, beta_model)
-
-            # evaluate fitting residues
             residue = traj - final_fit
 
             # store fitting data
             fitting_data["tune" + label] = tune
-            fitting_data["tune_err" + label] = params_error[0]
-            fitting_data["amplitudes" + label] = amps
-            fitting_data["beta" + label] = beta_fit
-            # TODO: propagate amplitude errors to beta errors
-            fitting_data["beta" + label + "_err"] = params_error[1 : nbpms + 1]
+            fitting_data["amp" + label] = amps
             fitting_data["phase" + label] = phases_fit
+            fitting_data["tune_err" + label] = params_error[0]
+            fitting_data["amp" + label + "_err"] = params_error[1 : nbpms + 1]
             fitting_data["phase" + label + "_err"] = params_error[-nbpms:]
-            fitting_data["action" + label] = action
-            # TODO: propagate amplitude errors to action error
             fitting_data["traj" + label + "_init_fit"] = initial_fit
             fitting_data["traj" + label + "_final_fit"] = final_fit
             fitting_data["fitting" + label + "_residue"] = residue
+
+            if not calc_optics:
+                self.fitting_data = fitting_data
+                return
+
+            if self.model_optics is None:
+                self._get_nominal_optics(tunes=(tunex + 49.0, tuney + 14.0))
+
+            beta_model = self.model_optics["beta" + label]
+
+            # fit beta-function & action from fitted amplitudes & nominal beta
+            beta_fit, action = self.calc_beta_and_action(amps, beta_model)
+            fitting_data["beta" + label] = beta_fit
+            # TODO: propagate amplitude errors to beta errors
+            fitting_data["action" + label] = action
+            # TODO: propagate amplitude errors to action error
 
         self.fitting_data = fitting_data
 
@@ -1133,7 +1136,6 @@ class TbTDataAnalysis(MeasureTbTData):
     def independent_components_analysis(
         self,
         n_components=4,
-        ica_method="SOBI",
         calc_optics=True,
         **kwargs
     ):
@@ -1202,16 +1204,9 @@ class TbTDataAnalysis(MeasureTbTData):
 
         traj = _np.concatenate((self.trajx, self.trajy), axis=1)
 
-        # perform Independent Component Analysis (ICA)
-        if ica_method.lower() == "fastica":
-            ica_ = _FastICA
-        elif ica_method.lower() == "sobi":
-            ica_ = _SOBI
-        else:
-            ica_ = _SOBI
-            warnings.warn("Unknown ICA method. Using SOBI.")
-
-        ica = ica_(n_components=n_components, **kwargs)
+        ica = _FastICA(
+            n_components=n_components, **kwargs
+        )
 
         # collect source signals & mixing matrix
         signals = ica.fit_transform(traj)
