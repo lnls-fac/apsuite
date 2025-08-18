@@ -1701,7 +1701,7 @@ class TbTDataAnalysis(MeasureTbTData):
         ax_beat.plot(
             beta_beat,
             "o-",
-            label=f"rms = {beta_beat[~_np.isnan(beta_beat)].std():.2f} %",
+            label=f"rms beat = {_np.nanstd(beta_beat):.2f} %",
             mfc="none",
         )
         ax_beat.set_ylabel("beta beating [%]")
@@ -1720,16 +1720,14 @@ class TbTDataAnalysis(MeasureTbTData):
 
         # Phase advance error plot
         ax_phase_err = axs[1, 1] if compare_meas2model else axs[1]
-        rph_err = model_phase_advance - meas_phase_advance
-        rph_err /= model_phase_advance
-        rph_err *= 100  # [%]
+        ph_err = model_phase_advance - meas_phase_advance
         ax_phase_err.plot(
-            rph_err,
+            ph_err,
             "o-",
-            label=f"rms.err={rph_err[~_np.isnan(rph_err)].std():.2f}",
+            label=f"rms err={_np.nanstd(ph_err):.2f}",
             mfc="none",
         )
-        ax_phase_err.set_ylabel("BPMs fractional phase advance error [rad]")
+        ax_phase_err.set_ylabel("BPMs phase advance error [rad]")
         ax_phase_err.legend()
 
         fig.supxlabel("BPM index")
