@@ -67,7 +67,7 @@ class BumpParams(_ParamsBaseClass):
 class Bump(_BaseClass):
     """."""
 
-    def __init__(self, measurement_func=None, isonline=True):
+    def __init__(self, isonline=True):
         """."""
         _BaseClass.__init__(
             self, params=BumpParams(), target=self._do_scan, isonline=isonline
@@ -75,10 +75,6 @@ class Bump(_BaseClass):
         self.data = dict()
         self.reforbx = None
         self.reforby = None
-        if measurement_func is None:
-            self.measurement_func = self._dummy_meas
-        else:
-            self.measurement_func = measurement_func
         self.bumptools = SiCalcBumps()
         if self.isonline:
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
@@ -87,7 +83,7 @@ class Bump(_BaseClass):
             self._configdb = _ConfigDBClient(config_type='si_orbit')
 
     @staticmethod
-    def _dummy_meas():
+    def do_measurement():
         print('Not a measurement!')
 
     def _is_beam_alive(self):
@@ -129,7 +125,7 @@ class Bump(_BaseClass):
         """."""
         currinfo = self.devices['currinfo']
         data = {'timestamp': _time.time(), 'current': currinfo.current}
-        data['measurements:'] = self.measurement_func()
+        data['measurements:'] = self.do_measurement()
         return data
 
     def config_sofb(self):
