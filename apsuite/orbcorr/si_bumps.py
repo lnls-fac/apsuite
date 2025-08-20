@@ -11,34 +11,30 @@ from . import OrbitCorr
 class SiCalcBumps:
     """Class to calculate bumps and related tools."""
 
-    SS_LENGTHS = {
-        "SA": 7.0358,
-        "SB": 6.1758,
-        "SP": 6.1758,
-    }
+    SS_LENGTHS = {'SA': 7.0358, 'SB': 6.1758, 'SP': 6.1758}
 
     MARKER_NAMES = {
-        "C1": "B1_SRC",
-        "C2": "B2_SRC",
-        "BC": "mc",
-        "SA": "mia",
-        "SB": "mib",
-        "SP": "mip",
+        'C1': 'B1_SRC',
+        'C2': 'B2_SRC',
+        'BC': 'mc',
+        'SA': 'mia',
+        'SB': 'mib',
+        'SP': 'mip',
     }
 
     BPM_SEC_IDCS = {
-        "C1": [0, 1],
-        "C2": [2, 3],
-        "BC": [3, 4],
-        "SA": [-1, 0],
-        "SB": [-1, 0],
-        "SP": [-1, 0],
+        'C1': [0, 1],
+        'C2': [2, 3],
+        'BC': [3, 4],
+        'SA': [-1, 0],
+        'SB': [-1, 0],
+        'SP': [-1, 0],
     }
 
     SS_NUMBERS = {
-        "SA": np.arange(1, 20, 4),
-        "SB": np.arange(2, 22, 2),
-        "SP": np.arange(3, 20, 4),
+        'SA': np.arange(1, 20, 4),
+        'SB': np.arange(2, 22, 2),
+        'SP': np.arange(3, 20, 4),
     }
 
     def __init__(
@@ -150,14 +146,12 @@ class SiCalcBumps:
 
     @staticmethod
     def _get_matrix_ss_section(leng):
-        return np.array(
-            [
-                [1, -leng / 2, 0, 0],
-                [1, leng / 2, 0, 0],
-                [0, 0, 1, -leng / 2],
-                [0, 0, 1, leng / 2],
-            ]
-        )
+        return np.array([
+            [1, -leng / 2, 0, 0],
+            [1, leng / 2, 0, 0],
+            [0, 0, 1, -leng / 2],
+            [0, 0, 1, leng / 2],
+        ])
 
     def _get_sec_bpm_indices(self, section_type=None):
         if section_type is None:
@@ -167,13 +161,13 @@ class SiCalcBumps:
 
     def print_ss_section(self):
         """Print straight section numbers."""
-        print("Straight section numbers: ")
-        print("SA:", end=" ")
-        print(self.SS_NUMBERS["SA"])
-        print("SB:", end=" ")
-        print(self.SS_NUMBERS["SB"])
-        print("SP:", end=" ")
-        print(self.SS_NUMBERS["SP"])
+        print('Straight section numbers: ')
+        print('SA:', end=' ')
+        print(self.SS_NUMBERS['SA'])
+        print('SB:', end=' ')
+        print(self.SS_NUMBERS['SB'])
+        print('SP:', end=' ')
+        print(self.SS_NUMBERS['SP'])
 
     def get_bpm_indices(self, section_type=None, sidx=None):
         """Get BPMs indices to set orbit for bump.
@@ -253,19 +247,19 @@ class SiCalcBumps:
             section_type = self.section_type
         if sidx is None:
             sidx = self.section_nr - 1
-        if "S" in section_type:
+        if 'S' in section_type:
             return [], []
 
         ch_idcs = dict()
         cv_idcs = dict()
-        ch_idcs["C1"] = [sidx * 6 + 0, sidx * 6 + 1]
-        cv_idcs["C1"] = [sidx * 8 + 0, sidx * 8 + 1]
+        ch_idcs['C1'] = [sidx * 6 + 0, sidx * 6 + 1]
+        cv_idcs['C1'] = [sidx * 8 + 0, sidx * 8 + 1]
 
-        ch_idcs["C2"] = [sidx * 6 + 2]
-        cv_idcs["C2"] = [sidx * 8 + 2, sidx * 8 + 3]
+        ch_idcs['C2'] = [sidx * 6 + 2]
+        cv_idcs['C2'] = [sidx * 8 + 2, sidx * 8 + 3]
 
-        ch_idcs["BC"] = []
-        cv_idcs["BC"] = []
+        ch_idcs['BC'] = []
+        cv_idcs['BC'] = []
 
         return ch_idcs[section_type], cv_idcs[section_type]
 
@@ -287,34 +281,34 @@ class SiCalcBumps:
             sidx = self.section_nr - 1
         if model is None:
             model = self.model
-        if "S" not in section_type:
-            nr = 1 if (section_type == "BC") else 2
+        if 'S' not in section_type:
+            nr = 1 if (section_type == 'BC') else 2
             marker = pyaccel.lattice.find_indices(
-                model, "fam_name", self.MARKER_NAMES[section_type]
+                model, 'fam_name', self.MARKER_NAMES[section_type]
             )[nr * sidx]
             return marker
 
-        mia = pyaccel.lattice.find_indices(model, "fam_name", "mia")
-        mib = pyaccel.lattice.find_indices(model, "fam_name", "mib")
-        mip = pyaccel.lattice.find_indices(model, "fam_name", "mip")
+        mia = pyaccel.lattice.find_indices(model, 'fam_name', 'mia')
+        mib = pyaccel.lattice.find_indices(model, 'fam_name', 'mib')
+        mip = pyaccel.lattice.find_indices(model, 'fam_name', 'mip')
         idcs = np.sort(mia + mib + mip)
 
         if sidx % 4 == 0:
-            if section_type != "SA":
+            if section_type != 'SA':
                 raise ValueError(
-                    "section {:.0f} is a SA section!".format(sidx + 1)
+                    'section {:.0f} is a SA section!'.format(sidx + 1)
                 )
 
         elif ((sidx - 1) % 4 == 0) or ((sidx - 3) % 4 == 0):
-            if section_type != "SB":
+            if section_type != 'SB':
                 raise ValueError(
-                    "section {:.0f} is a SB section!".format(sidx + 1)
+                    'section {:.0f} is a SB section!'.format(sidx + 1)
                 )
 
         elif (sidx - 2) % 4 == 0:
-            if section_type != "SP":
+            if section_type != 'SP':
                 raise ValueError(
-                    "section {:.0f} is a SP section!".format(sidx + 1)
+                    'section {:.0f} is a SP section!'.format(sidx + 1)
                 )
 
         marker = idcs[sidx]
@@ -411,7 +405,7 @@ class SiCalcBumps:
         if n_bpms_out is None:
             n_bpms_out = self.n_bpms_out
 
-        if "S" in section_type and use_ss_tfm:
+        if 'S' in section_type and use_ss_tfm:
             length = self.SS_LENGTHS[section_type]
             mat_s2r = self._get_matrix_ss_section(length)
             self.mat_s2r = mat_s2r
@@ -422,8 +416,8 @@ class SiCalcBumps:
             mod = si.create_accelerator()
             mod.cavity_on = True
         elif self.model.cavity_on is False:
-            raise ValueError("Model cavity must be turned on!")
-        orbcorr = OrbitCorr(mod, "SI", use6dorb=True)
+            raise ValueError('Model cavity must be turned on!')
+        orbcorr = OrbitCorr(mod, 'SI', use6dorb=True)
         orbcorr.params.enblrf = True
         orbcorr.params.tolerance = 1e-9
         orbcorr.params.minsingval = minsingval
@@ -459,7 +453,7 @@ class SiCalcBumps:
             orbcorr.correct_orbit(goal_orbit=gorb)
             orbp = orbcorr.get_orbit()[idcs]
             b2p = pyaccel.tracking.find_orbit(
-                orbcorr.respm.model, indices="open"
+                orbcorr.respm.model, indices='open'
             )
             b2p = b2p[0:4, marker]
 
@@ -467,7 +461,7 @@ class SiCalcBumps:
             orbcorr.correct_orbit(goal_orbit=gorb)
             orbn = orbcorr.get_orbit()[idcs]
             b2n = pyaccel.tracking.find_orbit(
-                orbcorr.respm.model, indices="open"
+                orbcorr.respm.model, indices='open'
             )
             b2n = b2n[0:4, marker]
 
@@ -536,12 +530,12 @@ class SiCalcBumps:
         fig, (a_i2s, a_i2r, a_s2r) = mplt.subplots(3, 1, figsize=(6, 9))
 
         for m_i2s, m_i2r, m_s2r, case in zip(ms_i2s, ms_i2r, ms_s2r, cases):
-            lab = f"nbpm={case[0]:d} svals={case[1]:.2f}"
-            a_i2s.plot(m_i2s.ravel(), "-o", label=lab)
-            a_i2r.plot(m_i2r.ravel(), "-o", label=lab)
-            a_s2r.plot(m_s2r.ravel(), "-o", label=lab)
+            lab = f'nbpm={case[0]:d} svals={case[1]:.2f}'
+            a_i2s.plot(m_i2s.ravel(), '-o', label=lab)
+            a_i2r.plot(m_i2r.ravel(), '-o', label=lab)
+            a_s2r.plot(m_s2r.ravel(), '-o', label=lab)
 
-        a_i2r.legend(loc="lower center", bbox_to_anchor=(0.5, 1))
+        a_i2r.legend(loc='lower center', bbox_to_anchor=(0.5, 1))
         fig.tight_layout()
         return fig, (a_i2s, a_i2r, a_s2r)
 
@@ -605,8 +599,8 @@ class SiCalcBumps:
             mod = si.create_accelerator()
             mod.cavity_on = True
         elif self.model.cavity_on is False:
-            raise ValueError("Model cavity must be turned on!")
-        orbcorr = OrbitCorr(mod, "SI", use6dorb=True)
+            raise ValueError('Model cavity must be turned on!')
+        orbcorr = OrbitCorr(mod, 'SI', use6dorb=True)
         orbcorr.params.enblrf = True
         orbcorr.params.tolerance = 1e-9
         orbcorr.params.minsingval = 0.2
@@ -691,7 +685,7 @@ class SiCalcBumps:
             orbcorr.respm.model, section_type, sidx
         )
         xres = pyaccel.tracking.find_orbit(
-            orbcorr.respm.model, indices="open"
+            orbcorr.respm.model, indices='open'
         )[0:4, marker]
 
         kicks = orbcorr.get_kicks()[:-1] * 1e6
@@ -700,18 +694,21 @@ class SiCalcBumps:
             fig, (ax, ay, az) = mplt.subplots(3, 1, figsize=(6, 9))
 
             ax.plot(
-                1e6 * vec, "-o", label="Input bump (posx, angx, posy, angy)"
+                1e6 * vec, '-o', label='Input bump (posx, angx, posy, angy)'
             )
-            ax.plot(1e6 * xres, "-o", label="Resultant bump ")
+            ax.plot(1e6 * xres, '-o', label='Resultant bump')
+            ax.set_ylabel('Pos [um] / angle [urad]')
+            ax.set_xlabel('Bump vector index')
+            ax.set_ylim(np.min(1e6 * xres) * 0.9, np.max(1e6 * xres) * 1.1)
             ax.legend()
 
             ay.plot(kicks)
-            ay.set_ylabel("Corr. kicks [urad]")
-            ay.set_xlabel("Corr idx")
+            ay.set_ylabel('Corr. kicks [urad]')
+            ay.set_xlabel('Corr idx')
 
             az.plot(orbit)
-            az.set_ylabel("Orbit [urad]")
-            az.set_xlabel("BPMS idx")
+            az.set_ylabel('Orbit [urad]')
+            az.set_xlabel('BPMS idx')
 
             fig.tight_layout()
             mplt.show()
