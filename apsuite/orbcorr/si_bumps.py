@@ -1,7 +1,7 @@
 """."""
 
-import numpy as np
-import matplotlib.pyplot as mplt
+import numpy as _np
+import matplotlib.pyplot as _mplt
 
 from pymodels import si
 import pyaccel
@@ -32,9 +32,9 @@ class SiCalcBumps:
     }
 
     SS_NUMBERS = {
-        'SA': np.arange(1, 20, 4),
-        'SB': np.arange(2, 22, 2),
-        'SP': np.arange(3, 20, 4),
+        'SA': _np.arange(1, 20, 4),
+        'SB': _np.arange(2, 22, 2),
+        'SP': _np.arange(3, 20, 4),
     }
 
     def __init__(
@@ -146,7 +146,7 @@ class SiCalcBumps:
 
     @staticmethod
     def _get_matrix_ss_section(leng):
-        return np.array([
+        return _np.array([
             [1, -leng / 2, 0, 0],
             [1, leng / 2, 0, 0],
             [0, 0, 1, -leng / 2],
@@ -188,12 +188,12 @@ class SiCalcBumps:
         bpm1_sec_index, bpm2_sec_index = self._get_sec_bpm_indices(
             section_type
         )
-        idlist = np.arange(0, 160, 1)
-        idcs = np.zeros(2, dtype=int)
+        idlist = _np.arange(0, 160, 1)
+        idcs = _np.zeros(2, dtype=int)
         idcs[0] = idlist[bpm1_sec_index + 8 * sidx]
         idcs[1] = idlist[bpm2_sec_index + 8 * sidx]
-        idcs = np.array(idcs)
-        idcs = np.tile(idcs, 2)
+        idcs = _np.array(idcs)
+        idcs = _np.tile(idcs, 2)
         idcs[2:] += 160
         return idcs
 
@@ -221,13 +221,13 @@ class SiCalcBumps:
         bpm1_sec_index, bpm2_sec_index = self._get_sec_bpm_indices(
             section_type
         )
-        idlist = np.arange(0, 160, 1)
+        idlist = _np.arange(0, 160, 1)
         idcs_ignore = list()
-        for i in np.arange(n_bpms_out):
+        for i in _np.arange(n_bpms_out):
             idcs_ignore.append(idlist[bpm1_sec_index + 8 * sidx - (i + 1)])
             idcs_ignore.append(idlist[bpm2_sec_index + 8 * sidx + (i + 1)])
-        idcs_ignore = np.array(idcs_ignore)
-        idcs_ignore = np.tile(idcs_ignore, 2)
+        idcs_ignore = _np.array(idcs_ignore)
+        idcs_ignore = _np.tile(idcs_ignore, 2)
         idcs_ignore[n_bpms_out * 2 :] += 160
         return idcs_ignore
 
@@ -291,7 +291,7 @@ class SiCalcBumps:
         mia = pyaccel.lattice.find_indices(model, 'fam_name', 'mia')
         mib = pyaccel.lattice.find_indices(model, 'fam_name', 'mib')
         mip = pyaccel.lattice.find_indices(model, 'fam_name', 'mip')
-        idcs = np.sort(mia + mib + mip)
+        idcs = _np.sort(mia + mib + mip)
 
         if sidx % 4 == 0:
             if section_type != 'SA':
@@ -443,8 +443,8 @@ class SiCalcBumps:
             orbcorr, section_type, sidx, n_bpms_out
         )
 
-        mat_i2s = np.zeros((4, 4), dtype=float)
-        mat_i2r = np.zeros((4, 4), dtype=float)
+        mat_i2s = _np.zeros((4, 4), dtype=float)
+        mat_i2r = _np.zeros((4, 4), dtype=float)
         for i, idx in enumerate(idcs):
             gorb = orb0.copy()
             orbcorr.set_kicks(kicks0)
@@ -468,7 +468,7 @@ class SiCalcBumps:
             mat_i2s[:, i] = (b2p - b2n) / deltax
             mat_i2r[:, i] = (orbp - orbn) / deltax
 
-        mat_s2r = np.linalg.solve(mat_i2s.T, mat_i2r.T).T
+        mat_s2r = _np.linalg.solve(mat_i2s.T, mat_i2r.T).T
         self.mat_i2s = mat_i2s
         self.mat_i2r = mat_i2r
         self.mat_s2r = mat_s2r
@@ -527,7 +527,7 @@ class SiCalcBumps:
                 ms_i2r.append(m_i2r)
                 ms_s2r.append(m_s2r)
 
-        fig, (a_i2s, a_i2r, a_s2r) = mplt.subplots(3, 1, figsize=(6, 9))
+        fig, (a_i2s, a_i2r, a_s2r) = _mplt.subplots(3, 1, figsize=(6, 9))
 
         for m_i2s, m_i2r, m_s2r, case in zip(ms_i2s, ms_i2r, ms_s2r, cases):
             lab = f'nbpm={case[0]:d} svals={case[1]:.2f}'
@@ -592,7 +592,7 @@ class SiCalcBumps:
             )
         sidx = max(min(section_nr, 20), 1)
         sidx -= 1
-        vec = np.array([posx, angx, posy, angy])
+        vec = _np.array([posx, angx, posy, angy])
 
         # Create accelerator and orbcorr
         if self.model is None:
@@ -618,7 +618,7 @@ class SiCalcBumps:
 
         gorb = orbcorr.get_orbit()
 
-        x = np.dot(m_s2r, vec)
+        x = _np.dot(m_s2r, vec)
         gorb[idcs] = x
         return gorb, orbcorr
 
@@ -679,7 +679,7 @@ class SiCalcBumps:
             angy,
         )
 
-        vec = np.array([posx, angx, posy, angy])
+        vec = _np.array([posx, angx, posy, angy])
         orbcorr.correct_orbit(goal_orbit=gorb)
         marker = self.get_source_marker_idx(
             orbcorr.respm.model, section_type, sidx
@@ -691,7 +691,7 @@ class SiCalcBumps:
         kicks = orbcorr.get_kicks()[:-1] * 1e6
         orbit = orbcorr.get_orbit() * 1e6
         if plot_results:
-            fig, (ax, ay, az) = mplt.subplots(3, 1, figsize=(6, 9))
+            fig, (ax, ay, az) = _mplt.subplots(3, 1, figsize=(6, 9))
 
             ax.plot(
                 1e6 * vec, '-o', label='Input bump (posx, angx, posy, angy)'
@@ -699,7 +699,7 @@ class SiCalcBumps:
             ax.plot(1e6 * xres, '-o', label='Resultant bump')
             ax.set_ylabel('Pos [um] / angle [urad]')
             ax.set_xlabel('Bump vector index')
-            ax.set_ylim(np.min(1e6 * xres) * 0.9, np.max(1e6 * xres) * 1.1)
+            ax.set_ylim(_np.min(1e6 * xres) * 0.9, _np.max(1e6 * xres) * 1.1)
             ax.legend()
 
             ay.plot(kicks)
@@ -711,5 +711,5 @@ class SiCalcBumps:
             az.set_xlabel('BPMS idx')
 
             fig.tight_layout()
-            mplt.show()
+            _mplt.show()
         return xres, kicks, orbit
