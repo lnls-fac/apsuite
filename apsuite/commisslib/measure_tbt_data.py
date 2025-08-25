@@ -752,7 +752,7 @@ class TbTDataAnalysis(MeasureTbTData):
         phasex_model = self.model_optics.get("phasex", None)
         phasey_model = self.model_optics.get("phasey", None)
 
-        if betax is not None:
+        if betax is not None and "h" in self.params.pingers2kick:
             self.plot_betabeat_and_phase_error(
                 betax_model,
                 betax,
@@ -762,7 +762,7 @@ class TbTDataAnalysis(MeasureTbTData):
                 compare_meas2model=compare_meas2model,
                 bpms2use=self.bpms2use,
             )
-        if betay is not None:
+        if betay is not None and "v" in self.params.pingers2kick:
             self.plot_betabeat_and_phase_error(
                 betay_model,
                 betay,
@@ -1455,7 +1455,7 @@ class TbTDataAnalysis(MeasureTbTData):
         ax[2].plot(trajsum, "-", mfc="none", color="k")
         ax[2].set_xlim(slicesum)
 
-        ax[2].set_ylabel("sum [a.u.]")
+        ax[2].set_ylabel("sum [counts]")
 
         fig.supxlabel("turn index")
         fig.tight_layout()
