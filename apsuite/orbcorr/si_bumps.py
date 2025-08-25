@@ -36,7 +36,7 @@ class SiCalcBumps:
         'SB': _np.arange(2, 22, 2),
         'SP': _np.arange(3, 20, 4),
     }
-
+SECTION_TYPES = list(MARKER_NAMES.keys())
     def __init__(
         self, model=None, section_type=None, section_nr=None, n_bpms_out=None
     ):
