@@ -452,7 +452,10 @@ class DoBBA(_BaseClass):
         """."""
         if self._bpms2dobba:
             return _dcopy(self._bpms2dobba)
-        return sorted(set(self.data["bpmnames"]) - self.data["measure"].keys())
+        return [
+            bpm for bpm in self.data["bpmnames"]
+            if bpm not in self.data["measure"]
+        ]
 
     @bpms2dobba.setter
     def bpms2dobba(self, bpmlist):
