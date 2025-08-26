@@ -42,8 +42,8 @@ class BumpParams(_ParamsBaseClass):
         """."""
         dtmp = '{0:20s} = {1:9d}\n'.format
         ftmp = '{0:20s} = {1:9.4f}  {2:s}\n'.format
-        stmp = '{0:20s} = {1:9s}  {2:s}\n'.format
-        stg = dtmp('subsec', self.subsec)
+        # stmp = '{0:20s} = {1:9.4f}  {1:9.4f} {2:s}\n'.format
+        stg = 'subsec = {} \n'.format(self.subsec)
         stg += dtmp('do_angular_bumps', self.do_angular_bumps)
 
         stg += dtmp('n_bpms_out', self.n_bpms_out, '')
@@ -57,20 +57,27 @@ class BumpParams(_ParamsBaseClass):
         stg += dtmp('orbcorr_nr_iters', self.orbcorr_nr_iters)
         stg += ftmp('orbcorr_residue', self.orbcorr_residue, '[um]')
 
-        stg += stmp('pts_x', self.pts_x, '[um]')
-        stg += stmp('pts_y', self.pts_y, '[um]')
-        stg += stmp('pts_px', self.pts_px, '[um] or [urad]')
-        stg += stmp('pts_py', self.pts_py, '[um] or [urad]')
+        # stg += stmp('pts_x', self.pts_x[0], self.pts_x[-1], '[um]')
+        # stg += stmp('pts_y', self.pts_y[0], self.pts_y[-1], '[um]')
+        # stg += stmp(
+        #     'pts_px', self.pts_px[0], self.pts_px[-1], '[um] or [urad]'
+        # )
+        # stg += stmp(
+        #     'pts_py', self.pts_py[0], self.pts_py[-1], '[um] or [urad]'
+        # )
         return stg
 
 
 class Bump(_BaseClass):
     """."""
 
-    def __init__(self, isonline=True):
+    def __init__(self, params, isonline=True):
         """."""
         _BaseClass.__init__(
-            self, params=BumpParams(), target=self._do_scan, isonline=isonline
+            self,
+            params=params if params is not None else BumpParams(),
+            target=self._do_scan,
+            isonline=isonline,
         )
         self.data = dict()
         self.reforbx = None
@@ -174,11 +181,11 @@ class Bump(_BaseClass):
             n_bpms_out=n_bpms_out,
         )
         sofb.bpmxenbl[idcs_out[: n_bpms_out * 2]] = False
-        sofb.bpmyenbl[idcs_out[n_bpms_out * 2 :]] = False
+        sofb.bpmyenbl[idcs_out[n_bpms_out * 2 :] - 160] = False
         if self.params.use_fofb:
             fofb = self.devices['fofb']
             fofb.bpmxenbl[idcs_out[: n_bpms_out * 2]] = False
-            fofb.bpmyenbl[idcs_out[n_bpms_out * 2 :]] = False
+            fofb.bpmyenbl[idcs_out[n_bpms_out * 2 :] - 160] = False
         _time.sleep(0.5)  # NOTE: For some reason We have to wait here.
 
     def get_orbrms(self, refx, refy, idx):
@@ -220,14 +227,14 @@ class Bump(_BaseClass):
         sofb = self.devices['sofb']
         refx = refx or self.reforbx
         refy = refy or self.reforby
-        subsec = subsec or self.subsec
+        subsec = subsec or self.params.subsec
         n_bpms_out = self.params.n_bpms_out
         minsingval = self.params.minsingval
         nr_iters = self.params.orbcorr_nr_iters
         residue = self.params.orbcorr_residue
         bump_residue = self.params.bump_residue
-        bump_max_residue = self.bump_max_residue
-        fofb_max_kick = self.fofb_max_kick
+        bump_max_residue = self.params.bump_max_residue
+        fofb_max_kick = self.params.fofb_max_kick
 
         orbx, orby = sofb.si_calculate_bumps(
             refx,
@@ -242,7 +249,7 @@ class Bump(_BaseClass):
         )
         section_type, section_nr = self.subsec_2_sectype_nr(subsec)
 
-        self.remove_bpms(section_type, section_nr)
+        self.remove_bpms(section_type, section_nr, n_bpms_out)
 
         idcs_bpm = self.bumptools.get_bpm_indices(
             section_type=section_type, sidx=section_nr - 1
@@ -254,12 +261,12 @@ class Bump(_BaseClass):
         # Verify orbit correction
         rms_residue = bump_residue + 1
         kick = fofb_max_kick - 1
-        if self.use_fofb:
+        if self.params.use_fofb:
             fofb = self.devices['fofb']
         print('Waiting orbit...')
         while rms_residue > bump_residue or kick > fofb_max_kick:
             rms_residue = self.get_orbrms(orbx, orby, idcs_bpm)
-            if self.use_fofb:
+            if self.params.use_fofb:
                 kick = _np.max((
                     _np.abs(fofb.kickch_acc),
                     _np.abs(fofb.kickcv_acc),
