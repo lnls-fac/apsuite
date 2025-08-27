@@ -48,7 +48,7 @@ def get_data_servconf_adjust_model(setup, find_best_alpha=True):
 
     simod = adjust_tunes(simod, setup)
     # Get nominal orbit matrix and dispersion
-    matrix_nominal = OrbRespmat(simod, 'SI', '6d').get_respm()
+    matrix_nominal = OrbRespmat(simod, 'SI', True).get_respm()
     alpha0 = pa.optics.get_mcf(simod)
 
     idx = pa.lattice.find_indices(simod, 'pass_method', 'cavity_pass')[0]
