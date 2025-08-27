@@ -757,7 +757,7 @@ class DistribReconstruction(_BaseClass):
         lin = _np.linspace(min_, max_, npts + 1)
         return (lin[1:] + lin[:-1]) / 2
 
-    def _find_main_convex(self, feasible_point=(0, 0)):
+    def _find_main_convex(self, feasible_point=(0.0, 0.0)):
         """Find the convex hull from a feasible point."""
         feasible_point = _np.array(feasible_point)
         sign = _np.sign(self.border_lines @ _np.r_[feasible_point, 1])
