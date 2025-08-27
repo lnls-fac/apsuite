@@ -15,12 +15,12 @@ class OpticsCorr():
     CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
     CORR_METHODS = _get_namedtuple('CorrMethods', ['LOCO'])
 
-    def __init__(self, model, acc, dim='4d', knobs_list=None,
+    def __init__(self, model, acc, use6dtrack=False, knobs_list=None,
                  method=None, correction_method=None):
         """."""
         self.model = model
         self.acc = acc
-        self.dim = dim
+        self.use6dtrack = use6dtrack
         self._corr_method = OpticsCorr.CORR_METHODS.LOCO
         self._method = OpticsCorr.METHODS.Proportional
         self.jacobian_matrix = []

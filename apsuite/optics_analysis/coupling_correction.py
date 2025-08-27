@@ -16,14 +16,16 @@ class CouplingCorr():
     CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
     CORR_METHODS = _get_namedtuple('CorrMethods', ['Orbrespm'])
 
-    def __init__(self, model, acc, dim='4d',
+    def __init__(self, model, acc, use6dtrack=False,
                  skew_list=None, correction_method=None):
         """."""
         self.model = model
         self.acc = acc
-        self.dim = dim
+        self.use6dtrack = use6dtrack
         self._corr_method = None
-        self.respm = OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
+        self.respm = OrbRespmat(
+            model=self.model, acc=self.acc, use6dtrack=self.use6dtrack
+        )
         self.bpm_idx = self.respm.fam_data['BPM']['index']
         if skew_list is None:
             self.skew_idx = self.respm.fam_data['QS']['index']
