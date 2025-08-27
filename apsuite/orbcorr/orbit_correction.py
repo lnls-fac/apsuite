@@ -12,7 +12,7 @@ class CorrParams:
 
     RESPMAT_MODE = _get_namedtuple('RespMatMode', ['Full', 'Mxx', 'Myy'])
 
-    def __init__(self, use6dorb=False):
+    def __init__(self, use6dtrack=False):
         """."""
         # The most restrictive of the two below will be the limiting factor:
         self.minsingval = 0.2
@@ -20,7 +20,7 @@ class CorrParams:
         self.tikhonovregconst = 0  # Tikhonov regularization constant
         self.respmatmode = self.RESPMAT_MODE.Full
         self.respmatrflinemult = 1e6  # Mult. factor of RF line in SVD.
-        self._enblrf = use6dorb
+        self._enblrf = use6dtrack
         self.enbllistbpm = None
         self.enbllistch = None
         self.enbllistcv = None
@@ -41,7 +41,7 @@ class CorrParams:
         self.useglobalcoef = False  # Use same kick factor for all correctors.
         self.updatejacobian = False  # jacobian should update in all iterations
 
-        self.use6dorb = use6dorb
+        self.use6dtrack = use6dtrack
 
     @property
     def enblrf(self):
@@ -51,8 +51,8 @@ class CorrParams:
     @enblrf.setter
     def enblrf(self, value):
         val = bool(value)
-        if val is True and self.use6dorb is not True:
-            raise ValueError('Cannot enable RF with use6dorb being False.')
+        if val is True and self.use6dtrack is not True:
+            raise ValueError('Cannot enable RF with use6dtrack being False.')
         self._enblrf = val
 
 
@@ -69,18 +69,18 @@ class OrbitCorr:
         acc,
         params=None,
         corr_system='SOFB',
-        use6dorb=True
+        use6dtrack=True
     ):
         """."""
         self.acc = acc
-        if params is not None and params.use6dorb != use6dorb:
-            raise ValueError('Incompatible parameters use6dorb.')
+        if params is not None and params.use6dtrack != use6dtrack:
+            raise ValueError('Incompatible parameters use6dtrack.')
 
-        self.params = params or CorrParams(use6dorb=use6dorb)
+        self.params = params or CorrParams(use6dtrack=use6dtrack)
         self.respm = OrbRespmat(
             model=model,
             acc=self.acc,
-            use6dorb=use6dorb,
+            use6dtrack=use6dtrack,
             corr_system=corr_system
         )
         self.params.enbllistbpm = _np.ones(
@@ -269,7 +269,7 @@ class OrbitCorr:
 
     def get_orbit(self):
         """."""
-        if self.params.use6dorb:
+        if self.params.use6dtrack:
             cod = pyaccel.tracking.find_orbit6(
                 self.respm.model, indices='open')
         else:
