@@ -97,7 +97,7 @@ class LOCOAnalysis:
         # print('    tunes final : ', tunecorr.get_tunes(simod))
 
         # Get nominal orbit matrix and dispersion
-        matrix_nominal = OrbRespmat(simod, "SI", "6d").get_respm()
+        matrix_nominal = OrbRespmat(simod, "SI", True).get_respm()
 
         alpha0 = pyaccel.optics.get_mcf(simod)
         idx = pyaccel.lattice.find_indices(
@@ -125,7 +125,7 @@ class LOCOAnalysis:
 
         self.loco_fit = loco_data
 
-        matrix_fitting = OrbRespmat(model_fitting, "SI", "6d").get_respm()
+        matrix_fitting = OrbRespmat(model_fitting, "SI", True).get_respm()
         matrix_fitting = LOCOUtils.apply_all_gain(
             matrix_fitting, gain_bpm, roll_bpm, gain_corr
         )

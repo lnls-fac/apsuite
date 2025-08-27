@@ -122,7 +122,7 @@ class LOCOReport(FPDF):
         latt_ver = self.loco_data["fit_model"].lattice_version
         data = (
             ("Lattice version", latt_ver),
-            ("Tracking dimension", cfg.dim),
+            ("Use 6D tracking", cfg.use6dtrack),
             ("Include dispersion", cfg.use_dispersion),
             ("Include diagonal blocks", cfg.use_diagonal),
             ("Include off-diagonal blocks", cfg.use_offdiagonal),

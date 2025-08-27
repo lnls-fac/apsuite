@@ -36,7 +36,7 @@ class LOCOConfig:
         self._minimization = LOCOConfig.MINIMIZATION.GaussNewton
         self._svd_method = LOCOConfig.SVD.Selection
         self.model = None
-        self.dim = None
+        self.use6dtrack = None
         self.respm = None
         self.goalmat = None
         self.measured_dispersion = None
@@ -115,7 +115,7 @@ class LOCOConfig:
         dtmp = "{0:35s}: {1:3d}  {2:s}\n".format
         etmp = "{0:35s}: {1:e}  {2:s}\n".format
 
-        stg = stmp("Tracking dimension", self.dim, "")
+        stg = stmp("Use 6d tracking", self.use6dtrack, "")
         stg += stmp("Include dispersion", self.use_dispersion, "")
         stg += stmp("Include diagonal", self.use_diagonal, "")
         stg += stmp("Include off-diagonal", self.use_offdiagonal, "")
@@ -284,7 +284,7 @@ class LOCOConfig:
 
     def update(self):
         """."""
-        self.update_model(self.model, self.dim)
+        self.update_model(self.model, self.use6dtrack)
         self.update_matrix(self.use_dispersion)
         self.update_goalmat(
             self.goalmat, self.use_dispersion, self.use_offdiagonal
@@ -299,13 +299,15 @@ class LOCOConfig:
         self.update_svd(self.svd_method, self.svd_sel, self.svd_thre)
         self.nr_fit_parameters = self.get_nr_fit_parameters()
 
-    def update_model(self, model, dim):
+    def update_model(self, model, use6dtrack):
         """."""
-        self.dim = dim
+        self.use6dtrack = use6dtrack
         self.model = _dcopy(model)
-        self.model.cavity_on = dim == "6d"
+        self.model.cavity_on = use6dtrack
         self.model.radiation_on = False
-        self.respm = _OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
+        self.respm = _OrbRespmat(
+            model=self.model, acc=self.acc, use6dtrack=self.use6dtrack
+        )
         self._create_indices()
 
     def update_svd(
