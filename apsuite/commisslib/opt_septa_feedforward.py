@@ -397,7 +397,7 @@ class OptSeptaFF(_RCDS):
         corrs_order = ['M2-CH', 'M1-CH', 'M2-CV', 'M1-CV', 'RF']
         if from_model:
             mod = _si.create_accelerator()
-            respm = _OrbRespmat(mod, acc='SI', dim='6d')
+            respm = _OrbRespmat(mod, acc='SI', use6dtrack=True)
 
             fch = _np.array(respm.fam_data['FCH']['index']).ravel()
             fcv = _np.array(respm.fam_data['FCV']['index']).ravel()
