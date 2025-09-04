@@ -1,8 +1,8 @@
 """."""
 
 import numpy as _np
-from pymodels import tb, bo, ts, si
 import pyaccel
+from pymodels import bo, si, tb, ts
 
 
 class OrbRespmat:

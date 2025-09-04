@@ -1,11 +1,10 @@
 """."""
 
-from mathphys.functions import get_namedtuple as _get_namedtuple
 from copy import deepcopy as _dcopy
 
 import numpy as _np
-
 import pyaccel as _pyaccel
+from mathphys.functions import get_namedtuple as _get_namedtuple
 
 from ..orbcorr import OrbRespmat as _OrbRespmat
 from .utils import LOCOUtils as _LOCOUtils
@@ -22,13 +21,13 @@ class LOCOConfig:
     DEFAULT_DELTAK_NORMALIZATION = 1e-3
     DEFAULT_GIRDER_SHIFT = 1e-6  # [m]
 
-    FAMNAME_RF = "SRFCav"
+    FAMNAME_RF = 'SRFCav'
 
-    INVERSION = _get_namedtuple("Methods", ["Normal", "Transpose"])
+    INVERSION = _get_namedtuple('Methods', ['Normal', 'Transpose'])
     MINIMIZATION = _get_namedtuple(
-        "Methods", ["GaussNewton", "LevenbergMarquardt"]
+        'Methods', ['GaussNewton', 'LevenbergMarquardt']
     )
-    SVD = _get_namedtuple("Methods", ["Selection", "Threshold"])
+    SVD = _get_namedtuple('Methods', ['Selection', 'Threshold'])
 
     def __init__(self, **kwargs):
         """."""
@@ -110,77 +109,77 @@ class LOCOConfig:
 
     def __str__(self):
         """."""
-        stmp = "{0:35s}: {1:}  {2:s}\n".format
-        ftmp = "{0:35s}: {1:3.2f}  {2:s}\n".format
-        dtmp = "{0:35s}: {1:3d}  {2:s}\n".format
-        etmp = "{0:35s}: {1:e}  {2:s}\n".format
+        stmp = '{0:35s}: {1:}  {2:s}\n'.format
+        ftmp = '{0:35s}: {1:3.2f}  {2:s}\n'.format
+        dtmp = '{0:35s}: {1:3d}  {2:s}\n'.format
+        etmp = '{0:35s}: {1:e}  {2:s}\n'.format
 
-        stg = stmp("Use 6d tracking", self.use6dtrack, "")
-        stg += stmp("Include dispersion", self.use_dispersion, "")
-        stg += stmp("Include diagonal", self.use_diagonal, "")
-        stg += stmp("Include off-diagonal", self.use_offdiagonal, "")
-        stg += stmp("Minimization method", self.min_method_str, "")
-        stg += etmp("Lambda LM", self.lambda_lm, "")
-        stg += stmp("Fixed lambda LM", self.fixed_lambda, "")
-        stg += stmp("Jacobian manipulation", self.inv_method_str, "")
+        stg = stmp('Use 6d tracking', self.use6dtrack, '')
+        stg += stmp('Include dispersion', self.use_dispersion, '')
+        stg += stmp('Include diagonal', self.use_diagonal, '')
+        stg += stmp('Include off-diagonal', self.use_offdiagonal, '')
+        stg += stmp('Minimization method', self.min_method_str, '')
+        stg += etmp('Lambda LM', self.lambda_lm, '')
+        stg += stmp('Fixed lambda LM', self.fixed_lambda, '')
+        stg += stmp('Jacobian manipulation', self.inv_method_str, '')
         stg += stmp(
-            "Constraint delta KL total", self.constraint_deltakl_total, ""
+            'Constraint delta KL total', self.constraint_deltakl_total, ''
         )
         stg += stmp(
-            "Constraint delta KL step", self.constraint_deltakl_step, ""
+            'Constraint delta KL step', self.constraint_deltakl_step, ''
         )
         stg += etmp(
-            "Constraint delta KL normalization", self.deltakl_normalization, ""
+            'Constraint delta KL normalization', self.deltakl_normalization, ''
         )
-        stg += stmp("Singular values method", self.svd_method_str, "")
+        stg += stmp('Singular values method', self.svd_method_str, '')
 
         if self.svd_method == LOCOConfig.SVD.Selection:
             if self.svd_sel is not None:
-                stg += dtmp("SV to be used:", self.svd_sel, "")
+                stg += dtmp('SV to be used:', self.svd_sel, '')
             else:
-                stg += stmp("SV to be used", "All", "")
+                stg += stmp('SV to be used', 'All', '')
         if self.svd_method == LOCOConfig.SVD.Threshold:
-            stg += ftmp("SV threshold (s/s_max):", self.svd_thre, "")
+            stg += ftmp('SV threshold (s/s_max):', self.svd_thre, '')
 
-        stg += etmp("Tolerance delta", self.tolerance_delta, "")
-        stg += etmp("Tolerance overfit", self.tolerance_overfit, "")
+        stg += etmp('Tolerance delta', self.tolerance_delta, '')
+        stg += etmp('Tolerance overfit', self.tolerance_overfit, '')
 
         stg += ftmp(
-            "H. kicks used to measure", self.delta_kickx_meas * 1e6, "[urad]"
+            'H. kicks used to measure', self.delta_kickx_meas * 1e6, '[urad]'
         )
         stg += ftmp(
-            "V. kicks used to measure", self.delta_kicky_meas * 1e6, "[urad]"
+            'V. kicks used to measure', self.delta_kicky_meas * 1e6, '[urad]'
         )
         stg += ftmp(
-            "RF freq. variation used to measure",
+            'RF freq. variation used to measure',
             self.delta_frequency_meas,
-            "[Hz]",
+            '[Hz]',
         )
 
-        stg += stmp("Dipoles normal gradients", self.fit_dipoles, "")
-        stg += stmp("Quadrupoles normal gradients", self.fit_quadrupoles, "")
-        stg += stmp("Sextupoles normal gradients", self.fit_sextupoles, "")
+        stg += stmp('Dipoles normal gradients', self.fit_dipoles, '')
+        stg += stmp('Quadrupoles normal gradients', self.fit_quadrupoles, '')
+        stg += stmp('Sextupoles normal gradients', self.fit_sextupoles, '')
 
-        stg += stmp("Use dipoles as families", self.use_dip_families, "")
-        stg += stmp("Use quadrupoles as families", self.use_quad_families, "")
-        stg += stmp("Use sextupoles as families", self.use_sext_families, "")
+        stg += stmp('Use dipoles as families', self.use_dip_families, '')
+        stg += stmp('Use quadrupoles as families', self.use_quad_families, '')
+        stg += stmp('Use sextupoles as families', self.use_sext_families, '')
 
-        stg += stmp("Dipoles skew gradients", self.fit_dipoles_coupling, "")
+        stg += stmp('Dipoles skew gradients', self.fit_dipoles_coupling, '')
         stg += stmp(
-            "Quadrupoles skew gradients", self.fit_quadrupoles_coupling, ""
-        )
-        stg += stmp(
-            "Sextupoles skew gradients", self.fit_sextupoles_coupling, ""
+            'Quadrupoles skew gradients', self.fit_quadrupoles_coupling, ''
         )
         stg += stmp(
-            "Skew quadrupoles skew gradients", self.fit_skew_quadrupoles, ""
+            'Sextupoles skew gradients', self.fit_sextupoles_coupling, ''
         )
-        stg += stmp("Girders longitudinal shifts", self.fit_girder_shift, "")
+        stg += stmp(
+            'Skew quadrupoles skew gradients', self.fit_skew_quadrupoles, ''
+        )
+        stg += stmp('Girders longitudinal shifts', self.fit_girder_shift, '')
 
-        stg += stmp("BPM gains", self.fit_gain_bpm, "")
-        stg += stmp("Corrector gains", self.fit_gain_corr, "")
-        stg += stmp("BPM roll", self.fit_roll_bpm, "")
-        stg += dtmp("Nr. fit parameters:", self.nr_fit_parameters, "")
+        stg += stmp('BPM gains', self.fit_gain_bpm, '')
+        stg += stmp('Corrector gains', self.fit_gain_corr, '')
+        stg += stmp('BPM roll', self.fit_roll_bpm, '')
+        stg += dtmp('Nr. fit parameters:', self.nr_fit_parameters, '')
         return stg
 
     @property
@@ -320,18 +319,18 @@ class LOCOConfig:
             if svd_sel is not None:
                 if flat_print:
                     print(
-                        "svd_selection: {:d} values will be used.".format(
+                        'svd_selection: {:d} values will be used.'.format(
                             self.svd_sel
                         )
                     )
             else:
                 if flat_print:
-                    print("svd_selection: all values will be used.")
+                    print('svd_selection: all values will be used.')
         if svd_method == LOCOConfig.SVD.Threshold:
             if svd_thre is None:
                 self.svd_thre = LOCOConfig.DEFAULT_SVD_THRESHOLD
             if flat_print:
-                print("svd_threshold: {:f}".format(self.svd_thre))
+                print('svd_threshold: {:f}'.format(self.svd_thre))
 
     def update_goalmat(self, goalmat, use_dispersion, use_offdiagonal):
         """."""
@@ -371,7 +370,7 @@ class LOCOConfig:
             if isinstance(gain_bpm, (int, float)):
                 self.gain_bpm = _np.ones(2 * self.nr_bpm) * gain_bpm
             else:
-                print("setting initial bpm gain...")
+                print('setting initial bpm gain...')
                 self.gain_bpm = gain_bpm
         if roll_bpm is None:
             if self.roll_bpm is None:
@@ -380,7 +379,7 @@ class LOCOConfig:
             if isinstance(roll_bpm, (int, float)):
                 self.roll_bpm = _np.ones(self.nr_bpm) * roll_bpm
             else:
-                print("setting initial bpm roll...")
+                print('setting initial bpm roll...')
                 self.roll_bpm = roll_bpm
         # corr
         if gain_corr is None:
@@ -390,7 +389,7 @@ class LOCOConfig:
             if isinstance(gain_corr, (int, float)):
                 self.gain_bpm = _np.ones(self.nr_corr) * gain_corr
             else:
-                print("setting initial corrector gain...")
+                print('setting initial corrector gain...')
                 self.gain_corr = gain_corr
         if roll_corr is None:
             if self.roll_corr is None:
@@ -466,7 +465,7 @@ class LOCOConfig:
             setquadfit = set(self.quadrupoles_to_fit)
             setquadall = set(self.famname_quadset)
             if not setquadfit.issubset(setquadall):
-                raise Exception("invalid quadrupole name used to fit!")
+                raise Exception('invalid quadrupole name used to fit!')
         if use_families is None:
             use_families = False
         self.use_quad_families = use_families
@@ -475,13 +474,13 @@ class LOCOConfig:
             self.quad_indices_ksl = []
             for idx, fam_name in enumerate(self.quadrupoles_to_fit):
                 fam = self.respm.fam_data
-                self.quad_indices_kl[idx] = fam[fam_name]["index"]
+                self.quad_indices_kl[idx] = fam[fam_name]['index']
                 self.quad_indices_ksl += self.quad_indices_kl[idx]
             self.quad_indices_ksl.sort()
         else:
             self.quad_indices_kl = []
             for fam_name in self.quadrupoles_to_fit:
-                self.quad_indices_kl += self.respm.fam_data[fam_name]["index"]
+                self.quad_indices_kl += self.respm.fam_data[fam_name]['index']
             self.quad_indices_kl.sort()
             self.quad_indices_ksl = self.quad_indices_kl
 
@@ -493,7 +492,7 @@ class LOCOConfig:
             setsextfit = set(self.sextupoles_to_fit)
             setsextall = set(self.famname_sextset)
             if not setsextfit.issubset(setsextall):
-                raise Exception("invalid sextupole name used to fit!")
+                raise Exception('invalid sextupole name used to fit!')
         if use_families is None:
             use_families = False
         self.use_sext_families = use_families
@@ -502,47 +501,47 @@ class LOCOConfig:
             self.sext_indices_ksl = []
             for idx, fam_name in enumerate(self.sextupoles_to_fit):
                 fam = self.respm.fam_data
-                self.sext_indices_kl[idx] = fam[fam_name]["index"]
+                self.sext_indices_kl[idx] = fam[fam_name]['index']
                 self.sext_indices_ksl += self.sext_indices_kl[idx]
             self.sext_indices_ksl.sort()
         else:
             self.sext_indices_kl = []
             for fam_name in self.sextupoles_to_fit:
                 fam = self.respm.fam_data
-                self.sext_indices_kl += fam[fam_name]["index"]
+                self.sext_indices_kl += fam[fam_name]['index']
             self.sext_indices_kl.sort()
             self.sext_indices_ksl = self.sext_indices_kl
 
     def update_skew_quad_knobs(self):
         """."""
         if self.skew_quadrupoles_to_fit is None:
-            self.skew_quad_indices_ksl = self.respm.fam_data["QS"]["index"]
+            self.skew_quad_indices_ksl = self.respm.fam_data['QS']['index']
         else:
             skewquadfit = set(self.skew_quadrupoles_to_fit)
             skewquadall = set(self.famname_skewquadset)
             if not skewquadfit.issubset(skewquadall):
-                raise Exception("invalid skew quadrupole name used to fit!")
+                raise Exception('invalid skew quadrupole name used to fit!')
             else:
                 self.skew_quad_indices_ksl = []
                 for fam_name in self.skew_quadrupoles_to_fit:
                     fam = self.respm.fam_data
-                    self.skew_quad_indices_ksl += fam[fam_name]["index"]
-                idx_all = _np.array(self.respm.fam_data["QS"]["index"]).ravel()
+                    self.skew_quad_indices_ksl += fam[fam_name]['index']
+                idx_all = _np.array(self.respm.fam_data['QS']['index']).ravel()
                 idx_sub = _np.array(self.skew_quad_indices_ksl).ravel()
                 self.skew_quad_indices_ksl = list(set(idx_sub) & set(idx_all))
                 self.skew_quad_indices_ksl.sort()
 
     def update_b1_knobs(self):
         """."""
-        self.b1_indices_kl = self.respm.fam_data["B1"]["index"]
+        self.b1_indices_kl = self.respm.fam_data['B1']['index']
 
     def update_b2_knobs(self):
         """."""
-        self.b2_indices_kl = self.respm.fam_data["B2"]["index"]
+        self.b2_indices_kl = self.respm.fam_data['B2']['index']
 
     def update_bc_knobs(self):
         """."""
-        self.bc_indices_kl = self.respm.fam_data["BC"]["index"]
+        self.bc_indices_kl = self.respm.fam_data['BC']['index']
 
     def update_dip_knobs(self, use_families):
         """."""
@@ -552,7 +551,7 @@ class LOCOConfig:
             setdipfit = set(self.dipoles_to_fit)
             setdipall = set(self.famname_dipset)
             if not setdipfit.issubset(setdipall):
-                raise Exception("invalid dipole name used to fit!")
+                raise Exception('invalid dipole name used to fit!')
         if use_families is None:
             use_families = False
         self.use_dip_families = use_families
@@ -562,7 +561,7 @@ class LOCOConfig:
             self.dip_indices_hkick = []
             for idx, fam_name in enumerate(self.dipoles_to_fit):
                 fam = self.respm.fam_data
-                self.dip_indices_kl[idx] = fam[fam_name]["index"]
+                self.dip_indices_kl[idx] = fam[fam_name]['index']
                 self.dip_indices_ksl += self.dip_indices_kl[idx]
                 self.dip_indices_ksl.sort()
                 self.dip_indices_hkick += self.dip_indices_kl[idx]
@@ -570,7 +569,7 @@ class LOCOConfig:
         else:
             self.dip_indices_kl = []
             for fam_name in self.dipoles_to_fit:
-                self.dip_indices_kl += self.respm.fam_data[fam_name]["index"]
+                self.dip_indices_kl += self.respm.fam_data[fam_name]['index']
                 self.dip_indices_kl.sort()
                 self.dip_indices_ksl = self.dip_indices_kl
                 self.dip_indices_hkick = self.dip_indices_kl
@@ -578,7 +577,7 @@ class LOCOConfig:
     def update_girder_knobs(self):
         """."""
         self.gir_indices = _pyaccel.lattice.find_indices(
-            self.model, "fam_name", "girder"
+            self.model, 'fam_name', 'girder'
         )
         self.gir_indices = _np.reshape(self.gir_indices, (-1, 2))
 
@@ -615,27 +614,27 @@ class LOCOConfig:
 
     def _process_input(self, kwargs):
         for key, value in kwargs.items():
-            if key == "model" and "dim" in kwargs:
-                model, dim = kwargs["model"], kwargs["dim"]
+            if key == 'model' and 'dim' in kwargs:
+                model, dim = kwargs['model'], kwargs['dim']
                 self.update_model(model, dim)
-            elif key == "dim":
+            elif key == 'dim':
                 pass
-            elif key == "svd_method" and (
-                "svd_sel" in kwargs or "svd_thre" in kwargs
+            elif key == 'svd_method' and (
+                'svd_sel' in kwargs or 'svd_thre' in kwargs
             ):
-                svd_method = kwargs["svd_method"]
-                svd_sel = kwargs["svd_sel"] if "svd_sel" in kwargs else None
-                svd_thre = kwargs["svd_thre"] if "svd_thre" in kwargs else None
+                svd_method = kwargs['svd_method']
+                svd_sel = kwargs['svd_sel'] if 'svd_sel' in kwargs else None
+                svd_thre = kwargs['svd_thre'] if 'svd_thre' in kwargs else None
                 self.update_svd(svd_method, svd_sel, svd_thre)
             setattr(self, key, value)
 
     def _create_indices(self):
         """."""
         self.idx_cav = _pyaccel.lattice.find_indices(
-            self.model, "fam_name", self.FAMNAME_RF
+            self.model, 'fam_name', self.FAMNAME_RF
         )[0]
         self.idx_bpm = _pyaccel.lattice.find_indices(
-            self.model, "fam_name", "BPM"
+            self.model, 'fam_name', 'BPM'
         )
 
 
@@ -645,7 +644,7 @@ class LOCOConfigSI(LOCOConfig):
     @property
     def acc(self):
         """."""
-        return "SI"
+        return 'SI'
 
     @property
     def nr_bpm(self):
@@ -665,67 +664,67 @@ class LOCOConfigSI(LOCOConfig):
     @property
     def famname_dipset(self):
         """."""
-        return ["B1", "B2", "BC"]
+        return ['B1', 'B2', 'BC']
 
     @property
     def famname_quadset(self):
         """."""
         return [
-            "QFA",
-            "QDA",
-            "QDB2",
-            "QFB",
-            "QDB1",
-            "QDP2",
-            "QFP",
-            "QDP1",
-            "Q1",
-            "Q2",
-            "Q3",
-            "Q4",
+            'QFA',
+            'QDA',
+            'QDB2',
+            'QFB',
+            'QDB1',
+            'QDP2',
+            'QFP',
+            'QDP1',
+            'Q1',
+            'Q2',
+            'Q3',
+            'Q4',
         ]
 
     @property
     def famname_sextset(self):
         """."""
         return [
-            "SDA0",
-            "SDB0",
-            "SDP0",
-            "SDA1",
-            "SDB1",
-            "SDP1",
-            "SDA2",
-            "SDB2",
-            "SDP2",
-            "SDA3",
-            "SDB3",
-            "SDP3",
-            "SFA0",
-            "SFB0",
-            "SFP0",
-            "SFA1",
-            "SFB1",
-            "SFP1",
-            "SFA2",
-            "SFB2",
-            "SFP2",
+            'SDA0',
+            'SDB0',
+            'SDP0',
+            'SDA1',
+            'SDB1',
+            'SDP1',
+            'SDA2',
+            'SDB2',
+            'SDP2',
+            'SDA3',
+            'SDB3',
+            'SDP3',
+            'SFA0',
+            'SFB0',
+            'SFP0',
+            'SFA1',
+            'SFB1',
+            'SFP1',
+            'SFA2',
+            'SFB2',
+            'SFP2',
         ]
 
     @property
     def famname_skewquadset(self):
         """."""
         return [
-            "SFA0",
-            "SDB0",
-            "SDP0",
-            "SDA2",
-            "SDB2",
-            "FC2",
-            "SDP2",
-            "SDA3",
-            "SDB3",
-            "SDP3",
+            'SFA0',
+            'SDB0',
+            'SDP0',
+            'SDA2',
+            'SDB2',
+            'FC2',
+            'SDP2',
+            'SDA3',
+            'SDB3',
+            'SDP3',
         ]
 
 
@@ -735,7 +734,7 @@ class LOCOConfigBO(LOCOConfig):
     @property
     def acc(self):
         """."""
-        return "BO"
+        return 'BO'
 
     @property
     def nr_bpm(self):
@@ -755,19 +754,19 @@ class LOCOConfigBO(LOCOConfig):
     @property
     def famname_dipset(self):
         """."""
-        return ["B"]
+        return ['B']
 
     @property
     def famname_quadset(self):
         """."""
-        return ["QF", "QD"]
+        return ['QF', 'QD']
 
     @property
     def famname_sextset(self):
         """."""
-        return ["SF", "SD"]
+        return ['SF', 'SD']
 
     @property
     def famname_skewquadset(self):
         """."""
-        return ["QS"]
+        return ['QS']
