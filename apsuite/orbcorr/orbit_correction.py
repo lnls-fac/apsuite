@@ -12,7 +12,7 @@ class CorrParams:
 
     RESPMAT_MODE = _get_namedtuple('RespMatMode', ['Full', 'Mxx', 'Myy'])
 
-    def __init__(self, use6dtrack=False):
+    def __init__(self, use6dtrack=True):
         """."""
         # The most restrictive of the two below will be the limiting factor:
         self.minsingval = 0.2
