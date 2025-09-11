@@ -27,7 +27,7 @@ class MachinesParams:
     def __init__(self):
 
         self.acc = 'SI'
-        self.orbcorr_params = CorrParams()  # Orbit corr params
+        self.orbcorr_params = CorrParams(use6dtrack=False)  # Orbit corr params
         self.optcorr_params = self.OptCorrParams()  # Optics corr params
         self.coupcorr_params = self.CoupCorrParams()  # Coupling corr params
         self.ramp_with_ids = False
@@ -441,7 +441,9 @@ class GenerateMachines:
             2D numpy array: Orbit response matrix.
         """
         self.orbcorr = OrbitCorr(
-            self.nominal_model, self.params.acc, params=self.orbcorr_params)
+            self.nominal_model, self.params.acc,
+            params=self.orbcorr_params, use6dtrack=False
+        )
         if jac is None:
             jac = self.orbcorr.get_jacobian_matrix()
         self.orbmat = jac
@@ -660,7 +662,7 @@ class GenerateMachines:
         print()
 
         if self.do_coupling_corr:
-            print('Correcting coupling:')        
+            print('Correcting coupling:')
             mintune = self._calc_coupling(mach)
             print(f'Minimum tune separation before corr: {100*mintune:.3f} %')
             self._correct_coupling(mach)
