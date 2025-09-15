@@ -313,6 +313,11 @@ class BbBAcqData(_BaseClass, UtilClass):
         if self.isonline:
             self.devices['bbb'] = BunchbyBunch(devname)
 
+    @property
+    def bbb_dev(self):
+        """."""
+        return self.devices['bbb']
+
     def get_data(self):
         """Get Raw data to file."""
         acqtype = self.params.acqtype
