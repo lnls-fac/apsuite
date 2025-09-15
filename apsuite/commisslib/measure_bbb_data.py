@@ -37,6 +37,8 @@ class UtilClass:
             timestamp=_time.time(),
             cavity_a_data=UtilClass.get_cavity_data(bbb.rfcav_a),
             cavity_b_data=UtilClass.get_cavity_data(bbb.rfcav_b),
+            fpmosc_fillpattern=bbb.fpmosc.fill_pattern,
+            fpmosc_fidoffset=bbb.fpmosc.fiducial_offset,
             acqtype=acqtype, downsample=acq.downsample,
             fb_set0=bbb.coeffs.set0, fb_set1=bbb.coeffs.set1,
             fb_set0_desc=bbb.coeffs.set0_desc,
