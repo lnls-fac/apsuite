@@ -37,3 +37,31 @@ def matrix_from_qf3_to_scrn(kl):
     # length of the magnet
     quad_len = 0.112
     return matrix_drift(l2) @ matrix_quad(kl) @ matrix_drift(quad_len/2)
+
+
+def matrix_from_boqf_to_scrn1(kl):
+    """Transfer matrix from the middle of QF to Scren-1 in Booster.
+
+    Args:
+    kl (float): Integrated quadrupole strength.
+
+    Returns:
+        array: Transfer matrix as a NumPy array.
+    """
+    # the following value was taken from booster model in pymodels
+    l_drift = 1.0886
+    return matrix_drift(l_drift) @ matrix_quad(kl)
+
+
+def matrix_from_boqf_to_scrn2(kl):
+    """Transfer matrix from the middle of QF to Scren-2 in Booster.
+
+    Args:
+    kl (float): Integrated quadrupole strength.
+
+    Returns:
+        array: Transfer matrix as a NumPy array.
+    """
+    # the following value was taken from booster model in pymodels
+    l_drift = 3.5499
+    return matrix_drift(l_drift) @ matrix_quad(kl)
