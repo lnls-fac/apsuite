@@ -355,12 +355,13 @@ class ParallelBBAParams(_ParamsBaseClass):
         """."""
         super().__init__()
 
-        self.meas_nrsteps = 6
         self.quad_deltakl = 0.01  # [1/m]
 
         self.wait_correctors = 0.3  # [s]
         self.wait_quadrupole = 0.3  # [s]
         self.timeout_wait_orbit = 3  # [s]
+
+        self.corr_nr_iters = 6
 
         self.sofb_nrpoints = 10
         self.sofb_maxcorriter = 5
@@ -604,29 +605,56 @@ class DoParallelBBA(_BaseClass):
     def calc_ios_jacobian(self, model, fam_data):
         use6d = any([model.cavity_on, model.radiation_on>0])
         _orbcorr = _OrbitCorr(model=model, acc='SI', corr_system='SOFB', use6dorb=use6d)
-        # _orbcorr.params.enblrf = False
         delta_stren = self.get_group_delta_kl()
-        strens_orig = self.get_strengths()
+        strens_orig = self.get_strengths(model, fam_data)
         self.set_strengths(strens_orig + delta_stren/2, model, fam_data)
         try:
             jac_pos = _orbcorr.get_jacobian_matrix()
         except Exception as E:
             self.set_strengths(strens_orig, model, fam_data)
-            print(E)
+            print("ggwp")
             return
         self.set_strengths(strens_orig - delta_stren/2, model, fam_data)
         try:
             jac_neg = _orbcorr.get_jacobian_matrix()
         except Exception as E:
             self.set_strengths(strens_orig, model, fam_data)
-            print(E)
+            print("ggez")
             return
         self.set_strengths(strens_orig, model, fam_data)
         return jac_pos - jac_neg
 
     def meas_ios_jacobian(self):
-        raise NotImplementedError('Not available yet. Use \'calc_ios_jacobian\' for a model-base jacobian.')
+        raise NotImplementedError('Not available yet. Use \'calc_ios_jacobian\' for a model-based jacobian.')
 
+    @staticmethod
+    def inverse_matrix(matrix):
+        return _np.dot(_np.linalg.pinv(_np.dot(matrix.T, matrix), rcond=1e-8), matrix.T)
+
+    def correct_ios(self, jacobian=None, model=None, fam_data=None):
+        if jacobian is None:
+            jacobian = self.calc_ios_jacobian(model, fam_data)
+        inverse_jacobian = self.inverse_matrix(jacobian)
+        ios_evo = []
+        nr_iters = self.params.corr_nr_iters
+        for i in range(nr_iters+1):
+            if model is not None:
+                ios = self.calc_ios(model, fam_data)
+            else:
+                ios = self.meas_ios()
+            ios_evo.append(ios)
+            if i >= nr_iters:
+                break
+            dkicks = list(-1 * _np.dot(inverse_jacobian, ios))
+            if model is not None:
+                use6d = any([model.cavity_on, model.radiation_on>0])
+                _orbcorr = _OrbitCorr(model=model, acc='SI', corr_system='SOFB', use6dorb=use6d)
+                _orbcorr.set_delta_kicks(dkicks)
+            else:
+                sofb = self.devices['sofb']
+                sofb.APPLY_DELTA_KICKS(dkicks) #!!!!!!!!!!!!!!!!!!!!!!!!!!
+        self.data[self.active_group_id] = {'ios': ios_evo}
+        return ios_evo
 
 
     # #### private methods ####
@@ -695,7 +723,7 @@ class DoParallelBBA(_BaseClass):
             self._model, self.groups2dopbba[self.active_group_id]
         )
 
-        nrsteps = self.params.meas_nrsteps
+        nrsteps = self.params.corr_nr_iters
         refx0, refy0 = sofb.refx.copy(), sofb.refy.copy()
 
         for i in range(nrsteps):
