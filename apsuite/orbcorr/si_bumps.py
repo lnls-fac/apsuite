@@ -419,7 +419,7 @@ class SiCalcBumps:
             mod.cavity_on = True
         elif self.model.cavity_on is False:
             raise ValueError('Model cavity must be turned on!')
-        orbcorr = OrbitCorr(mod, 'SI', use6dorb=True)
+        orbcorr = OrbitCorr(mod, 'SI', use6dtrack=True)
         orbcorr.params.enblrf = True
         orbcorr.params.tolerance = 1e-9
         orbcorr.params.minsingval = minsingval
@@ -602,7 +602,7 @@ class SiCalcBumps:
             mod.cavity_on = True
         elif self.model.cavity_on is False:
             raise ValueError('Model cavity must be turned on!')
-        orbcorr = OrbitCorr(mod, 'SI', use6dorb=True)
+        orbcorr = OrbitCorr(mod, 'SI', use6dtrack=True)
         orbcorr.params.enblrf = True
         orbcorr.params.tolerance = 1e-9
         orbcorr.params.minsingval = 0.2
