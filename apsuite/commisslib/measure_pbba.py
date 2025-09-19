@@ -362,6 +362,7 @@ class ParallelBBAParams(_ParamsBaseClass):
         self.timeout_wait_orbit = 3  # [s]
 
         self.corr_nr_iters = 6
+        self.ijac_tol = 1e-5
 
         self.sofb_nrpoints = 10
         self.sofb_maxcorriter = 5
@@ -628,33 +629,49 @@ class DoParallelBBA(_BaseClass):
         raise NotImplementedError('Not available yet. Use \'calc_ios_jacobian\' for a model-based jacobian.')
 
     @staticmethod
-    def inverse_matrix(matrix):
-        return _np.dot(_np.linalg.pinv(_np.dot(matrix.T, matrix), rcond=1e-8), matrix.T)
+    def inverse_matrix(matrix, rcond=None):
+        return _np.dot(_np.linalg.pinv(_np.dot(matrix.T, matrix), rcond=rcond), matrix.T)
 
     def correct_ios(self, jacobian=None, model=None, fam_data=None):
         if jacobian is None:
             jacobian = self.calc_ios_jacobian(model, fam_data)
-        inverse_jacobian = self.inverse_matrix(jacobian)
+        inverse_jacobian = self.inverse_matrix(jacobian, self.params.ijac_tol)
+        if model is not None:
+            use6d = any([model.cavity_on, model.radiation_on>0])
+            print(use6d)
+            sofb = _OrbitCorr(model=model, acc='SI', corr_system='SOFB', use6dorb=use6d)
+            apply_dkicks = sofb.set_delta_kicks
+            get_kicks = sofb.get_kicks
+        else:
+            sofb = self.devices['sofb']
+            apply_dkicks = sofb.APPLY_DELTA_KICKS
+            get_kicks = sofb.GET_KICKS
         ios_evo = []
+        dkicks_evo = []
+        kicks_ini = _np.array(get_kicks())
         nr_iters = self.params.corr_nr_iters
         for i in range(nr_iters+1):
+            print(f'iter = {(i+1):1d}/{nr_iters:d}')
             if model is not None:
                 ios = self.calc_ios(model, fam_data)
             else:
                 ios = self.meas_ios()
+            dkicks = list(-1 * _np.dot(inverse_jacobian, ios))
             ios_evo.append(ios)
+            dkicks_evo.append(dkicks)
             if i >= nr_iters:
                 break
-            dkicks = list(-1 * _np.dot(inverse_jacobian, ios))
-            if model is not None:
-                use6d = any([model.cavity_on, model.radiation_on>0])
-                _orbcorr = _OrbitCorr(model=model, acc='SI', corr_system='SOFB', use6dorb=use6d)
-                _orbcorr.set_delta_kicks(dkicks)
-            else:
-                sofb = self.devices['sofb']
-                sofb.APPLY_DELTA_KICKS(dkicks) #!!!!!!!!!!!!!!!!!!!!!!!!!!
-        self.data[self.active_group_id] = {'ios': ios_evo}
-        return ios_evo
+            apply_dkicks(dkicks)
+        kicks_fim = _np.array(get_kicks())
+        self.data[self.active_group_id] = {
+            'bpms':self.groups2dopbba[self.active_group_id],
+            'ios': ios_evo,
+            'dkicks_evo': dkicks_evo,
+            'kicks_ini': kicks_ini,
+            'kicks_fim': kicks_fim,
+            'dkicks': kicks_fim - kicks_ini
+        }
+        return self.data[self.active_group_id]
 
 
     # #### private methods ####
