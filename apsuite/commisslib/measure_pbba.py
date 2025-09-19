@@ -18,7 +18,7 @@ from siriuspy.namesys import SiriusPVName as _PVName
 from ..utils import ParamsBaseClass as _ParamsBaseClass, \
     ThreadedMeasBaseClass as _BaseClass
 from .measure_bba import DoBBA as _DoBBA
-
+from ..orbcorr.orbit_correction import OrbitCorr as _OrbitCorr
 
 class ParallelBBAParams(_ParamsBaseClass):
     """."""
@@ -377,7 +377,7 @@ class DoParallelBBA(_BaseClass):
     def __init__(self, isonline=True):
         """."""
         super().__init__(
-            params=ParallelBBAParams(), target=self._do_bba, isonline=isonline
+            params=ParallelBBAParams(), target=self._do_pbba, isonline=isonline
         )
         self._groups2dopbba = list()
         self._activegroup_id = None
@@ -411,11 +411,11 @@ class DoParallelBBA(_BaseClass):
 
     @property
     def groups2dopbba(self):
-        return self.groups2dopbba
+        return _dcopy(self._groups2dopbba)
 
     @groups2dopbba.setter
     def groups2dopbba(self, groups):
-        self._groups2dopbba = [[_PVName(bpm) for bpm in group] for group in groups]
+        self._groups2dopbba = [[_PVName(bpm) for bpm in group if isinstance(bpm, str)] for group in groups if isinstance(group, (list, tuple, _np.ndarray))]
 
     @property
     def active_group_id(self):
@@ -464,28 +464,170 @@ class DoParallelBBA(_BaseClass):
     @staticmethod
     def get_default_quads(model, fam_data):
         """."""
-        return _DoBBA.get_default_quads(model, fam_data)
+        quads_idx = _dcopy(fam_data["QN"]["index"])
+        qs_idx = [idx for idx in fam_data["QS"]["index"]]
+        quads_idx.extend(qs_idx)
+        quads_idx = _np.array([idx[len(idx) // 2] for idx in quads_idx])
+        quads_pos = _np.array(_pyacc.lattice.find_spos(model, quads_idx))
+
+        bpms_idx = _np.array([idx[0] for idx in fam_data["BPM"]["index"]])
+        bpms_pos = _np.array(_pyacc.lattice.find_spos(model, bpms_idx))
+
+        diff = _np.abs(bpms_pos[:, None] - quads_pos[None, :])
+        bba_idx = _np.argmin(diff, axis=1)
+        quads_bba_idx = quads_idx[bba_idx]
+        bpmnames = list()
+        qnames = list()
+        for i, qidx in enumerate(quads_bba_idx):
+            name = model[qidx].fam_name
+            idc = fam_data[name]["index"].index([qidx])
+            sub = fam_data[name]["subsection"][idc]
+            inst = fam_data[name]["instance"][idc]
+            name = "QS" if name.startswith(("S", "F")) else name
+            qname = "SI-{0:s}:PS-{1:s}-{2:s}".format(sub, name, inst)
+            qnames.append(qname.strip("-"))
+
+            sub = fam_data["BPM"]["subsection"][i]
+            inst = fam_data["BPM"]["instance"][i]
+            bname = "SI-{0:s}:DI-BPM-{1:s}".format(sub, inst)
+            bname = bname.strip("-")
+            bpmnames.append(bname.strip("-"))
+        return bpmnames, bpms_idx, qnames, quads_bba_idx
 
     @staticmethod
     def list_bpm_subsections(bpms):
         """."""
         return _DoBBA.list_bpm_subsections(bpms)
 
-    def save_to_servconf(self, config_name):
-        """."""
-        self.clt_confdb.insert_config(config_name, self.data)
-
-    def load_from_servconf(self, config_name):
-        """."""
-        self.data = self.clt_confdb.get_config_value(config_name)
-
     # ##### Make Figures #####
     #! empty
 
     # #### pbba utils #####
-    @staticmethod
-    def get_ios_jacobian(model, group, fam_data, dkl=0.01):
-        bnames, qnames, qidx = DoParallelBBA.get_default_quads(model, fam_data)
+    def get_group_delta_kl(self):
+        group = self.groups2dopbba[self.active_group_id]
+        delta_kl = _np.ones(len(group))*self.params.quad_deltakl
+        delta_kl[1::2] *= -1
+        return delta_kl
+
+    def get_group_ordering(self):
+        group = self.groups2dopbba[self.active_group_id]
+        return _np.arange(len(group))
+
+    def set_strengths(self, strengths, model=None, fam_data=None):
+        order = self.get_group_ordering()
+        group = self.groups2dopbba[self.active_group_id]
+        if len(strengths) != len(group):
+            raise ValueError('dim mismatch between the active group and "strengths".')
+        if model is not None:
+            bnames, _, qnames, qindices = self.get_default_quads(model, fam_data)
+            for _o in order:
+                _id = bnames.index(group[_o])
+                qidx = qindices[_id]
+                if "QS" in qnames[_id]:
+                    model[qidx].KsL = strengths[_o]
+                else:
+                    model[qidx].KL = strengths[_o]
+        else:
+            qnames = self.data["quadnames"]
+            bnames = self.data["bpmnames"]
+            for _o in order:
+                bname = group[_o]
+                qname = qnames[bnames.index(bname)]
+                quad = self.devices[qname]
+                quad.strength = strengths[_o]
+                _time.sleep(self.params.wait_quadrupole)
+
+    def get_strengths(self, model=None, fam_data=None):
+        order = self.get_group_ordering()
+        group = self.groups2dopbba[self.active_group_id]
+        strengths = _np.zeros(len(group))
+        if model is not None:
+            bnames, _, qnames, qindices = self.get_default_quads(model, fam_data)
+            for _o in order:
+                _id = bnames.index(group[_o])
+                qidx = qindices[_id]
+                if "QS" in qnames[_id]:
+                    strengths[_o] = model[qidx].KsL
+                else:
+                    strengths[_o] = model[qidx].KL
+        else:
+            qnames = self.data["quadnames"]
+            bnames = self.data["bpmnames"]
+            for _o in order:
+                bname = group[_o]
+                qname = qnames[bnames.index(bname)]
+                quad = self.devices[qname]
+                strengths[_o] = quad.strength
+        return strengths
+
+    def calc_ios(self, model, fam_data):
+        if any([model.cavity_on, model.radiation_on > 0]):
+            findorbit = _pyacc.tracking.find_orbit6
+        else:
+            findorbit = _pyacc.tracking.find_orbit4
+        bpmidx = _np.array(fam_data['BPM']['index']).ravel()
+        delta_stren = self.get_group_delta_kl()
+        strens_orig = self.get_strengths(model, fam_data)
+        self.set_strengths(strens_orig + delta_stren/2, model, fam_data)
+        try:
+            orb_pos = findorbit(model, indices=bpmidx)
+        except Exception as E:
+            self.set_strengths(strens_orig, model, fam_data)
+            print(E)
+            return
+        self.set_strengths(strens_orig - delta_stren/2, model, fam_data)
+        try:
+            orb_neg = findorbit(model, indices=bpmidx)
+        except Exception as E:
+            self.set_strengths(strens_orig, model, fam_data)
+            print(E)
+            return
+        self.set_strengths(strens_orig, model, fam_data)
+        orb_pos = _np.hstack((orb_pos[0,:], orb_pos[2,:]))
+        orb_neg = _np.hstack((orb_neg[0,:], orb_neg[2,:]))
+        return orb_pos - orb_neg
+
+    def meas_ios(self):
+        def get_orbit():
+            orbx = self.devices['soft'].orbx
+            orby = self.devices['soft'].orby
+            return _np.hstack((orbx, orby))
+        delta_stren = self.get_group_delta_kl()
+        strens_orig = self.get_strengths()
+        self.set_strengths(strens_orig + delta_stren/2)
+        orb_pos = get_orbit()
+        self.set_strengths(strens_orig + delta_stren/2)
+        orb_neg = get_orbit()
+        self.set_strengths(strens_orig)
+        return orb_pos - orb_neg
+
+    def calc_ios_jacobian(self, model, fam_data):
+        use6d = any([model.cavity_on, model.radiation_on>0])
+        _orbcorr = _OrbitCorr(model=model, acc='SI', corr_system='SOFB', use6dorb=use6d)
+        # _orbcorr.params.enblrf = False
+        delta_stren = self.get_group_delta_kl()
+        strens_orig = self.get_strengths()
+        self.set_strengths(strens_orig + delta_stren/2, model, fam_data)
+        try:
+            jac_pos = _orbcorr.get_jacobian_matrix()
+        except Exception as E:
+            self.set_strengths(strens_orig, model, fam_data)
+            print(E)
+            return
+        self.set_strengths(strens_orig - delta_stren/2, model, fam_data)
+        try:
+            jac_neg = _orbcorr.get_jacobian_matrix()
+        except Exception as E:
+            self.set_strengths(strens_orig, model, fam_data)
+            print(E)
+            return
+        self.set_strengths(strens_orig, model, fam_data)
+        return jac_pos - jac_neg
+
+    def meas_ios_jacobian(self):
+        raise NotImplementedError('Not available yet. Use \'calc_ios_jacobian\' for a model-base jacobian.')
+
+
 
     # #### private methods ####
     def _do_pbba(self):
@@ -548,7 +690,7 @@ class DoParallelBBA(_BaseClass):
                 return
             korig.append(_quad.strength)
 
-        deltakl = self.groups_delta_kl[self.active_group_id]
+        deltakl = self.get_group_delta_kl(self.active_group_id)
         ios_jac = self.get_ios_jacobian(
             self._model, self.groups2dopbba[self.active_group_id]
         )
