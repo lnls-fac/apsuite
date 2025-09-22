@@ -464,6 +464,10 @@ class DoParallelBBA(_BaseClass):
             residue=self.params.sofb_maxorberr,
         )
 
+    def get_tunes(self):
+        tune = self.devices['tune']
+        return _np.array([tune.tunex, tune.tuney])
+
     @staticmethod
     def get_default_quads(model, fam_data):
         """."""
@@ -516,13 +520,14 @@ class DoParallelBBA(_BaseClass):
         bpms = self.get_active_bpmnames()
         return _np.arange(len(bpms))
 
-    def set_strengths(self, strengths):
+    def set_strengths(self, strengths, track_tune=False):
         order = self.get_group_ordering()
         bpms = self.get_active_bpmnames()
         if len(strengths) != len(bpms):
             raise ValueError('dim mismatch between the active group and \"strengths\".')
         quad_names = self.data["quadnames"]
         bpm_names = self.data["bpmnames"]
+        tunes = []
         for _o in order:
             bpmname = bpms[_o]
             quadname = quad_names[bpm_names.index(bpmname)]
@@ -534,6 +539,10 @@ class DoParallelBBA(_BaseClass):
                 return
             quad.strength = strengths[_o]
             _time.sleep(self.params.wait_quadrupole)
+            tunes.append(self.get_tunes())
+        if track_tune:
+            return tunes
+        return
 
     def get_strengths(self):
         order = self.get_group_ordering()
@@ -553,15 +562,18 @@ class DoParallelBBA(_BaseClass):
             strengths[_o] = quad.strength
         return strengths
 
-    def meas_ios(self):
+    def meas_ios(self, track_tune=False):
         delta_stren = self.get_group_delta_kl()
         strens_orig = self.get_strengths()
-        self.set_strengths(strens_orig + delta_stren/2)
+        tune_up = self.set_strengths(strens_orig + delta_stren/2, track_tune)
         orb_pos = self.get_orbit()
-        self.set_strengths(strens_orig + delta_stren/2)
+        tune_down = self.set_strengths(strens_orig + delta_stren/2, track_tune)
         orb_neg = self.get_orbit()
-        self.set_strengths(strens_orig)
-        return orb_pos - orb_neg
+        tune_back = self.set_strengths(strens_orig, track_tune)
+        if track_tune:
+            tune_variation = tune_up + tune_down + tune_back
+            return orb_pos - orb_neg, tune_variation
+        return orb_pos - orb_neg, None
 
     def get_ios_jacobian(self, model=None, fam_data=None):
         if model is None:
@@ -614,13 +626,12 @@ class DoParallelBBA(_BaseClass):
     def inverse_matrix(matrix, rcond=None):
         return _np.dot(_np.linalg.pinv(_np.dot(matrix.T, matrix), rcond=rcond), matrix.T)
 
-    def correct_ios(self, jacobian=None):
+    def correct_ios(self, jacobian=None, track_tune=False):
         if jacobian is None:
             jacobian = self.get_ios_jacobian()
         inverse_jacobian = self.inverse_matrix(jacobian, self.params.ijac_tol)
         sofb = self.devices['sofb']
-        ios_evo = []
-        dkicks_evo = []
+        ios_iter, tune_iter, dkicks_iter = [], [], []
         kicks_ini = _np.array(sofb.get_kicks())  #!!!!!!!!!!!!!!!!!!!!!!!!
         nr_iters = self.params.corr_nr_iters
         for i in range(nr_iters+1):
@@ -628,24 +639,25 @@ class DoParallelBBA(_BaseClass):
                 print("   exiting...")
                 break
             print("    {0:02d}/{1:02d} --> ".format(i + 1, nr_iters), end="")
-            ios = self.meas_ios()
-            dkicks = list(-1 * _np.dot(inverse_jacobian, ios))
-            ios_evo.append(ios)
-            dkicks_evo.append(dkicks)
+            ios, tune = self.meas_ios(track_tune)
+            ios_iter.append(ios)
+            tune_iter.append(tune)
             if i >= nr_iters:
                 break
+            dkicks = list(-1 * _np.dot(inverse_jacobian, ios))
+            dkicks_iter.append(dkicks)
             sofb.set_delta_kicks(dkicks)         #!!!!!!!!!!!!!!!!!!!!!!!!
         kicks_fim = _np.array(sofb.get_kicks())  #!!!!!!!!!!!!!!!!!!!!!!!!
-        self.data[self.active_group_id] = {
+        self.data[f'group_{self.active_group_id:0d}'] = {
             'bpms':self.groups2dopbba[self.active_group_id],
-            'ios': ios_evo,
-            'dkicks_evo': dkicks_evo,
+            'ios_iter': ios_iter,
+            'dkicks_iter': dkicks_iter,
             'kicks_ini': kicks_ini,
             'kicks_fim': kicks_fim,
-            'dkicks': kicks_fim - kicks_ini
+            'ordering':self.get_group_ordering(),
+            'delta_kl':self.get_group_delta_kl(),
         }
-        return self.data[self.active_group_id]
-
+        if track_tune: self.data['tune_iter'] = tune_iter
 
     # #### private methods ####
     def _do_pbba(self):
@@ -689,20 +701,22 @@ class DoParallelBBA(_BaseClass):
         """."""
         self.activegroup_id = group_id
         bpmnames = self.get_active_bpmnames()
+        bpmnames_all = self.data['bpmnames']
+        nbpms = len(bpmnames_all)
         self.connect_to_quadrupoles()
-        quadnames = self.get_active_quadnames()
 
         tini = _datetime.datetime.fromtimestamp(_time.time())
         strtini = tini.strftime("%Hh%Mm%Ss")
         print("{:s} --> Doing PBBA for Group {:d}".format(strtini))
 
         sofb = self.devices["sofb"]
-        tune = self.devices["tune"]
-        refx0, refy0 = sofb.refx.copy(), sofb.refy.copy()
-
-        korig = self.get_strengths()
 
         ios_jac = self.get_ios_jacobian()
+        self.correct_ios(ios_jac)
+        orbit = self.get_orbit()
+        for bpm in bpmnames:
+            idx = bpmnames_all.index(bpm)
+            self.data['measure'][bpm] = {'x0':orbit[idx], 'y0':orbit[idx+nbpms]}
 
         print("restoring initial conditions.")
 
