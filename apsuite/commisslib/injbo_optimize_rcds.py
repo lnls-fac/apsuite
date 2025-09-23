@@ -59,6 +59,11 @@ class OptimizeInjBOParams(_RCDSParams):
         'angy',
         'kckr',
 
+        "tb_ch1",
+        "tb_injsept",
+        "tb_cv1",
+        "tb_cv2",
+
         'shb_amp',
         'kly1_amp',
         'kly2_amp',
@@ -114,12 +119,17 @@ class OptimizeInjBOParams(_RCDSParams):
         +1.0,    # 'angy',
         -19.0,   # 'kckr',
 
+        +10.0,   # tb_ch1
+        0.0,     # tb_injsept
+        +10.0,   # tb_cv1
+        +10.0,   # tb_cv2
+
         40,      # 'shb_amp',
         91,      # 'kly1_amp',
         76,      # 'kly2_amp',
         180,     # 'shb_phs',
-        180,     # 'kly1_phs',
-        180,     # 'kly2_phs',
+        -150,    # 'kly1_phs',
+        0,       # 'kly2_phs',
 
         80,      # 'borf_amp',
         160,     # 'borf_phs',
@@ -169,12 +179,17 @@ class OptimizeInjBOParams(_RCDSParams):
         -1.0,   # 'angy',
         -25.0,  # 'kckr',
 
+        -10.0,    # tb_ch1
+        -776.69,  # tb_injsept
+        -10.0,    # tb_cv1
+        -10.0,    # tb_cv2
+
         20,    # 'shb_amp',
         85,    # 'kly1_amp',
         70,    # 'kly2_amp',
-        -180,  # 'shb_phs',
+        160,   # 'shb_phs',
         -180,  # 'kly1_phs',
-        -180,  # 'kly2_phs',
+        -20,   # 'kly2_phs',
 
         30,    # 'borf_amp',
         90,    # 'borf_phs',
@@ -406,6 +421,15 @@ class OptimizeInjBO(_RCDS):
             elif fun('kckr'):
                 pos.append(self.devices['injkckr'].strength)
 
+            elif fun('tb_ch1'):
+                pos.append(self.devices['tb_ch1'].current)
+            elif fun('tb_injsept'):
+                pos.append(self.devices['tb_injsept'].strength)
+            elif fun('tb_cv1'):
+                pos.append(self.devices['tb_cv1'].current)
+            elif fun('tb_cv2'):
+                pos.append(self.devices['tb_cv2'].current)
+
             elif fun('shb_amp'):
                 pos.append(self.devices['li_llrf'].dev_shb.amplitude)
             elif fun('kly1_amp'):
@@ -518,6 +542,15 @@ class OptimizeInjBO(_RCDS):
             elif fun('kckr'):
                 self.devices['injkckr'].strength = p
 
+            elif fun('tb_ch1'):
+                self.devices['tb_ch1'].current = p
+            elif fun('tb_injsept'):
+                self.devices['tb_injsept'].strength = p
+            elif fun('tb_cv1'):
+                self.devices['tb_cv1'].current = p
+            elif fun('tb_cv2'):
+                self.devices['tb_cv2'].current = p
+
             elif fun('shb_amp'):
                 self.devices['li_llrf'].dev_shb.amplitude = p
             elif fun('kly1_amp'):
@@ -537,6 +570,8 @@ class OptimizeInjBO(_RCDS):
                 self.devices['bo_llrf'].phase_bottom = p
             else:
                 raise ValueError('Wrong specification of knob.')
+
+            self.wait_set_pos(pos, timeout=10, rtol=0.05, atol=0.1)
 
     def _create_devices(self):
         # knobs devices
@@ -582,6 +617,11 @@ class OptimizeInjBO(_RCDS):
         self.devices['pos_ang'] = PosAng(PosAng.DEVICES.TB)
         self.devices['injkckr'] = PowerSupplyPU(
             PowerSupplyPU.DEVICES.BO_INJ_KCKR)
+        # TB PosAng knobs (alternative to PosAng)
+        self.devices["tb_ch1"] = PowerSupply("TB-04:PS-CH-1")
+        self.devices["tb_injsept"] = PowerSupplyPU("TB-04:PU-InjSept")
+        self.devices["tb_cv1"] = PowerSupply("TB-04:PS-CV-1")
+        self.devices["tb_cv2"] = PowerSupply("TB-04:PS-CV-2")
         # LI LLRF
         self.devices['li_llrf'] = LILLRF()
         # BO LLRF
@@ -605,3 +645,26 @@ class OptimizeInjBO(_RCDS):
         self.data['currents'] = []
         self.prepare_evg()
         return True
+
+    def wait_set_pos(self, pos, tol=0.05, timeout=10):
+        """Wait positions RB reach the the desired SP vals.
+
+        Wait current RB values reach `pos` within a `tol` precision up to
+        `timeout` seconds.
+
+        Args:
+            pos (array): reference positions that have been set to SP PVs
+            tol (float): relative tolerance for comparing values.
+                i. e. |current_pos - pos| <= tol * |pos|. Defaults to 0.05
+            timeout (float): timeout in seconds. Defaults to 10 s.
+        """
+        sleep_time = 0.1
+        it = int(timeout/sleep_time)
+        for _ in range(it):
+            pos_ = self.get_current_position()
+            if _np.all(_np.isclose(pos_, pos, rtol=tol)):
+                _log.info('Positions have been set.')
+                break
+            _time.sleep(sleep_time)
+        else:
+            _log.warning('Timed out waiting positions be set.')
