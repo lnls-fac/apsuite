@@ -47,29 +47,57 @@ class LOCOAnalysis:
 
     def calc_twiss(self):
         """."""
+        mod = self.loco_fit['fit_model']
+        cav = mod.cavity_on
+        rad = mod.radiation_on
+        mod.cavity_on = False
+        mod.radiation_on = False
         self.twi_fit, *_ = pyaccel.optics.calc_twiss(
-            self.loco_fit['fit_model'], indices='open'
+            mod, indices='open'
         )
+        mod.cavity_on = cav
+        mod.radiation_on = rad
 
         if self.nom_model is None:
             self.nom_model, _ = self.get_nominal_model()
 
+        mod = self.nom_model
+        cav = mod.cavity_on
+        rad = mod.radiation_on
+        mod.cavity_on = False
+        mod.radiation_on = False
         self.twi_nom, *_ = pyaccel.optics.calc_twiss(
-            self.nom_model, indices='open'
+            mod, indices='open'
         )
+        mod.cavity_on = cav
+        mod.radiation_on = rad
 
     def calc_edteng(self):
         """."""
+        mod = self.loco_fit['fit_model']
+        cav = mod.cavity_on
+        rad = mod.radiation_on
+        mod.cavity_on = False
+        mod.radiation_on = False
         self.edteng_fit, *_ = pyaccel.optics.calc_edwards_teng(
-            self.loco_fit['fit_model'], indices='open'
+            mod, indices='open'
         )
+        mod.cavity_on = cav
+        mod.radiation_on = rad
 
         if self.nom_model is None:
             self.nom_model, _ = self.get_nominal_model()
 
+        mod = self.nom_model
+        cav = mod.cavity_on
+        rad = mod.radiation_on
+        mod.cavity_on = False
+        mod.radiation_on = False
         self.edteng_nom, *_ = pyaccel.optics.calc_edwards_teng(
-            self.nom_model, indices='open'
+            mod, indices='open'
         )
+        mod.cavity_on = cav
+        mod.radiation_on = rad
 
     def get_nominal_model(self):
         """."""
