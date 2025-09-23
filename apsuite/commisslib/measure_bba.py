@@ -1702,14 +1702,14 @@ class DoBBA(_BaseClass):
                     rmsx, rmsy, klpos - klneg
                 )
             )
-
-        self.data['measure'][bpmname] = {
-            'orbini': _np.array(orbini),
-            'orbpos': _np.array(orbpos),
-            'orbneg': _np.array(orbneg),
-            'klpos': klpos,
-            'klneg': klneg,
-        }
+        else:
+            self.data['measure'][bpmname] = {
+                'orbini': _np.array(orbini),
+                'orbpos': _np.array(orbpos),
+                'orbneg': _np.array(orbneg),
+                'klpos': klpos,
+                'klneg': klneg,
+            }
 
         print('    restoring initial conditions.')
         sofb.refx, sofb.refy = refx0, refy0
