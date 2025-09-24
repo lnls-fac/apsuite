@@ -363,7 +363,7 @@ class ParallelBBAParams(_ParamsBaseClass):
         self.timeout_wait_orbit = 3  # [s]
 
         self.corr_nr_iters = 6
-        self.ijac_tol = 1e-5
+        self.ijac_tol = 1e-7
 
         self.sofb_nrpoints = 10
         self.sofb_maxcorriter = 5
@@ -463,6 +463,33 @@ class DoParallelBBA(_BaseClass):
             nr_iters=self.params.sofb_maxcorriter,
             residue=self.params.sofb_maxorberr,
         )
+
+    def get_kicks(self):
+        sofb = self.devices['sofb']
+        return _np.hstack((
+            list(sofb.kickch),
+            list(sofb.kickcv),
+            list(sofb.kickrf))
+        )
+
+    def set_delta_kicks(self, dkicks):
+        sofb = self.devices['sofb']
+        nch, ncv, nrf = sofb._data.nr_ch, sofb._data.nr_cv, 1
+        if len(dkicks) != nch+ncv+nrf:
+            raise ValueError(f'invalid dim for dkicks, must have shape=({nch+ncv+nrf},)')
+        dch, dcv, drf = dkicks[:nch], dkicks[nch:ncv], dkicks[ncv:]
+
+        factch, factcv, factrf = sofb.mancorrgainch, sofb.mancorrgaincv, sofb.mancorrgainrf
+        sofb.deltakickch, sofb.deltakickcv, sofb.deltakickrf = dch, dcv, drf
+        nrsteps = _np.ceil(max(_np.abs(dch).max(), _np.abs(dcv).max()) / 1.0)
+        for i in range(int(nrsteps)):
+            sofb.mancorrgainch = (i + 1) / nrsteps * 100
+            sofb.mancorrgaincv = (i + 1) / nrsteps * 100
+            sofb.mancorrgainrf = (i + 1) / nrsteps * 100
+            sofb.cmd_applycorr_all()
+            _time.sleep(self.params.wait_correctors)
+        sofb.deltakickch, sofb.deltakickcv, sofb.deltakickrf = dch * 0, dcv * 0, drf * 0
+        sofb.mancorrgainch, sofb.mancorrgaincv = factch, factcv, factrf
 
     def get_tunes(self):
         tune = self.devices['tune']
@@ -623,16 +650,15 @@ class DoParallelBBA(_BaseClass):
         return jac_pos - jac_neg
 
     @staticmethod
-    def inverse_matrix(matrix, rcond=None):
+    def inverse_matrix(matrix, rcond=1e-8):
         return _np.dot(_np.linalg.pinv(_np.dot(matrix.T, matrix), rcond=rcond), matrix.T)
 
     def correct_ios(self, jacobian=None, track_tune=False):
         if jacobian is None:
             jacobian = self.get_ios_jacobian()
         inverse_jacobian = self.inverse_matrix(jacobian, self.params.ijac_tol)
-        sofb = self.devices['sofb']
         ios_iter, tune_iter, dkicks_iter = [], [], []
-        kicks_ini = _np.array(sofb.get_kicks())  #!!!!!!!!!!!!!!!!!!!!!!!!
+        kicks_ini = self.get_kicks()
         nr_iters = self.params.corr_nr_iters
         for i in range(nr_iters+1):
             if self._stopevt.is_set() or not self.havebeam:
@@ -646,9 +672,10 @@ class DoParallelBBA(_BaseClass):
                 break
             dkicks = list(-1 * _np.dot(inverse_jacobian, ios))
             dkicks_iter.append(dkicks)
-            sofb.set_delta_kicks(dkicks)         #!!!!!!!!!!!!!!!!!!!!!!!!
-        kicks_fim = _np.array(sofb.get_kicks())  #!!!!!!!!!!!!!!!!!!!!!!!!
-        self.data[f'group_{self.active_group_id:0d}'] = {
+            self.set_delta_kicks(dkicks)
+        kicks_fim = self.get_kicks()
+        group_name = f'group_{self.active_group_id:0d}'
+        self.data[group_name] = {
             'bpms':self.groups2dopbba[self.active_group_id],
             'ios_iter': ios_iter,
             'dkicks_iter': dkicks_iter,
@@ -657,7 +684,7 @@ class DoParallelBBA(_BaseClass):
             'ordering':self.get_group_ordering(),
             'delta_kl':self.get_group_delta_kl(),
         }
-        if track_tune: self.data['tune_iter'] = tune_iter
+        if track_tune: self.data[group_name]['tune_iter'] = tune_iter
 
     # #### private methods ####
     def _do_pbba(self):
