@@ -756,9 +756,10 @@ class DoParallelBBA(_BaseClass):
         for bpm in bpmnames:
             idx = bpmnames_all.index(bpm)
             self.data['measure'][bpm] = {'x0':orbit[idx], 'y0':orbit[idx+nbpms]}
+            self.data["scancenterx"][idx] = self.data['measure'][bpm]["x0"]
+            self.data["scancentery"][idx] = self.data['measure'][bpm]["y0"]
 
-        print("restoring initial conditions.")
-
+        # print("restoring initial conditions.") #! -> automatically restored before each group
 
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)
