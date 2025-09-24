@@ -1,8 +1,8 @@
 """."""
 
 import numpy as _np
-from pymodels import tb, bo, ts, si
 import pyaccel
+from pymodels import bo, si, tb, ts
 
 
 class OrbRespmat:
@@ -11,10 +11,10 @@ class OrbRespmat:
     _FREQ_DELTA = 10
     _ENERGY_DELTA = 1e-5
 
-    def __init__(self, model, acc='SI', use6dorb=False, corr_system='SOFB'):
+    def __init__(self, model, acc='SI', use6dtrack=False, corr_system='SOFB'):
         """."""
         self.model = model
-        self.use6dorb = use6dorb
+        self.use6dtrack = use6dtrack
 
         acc = acc.upper()
         if acc not in {'BO', 'SI'}:
@@ -38,10 +38,10 @@ class OrbRespmat:
     def get_respm(self, add_rfline=True):
         """."""
         cav = self.model.cavity_on
-        self.model.cavity_on = self.use6dorb
+        self.model.cavity_on = self.use6dtrack
 
         find_m = pyaccel.tracking
-        find_m = find_m.find_m66 if self.use6dorb else find_m.find_m44
+        find_m = find_m.find_m66 if self.use6dtrack else find_m.find_m44
         m_mat, t_mat = find_m(self.model, indices='open')
 
         nch = len(self.ch_idx)
@@ -150,7 +150,7 @@ class OrbRespmat:
     def _get_rfline(self):
         idx = self.rf_idx[0]
         rffreq = self.model[idx].frequency
-        if self.use6dorb:
+        if self.use6dtrack:
             dfreq = OrbRespmat._FREQ_DELTA
             self.model[idx].frequency = rffreq + dfreq
             orbp = pyaccel.tracking.find_orbit6(self.model, indices='open')
