@@ -363,11 +363,13 @@ class ParallelBBAParams(_ParamsBaseClass):
         self.timeout_wait_orbit = 3  # [s]
 
         self.corr_nr_iters = 6
-        self.ijac_tol = 1e-7
+        self.inv_jac_rcond = 1e-5
 
         self.sofb_nrpoints = 10
         self.sofb_maxcorriter = 5
         self.sofb_maxorberr = 5  # [um]
+
+        self.dotrack_tune = True
 
     def __str__(self):
         """."""
@@ -391,6 +393,8 @@ class DoParallelBBA(_BaseClass):
         self.data["scancenterx"] = _np.zeros(len(ParallelBBAParams.BPMNAMES))
         self.data["scancentery"] = _np.zeros(len(ParallelBBAParams.BPMNAMES))
         self.data["measure"] = dict()
+        self._model = None
+        self._famdata = None
 
         if self.isonline:
             self.devices["tune"] = _Tune(_Tune.DEVICES.SI)
@@ -495,47 +499,6 @@ class DoParallelBBA(_BaseClass):
         tune = self.devices['tune']
         return _np.array([tune.tunex, tune.tuney])
 
-    @staticmethod
-    def get_default_quads(model, fam_data):
-        """."""
-        quads_idx = _dcopy(fam_data["QN"]["index"])
-        qs_idx = [idx for idx in fam_data["QS"]["index"]]
-        quads_idx.extend(qs_idx)
-        quads_idx = _np.array([idx[len(idx) // 2] for idx in quads_idx])
-        quads_pos = _np.array(_pyacc.lattice.find_spos(model, quads_idx))
-
-        bpms_idx = _np.array([idx[0] for idx in fam_data["BPM"]["index"]])
-        bpms_pos = _np.array(_pyacc.lattice.find_spos(model, bpms_idx))
-
-        diff = _np.abs(bpms_pos[:, None] - quads_pos[None, :])
-        bba_idx = _np.argmin(diff, axis=1)
-        quads_bba_idx = quads_idx[bba_idx]
-        bpmnames = list()
-        qnames = list()
-        for i, qidx in enumerate(quads_bba_idx):
-            name = model[qidx].fam_name
-            idc = fam_data[name]["index"].index([qidx])
-            sub = fam_data[name]["subsection"][idc]
-            inst = fam_data[name]["instance"][idc]
-            name = "QS" if name.startswith(("S", "F")) else name
-            qname = "SI-{0:s}:PS-{1:s}-{2:s}".format(sub, name, inst)
-            qnames.append(qname.strip("-"))
-
-            sub = fam_data["BPM"]["subsection"][i]
-            inst = fam_data["BPM"]["instance"][i]
-            bname = "SI-{0:s}:DI-BPM-{1:s}".format(sub, inst)
-            bname = bname.strip("-")
-            bpmnames.append(bname.strip("-"))
-        return bpmnames, bpms_idx, qnames, quads_bba_idx
-
-    @staticmethod
-    def list_bpm_subsections(bpms):
-        """."""
-        return _DoBBA.list_bpm_subsections(bpms)
-
-    # ##### Make Figures #####
-    #! empty
-
     # #### pbba utils #####
     def get_group_delta_kl(self):
         bpms = self.get_active_bpmnames()
@@ -554,7 +517,7 @@ class DoParallelBBA(_BaseClass):
             raise ValueError('dim mismatch between the active group and \"strengths\".')
         quad_names = self.data["quadnames"]
         bpm_names = self.data["bpmnames"]
-        tunes = []
+        if track_tune: tunes = []
         for _o in order:
             bpmname = bpms[_o]
             quadname = quad_names[bpm_names.index(bpmname)]
@@ -566,9 +529,8 @@ class DoParallelBBA(_BaseClass):
                 return
             quad.strength = strengths[_o]
             _time.sleep(self.params.wait_quadrupole)
-            tunes.append(self.get_tunes())
-        if track_tune:
-            return tunes
+            if track_tune: tunes.append(self.get_tunes())
+        if track_tune: return tunes
         return
 
     def get_strengths(self):
@@ -602,11 +564,63 @@ class DoParallelBBA(_BaseClass):
             return orb_pos - orb_neg, tune_variation
         return orb_pos - orb_neg, None
 
-    def get_ios_jacobian(self, model=None, fam_data=None):
+    @staticmethod
+    def get_default_quads(model, fam_data):
+        """."""
+        quads_idx = _dcopy(fam_data["QN"]["index"])
+        qs_idx = [idx for idx in fam_data["QS"]["index"]]
+        quads_idx.extend(qs_idx)
+        quads_idx = _np.array([idx[len(idx) // 2] for idx in quads_idx])
+        quads_pos = _np.array(_pyacc.lattice.find_spos(model, quads_idx))
+
+        bpms_idx = _np.array([idx[0] for idx in fam_data["BPM"]["index"]])
+        bpms_pos = _np.array(_pyacc.lattice.find_spos(model, bpms_idx))
+
+        diff = _np.abs(bpms_pos[:, None] - quads_pos[None, :])
+        bba_idx = _np.argmin(diff, axis=1)
+        quads_bba_idx = quads_idx[bba_idx]
+        bpmnames = list()
+        qnames = list()
+        for i, qidx in enumerate(quads_bba_idx):
+            name = model[qidx].fam_name
+            idc = fam_data[name]["index"].index([qidx])
+            sub = fam_data[name]["subsection"][idc]
+            inst = fam_data[name]["instance"][idc]
+            name = "QS" if name.startswith(("S", "F")) else name
+            qname = "SI-{0:s}:PS-{1:s}-{2:s}".format(sub, name, inst)
+            qnames.append(qname.strip("-"))
+
+            sub = fam_data["BPM"]["subsection"][i]
+            inst = fam_data["BPM"]["instance"][i]
+            bname = "SI-{0:s}:DI-BPM-{1:s}".format(sub, inst)
+            bname = bname.strip("-")
+            bpmnames.append(bname.strip("-"))
+        return bpmnames, bpms_idx, qnames, quads_bba_idx
+
+    @property
+    def model(self):
+        return self._model
+
+    @model.setter
+    def model(self, value):
+        self._model = value
+        self._famdata = _pymodels.si.families.get_family_data(self._model)
+
+    @property
+    def fam_data(self):
+        return self._famdata
+
+    @fam_data.setter
+    def fam_data(self, value):
+        raise ValueError('\n     Can\'t set fam_data manually, try setting a model')
+
+    def get_ios_jacobian(self):
+        model = self._model
         if model is None:
+            print("\n     undefined model... setting a default one")
             model = _pymodels.si.fitted_models.vertical_dispersion_and_coupling(_pymodels.si.create_accelerator())
-        if fam_data is None:
-            fam_data = _pymodels.si.families.get_family_data(model)
+            self.model = model
+        fam_data = self._famdata
         use6d = any([model.cavity_on, model.radiation_on>0])
         _orbcorr = _OrbitCorr(model=model, acc='SI', corr_system='SOFB', use6dorb=use6d)
         bpms = self.get_active_bpmnames()
@@ -650,13 +664,13 @@ class DoParallelBBA(_BaseClass):
         return jac_pos - jac_neg
 
     @staticmethod
-    def inverse_matrix(matrix, rcond=1e-8):
+    def inverse_matrix(matrix, rcond=1e-5):
         return _np.dot(_np.linalg.pinv(_np.dot(matrix.T, matrix), rcond=rcond), matrix.T)
 
     def correct_ios(self, jacobian=None, track_tune=False):
         if jacobian is None:
             jacobian = self.get_ios_jacobian()
-        inverse_jacobian = self.inverse_matrix(jacobian, self.params.ijac_tol)
+        inverse_jacobian = self.inverse_matrix(jacobian, self.params.inv_jac_rcond)
         ios_iter, tune_iter, dkicks_iter = [], [], []
         kicks_ini = self.get_kicks()
         nr_iters = self.params.corr_nr_iters
@@ -734,12 +748,10 @@ class DoParallelBBA(_BaseClass):
 
         tini = _datetime.datetime.fromtimestamp(_time.time())
         strtini = tini.strftime("%Hh%Mm%Ss")
-        print("{:s} --> Doing PBBA for Group {:d}".format(strtini))
+        print("{:s} --> Doing PBBA for Group {:d}".format(strtini, group_id))
 
-        sofb = self.devices["sofb"]
-
-        ios_jac = self.get_ios_jacobian()
-        self.correct_ios(ios_jac)
+        ios_jac = self.get_ios_jacobian(self._model, self._famdata)
+        self.correct_ios(ios_jac, self.params.dotrack_tune)
         orbit = self.get_orbit()
         for bpm in bpmnames:
             idx = bpmnames_all.index(bpm)
