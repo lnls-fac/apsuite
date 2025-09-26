@@ -1,42 +1,44 @@
 """Main module."""
 
+import operator as _opr
 import time as _time
-from threading import Thread as _Thread
 from copy import deepcopy as _dcopy
 from functools import reduce as _red
-import operator as _opr
+from threading import Thread as _Thread
 
-import numpy as _np
 import matplotlib.pyplot as _mplt
+import numpy as _np
+import pyaccel as _pa
+from mathphys.functions import (
+    get_namedtuple as _get_namedtuple,
+    load as _load,
+    save as _save
+)
 from scipy.signal import (
     find_peaks as _find_peaks,
-    savgol_filter as _savgol_filter,
+    savgol_filter as _savgol_filter
 )
-
-from mathphys.functions import save as _save, load as _load
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 from siriuspy.devices import (
-    StrengthConv,
-    PowerSupply,
+    ASLLRF,
     CurrInfoSI,
-    Trigger,
     Event,
     EVG,
-    RFGen,
-    Tune,
     FamBPMs,
-    ASLLRF,
+    PowerSupply,
+    RFGen,
+    StrengthConv,
+    Trigger,
+    Tune
 )
-from siriuspy.sofb.csdev import SOFBFactory
 from siriuspy.search import LLTimeSearch as _LLTime
-import pyaccel as _pa
-from mathphys.functions import get_namedtuple as _get_namedtuple
+from siriuspy.sofb.csdev import SOFBFactory
+
 from .. import asparams as _asparams
 from ..utils import (
     ParamsBaseClass as _ParamsBaseClass,
-    ThreadedMeasBaseClass as _ThreadBaseClass,
+    ThreadedMeasBaseClass as _ThreadBaseClass
 )
-
 from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals
 from .measure_orbit_stability import OrbitAnalysis as _OrbitAnalysis
 
