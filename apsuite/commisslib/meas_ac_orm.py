@@ -74,6 +74,7 @@ class ACORMParams(_ParamsBaseClass):
         self.rf_step_kick = 5  # [Hz]
         self.rf_step_delay = 200e-3  # [s]
         self.rf_phase_amp = 2  # [°]
+        self._rf_llrf2use = 'B'  # (A or B)
 
     def __str__(self):
         """."""
@@ -122,6 +123,7 @@ class ACORMParams(_ParamsBaseClass):
         stg += ftmp('rf_step_kick', self.rf_step_kick, '[Hz]')
         stg += ftmp('rf_step_delay', self.rf_step_delay, '[s]')
         stg += ftmp('rf_phase_amp', self.rf_phase_amp, '[°]')
+        stg += ftmp('rf_llrf2use', self.rf_llrf2use, '(A or B)')
         return stg
 
     @property
@@ -141,6 +143,16 @@ class ACORMParams(_ParamsBaseClass):
             self._rf_mode = self.RFModes._fields.index(value)
         elif int(value) in self.RFModes:
             self._rf_mode = int(value)
+
+    @property
+    def rf_llrf2use(self):
+        """."""
+        return self._rf_llrf2use
+
+    @rf_llrf2use.setter
+    def rf_llrf2use(self, value):
+        if isinstance(value, str) and value.upper() in {'A', 'B'}:
+            self._rf_llrf2use = value.upper()
 
     @staticmethod
     def find_primes(n_primes, start=3):
@@ -1159,9 +1171,12 @@ class MeasACORM(_ThreadBaseClass):
         t00 = _time.time()
         self._log('Creating General Devices  -> ', end='')
         self.devices['currinfo'] = CurrInfoSI()
+
         # Create RF generator object
         props = ['GeneralFreq-SP', 'GeneralFreq-RB']
         self.devices['rfgen'] = RFGen(props2init=props)
+
+        # Create LLRF Devices
         props = [
             'ALRef-SP',
             'AmpRefMin-SP',
@@ -1173,7 +1188,9 @@ class MeasACORM(_ThreadBaseClass):
             'CondEnbl-Sts',
             'CondDutyCycle-Mon',
         ]
-        self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SIA, props2init=props)
+        self.devices['llrfa'] = ASLLRF(ASLLRF.DEVICES.SIA, props2init=props)
+        self.devices['llrfb'] = ASLLRF(ASLLRF.DEVICES.SIB, props2init=props)
+
         # Create Tune object:
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self._log(f'ET: = {_time.time() - t00:.2f}s')
@@ -1381,14 +1398,21 @@ class MeasACORM(_ThreadBaseClass):
             self._meas_finished_ok = False
         self._log(f'Done! ET: {_time.time() - t00:.2f}s')
 
-        llrf = self.devices['llrf']
         data = dict()
-        data['llrf_cond_voltage_min'] = llrf.voltage_refmin_sp
-        data['llrf_cond_phase_min'] = llrf.phase_refmin_sp
-        data['llrf_cond_voltage'] = llrf.voltage_sp
-        data['llrf_cond_phase'] = llrf.phase_sp
-        data['llrf_cond_duty_cycle'] = llrf.conditioning_duty_cycle
-        data['llrf_cond_state'] = llrf.conditioning_state
+        llrf = self.devices['llrfa']
+        data['llrfa_cond_voltage_min'] = llrf.voltage_refmin_sp
+        data['llrfa_cond_phase_min'] = llrf.phase_refmin_sp
+        data['llrfa_cond_voltage'] = llrf.voltage_sp
+        data['llrfa_cond_phase'] = llrf.phase_sp
+        data['llrfa_cond_duty_cycle'] = llrf.conditioning_duty_cycle
+        data['llrfa_cond_state'] = llrf.conditioning_state
+        llrf = self.devices['llrfb']
+        data['llrfb_cond_voltage_min'] = llrf.voltage_refmin_sp
+        data['llrfb_cond_phase_min'] = llrf.phase_refmin_sp
+        data['llrfb_cond_voltage'] = llrf.voltage_sp
+        data['llrfb_cond_phase'] = llrf.phase_sp
+        data['llrfb_cond_duty_cycle'] = llrf.conditioning_duty_cycle
+        data['llrfb_cond_state'] = llrf.conditioning_state
 
         if par.rf_mode == par.RFModes.Phase:
             t00 = _time.time()
@@ -1426,14 +1450,16 @@ class MeasACORM(_ThreadBaseClass):
         rfgen.frequency = freq0
 
     def _turn_on_llrf_conditioning(self):
-        llrf = self.devices['llrf']
+        stg_llrf = 'llrf' + self.params.rf_llrf2use.lower()
+        llrf = self.devices[stg_llrf]
         llrf.voltage_refmin = llrf.voltage_sp
         llrf.phase_refmin = llrf.phase_sp - self.params.rf_phase_amp
         llrf.set_duty_cycle(self.RF_CONDITIONING_DUTY)
         llrf.cmd_turn_on_conditioning()
 
     def _turn_off_llrf_conditioning(self):
-        llrf = self.devices['llrf']
+        stg_llrf = 'llrf' + self.params.rf_llrf2use.lower()
+        llrf = self.devices[stg_llrf]
         llrf.cmd_turn_off_conditioning()
         llrf.voltage_refmin = self.RF_CONDITIONING_VOLTAGEMIN
         llrf.phase_refmin = llrf.phase_sp
