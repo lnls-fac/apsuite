@@ -1068,9 +1068,16 @@ class MeasACORM(_ThreadBaseClass):
         props = ['GeneralFreq-SP', 'GeneralFreq-RB']
         self.devices['rfgen'] = RFGen(props2init=props)
         props = [
-            'mV:AL:REF-SP', 'mV:AMPREF:MIN:S', 'PL:REF:S', 'PHSREF:MIN:S',
-            'COND:DC:S', 'COND:DC', 'PULSE:S', 'PULSE',
-            ]
+            'ALRef-SP',
+            'AmpRefMin-SP',
+            'PLRef-SP',
+            'PhsRefMin-SP',
+            'CondDuty-SP',
+            'CondDuty-RB',
+            'CondEnbl-Sel',
+            'CondEnbl-Sts',
+            'CondDutyCycle-Mon'
+        ]
         self.devices['llrf'] = ASLLRF(ASLLRF.DEVICES.SIA, props2init=props)
         # Create Tune object:
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
