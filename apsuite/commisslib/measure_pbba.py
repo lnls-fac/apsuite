@@ -385,6 +385,49 @@ class ParallelBBAParams(_ParamsBaseClass):
         stg += f'sofb_maxorberr = {self.sofb_maxorberr:.3f}'
         return stg
 
+    @staticmethod
+    def get_default_groups():
+        """."""
+        return [
+            sorted(
+                [
+                    e
+                    for e in ParallelBBAParams.BPMNAMES
+                    if (e.sub[2:], e.idx) in k
+                ],
+                key=lambda x: {
+                    'Q4': 0,
+                    'Q1': 1,
+                    'QDB2': 2,
+                    'QDP2': 3,
+                    'QS': 4,
+                }.get(
+                    ParallelBBAParams.QUADNAMES[
+                        ParallelBBAParams.BPMNAMES.index(x)
+                    ].dev,
+                    999,
+                ),
+            )
+            for k in [
+                [('M2', ''), ('C3', '1')],
+                [('C1', '1'), ('C3', '2')],
+                [('C1', '2'), ('C4', '')],
+                [('C2', ''), ('M1', '')],
+            ]
+        ]
+
+    def get_default_dkl(self, groups=None):
+        """."""
+        groups = (
+            ParallelBBAParams.get_default_groups()
+            if groups is None
+            else groups
+        )
+        dkl = [_np.ones(len(g)) * self.quad_deltakl for g in groups]
+        for d in dkl:
+            d[::2] *= -1
+        return dkl
+
 
 class BBAPairPVName(_PVName):
     """."""
@@ -461,8 +504,10 @@ class DoParallelBBA(_BaseClass):
         self.data['bpmnames'] = list(ParallelBBAParams.BPMNAMES)
         self.data['quadnames'] = list(ParallelBBAParams.QUADNAMES)
         self.data['measure'] = list()
-        self.data['groups2dopbba'] = list()
-        self.data['delta_kl'] = list()
+        self.data['groups2dopbba'] = ParallelBBAParams.get_default_groups()
+        self.data['delta_kl'] = self.params.get_default_dkl(
+            self.data['groups2dopbba']
+        )
         self.data['jacobians'] = list()
         self._model = None
         self._fam_data = None
