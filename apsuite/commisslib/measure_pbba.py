@@ -821,6 +821,57 @@ class DoParallelBBA(_BaseClass):
             'tune_variation': _np.array(tune_variation),
         }
 
+    def process_data(self):
+        """."""
+        for group_id in range(len(self.data['groups2dopbba'])):
+            self.process_data_single_group(group_id)
+
+    def process_data_single_group(self, group_id):
+        """."""
+        meas_data = self.data['measure'][group_id]
+        bpmnames = self.data['bpmnames']
+        nbpms = len(bpmnames)
+        orbit = meas_data['orbit_end']
+
+        # #### error estimation ? #####
+        # ios_iter = meas_data['ios_iter']
+        # ios_init = ios_iter[0]
+        # iosx_init, iosy_init = ios_init[:nbpms], ios_init[nbpms:]
+        # ios_end = ios_iter[-1]
+        # iosx_end, iosy_end = ios_end[:nbpms], ios_end[nbpms:]
+        stdx0 = 0.0
+        stdy0 = 0.0
+
+        for bpm in meas_data['bpms']:
+            bpm_idx = bpmnames.index(bpm)
+            self.analysis[bpm] = {
+                'x0': orbit[bpm_idx],
+                'y0': orbit[bpm_idx + nbpms],
+                'stdx0': stdx0,
+                'stdy0': stdy0
+            }
+
+    def get_pbba_results(self, error=False):
+        """."""
+        bpms = self.data['bpmnames']
+        bbax = _np.zeros(len(bpms))
+        bbay = _np.zeros(len(bpms))
+        if error:
+            bbaxerr = _np.zeros(len(bpms))
+            bbayerr = _np.zeros(len(bpms))
+        for idx, bpm in enumerate(bpms):
+            res = self.analysis.get(bpm)
+            if not res:
+                continue
+            bbax[idx] = res['x0']
+            bbay[idx] = res['y0']
+            if error and 'stdx0' in res:
+                bbaxerr[idx] = res['stdx0']
+                bbayerr[idx] = res['stdy0']
+        if error:
+            return bbax, bbay, bbaxerr, bbayerr
+        return bbax, bbay
+
     # #### private methods ####
     def _get_quads_indices_in_model(self, quadnames):
         """."""
