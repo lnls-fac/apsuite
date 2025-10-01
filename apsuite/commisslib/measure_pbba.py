@@ -498,7 +498,6 @@ class DoParallelBBA(_BaseClass):
         super().__init__(
             params=ParallelBBAParams(), target=self._do_pbba, isonline=isonline
         )
-        # self._groups2dopbba: list[PBBAGroup] = list()
         self.clt_confdb = ConfigDBClient(config_type='si_bbadata')
         self.clt_confdb._TIMEOUT_DEFAULT = 20
         self.data['bpmnames'] = list(ParallelBBAParams.BPMNAMES)
@@ -530,25 +529,7 @@ class DoParallelBBA(_BaseClass):
     @property
     def groups2dopbba(self):
         """."""
-        # return self.data['groups2dopbba']
         return _dcopy(self.data['groups2dopbba'])
-
-    # @groups2dopbba.setter
-    # def groups2dopbba(self, groups):
-    #     pbba_groups_list = []
-    #     for group in groups:
-    #         if isinstance(group, PBBAGroup):
-    #             pbba_groups_list.append(group)
-    #         elif isinstance(group, (list, tuple, _np.ndarray)):
-    #             if all(isinstance(x, str) for x in group):
-    #                 pbba_groups_list.append(PBBAGroup(group))
-    #             elif all(isinstance(x, BBAPairPVName) for x in group):
-    #                 pbba_groups_list.append(PBBAGroup(group))
-    #             else:
-    #                 raise ValueError('')
-    #         else:
-    #             raise ValueError('')
-    #     self.data['groups2dopbba'] = pbba_groups_list
 
     @groups2dopbba.setter
     def groups2dopbba(self, groups):
@@ -715,7 +696,6 @@ class DoParallelBBA(_BaseClass):
 
     def meas_ios(self, group_id):
         """."""
-        # delta_strens = self.data['groups2dopbba'][group_id].delta_kl
         delta_strens = self.data['delta_kl'][group_id]
         strens_orig = self.get_quad_strengths(group_id)
         if not self.set_quad_strengths(
@@ -773,7 +753,6 @@ class DoParallelBBA(_BaseClass):
         )
         for group_id in groups_to_calc:
             group = self.data['groups2dopbba'][group_id]
-            # delta_strens = group.delta_kl
             try:
                 delta_strens = self.data['delta_kl'][group_id]
             except Exception as e:
@@ -957,9 +936,6 @@ class DoParallelBBA(_BaseClass):
         group_data['ios_iter'] = ios_iter
         group_data['dkicks_iter'] = dkicks_iter
         group_data['orbit_end'] = self.get_orbit()
-        # group_data['delta_kl'] = self.data['groups2dopbba'][
-        #     group_id
-        # ].delta_kl
         group_data['delta_kl'] = self.data['delta_kl'][group_id]
         self.data['measure'].append(group_data)
 
