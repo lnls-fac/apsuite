@@ -373,7 +373,17 @@ class ParallelBBAParams(_ParamsBaseClass):
 
     def __str__(self):
         """."""
-        return '...'
+        stg = ''
+        stg += f'quad_deltakl = {self.quad_deltakl:.3f}'
+        stg += f'wait_correctors = {self.wait_correctors:.3f}'
+        stg += f'wait_quadrupole = {self.wait_quadrupole:.3f}'
+        stg += f'timeout_wait_orbit = {self.timeout_wait_orbit:.3f}'
+        stg += f'corr_nr_iters = {self.corr_nr_iters:.3f}'
+        stg += f'inv_jac_rcond = {self.inv_jac_rcond:.3f}'
+        stg += f'sofb_nrpoints = {self.sofb_nrpoints:.3f}'
+        stg += f'sofb_maxcorriter = {self.sofb_maxcorriter:.3f}'
+        stg += f'sofb_maxorberr = {self.sofb_maxorberr:.3f}'
+        return stg
 
 
 class BBAPairPVName(_PVName):
@@ -464,7 +474,7 @@ class DoParallelBBA(_BaseClass):
 
     def __str__(self):
         """."""
-        return '...'
+        return str(self.params)
 
     @property
     def havebeam(self):
