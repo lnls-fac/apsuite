@@ -906,6 +906,14 @@ class DoParallelBBA(_BaseClass):
         else:
             sts = self.STATUS.Success
 
+        # final ios
+        ios, sts = self.meas_ios(group_id)
+        if not sts:
+            self._restore_init_conditions(
+                group_id, init_strengths=group_data['strengths_init']
+            )
+        ios_iter.append(ios)
+
         group_data['kicks_end'] = self.get_kicks()
         group_data['ios_iter'] = ios_iter
         group_data['dkicks_iter'] = dkicks_iter
