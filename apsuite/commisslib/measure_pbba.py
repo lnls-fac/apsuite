@@ -607,6 +607,8 @@ class DoParallelBBA(_BaseClass):
 
     def get_orbit(self):
         """."""
+        if not self.havebeam:
+            return
         sofb = self.devices['sofb']
         sofb.cmd_reset()
         sofb.wait_buffer(self.params.timeout_wait_orbit)
