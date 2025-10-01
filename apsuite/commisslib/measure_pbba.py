@@ -723,27 +723,26 @@ class DoParallelBBA(_BaseClass):
         _orbcorr = _OrbitCorr(
             model=model, acc='SI', corr_system='SOFB', use6dtrack=True
         )
-        quadindices = self.get_quads_indices_in_model(quadnames)
+        quadindices = self._get_quads_indices_in_model(self.data['quadnames'])
+
+        def _get_or_set_kl(bname, value=None):
+            _do = getattr if value is None else setattr
+            bidx = self.data['bpmnames'].index(bname)
+            qidx = quadindices[bidx]
+            if 'QS' == self.data['quadnames'][bidx].dev:
+                return _do(model[qidx], 'KsL', value)
+            else:
+                return _do(model[qidx], 'KL', value)
 
         def _get_quad_strengths(group):
             strens = []
             for bname in group:
-                _id = bnames.index(bname)
-                qidx = quadindices[_id]
-                if 'QS' in qnames[_id]:
-                    strens.append(model[qidx].KsL)
-                else:
-                    strens.append(model[qidx].KL)
+                strens.append(_get_or_set_kl(bname))
             return _np.array(strens)
 
         def _set_quad_strengths(group, strengths):
             for strength, bname in zip(strengths, group):
-                _id = bnames.index(bname)
-                qidx = quadindices[_id]
-                if 'QS' in qnames[_id]:
-                    model[qidx].KsL = strength
-                else:
-                    model[qidx].KL = strength
+                _get_or_set_kl(bname, strength)
 
         jacobians = []
         groups_to_calc = (
@@ -796,65 +795,42 @@ class DoParallelBBA(_BaseClass):
         u_mat, svals, vt_mat = _np.linalg.svd(jacobian)
 
         model = self.model
-        quadindices = self.get_quads_indices_in_model(quadnames)
-        # delta_strens = self.data['groups2dopbba'][group_id].delta_kl
+        quadindices = self._get_quads_indices_in_model(self.data['quadnames'])
         delta_strens = self.data['delta_kl'][group_id]
         group = self.data['groups2dopbba'][group_id]
 
         tune_variation = [_pyacc.optics.get_frac_tunes(model)[:2]]
 
-        for sign in [1, -1, 1]:
+        for fac in [1, -2, 1]:
             for dkl, bpm in zip(delta_strens, group):
-                _id = bnames.index(bpm)
-                qname = qnames[_id]
+                _id = self.data['bpmnames'].index(bpm)
+                qname = self.data['quadnames'][_id]
                 qidx = quadindices[_id]
                 if 'QS' in qname:
-                    model[qidx].KsL += sign * dkl / 2
+                    model[qidx].KsL += fac * dkl / 2
                 else:
-                    model[qidx].KL += sign * dkl / 2
+                    model[qidx].KL += fac * dkl / 2
                 tune_variation.append(_pyacc.optics.get_frac_tunes(model)[:2])
 
         return {
             'u_matrix': u_mat,
             'vt_matrix': vt_mat,
             'svals': svals,
-            'tune_variation': tune_variation,
+            'tune_variation': _np.array(tune_variation),
         }
 
     # #### private methods ####
     def _get_quads_indices_in_model(self, quadnames):
         """."""
-        # quads_idx = _dcopy(fam_data['QN']['index'])
-        # qs_idx = [idx for idx in fam_data['QS']['index']]
-        # quads_idx.extend(qs_idx)
-        # quads_idx = _np.array([idx[len(idx) // 2] for idx in quads_idx])
-        # quads_pos = _np.array(_pyacc.lattice.find_spos(model, quads_idx))
-
-        # bpms_idx = _np.array([idx[0] for idx in fam_data['BPM']['index']])
-        # bpms_pos = _np.array(_pyacc.lattice.find_spos(model, bpms_idx))
-
-        # diff = _np.abs(bpms_pos[:, None] - quads_pos[None, :])
-        # bba_idx = _np.argmin(diff, axis=1)
-        # quads_bba_idx = quads_idx[bba_idx]
-        # bpmnames = list()
-        # qnames = list()
-        # for i, qidx in enumerate(quads_bba_idx):
-        #     name = model[qidx].fam_name
-        #     idc = fam_data[name]['index'].index([qidx])
-        #     sub = fam_data[name]['subsection'][idc]
-        #     inst = fam_data[name]['instance'][idc]
-        #     name = 'QS' if name.startswith(('S', 'F')) else name
-        #     qname = 'SI-{0:s}:PS-{1:s}-{2:s}'.format(sub, name, inst)
-        #     qnames.append(qname.strip('-'))
-
-        #     sub = fam_data['BPM']['subsection'][i]
-        #     inst = fam_data['BPM']['instance'][i]
-        #     bname = 'SI-{0:s}:DI-BPM-{1:s}'.format(sub, inst)
-        #     bname = bname.strip('-')
-        #     bpmnames.append(bname.strip('-'))
-        # return bpmnames, bpms_idx, qnames, quads_bba_idx
-        quad_indices = _np.zeros(len(quadnames), dtype=int)
-        return quad_indices
+        fam_data = self.fam_data
+        quadindices = []
+        for qname in quadnames:
+            key = qname.dev
+            idx = fam_data[key]['devnames'].index(qname)
+            qindex = fam_data[key]['index'][idx]
+            qindex = qindex[0] if len(qindex) == 1 else qindex
+            quadindices.append(qindex)
+        return quadindices
 
     def _do_pbba(self):
         tini = _datetime.datetime.fromtimestamp(_time.time())
@@ -912,16 +888,14 @@ class DoParallelBBA(_BaseClass):
             print('    {:02d}/{:02d} --> '.format(i + 1, nr_iters), end='')
             if self._stopevt.is_set() or not self.havebeam:
                 self._restore_init_conditions(
-                    group_id,
-                    init_strengths=group_data['strengths_init'],
+                    group_id, init_strengths=group_data['strengths_init']
                 )
                 print('   exiting...')
                 break
             ios, sts = self.meas_ios(group_id)
             if not sts:
                 self._restore_init_conditions(
-                    group_id,
-                    init_strengths=group_data['strengths_init'],
+                    group_id, init_strengths=group_data['strengths_init']
                 )
                 break
             ios_iter.append(ios)
@@ -951,8 +925,6 @@ class DoParallelBBA(_BaseClass):
 
     def _restore_init_conditions(self, group_id, init_strengths):
         """."""
-        self.set_quad_strengths(
-            group_id, init_strengths, ignore_timeout=True
-        )
+        self.set_quad_strengths(group_id, init_strengths, ignore_timeout=True)
         _time.sleep(self.params.wait_quadrupole)
         self.correct_orbit()
