@@ -445,7 +445,9 @@ class DoParallelBBA(_BaseClass):
         super().__init__(
             params=ParallelBBAParams(), target=self._do_pbba, isonline=isonline
         )
-        self._groups2dopbba: list[PBBAGroup] = list()
+        # self._groups2dopbba: list[PBBAGroup] = list()
+        self._groups2dopbba: list[_PVName] = list()
+        self._delta_kl: list[_np.ndarray] = list()
         self.clt_confdb = ConfigDBClient(config_type='si_bbadata')
         self.clt_confdb._TIMEOUT_DEFAULT = 20
         self.data['bpmnames'] = list(ParallelBBAParams.BPMNAMES)
@@ -480,24 +482,50 @@ class DoParallelBBA(_BaseClass):
     @property
     def groups2dopbba(self):
         """."""
-        return self._groups2dopbba
+        # return self._groups2dopbba
+        return _dcopy(self._groups2dopbba)
+
+    # @groups2dopbba.setter
+    # def groups2dopbba(self, groups):
+    #     pbba_groups_list = []
+    #     for group in groups:
+    #         if isinstance(group, PBBAGroup):
+    #             pbba_groups_list.append(group)
+    #         elif isinstance(group, (list, tuple, _np.ndarray)):
+    #             if all(isinstance(x, str) for x in group):
+    #                 pbba_groups_list.append(PBBAGroup(group))
+    #             elif all(isinstance(x, BBAPairPVName) for x in group):
+    #                 pbba_groups_list.append(PBBAGroup(group))
+    #             else:
+    #                 raise ValueError('')
+    #         else:
+    #             raise ValueError('')
+    #     self._groups2dopbba = pbba_groups_list
 
     @groups2dopbba.setter
     def groups2dopbba(self, groups):
-        pbba_groups_list = []
-        for group in groups:
-            if isinstance(group, PBBAGroup):
-                pbba_groups_list.append(group)
-            elif isinstance(group, (list, tuple, _np.ndarray)):
-                if all(isinstance(x, str) for x in group):
-                    pbba_groups_list.append(PBBAGroup(group))
-                elif all(isinstance(x, BBAPairPVName) for x in group):
-                    pbba_groups_list.append(PBBAGroup(group))
-                else:
-                    raise ValueError('')
-            else:
-                raise ValueError('')
-        self._groups2dopbba = pbba_groups_list
+        self._groups2dopbba = [
+            [_PVName(bpm) for bpm in group if isinstance(bpm, str)]
+            for group in groups
+            if isinstance(group, (list, tuple, _np.ndarray))
+        ]
+
+    @property
+    def delta_kl(self):
+        """."""
+        return _dcopy(self._delta_kl)
+
+    @delta_kl.setter
+    def delta_kl(self, value):
+        _max = self.params.quad_deltakl
+        for i, group in enumerate(self._groups2dopbba):
+            if len(value[i]) != len(group):
+                raise ValueError(
+                    f'size mismatch between group {i} and given delta_kl'
+                )
+            if any([abs(v) > _max for v in value[i]]):
+                raise ValueError(f"values for delta kl can't exceed {_max}")
+        self._delta_kl = _dcopy(value)
 
     def connect_to_quadrupoles(self):
         """."""
@@ -599,7 +627,8 @@ class DoParallelBBA(_BaseClass):
 
     def meas_ios(self, group_id):
         """."""
-        delta_strens = self._groups2dopbba[group_id].delta_kl
+        # delta_strens = self._groups2dopbba[group_id].delta_kl
+        delta_strens = self._delta_kl[group_id]
         strens_orig = self.get_strengths(group_id)
         _sts = self.set_strengths(group_id, strens_orig + delta_strens / 2)
         if not _sts:
@@ -715,7 +744,13 @@ class DoParallelBBA(_BaseClass):
         )
         groups_to_calc = [self._groups2dopbba[i] for i in groups_to_calc]
         for group in groups_to_calc:
-            delta_strens = group.delta_kl
+            # delta_strens = group.delta_kl
+            try:
+                delta_strens = self._delta_kl[self._groups2dopbba.index(group)]
+            except Exception as e:
+                str_msg = 'undefined or empty "delta_kl"'
+                str_msg += f' of group {self._groups2dopbba.index(group)}'
+                raise IndexError(str_msg) from e
             strens_orig = _get_strengths(group)
 
             _set_strengths(group, strens_orig + delta_strens / 2)
@@ -735,11 +770,20 @@ class DoParallelBBA(_BaseClass):
             _set_strengths(group, strens_orig)
             jacobians.append(jac_pos - jac_neg)
 
+        problems = []
+        for i, jac in enumerate(jacobians):
+            if _np.any(_np.isnan(jac)):
+                group_id = self._groups2dopbba.index(groups_to_calc[i])
+                problems.append(group_id)
+        if problems:
+            str_msg = 'Error(s) when obtaining the jacobian'
+            str_msg += f'for group(s): {problems}'
+            raise ValueError(str_msg)
+
         return jacobians
 
     def analyze_group(self, group_id):
         """Helper function to analyze group's properties."""
-        print(f'Analyzing group {group_id:2d}:')
         try:
             jacobian = self._jacobians[group_id]
         except Exception:
@@ -750,7 +794,8 @@ class DoParallelBBA(_BaseClass):
         bnames, _, qnames, quadindices = self.get_default_quads(
             model, self._famdata
         )
-        delta_strens = self._groups2dopbba[group_id].delta_kl
+        # delta_strens = self._groups2dopbba[group_id].delta_kl
+        delta_strens = self._delta_kl[group_id]
 
         tune_variation = [_pyacc.optics.get_frac_tunes(model, dim='4D')]
 
@@ -801,7 +846,8 @@ class DoParallelBBA(_BaseClass):
         """Helper function to analyze the groups' properties."""
         anl = dict()
         for group_id in range(len(self._groups2dopbba)):
-            anl[f'group_{group_id:2d}'] = self.analyze_group(group_id)
+            print(f'Analyzing group: {group_id:d}')
+            anl[f'group_{group_id:d}'] = self.analyze_group(group_id)
         return anl
 
     @property
@@ -859,9 +905,10 @@ class DoParallelBBA(_BaseClass):
         self.data[group_name]['kicks_fim'] = self.get_kicks()
         self.data[group_name]['ios_iter'] = ios_iter
         self.data[group_name]['dkicks_iter'] = dkicks_iter
-        self.data[group_name]['delta_kl'] = self._groups2dopbba[
-            group_id
-        ].delta_kl
+        # self.data[group_name]['delta_kl'] = self._groups2dopbba[
+        #     group_id
+        # ].delta_kl
+        self.data[group_name]['delta_kl'] = self._delta_kl[group_id]
 
         return DoParallelBBA.STATUS.Success
 
