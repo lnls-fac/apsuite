@@ -148,7 +148,7 @@ class NOECOFit(LeastSquaresOptimize):
         print(f'Setting RF freq. to {frequency:.8e}')
         model[cav_idx].frequency = frequency
 
-    def get_strengths_(self):
+    def get_strengths(self):
         """."""
         strengths = list()
         for fam in self.params.sextfams2fit:
@@ -156,7 +156,7 @@ class NOECOFit(LeastSquaresOptimize):
             strengths.append(self.model[idc].SL)
         return _np.array(strengths)
 
-    def set_strengths_(self, strengths):
+    def set_strengths(self, strengths):
         """."""
         for stren, fam in zip(strengths, self.params.sextfams2fit):
             idcs = _pa.lattice.flatten(self.famdata[fam]['index'])
@@ -176,8 +176,8 @@ class NOECOFit(LeastSquaresOptimize):
             model = self.model
 
         if strengths is not None:
-            pos0 = self.get_strengths_()
-            self.set_strengths_(strengths)
+            pos0 = self.get_strengths()
+            self.set_strengths(strengths)
 
         rf_freq0 = get_rf_frequency(self.model)
         self._set_energy_offset(energy_offset=delta, model=self.model)
@@ -199,20 +199,20 @@ class NOECOFit(LeastSquaresOptimize):
             oeorm = _np.ravel(oeorm)
 
         if strengths is not None and idempotent:
-            self.set_strengths_(pos0)
+            self.set_strengths(pos0)
 
         return oeorm
 
     def get_chroms(self, strengths=None, idempotent=True):
         """."""
         if strengths is not None:
-            pos0 = self.get_strengths_()
-            self.set_strengths_(strengths)
+            pos0 = self.get_strengths()
+            self.set_strengths(strengths)
 
         chroms = get_chromaticities(self.model)
 
         if strengths is not None and idempotent:
-            self.set_strengths_(pos0)
+            self.set_strengths(pos0)
 
         return _np.array(chroms)
 
@@ -229,7 +229,7 @@ class NOECOFit(LeastSquaresOptimize):
 
     def get_optimization_pos(self):
         """."""
-        pos = self.get_strengths_()
+        pos = self.get_strengths()
         # other params will go here as well (gains, rolls, etc)
         return pos
 
@@ -238,7 +238,7 @@ class NOECOFit(LeastSquaresOptimize):
         if fig is None or ax is None:
             fig, ax = _mplt.subplots(figsize=(12, 4))
         if strengths is None:
-            strengths = self.get_strengths_()
+            strengths = self.get_strengths()
 
         ax.plot(strengths, 'o-', mfc='none', label=label)
         tick_label = self.params.sextfams2fit
