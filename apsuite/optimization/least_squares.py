@@ -129,10 +129,8 @@ class LeastSquaresOptimize(Optimize):
             pos_init = pos.copy()
 
             if jacobian_update_rate and it:
-                update_jac = not it % jacobian_update_rate
-
-            if update_jac:
-                M = self.calc_jacobian(pos)
+                if not it % jacobian_update_rate:
+                    M = self.calc_jacobian(pos)
 
             MTM = M.T @ M
             reg = _np.diag(
