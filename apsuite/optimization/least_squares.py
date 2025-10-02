@@ -101,6 +101,11 @@ class LeastSquaresOptimize(Optimize):
 
     def _optimize(self):
         """LM-like optimization loop."""
+        def print_(*args, **kwargs):
+            if not verbose:
+                return
+            print(*args, **kwargs)
+            
         niter = self.params.max_number_iters
         atol = self.params.abs_tol_convergence
         rtol = self.params.rel_tol_convergence
@@ -125,8 +130,7 @@ class LeastSquaresOptimize(Optimize):
         # if c:
         #     chi2 += w * _np.std(res0) * _np.linalg.norm(pos0)
 
-        if verbose:
-            print(f'initial chi²: {chi2:.6g}')
+        print_(f'initial chi²: {chi2:.6g}')
 
         for it in range(niter):
             if verbose:
