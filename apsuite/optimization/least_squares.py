@@ -101,8 +101,9 @@ class LeastSquaresOptimize(Optimize):
 
     def _optimize(self):
         """LM-like optimization loop."""
+
         def print_(*args, **kwargs):
-            if not verbose:
+            if not self.params.verbose:
                 return
             print(*args, **kwargs)
             
@@ -157,8 +158,7 @@ class LeastSquaresOptimize(Optimize):
             pos -= lr * delta  # position update
 
             if _np.any(_np.isnan(pos)):
-                if verbose:
-                    print('\tNaNs detected in pos. Aborting.')
+                print_('\tNaNs detected in pos. Aborting.')
                 break
 
             fails = 0
@@ -167,8 +167,7 @@ class LeastSquaresOptimize(Optimize):
                     res = self._objective_func(pos)
                     break
                 except Exception:
-                    if verbose:
-                        print('Merit figure evaluation failed. Back-tracking.')
+                    print_('Merit figure evaluation failed. Back-tracking.')
                     fails += 1
                     lr /= lr_factor  # reduce step size
                     lr = min(lr, lr_min)
@@ -179,25 +178,17 @@ class LeastSquaresOptimize(Optimize):
             chi2_new = self.calc_chi2(res)
             # if c:
             #     chi2 += w * _np.std(res) * _np.linalg.norm(pos)
-            if verbose:
-                print(f'\tchi²: {chi2_new:.6g}')
+            print_(f'\tchi²: {chi2_new:.6g}')
 
             delta_chi2 = chi2_old - chi2_new
             if abs(delta_chi2) < atol or abs(delta_chi2) / chi2_old < rtol:
-                if verbose:
-                    print('\tConvergence tolerance reached. Exiting.')
+                print_('\tConvergence tolerance reached. Exiting.')
                 break
 
             if damping_constant:
                 if delta_chi2 > 0:
                     damping_constant /= damping_factor
-                    if verbose:
-                        print(
-                            '\tImproved fit. Decreasing LM damping_constant.'
-                        )
+                    print_('\tImproved fit. Decreasing LM damping_constant.')
                 else:
                     damping_constant *= damping_factor
-                    if verbose:
-                        print(
-                            '\tWorsened fit. Increasing LM damping_constant.'
-                        )
+                    print_('\tWorsened fit. Increasing LM damping_constant.')
