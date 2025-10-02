@@ -26,6 +26,7 @@ class LeastSquaresParams(OptimizeParams):
         self.min_learning_rate = 1e-3
         self.backtracking_factor = 2
         self.patience = 5
+        self.errorbars = None
 
 
 class LeastSquaresOptimize(Optimize):
@@ -67,7 +68,10 @@ class LeastSquaresOptimize(Optimize):
         if merit_figure_goal is None:
             merit_figure_goal = self.merit_figure_goal
 
-        return merit_figure_meas - merit_figure_goal
+        res = merit_figure_meas - merit_figure_goal
+        if self.params.errorbars is not None:
+            res = res / self.params.errorbars
+        return res
 
     def calc_merit_figure(self, pos):
         """."""
@@ -90,6 +94,8 @@ class LeastSquaresOptimize(Optimize):
             pos[i] = pos0[i]
 
             jac_col = (figm_pos - figm_neg) / step
+            if self.params.errorbars is not None:
+                jac_col = jac_col / self.params.errorbars
             jacobian_t.append(jac_col)
         return _np.array(jacobian_t).T
 
