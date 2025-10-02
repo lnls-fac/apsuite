@@ -182,7 +182,7 @@ class MeasACORM(_ThreadBaseClass):
     """."""
 
     RF_CONDITIONING_FREQ = 1 / 12 / 4e6  # in units of RF frequency
-    RF_CONDITIONING_VOLTAGEMIN = 60  # [mV]
+    RF_CONDITIONING_VOLTAGEMIN = 30  # [mV]
     RF_CONDITIONING_DUTY = 55  # [%]
 
     def __init__(self, isonline=True):
