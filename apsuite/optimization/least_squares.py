@@ -106,20 +106,19 @@ class LeastSquaresOptimize(Optimize):
             if not self.params.verbose:
                 return
             print(*args, **kwargs)
-            
+
         niter = self.params.max_number_iters
         atol = self.params.abs_tol_convergence
         rtol = self.params.rel_tol_convergence
         jacobian = self.jacobian
         damping_constant = self.params.damping_constant
         damping_factor = self.params.damping_factor
-        ridge_reg = self.params.ridge_constant
+        ridge_constant = self.params.ridge_constant
         jacobian_update_rate = self.params.jacobian_update_rate
         lr = self.params.learning_rate
         lr_min = self.params.min_learning_rate
         lr_factor = self.params.backtracking_factor
         patience = self.params.patience
-        verbose = self.params.verbose
 
         pos0 = self.params.initial_position
         pos = pos0.copy()
@@ -133,22 +132,26 @@ class LeastSquaresOptimize(Optimize):
 
         print_(f'initial chi²: {chi2:.6g}')
 
+        MTM = M.T @ M
+        ridge_reg = ridge_constant * _np.eye(
+            MTM.shape[0]
+        )  # Ridge regularization
+
         for it in range(niter):
-            if verbose:
-                print(f'iteration {it:03d}')
+            print_(f'iteration {it:03d}')
 
             pos_init = pos.copy()
 
             if jacobian_update_rate and it:
                 if not it % jacobian_update_rate:
                     M = self.calc_jacobian(pos)
+                    MTM = M.T @ M
 
-            MTM = M.T @ M
-            reg = _np.diag(
+            lm_reg = _np.diag(
                 damping_constant * _np.diag(MTM)
-            )  # LM regularization
-            reg += ridge_reg * _np.eye(MTM.shape[0])  # Ridge regularization
-            matrix = MTM + reg
+            )  # Levenberg-Macquardt regularization
+
+            matrix = MTM + ridge_reg + lm_reg
 
             res = self.objfuncs_evaluated[-1]  # last evaluated residual
             delta = (
