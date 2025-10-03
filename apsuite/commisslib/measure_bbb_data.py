@@ -3,23 +3,21 @@
 import time as _time
 from functools import partial as _partial
 
+import matplotlib.gridspec as _mgs
+import matplotlib.pyplot as _mplt
 import numpy as _np
-import scipy.signal as _scysig
 import scipy.integrate as _scyint
 import scipy.optimize as _scyopt
-
-import matplotlib.pyplot as _mplt
-import matplotlib.gridspec as _mgs
+import scipy.signal as _scysig
 from matplotlib.collections import PolyCollection as _PolyCollection
+from siriuspy.devices import BunchbyBunch, EGTriggerPS, PowerSupplyPU
 
-from siriuspy.devices import BunchbyBunch, PowerSupplyPU, EGTriggerPS
-
+from .. import asparams as _asparams
 from ..utils import (
     MeasBaseClass as _BaseClass,
     ParamsBaseClass as _ParamsBaseClass,
-    ThreadedMeasBaseClass as _ThreadBaseClass,
+    ThreadedMeasBaseClass as _ThreadBaseClass
 )
-from .. import asparams as _asparams
 
 
 class UtilClass:
