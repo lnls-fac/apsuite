@@ -300,7 +300,7 @@ class BbBAcqData(_BaseClass, UtilClass):
 
     DEVICES = BunchbyBunch.DEVICES
 
-    def __init__(self, devname):
+    def __init__(self, devname, isonline=True):
         """."""
         if devname.endswith('L'):
             params = BbBLParams()
@@ -309,7 +309,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         elif devname.endswith('V'):
             params = BbBVParams()
 
-        super().__init__(params=params)
+        super().__init__(params=params, isonline=isonline)
         if self.isonline:
             self.devices['bbb'] = BunchbyBunch(devname)
 
