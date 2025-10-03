@@ -721,7 +721,7 @@ class DoParallelBBA(_BaseClass):
             jacobians.append(jac_pos - jac_neg)
         return jacobians
 
-    def analyze_groups(self):
+    def analyze_groups(self, analyze_coupling=False):
         """Helper function to analyze the groups' properties."""
         if not self.data['jacobians']:
             raise ValueError('Please calculate and set jacobians first.')
@@ -729,10 +729,10 @@ class DoParallelBBA(_BaseClass):
         anl = []
         for group_id in range(len(self.data['groups2dopbba'])):
             print(f'Analyzing group: {group_id:d}')
-            anl.append(self.analyze_group(group_id))
+            anl.append(self.analyze_group(group_id, analyze_coupling))
         return anl
 
-    def analyze_group(self, group_id):
+    def analyze_group(self, group_id, analyze_coupling=False):
         """Helper function to analyze group's properties."""
         jacobian = self.data['jacobians'][group_id]
         u_mat, svals, vt_mat = _np.linalg.svd(jacobian)
@@ -744,6 +744,16 @@ class DoParallelBBA(_BaseClass):
 
         tune_variation = [_pyacc.optics.get_frac_tunes(model)[:2]]
 
+        if analyze_coupling:
+            def _get_coupling_parameters():
+                ed = _pyacc.optics.calc_edwards_teng(model)[0]
+                mtsp, ratio = _pyacc.optics.estimate_coupling_parameters(ed)
+                return mtsp, _np.std(ratio)
+
+            min_tunesep, std_ratio = _get_coupling_parameters()
+            min_tunesep_variation = [min_tunesep]
+            std_ratio_variation = [std_ratio]
+
         for fac in [1, -2, 1]:
             for dkl, bpm in zip(delta_strens, group):
                 _id = self.data['bpmnames'].index(bpm)
@@ -754,13 +764,21 @@ class DoParallelBBA(_BaseClass):
                 else:
                     model[qidx].KL += fac * dkl / 2
                 tune_variation.append(_pyacc.optics.get_frac_tunes(model)[:2])
+                if analyze_coupling:
+                    min_tunesep, std_ratio = _get_coupling_parameters()
+                    min_tunesep_variation.append(min_tunesep)
+                    std_ratio_variation.append(std_ratio)
 
-        return {
+        ret = {
             'u_matrix': u_mat,
             'vt_matrix': vt_mat,
             'svals': svals,
             'tune_variation': _np.array(tune_variation),
         }
+        if analyze_coupling:
+            ret['min_tunesep_variation'] = _np.array(min_tunesep_variation)
+            ret['std_ratio_variation'] = _np.array(std_ratio_variation)
+        return ret
 
     def process_data(self):
         """."""
