@@ -429,65 +429,6 @@ class ParallelBBAParams(_ParamsBaseClass):
         return dkl
 
 
-class BBAPairPVName(_PVName):
-    """."""
-
-    def __new__(
-        cls,
-        pv_name,
-        associated_quad_str=None,
-        associated_dkl=0.0,
-        elements=None,
-    ):
-        """."""
-        if 'BPM' in pv_name:
-            obj = super().__new__(cls, pv_name, elements)
-            if associated_quad_str is None:
-                associated_quad_str = ParallelBBAParams.QUADNAMES[
-                    ParallelBBAParams.BPMNAMES.index(pv_name)
-                ]
-            obj.associated_quad = _PVName(str(associated_quad_str))
-            obj.associated_dkl = associated_dkl
-            return obj
-        else:
-            raise ValueError('Creation restricted for BPMs')
-
-
-class PBBAGroup(list[BBAPairPVName]):
-    """Lista de SiriusPVNames (BPMs + metadados)."""
-
-    def __init__(self, iterable=()):
-        """."""
-        if all(isinstance(_, BBAPairPVName) for _ in iterable):
-            super().__init__(iterable)
-        elif all(isinstance(_, str) for _ in iterable):
-            iterable = [
-                BBAPairPVName(
-                    bname,
-                    ParallelBBAParams.QUADNAMES[
-                        ParallelBBAParams.BPMNAMES.index(bname)
-                    ],
-                )
-                for bname in iterable
-                if bname in ParallelBBAParams.BPMNAMES
-            ]
-            super().__init__(iterable)
-        else:
-            raise ValueError('')
-
-    @property
-    def delta_kl(self):
-        """."""
-        return _np.array([_.associated_dkl for _ in self])
-
-    @delta_kl.setter
-    def delta_kl(self, value):
-        if len(value) != len(self):
-            raise ValueError
-        for i, val in enumerate(value):
-            self[i].associated_dkl = val
-
-
 class DoParallelBBA(_BaseClass):
     """."""
 
