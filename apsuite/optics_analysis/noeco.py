@@ -6,14 +6,14 @@ import pyaccel as _pa
 from pyaccel.optics.miscellaneous import (
     get_chromaticities,
     get_mcf,
-    get_rf_frequency
+    get_rf_frequency,
 )
 from pymodels import si as _si
 
 from apsuite.optics_analysis import ChromCorr, TuneCorr
 from apsuite.optimization.least_squares import (
     LeastSquaresOptimize,
-    LeastSquaresParams
+    LeastSquaresParams,
 )
 from apsuite.orbcorr import OrbRespmat
 
@@ -62,23 +62,43 @@ class NOECOFit(LeastSquaresOptimize):
     """."""
 
     def __init__(
-        self,
-        merit_figure_goal=None,
-        jacobian=None,
-        use_thread=True,
-        isonline=False,
+        self, oeorm_goal=None, jacobian=None, use_thread=True, isonline=False
     ):
         """."""
         params = NOECOParams()
+
+        merit_figure_goal = None
+        if oeorm_goal is not None and oeorm_goal.squeeze().ndim > 1:
+            merit_figure_goal = oeorm_goal.ravel()
+
         super().__init__(
-            params, merit_figure_goal, jacobian, use_thread, isonline
+            params=params,
+            merit_figure_goal=merit_figure_goal,
+            jacobian=jacobian,
+            use_thread=use_thread,
+            isonline=isonline,
         )
+
+        self._oeorm_goal = None
         self._model = None
         self.famdata = None
+
+        self.nr_sexts = len(self.params.sextfams2fit)
+        self.nr_bpms_total = 320
+        self.nr_bpms_x = 160
+        self.nr_bpms_y = 160
+        self.nr_corrs_total = 281
+        self.nr_corrs_x = 120
+        self.nr_corrs_y = 160
 
         self._orbmat = None
         self._tunecorr = None
         self._chromcorr = None
+
+        self.sext_strengths = None
+        self.gain_corrs = _np.ones(self.nr_corrs_total)
+        self.gain_bpms = _np.zeros(self.nr_bpms_total)  # Gx, Gy
+        self.coup_bpms = _np.zeros(self.nr_bpms_total)  # Cc, Cy
 
     @property
     def model(self):
@@ -93,6 +113,19 @@ class NOECOFit(LeastSquaresOptimize):
         self._model = model
         self.famdata = _si.get_family_data(self._model)
         self.create_corr_objects()
+
+    @property
+    def oeorm_goal(self):
+        """."""
+        return self._oeorm_goal
+
+    @oeorm_goal.setter
+    def oeorm_goal(self, oeorm):
+        """."""
+        self._oeorm_goal = oeorm
+        self.merit_figure_goal = oeorm.ravel()
+        self.nr_bpms_total = oeorm.shape[0] / 2
+        self.nr_corrs_total = oeorm[:-1].shape[-1]
 
     def create_model(self):
         """."""
@@ -227,10 +260,60 @@ class NOECOFit(LeastSquaresOptimize):
         )
         return oeorm
 
+    def calc_residual(self, merit_figure_meas, merit_figure_goal=None):
+        """."""
+        if merit_figure_goal is None:
+            merit_figure_goal = self.oeorm_goal
+
+        merit_figure_goal = self.get_real_matrix_from_meas(
+            merit_figure_goal
+        ).ravel()
+
+        return super().calc_residual(merit_figure_meas, merit_figure_goal)
+
+    def get_real_matrix_from_meas(self, oeorm):
+        """."""
+        _, *ret = self.parse_params_from_pos()
+        gains_corrs, gains_bpms, coup_bpms = ret
+        Gb = self.bpms_gains_matrix(gains_bpms, coup_bpms)
+        oeorm_ = Gb @ (oeorm * gains_corrs)
+        return oeorm_
+
+    def bpms_gains_matrix(self, gains, coups):
+        """."""
+        gx = _np.diag(1 + gains[: self.nr_bpms_x])
+        gy = _np.diag(1 + gains[self.nr_bpms_x :])
+        cx = _np.diag(coups[: self.nr_bpms_x])
+        cy = _np.diag(coups[self.nr_bpms_x :])
+        return _np.block([[gx, cx], [cy, gy]])
+
+    def parse_params_from_pos(self, pos=None):
+        """."""
+        if pos is None:
+            pos = (
+                self.positions_evaluated[-1]
+                if len(self.positions_evaluated)
+                else self.get_optimization_pos()
+            )
+        n = self.nr_sexts
+        sexts = pos[:n]
+        gains_corrs = pos[n : n + self.nr_corrs_total]
+        n += self.nr_corrs_total
+        gains_bpms = pos[n : n + self.nr_bpms_total]
+        n += self.nr_bpms_total
+        coup_bpms = pos[n : n + self.nr_bpms_total]
+        return sexts, gains_corrs, gains_bpms, coup_bpms
+
     def get_optimization_pos(self):
         """."""
-        pos = self.get_strengths()
-        # other params will go here as well (gains, rolls, etc)
+        if self.sext_strengths is None:
+            sexts = self.get_strengths()
+        else:
+            sexts = self.sext_strengths
+        gain_bpms = self.gain_bpms
+        gain_corrs = self.gain_corrs
+        coup_bpms = self.coup_bpms
+        pos = _np.r_[sexts, gain_corrs, gain_bpms, coup_bpms]
         return pos
 
     def plot_strengths(self, strengths=None, fig=None, ax=None, label=None):
