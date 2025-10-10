@@ -28,6 +28,7 @@ from siriuspy.devices import (
     PowerSupply,
     RFGen,
     StrengthConv,
+    SOFB,
     Trigger,
     Tune
 )
@@ -62,6 +63,7 @@ class ACORMParams(_ParamsBaseClass):
         self.corrs_nrruns_per_acq = 4
         self.corrs_excit_time = 4  # [s]
         self.corrs_delay = 5e-3  # [s]
+        self.correct_orbit_between_acqs = True
         self.corrs_norm_kicks = False
         self.corrs_ch_kick = 5  # [urad]
         self.corrs_cv_kick = 5  # [urad]
@@ -96,6 +98,11 @@ class ACORMParams(_ParamsBaseClass):
         stg += dtmp('corrs_nrruns_per_acq', self.corrs_nrruns_per_acq, '')
         stg += ftmp('corrs_excit_time', self.corrs_excit_time, '[s]')
         stg += ftmp('corrs_delay', self.corrs_delay, '[s]')
+        stg += stmp(
+            'correct_orbit_between_acqs',
+            str(self.correct_orbit_between_acqs),
+            '',
+        )
         stg += stmp('corrs_norm_kicks', str(self.corrs_norm_kicks), '')
         stg += ftmp(
             'corrs_ch_kick',
@@ -1248,6 +1255,9 @@ class MeasACORM(_ThreadBaseClass):
         self.devices['fambpms'] = self.bpms
         self._log(f'ET: = {_time.time() - t00:.2f}s')
 
+        # Create SOFB
+        self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+
     # ---------------- Measurement Methods ----------------
 
     def _do_measure(self):
@@ -1639,6 +1649,10 @@ class MeasACORM(_ThreadBaseClass):
             ):
                 self._log('Problem: Correctors not in SlowRef mode.')
                 break
+            if self.params.correct_orbit_between_acqs:
+                self.devices['sofb'].correct_orbit_manually(
+                    nr_iters=5, residue=1
+                )
             self._log(f'Done! ET: {_time.time() - t00:.2f}s')
 
             elt -= _time.time()
