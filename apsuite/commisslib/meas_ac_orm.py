@@ -163,7 +163,7 @@ class ACORMParams(_ParamsBaseClass):
         if isinstance(value, str) and value.upper() in {'A', 'B'}:
             self._rf_llrf2use = value.upper()
         else:
-            raise ValueError('value must be "A" or "B")
+            raise ValueError('value must be "A" or "B"')
 
     @staticmethod
     def find_primes(n_primes, start=3):
