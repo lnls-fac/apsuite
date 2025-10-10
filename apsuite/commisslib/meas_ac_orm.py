@@ -28,6 +28,7 @@ from siriuspy.devices import (
     PowerSupply,
     RFGen,
     StrengthConv,
+    SOFB,
     Trigger,
     Tune
 )
@@ -46,7 +47,7 @@ from .measure_orbit_stability import OrbitAnalysis as _OrbitAnalysis
 class ACORMParams(_ParamsBaseClass):
     """."""
 
-    RFModes = _get_namedtuple('RFModes', ('Step', 'Phase'))
+    RFModes = _get_namedtuple('RFModes', ('Step', 'Phase', 'SOFB'))
 
     def __init__(self):
         """."""
@@ -62,6 +63,7 @@ class ACORMParams(_ParamsBaseClass):
         self.corrs_nrruns_per_acq = 4
         self.corrs_excit_time = 4  # [s]
         self.corrs_delay = 5e-3  # [s]
+        self.correct_orbit_between_acqs = True
         self.corrs_norm_kicks = False
         self.corrs_ch_kick = 5  # [urad]
         self.corrs_cv_kick = 5  # [urad]
@@ -73,7 +75,7 @@ class ACORMParams(_ParamsBaseClass):
 
         self.rf_excit_time = 1  # [s]
         self._rf_mode = self.RFModes.Phase
-        self.rf_step_kick = 5  # [Hz]
+        self.rf_step_kick = 37.5  # [Hz]
         self.rf_step_delay = 200e-3  # [s]
         self.rf_phase_amp = 2  # [°]
         self._rf_llrf2use = 'B'  # (A or B)
@@ -96,6 +98,11 @@ class ACORMParams(_ParamsBaseClass):
         stg += dtmp('corrs_nrruns_per_acq', self.corrs_nrruns_per_acq, '')
         stg += ftmp('corrs_excit_time', self.corrs_excit_time, '[s]')
         stg += ftmp('corrs_delay', self.corrs_delay, '[s]')
+        stg += stmp(
+            'correct_orbit_between_acqs',
+            str(self.correct_orbit_between_acqs),
+            '',
+        )
         stg += stmp('corrs_norm_kicks', str(self.corrs_norm_kicks), '')
         stg += ftmp(
             'corrs_ch_kick',
@@ -156,7 +163,7 @@ class ACORMParams(_ParamsBaseClass):
         if isinstance(value, str) and value.upper() in {'A', 'B'}:
             self._rf_llrf2use = value.upper()
         else:
-            raise ValueError('value must be "A" or "B")
+            raise ValueError('value must be "A" or "B"')
 
     @staticmethod
     def find_primes(n_primes, start=3):
@@ -534,8 +541,10 @@ class MeasACORM(_ThreadBaseClass):
                 anly = self._process_rf_phase(
                     rf_d, rf_phase_window, central_freq=rf_phase_central_freq
                 )
-            else:
+            elif 'mode' in rf_d and rf_d['mode'] == self.params.RFModes.Step:
                 anly = self._process_rf_step(rf_d, rf_step_trans_len)
+            elif 'mode' in rf_d and rf_d['mode'] == self.params.RFModes.SOFB:
+                anly = self._process_rf_sofb(rf_d)
             self.analysis['rf'] = anly
         bpms_data = self.data.get('bpms_noise')
         if bpms_data is not None:
@@ -1248,6 +1257,9 @@ class MeasACORM(_ThreadBaseClass):
         self.devices['fambpms'] = self.bpms
         self._log(f'ET: = {_time.time() - t00:.2f}s')
 
+        # Create SOFB
+        self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+
     # ---------------- Measurement Methods ----------------
 
     def _do_measure(self):
@@ -1343,6 +1355,42 @@ class MeasACORM(_ThreadBaseClass):
         par = self.params
         self._log('Measuring RF Line:')
 
+        data = dict()
+        if par.rf_mode == par.RFModes.SOFB:
+            sofb, rfgen = self.devices['sofb'], self.devices['rfgen']
+            freq0 = rfgen.frequency
+
+            rfgen.set_frequency(freq0 + self.params.rf_step_kick)
+            sofb.cmd_reset()
+            _time.sleep(self.params.rf_step_delay)
+            sofb.wait_buffer()
+
+            orbx_pos = sofb.orbx
+            orby_pos = sofb.orby
+
+            rfgen.set_frequency(freq0 - self.params.rf_step_kick)
+            sofb.cmd_reset()
+            _time.sleep(self.params.rf_step_delay)
+            sofb.wait_buffer()
+
+            orbx_neg = sofb.orbx
+            orby_neg = sofb.orby
+
+            rfgen.set_frequency(freq0)
+
+            data.update(self.get_general_data())
+            data['mode'] = par.rf_mode
+            data['step_kick'] = par.rf_step_kick
+            data['orbx_pos'] = orbx_pos
+            data['orbx_neg'] = orbx_neg
+            data['orby_pos'] = orby_pos
+            data['orby_neg'] = orby_neg
+
+            elt -= _time.time()
+            elt *= -1
+            self._log(f'    Elapsed Time: {elt:.2f}s')
+            return data
+
         rate = 'FOFB' if par.rf_mode == par.RFModes.Phase else 'FAcq'
 
         t00 = _time.time()
@@ -1402,7 +1450,6 @@ class MeasACORM(_ThreadBaseClass):
             self._meas_finished_ok = False
         self._log(f'Done! ET: {_time.time() - t00:.2f}s')
 
-        data = dict()
         llrf = self.devices['llrfa']
         data['llrfa_cond_voltage_min'] = llrf.voltage_refmin_sp
         data['llrfa_cond_phase_min'] = llrf.phase_refmin_sp
@@ -1639,6 +1686,10 @@ class MeasACORM(_ThreadBaseClass):
             ):
                 self._log('Problem: Correctors not in SlowRef mode.')
                 break
+            if self.params.correct_orbit_between_acqs:
+                self.devices['sofb'].correct_orbit_manually(
+                    nr_iters=5, residue=1
+                )
             self._log(f'Done! ET: {_time.time() - t00:.2f}s')
 
             elt -= _time.time()
@@ -1822,6 +1873,27 @@ class MeasACORM(_ThreadBaseClass):
         eta_meas = _OrbitAnalysis.calculate_eta_meas(orbx, orby, etax, etay)
         anly['mat_colsx'] = eta_meas[:nrbpms]
         anly['mat_colsy'] = eta_meas[nrbpms:]
+
+        self._log(f'Done! ET: {_time.time() - t0_:2f}s')
+        return anly
+
+    def _process_rf_sofb(self, data):
+        t0_ = _time.time()
+        self._log('Processing SOFB RF col meas ...', end='')
+
+        orbx_pos = data['orbx_pos'].copy()
+        orby_pos = data['orby_pos'].copy()
+        orbx_neg = data['orbx_nneg'].copy()
+        orby_neg = data['orby_nneg'].copy()
+        kick = data['step_kick']
+
+        anly = dict()
+        anly['orbx_neg'] = orbx_neg
+        anly['orby_neg'] = orby_neg
+        anly['orbx_pos'] = orbx_pos
+        anly['orby_pos'] = orby_pos
+        anly['mat_colsx'] = (orbx_pos - orbx_neg) / kick / 2
+        anly['mat_colsy'] = (orby_pos - orby_neg) / kick / 2
 
         self._log(f'Done! ET: {_time.time() - t0_:2f}s')
         return anly
