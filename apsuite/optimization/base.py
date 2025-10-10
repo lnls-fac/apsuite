@@ -1,4 +1,4 @@
-"""Simulated Annealing Algorithm for Minimization."""
+"""."""
 import logging as _log
 
 import matplotlib.pyplot as _mplt
@@ -283,7 +283,7 @@ class Optimize(_Base):
         """Implement here optimization algorithm."""
         raise NotImplementedError()
 
-    def _initialization():
+    def _initialization(self):
         """To be called before optimization starts.
 
         If the return value is False, optimization will not run.
