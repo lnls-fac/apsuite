@@ -607,7 +607,7 @@ class DoParallelBBA(_BaseClass):
         bpms = self.data['groups2dopbba'][group_id]
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
-        for strength, bpmname in zip(strengths, bpms):
+        for strength, bpmname in zip(strengths, bpms):  # noqa: B905
             quadname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[quadname]
             quad.strength = strength
@@ -615,7 +615,7 @@ class DoParallelBBA(_BaseClass):
         if ignore_timeout:
             return DoParallelBBA.STATUS.Success
 
-        for strength, bpmname in zip(strengths, bpms):
+        for strength, bpmname in zip(strengths, bpms):  # noqa: B905
             quadname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[quadname]
             if not quad._wait_float(
@@ -684,7 +684,7 @@ class DoParallelBBA(_BaseClass):
             return _np.array(strens)
 
         def _set_quad_strengths(group, strengths):
-            for strength, bname in zip(strengths, group):
+            for strength, bname in zip(strengths, group):  # noqa: B905
                 _get_or_set_kl(bname, strength)
 
         jacobians = []
@@ -755,7 +755,7 @@ class DoParallelBBA(_BaseClass):
             std_ratio_variation = [std_ratio]
 
         for fac in [1, -2, 1]:
-            for dkl, bpm in zip(delta_strens, group):
+            for dkl, bpm in zip(delta_strens, group):  # noqa: B905
                 _id = self.data['bpmnames'].index(bpm)
                 qname = self.data['quadnames'][_id]
                 qidx = quadindices[_id]
