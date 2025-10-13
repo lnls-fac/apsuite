@@ -459,7 +459,29 @@ class DoParallelBBA(_BaseClass):
 
     def __str__(self):
         """."""
-        return str(self.params)
+        stn = 'Params\n'
+        stp = self.params.__str__()
+        stp = '    ' + stp.replace('\n', '\n    ')
+        stn += stp + '\n'
+        connected = str(self.connected & len(self.devices.keys()) > 0)
+        stn += 'Connected?  ' + connected + '\n\n'
+        stn += '     {:^20s} {:^20s} {:^7s}\n'.format(
+            'BPM', 'Quad', 'dKL'
+        )
+        tmplt = '{:03d}: {:^20s} {:^20s} {:+.3f}\n'
+        dta = self.data
+        for group_id, group in enumerate(self.data['groups2dopbba']):
+            stn += f'> Group {group_id:03d}\n'
+            for j, bpm in enumerate(group):
+                idx = dta['bpmnames'].index(bpm)
+                stn += tmplt.format(
+                    idx,
+                    dta['bpmnames'][idx],
+                    dta['quadnames'][idx],
+                    dta['delta_kl'][group_id][j]
+                )
+            stn += '\n'
+        return stn
 
     @property
     def havebeam(self):
