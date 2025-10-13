@@ -1892,8 +1892,8 @@ class MeasACORM(_ThreadBaseClass):
 
         orbx_pos = data['orbx_pos'].copy()
         orby_pos = data['orby_pos'].copy()
-        orbx_neg = data['orbx_nneg'].copy()
-        orby_neg = data['orby_nneg'].copy()
+        orbx_neg = data['orbx_neg'].copy()
+        orby_neg = data['orby_neg'].copy()
         kick = data['step_kick']
 
         anly = dict()
