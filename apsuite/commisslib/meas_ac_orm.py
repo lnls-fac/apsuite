@@ -57,6 +57,7 @@ class ACORMParams(_ParamsBaseClass):
         self.ref_respmat_name = 'ref_respmat'
         self.meas_bpms_noise = True
         self.meas_rf_line = True
+        self.meas_magnets = True
 
         self.corrs_ch2meas = 'all'
         self.corrs_cv2meas = 'all'
@@ -92,6 +93,7 @@ class ACORMParams(_ParamsBaseClass):
         stg += stmp('ref_respmat_name', self.ref_respmat_name, '')
         stg += stmp('meas_bpms_noise', str(self.meas_bpms_noise), '')
         stg += stmp('meas_rf_line', str(self.meas_rf_line), '')
+        stg += stmp('meas_magnets', str(self.meas_magnets), '')
 
         stg += stmp('corrs_ch2meas', str(self.corrs_ch2meas), '')
         stg += stmp('corrs_cv2meas', str(self.corrs_cv2meas), '')
@@ -387,8 +389,12 @@ class MeasACORM(_ThreadBaseClass):
 
         """
         corr = (arr1 * arr2).sum(axis=-2)
-        corr /= _np.linalg.norm(arr1, axis=-2)
-        corr /= _np.linalg.norm(arr2, axis=-2)
+        norm1 = _np.linalg.norm(arr1, axis=-2)
+        norm2 = _np.linalg.norm(arr2, axis=-2)
+        idx1 = norm1 != 0
+        idx2 = norm2 != 0
+        corr[idx1] /= norm1[idx1]
+        corr[idx2] /= norm2[idx2]
         return corr
 
     def save_loco_input_data(
@@ -494,7 +500,7 @@ class MeasACORM(_ThreadBaseClass):
         """
         sofb = self.sofb_data
         mat = _np.zeros((2 * sofb.nr_bpms, sofb.nr_corrs), dtype=float)
-        anls = self.analysis['magnets']
+        anls = self.analysis.get('magnets', dict())
         for anly in anls:
             mat[: sofb.nr_bpms, anly['mat_idcs']] = anly[propty + 'x']
             mat[sofb.nr_bpms :, anly['mat_idcs']] = anly[propty + 'y']
@@ -531,9 +537,10 @@ class MeasACORM(_ThreadBaseClass):
                 was used as RFMode in measurement.
 
         """
-        self.analysis['magnets'] = self._process_magnets(
-            self.data['magnets'], mag_idx_ini
-        )
+        if 'magnets' in self.data:
+            self.analysis['magnets'] = self._process_magnets(
+                self.data['magnets'], mag_idx_ini
+            )
 
         rf_d = self.data.get('rf')
         if rf_d is not None:
@@ -1281,7 +1288,9 @@ class MeasACORM(_ThreadBaseClass):
             self._log('Stopped!')
             return
 
-        self.data['magnets'] = self._do_measure_magnets()
+        if self.params.meas_magnets:
+            self.data['magnets'] = self._do_measure_magnets()
+
         self._set_timing_state(tim_state)
         self._log('All measurements finished!!')
 
