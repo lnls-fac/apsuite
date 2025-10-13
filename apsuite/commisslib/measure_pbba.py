@@ -746,8 +746,13 @@ class DoParallelBBA(_BaseClass):
 
         if analyze_coupling:
             def _get_coupling_parameters():
+                rad_on, cav_on = model.radiation_on, model.cavity_on
+                model.radiation_on = 0
+                model.cavity_on = False
                 ed = _pyacc.optics.calc_edwards_teng(model)[0]
                 mtsp, ratio = _pyacc.optics.estimate_coupling_parameters(ed)
+                model.radiation_on = rad_on
+                model.cavity_on = cav_on
                 return mtsp, _np.std(ratio)
 
             min_tunesep, std_ratio = _get_coupling_parameters()
