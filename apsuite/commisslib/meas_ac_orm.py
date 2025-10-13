@@ -134,7 +134,7 @@ class ACORMParams(_ParamsBaseClass):
         stg += ftmp('rf_step_kick', self.rf_step_kick, '[Hz]')
         stg += ftmp('rf_step_delay', self.rf_step_delay, '[s]')
         stg += ftmp('rf_phase_amp', self.rf_phase_amp, '[°]')
-        stg += ftmp('rf_llrf2use', self.rf_llrf2use, '(A or B)')
+        stg += stmp('rf_llrf2use', self.rf_llrf2use, '(A or B)')
         return stg
 
     @property
