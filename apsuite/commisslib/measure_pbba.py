@@ -945,7 +945,8 @@ class DoParallelBBA(_BaseClass):
         dtime = dtime.split('.')[0]
         if sts:
             print('Done! Elapsed time: {:s}\n'.format(dtime))
-        print('Fail! Elapsed time: {:s}\n'.format(dtime))
+        else:
+            print('Fail! Elapsed time: {:s}\n'.format(dtime))
         return sts
 
     def _restore_init_conditions(self, group_id, init_strengths):
