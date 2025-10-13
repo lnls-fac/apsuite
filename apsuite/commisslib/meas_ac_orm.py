@@ -1405,7 +1405,9 @@ class MeasACORM(_ThreadBaseClass):
         t00 = _time.time()
         self._log('    Configuring BPMs...', end='')
         rf_freq = self.devices['rfgen'].frequency
-        nr_points = par.rf_excit_time + par.rf_step_delay * 2
+        nr_points = par.rf_excit_time
+        if par.rf_mode == par.RFModes.Step:
+            nr_points += par.rf_step_delay * 2
         nr_points *= self.bpms.get_sampling_frequency(rf_freq, acq_rate=rate)
         nr_points = int(_np.ceil(nr_points))
         ret = self._config_bpms(nr_points, rate=rate)
