@@ -418,11 +418,7 @@ class ParallelBBAParams(_ParamsBaseClass):
 
     def get_default_dkl(self, groups=None):
         """."""
-        groups = (
-            ParallelBBAParams.get_default_groups()
-            if groups is None
-            else groups
-        )
+        groups = self.get_default_groups() if groups is None else groups
         dkl = [_np.ones(len(g)) * self.quad_deltakl for g in groups]
         for d in dkl:
             d[::2] *= -1
@@ -439,8 +435,6 @@ class DoParallelBBA(_BaseClass):
         super().__init__(
             params=ParallelBBAParams(), target=self._do_pbba, isonline=isonline
         )
-        self.clt_confdb = ConfigDBClient(config_type='si_bbadata')
-        self.clt_confdb._TIMEOUT_DEFAULT = 20
         self.data['bpmnames'] = list(ParallelBBAParams.BPMNAMES)
         self.data['quadnames'] = list(ParallelBBAParams.QUADNAMES)
         self.data['measure'] = list()
@@ -590,7 +584,7 @@ class DoParallelBBA(_BaseClass):
     def get_kicks(self):
         """."""
         sofb = self.devices['sofb']
-        return _np._r[sofb.kickch, sofb.kickcv, sofb.kickrf]
+        return _np.r_[sofb.kickch, sofb.kickcv, sofb.kickrf]
 
     def set_delta_kicks(self, dkicks):
         """."""
@@ -620,7 +614,9 @@ class DoParallelBBA(_BaseClass):
             dcv * 0,
             drf * 0,
         )
-        sofb.mancorrgainch, sofb.mancorrgaincv = factch, factcv, factrf
+        sofb.mancorrgainch, sofb.mancorrgaincv, sofb.mancorrgainrf = (
+            factch, factcv, factrf
+        )
 
     # #### pbba utils #####
 
@@ -740,7 +736,9 @@ class DoParallelBBA(_BaseClass):
                 raise err
 
             _set_quad_strengths(group, strens_orig)
-            jacobians.append(jac_pos - jac_neg)
+            jac = jac_pos - jac_neg
+            jac[:, -1] *= 1e6  # rescale: [m/Hz] -> [um/Hz]
+            jacobians.append(jac)
         return jacobians
 
     def analyze_groups(self, analyze_coupling=False):
@@ -880,6 +878,7 @@ class DoParallelBBA(_BaseClass):
         )
 
         self.data['jacobians'] = self.calc_ios_jacobians()
+        self.data['measure'] = list()
 
         sofb = self.devices['sofb']
         if sofb.autocorrsts:
