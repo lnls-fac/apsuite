@@ -195,6 +195,8 @@ class MeasACORM(_ThreadBaseClass):
     RF_CONDITIONING_FREQ = 1 / 12 / 4e6  # in units of RF frequency
     RF_CONDITIONING_VOLTAGEMIN = 30  # [mV]
     RF_CONDITIONING_DUTY = 55  # [%]
+    _RF_PHASE_MIN_HARM = 1300  # [Hz]
+    _RF_PHASE_MAX_HARM = 2500  # [Hz]
 
     def __init__(self, isonline=True):
         """."""
@@ -1841,8 +1843,8 @@ class MeasACORM(_ThreadBaseClass):
         # Find peak with maximum amplitude to filter data
         if central_freq is None:
             # Possible range to find peak
-            harm_min = int(2000 / f_cond)
-            harm_max = int(2500 / f_cond)
+            harm_min = int(self._RF_PHASE_MIN_HARM / f_cond)
+            harm_max = int(self._RF_PHASE_MAX_HARM / f_cond)
             freqs = _np.arange(harm_min, harm_max) * f_cond
             freqx = _np.fft.rfftfreq(orbx.shape[0], d=dtim)
 
