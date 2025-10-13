@@ -1797,7 +1797,7 @@ class MeasACORM(_ThreadBaseClass):
         self._log(f'Done! ET: {_time.time() - t0_:2f}s')
         return anly
 
-    def _process_rf_phase(self, data, window=10, central_freq=None):
+    def _process_rf_phase(self, data, window=20, central_freq=None):
         anly = dict()
 
         t0_ = _time.time()
@@ -1839,8 +1839,8 @@ class MeasACORM(_ThreadBaseClass):
         # Find peak with maximum amplitude to filter data
         if central_freq is None:
             # Possible range to find peak
-            harm_min = int(1700 / f_cond)
-            harm_max = int(2300 / f_cond)
+            harm_min = int(2000 / f_cond)
+            harm_max = int(2500 / f_cond)
             freqs = _np.arange(harm_min, harm_max) * f_cond
             freqx = _np.fft.rfftfreq(orbx.shape[0], d=dtim)
 
