@@ -47,7 +47,7 @@ from .measure_orbit_stability import OrbitAnalysis as _OrbitAnalysis
 class ACORMParams(_ParamsBaseClass):
     """."""
 
-    RFModes = _get_namedtuple('RFModes', ('Step', 'Phase', 'SOFB'))
+    RFModes = _get_namedtuple('RFModes', ('Step', 'Phase', 'Standard'))
 
     def __init__(self):
         """."""
@@ -552,7 +552,9 @@ class MeasACORM(_ThreadBaseClass):
                 )
             elif 'mode' in rf_d and rf_d['mode'] == self.params.RFModes.Step:
                 anly = self._process_rf_step(rf_d, rf_step_trans_len)
-            elif 'mode' in rf_d and rf_d['mode'] == self.params.RFModes.SOFB:
+            elif (
+                'mode' in rf_d and rf_d['mode'] == self.params.RFModes.Standard
+            ):
                 anly = self._process_rf_sofb(rf_d)
             self.analysis['rf'] = anly
         bpms_data = self.data.get('bpms_noise')
@@ -1367,7 +1369,7 @@ class MeasACORM(_ThreadBaseClass):
         self._log('Measuring RF Line:')
 
         data = dict()
-        if par.rf_mode == par.RFModes.SOFB:
+        if par.rf_mode == par.RFModes.Standard:
             sofb, rfgen = self.devices['sofb'], self.devices['rfgen']
             freq0 = rfgen.frequency
 
