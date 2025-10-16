@@ -16,6 +16,7 @@ class LeastSquaresParams(OptimizeParams):
         self.max_number_evals = _np.inf
         self.abs_tol_convergence = 1e-6
         self.rel_tol_convergence = 1e-3
+        self.rcond = 1e-15
         self.damping_constant = 1.0
         self.damping_factor = 10.0
         self.ridge_constant = 0.0
@@ -155,7 +156,7 @@ class LeastSquaresOptimize(Optimize):
 
             res = self.objfuncs_evaluated[-1]  # last evaluated residual
             delta = (
-                _np.linalg.pinv(matrix) @ M.T @ res
+                _np.linalg.pinv(matrix, rcond=self.params.rcond) @ M.T @ res
             )  # LM/GN Normal equation
             # TODO: include processing of pseudo-inverse for singvals selection
             pos -= lr * delta  # position update
