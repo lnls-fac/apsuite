@@ -74,7 +74,7 @@ class LeastSquaresOptimize(Optimize):
             res = res / self.params.errorbars
         return res
 
-    def calc_merit_figure(self, pos):
+    def calc_merit_figure(self):
         """."""
         raise NotImplementedError(
             'Problem-specific figure of merit needs to be implemented'
@@ -83,9 +83,9 @@ class LeastSquaresOptimize(Optimize):
     def calc_jacobian(self, pos=None, step=1e-4):
         """."""
         jacobian_t = list()
-        pos0 = self.params.initial_position
-        pos = pos0.copy() if pos is None else pos
-
+        if pos is None:
+            raise ValueError('Specify position to calculate Jacobian.')
+        pos0 = pos.copy()
         for i in range(len(pos)):
             pos[i] += step / 2
             figm_pos = self.calc_merit_figure(pos)
