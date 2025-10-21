@@ -28,12 +28,6 @@ class TuneCorr(BaseCorr):
         self._type_optics = TuneCorr.OPTICS.EdwardsTeng
         self.type_optics = type_optics
         self.idcs_out = idcs_out
-        if self.type_optics == self.OPTICS.EdwardsTeng:
-            self._optics_func = pyaccel.optics.calc_edwards_teng
-        elif self._type_optics == self.OPTICS.Twiss:
-            self._optics_func = pyaccel.optics.calc_twiss
-        else:
-            raise TypeError('Optics type not supported.')
 
         if self.acc == 'BO':
             self.knobs.focusing = qf_knobs or TuneCorr.BO_QF
@@ -112,8 +106,7 @@ class TuneCorr(BaseCorr):
         """."""
         if model is None:
             model = self.model
-        linopt, *_ = self._optics_func(
-            accelerator=model, indices='open')
+        linopt, *_ = self._optics_func(model, indices='open')
         if self.type_optics == self.OPTICS.EdwardsTeng:
             nu1 = linopt.mu1[-1]
             nu2 = linopt.mu2[-1]
@@ -121,3 +114,12 @@ class TuneCorr(BaseCorr):
             nu1 = linopt.mux[-1]
             nu2 = linopt.muy[-1]
         return np.array([nu1, nu2])/2/np.pi
+
+    def _optics_func(self, model, indices):
+        if self.type_optics == self.OPTICS.EdwardsTeng:
+            _func = pyaccel.optics.calc_edwards_teng
+        elif self._type_optics == self.OPTICS.Twiss:
+            _func = pyaccel.optics.calc_twiss
+
+        ret = _func(accelerator=model, indices=indices)
+        return ret
