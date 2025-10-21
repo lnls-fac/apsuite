@@ -121,11 +121,5 @@ class TuneCorr(BaseCorr):
         elif self._type_optics == self.OPTICS.Twiss:
             _func = pyaccel.optics.calc_twiss
 
-        cav = model.cavity_on
-        rad = model.radiation_on
-        model.cavity_on = False
-        model.radiation_on = False
         ret = _func(accelerator=model, indices=indices)
-        model.cavity_on = cav
-        model.radiation_on = rad
         return ret
