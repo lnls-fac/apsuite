@@ -1,4 +1,4 @@
-"""Simulated Annealing Algorithm for Minimization."""
+"""."""
 import logging as _log
 
 import matplotlib.pyplot as _mplt
@@ -27,8 +27,8 @@ class OptimizeParams(_Params):
     def __init__(self):
         """."""
         self._initial_position = _np.array([])
-        self._limit_upper = _np.array([])
-        self._limit_lower = _np.array([])
+        self._limit_upper = _np.array([_np.inf])
+        self._limit_lower = _np.array([-_np.inf])
         self.max_number_iters = 100
         self.max_number_evals = 1000
         self._boundary_policy = self.BoundaryPolicy.ToNaN
@@ -283,7 +283,7 @@ class Optimize(_Base):
         """Implement here optimization algorithm."""
         raise NotImplementedError()
 
-    def _initialization():
+    def _initialization(self):
         """To be called before optimization starts.
 
         If the return value is False, optimization will not run.
@@ -295,9 +295,7 @@ class Optimize(_Base):
         pass
 
     def _objective_func(self, pos):
-        self._num_objective_evals += 1
         pos = self.params.check_and_adjust_boundary(pos)
-        self.positions_evaluated.extend(_np.array(pos, ndmin=2))
         res = []
         for posi in _np.array(pos, ndmin=2):
             if self._stopevt.is_set():
@@ -307,6 +305,8 @@ class Optimize(_Base):
                 res.append(_np.nan)
             else:
                 res.append(self.objective_function(posi))
+            self.positions_evaluated.append(posi)
+            self._num_objective_evals += 1
         res = _np.array(res)
         # the objective function must be a (m, n)-array
         # for the m individuals values of the n objectives
