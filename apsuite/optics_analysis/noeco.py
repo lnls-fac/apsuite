@@ -170,8 +170,15 @@ class NOECOFit(LeastSquaresOptimize):
         if chroms is None:
             chroms = self.params.chromx, self.params.chromy
 
+        cav = self.model.cavity_on
+        rad = self.model.radiation_on
+        self.model.cavity_on = False
+        self.model.radiation_on = False
         self._tunecorr.correct_parameters(tunes, model=self.model)
         self._chromcorr.correct_parameters(chroms, model=self.model)
+        self.model.cavity_on = cav
+        self.model.radiation_on = rad
+
 
     def _set_energy_offset(self, energy_offset, model=None):
         """."""
