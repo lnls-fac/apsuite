@@ -62,6 +62,11 @@ class NOECOParams(LeastSquaresParams):
         self.fit_coup_bpms = True
         self.fit_gain_corr = True
 
+        self.use_diag_blocks = True
+        self.use_hor_disp = True
+        self.use_ver_disp = False
+        self.use_offdiag_blocks = False
+
         self.update_jacobian_sexts = False
         self.update_jacobian_gains = True
 
@@ -131,9 +136,9 @@ class NOECOFit(LeastSquaresOptimize):
     @oeorm_goal.setter
     def oeorm_goal(self, oeorm):
         """."""
-        n, m = self.params.nr_bpms, self.params.nr_corrs + 1
-        self._oeorm_goal = oeorm.reshape((2 * n, m))
-        self.merit_figure_goal = oeorm.ravel()
+        oeorm_ = self._select_matrix_blocks(oeorm)
+        self._oeorm_goal = oeorm_
+        self.merit_figure_goal = oeorm_.ravel()
 
     @property
     def bpms_noise(self):
@@ -179,6 +184,21 @@ class NOECOFit(LeastSquaresOptimize):
         self.model.cavity_on = cav
         self.model.radiation_on = rad
 
+    def _select_matrix_blocks(self, oeorm):
+        n, m = self.params.nr_bpms, self.params.nr_corrs + 1
+        xx, xy, dispx, yx, yy, dispy = self.get_oeorm_blocks(oeorm)
+        oeorm_ = _np.zeros((2 * n, m))
+        if self.params.use_diag_blocks:
+            oeorm_[:n, : self.params.nr_chs] = xx
+            oeorm_[n:, self.params.nr_chs : self.params.nr_corrs] = yy
+        if self.params.use_offdiag_blocks:
+            oeorm_[:n, self.params.nr_chs : self.params.nr_corrs] = xy
+            oeorm_[n:, : self.params.nr_chs] = yx
+        if self.params.use_hor_disp:
+            oeorm_[:n, -1] = dispx
+        if self.params.use_ver_disp:
+            oeorm_[n:, -1] = dispy
+        return oeorm_.reshape((2 * n, m))
 
     def _set_energy_offset(self, energy_offset, model=None):
         """."""
@@ -285,6 +305,8 @@ class NOECOFit(LeastSquaresOptimize):
 
         if normalize_rf:
             oeorm[:, -1] *= 1e6  # [um/Hz]
+
+        oeorm = self._select_matrix_blocks(oeorm)
 
         if ravel:
             oeorm = _np.ravel(oeorm)
