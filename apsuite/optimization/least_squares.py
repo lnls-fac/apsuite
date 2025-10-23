@@ -1,5 +1,6 @@
 """."""
 
+import math as _math
 import numpy as _np
 
 from apsuite.optimization.base import Optimize, OptimizeParams
@@ -74,23 +75,21 @@ class LeastSquaresOptimize(Optimize):
             res = res / self.params.errorbars
         return res
 
-    def calc_merit_figure(self):
+    def calc_merit_figure(self, pos):
         """."""
+        _ = pos
         raise NotImplementedError(
             'Problem-specific figure of merit needs to be implemented'
         )
 
-    def calc_jacobian(self, pos=None, step=1e-4):
+    def calc_jacobian(self, pos, step=1e-4):
         """."""
         jacobian_t = list()
-        if pos is None:
-            raise ValueError('Specify position to calculate Jacobian.')
         pos0 = pos.copy()
         for i in range(len(pos)):
             pos[i] += step / 2
             figm_pos = self.calc_merit_figure(pos)
-            pos[i] = pos0[i]
-            pos[i] -= step / 2
+            pos[i] -= step
             figm_neg = self.calc_merit_figure(pos)
             pos[i] = pos0[i]
 
@@ -159,24 +158,22 @@ class LeastSquaresOptimize(Optimize):
                 _np.linalg.pinv(matrix, rcond=self.params.rcond) @ M.T @ res
             )  # LM/GN Normal equation
             # TODO: include processing of pseudo-inverse for singvals selection
-            pos -= lr * delta  # position update
-
-            if _np.any(_np.isnan(pos)):
-                print_('\tNaNs detected in pos. Aborting.')
+            if _np.any(_np.isnan(delta)):
+                print_('\tProblem in step calculation. Aborting.')
                 break
 
-            fails = 0
-            while fails <= patience:
+            pos -= lr * delta  # position update
+            for _ in range(patience):
                 try:
                     res = self._objective_func(pos)
-                    break
+                    if not _np.any(_np.isnan(res)):
+                        break
+                    print_('NaN in objective function. Back-tracking.')
                 except Exception:
                     print_('Merit figure evaluation failed. Back-tracking.')
-                    fails += 1
-                    lr /= lr_factor  # reduce step size
-                    lr = min(lr, lr_min)
-                    pos = pos_init  # restore pos
-                    pos -= lr * delta  # apply smaller step
+                lr /= lr_factor  # reduce step size
+                lr = max(lr, lr_min)
+                pos = pos_init - lr * delta  # apply smaller step
 
             chi2_old = self.history_chi2[-1]
             chi2_new = self.calc_chi2(res)
@@ -184,11 +181,11 @@ class LeastSquaresOptimize(Optimize):
             #     chi2 += w * _np.std(res) * _np.linalg.norm(pos)
             print_(f'\tchi²: {chi2_new:.6g}')
 
-            delta_chi2 = chi2_old - chi2_new
-            if abs(delta_chi2) < atol or abs(delta_chi2) / chi2_old < rtol:
+            if _math.isclose(chi2_new, chi2_old, rel_tol=rtol, abs_tol=atol):
                 print_('\tConvergence tolerance reached. Exiting.')
                 break
 
+            delta_chi2 = chi2_old - chi2_new
             if damping_constant:
                 if delta_chi2 > 0:
                     damping_constant /= damping_factor

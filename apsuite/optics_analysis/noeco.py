@@ -4,9 +4,9 @@ import matplotlib.pyplot as _mplt
 import numpy as _np
 import pyaccel as _pa
 from pyaccel.optics.miscellaneous import (
-    get_chromaticities,
-    get_mcf,
-    get_rf_frequency,
+    get_chromaticities as _get_chromaticities,
+    get_mcf as _get_mcf,
+    get_rf_frequency as _get_rf_frequency,
 )
 from pymodels import si as _si
 from scipy.linalg import block_diag
@@ -71,7 +71,6 @@ class NOECOParams(LeastSquaresParams):
         self.update_jacobian_sexts = False
         self.update_jacobian_gains = True
 
-        self.nr_sexts = len(self.sextfams2fit)
         self.nr_bpms = 160
         self.nr_chs = 120
         self.nr_cvs = 160
@@ -80,6 +79,11 @@ class NOECOParams(LeastSquaresParams):
         self.init_gain_corr = _np.ones(self.nr_corrs)
         self.init_gain_bpms = _np.ones(2 * self.nr_bpms)  # Gx, Gy
         self.init_coup_bpms = _np.zeros(2 * self.nr_bpms)  # Cc, Cy
+
+    @property
+    def nr_sexts(self):
+        """."""
+        return len(self.sextfams2fit)
 
 
 class NOECOFit(LeastSquaresOptimize):
@@ -100,7 +104,6 @@ class NOECOFit(LeastSquaresOptimize):
         self._chromcorr = None
         self.jacobian_sexts = None
         self.jacobian_gains = None
-        self.jacobian = None
 
         super().__init__(
             params=params,
@@ -109,11 +112,8 @@ class NOECOFit(LeastSquaresOptimize):
             isonline=isonline,
         )
 
-        if oeorm_goal is not None:
-            self.oeorm_goal = oeorm_goal
-
-        if bpms_noise is not None:
-            self.bpms_noise = bpms_noise
+        self.oeorm_goal = oeorm_goal
+        self.bpms_noise = bpms_noise
 
     @property
     def model(self):
@@ -126,6 +126,8 @@ class NOECOFit(LeastSquaresOptimize):
         if not isinstance(model, _pa.accelerator.Accelerator):
             raise TypeError('model must be pyaccel.accelerator.Accelerator')
         self._model = model
+        self._model.radiation_on = 1
+        self._model.cavity_on = True
         self.famdata = _si.get_family_data(self._model)
         self.create_corr_objects()
 
@@ -137,6 +139,8 @@ class NOECOFit(LeastSquaresOptimize):
     @oeorm_goal.setter
     def oeorm_goal(self, oeorm):
         """."""
+        if oeorm is None:
+            raise ValueError('oeorm_goal must not be None.')
         oeorm_ = self._select_matrix_blocks(oeorm)
         self._oeorm_goal = oeorm_
         self.merit_figure_goal = oeorm_.ravel()
@@ -149,6 +153,8 @@ class NOECOFit(LeastSquaresOptimize):
     @bpms_noise.setter
     def bpms_noise(self, bpms_noise):
         """."""
+        if bpms_noise is None:
+            return
         self._bpms_noise = bpms_noise
         self.params.errorbars = self._get_errorbars(bpms_noise)
 
@@ -158,14 +164,14 @@ class NOECOFit(LeastSquaresOptimize):
 
     def create_corr_objects(self):
         """."""
-        if self.model is None:
+        if self._model is None:
             raise RuntimeError(
                 'self.model is None. Call create_model() or set model first'
             )
 
-        self._orbmat = OrbRespmat(model=self.model, acc='SI', use6dtrack=True)
-        self._tunecorr = TuneCorr(model=self.model, acc='SI')
-        self._chromcorr = ChromCorr(model=self.model, acc='SI')
+        self._orbmat = OrbRespmat(model=self._model, acc='SI', use6dtrack=True)
+        self._tunecorr = TuneCorr(model=self._model, acc='SI')
+        self._chromcorr = ChromCorr(model=self._model, acc='SI')
 
     def adjust_model(self, tunes=None, chroms=None):
         """."""
@@ -174,14 +180,14 @@ class NOECOFit(LeastSquaresOptimize):
         if chroms is None:
             chroms = self.params.chromx, self.params.chromy
 
-        cav = self.model.cavity_on
-        rad = self.model.radiation_on
-        self.model.cavity_on = False
-        self.model.radiation_on = False
-        self._tunecorr.correct_parameters(tunes, model=self.model)
-        self._chromcorr.correct_parameters(chroms, model=self.model)
-        self.model.cavity_on = cav
-        self.model.radiation_on = rad
+        cav = self._model.cavity_on
+        rad = self._model.radiation_on
+        self._model.cavity_on = False
+        self._model.radiation_on = False
+        self._tunecorr.correct_parameters(tunes, model=self._model)
+        self._chromcorr.correct_parameters(chroms, model=self._model)
+        self._model.cavity_on = cav
+        self._model.radiation_on = rad
 
     def _select_matrix_blocks(self, oeorm):
         n, m = self.params.nr_bpms, self.params.nr_corrs + 1
@@ -199,19 +205,19 @@ class NOECOFit(LeastSquaresOptimize):
             oeorm_[n:, -1] = dispy
         return oeorm_.reshape((2 * n, m))
 
-    def _set_energy_offset(self, energy_offset, model=None):
+    def _set_delta_energy_offset(self, energy_offset, model=None):
         """."""
         if model is None:
             model = self.model
-        freq0 = get_rf_frequency(model)
-        alpha = get_mcf(model)
+        freq0 = _get_rf_frequency(model)
+        alpha = _get_mcf(model)
         df = -alpha * freq0 * energy_offset
         self._set_delta_rf_frequency(df, model)
 
     def _set_delta_rf_frequency(self, delta_frequency, model=None):
         if model is None:
             model = self.model
-        freq0 = get_rf_frequency(model)
+        freq0 = _get_rf_frequency(model)
         # print(f'Changing RF freq. by {delta_frequency:.4e}')
         self._set_rf_frequency(freq0 + delta_frequency, model)
 
@@ -224,11 +230,11 @@ class NOECOFit(LeastSquaresOptimize):
         model[cav_idx].frequency = frequency
 
     def _initialization(self):
-        if self.model is None:
+        if self._model is None:
             print('Cannot start optimization without machine model.')
             return False
 
-        if self.oeorm_goal is None:
+        if self._oeorm_goal is None:
             print('Cannot start optimization without oeorm_goal')
             return False
 
@@ -239,13 +245,6 @@ class NOECOFit(LeastSquaresOptimize):
                 print('No parameters to fit!')
                 return False
             self.params.initial_position = pos
-
-        self.params.limit_lower = _np.full(
-            self.params.initial_position.shape, -_np.inf
-        )
-        self.params.limit_upper = _np.full(
-            self.params.initial_position.shape, _np.inf
-        )
         return True
 
     def _get_errorbars(self, bpms_noise):
@@ -273,7 +272,6 @@ class NOECOFit(LeastSquaresOptimize):
         self,
         model=None,
         strengths=None,
-        idempotent=True,
         delta=1e-2,
         normalize_rf=True,
         ravel=False,
@@ -286,16 +284,18 @@ class NOECOFit(LeastSquaresOptimize):
             strengths0 = self.get_strengths()
             self.set_strengths(strengths)
 
-        rf_freq0 = get_rf_frequency(self.model)
-        self._set_energy_offset(energy_offset=delta, model=self.model)
+        rf_freq0 = _get_rf_frequency(model)
+        self._set_delta_energy_offset(energy_offset=delta, model=model)
+        # TODO: model not being used here!
         mat_pos = self._orbmat.get_respm(add_rfline=True)
 
-        self._set_rf_frequency(frequency=rf_freq0, model=self.model)
+        self._set_rf_frequency(frequency=rf_freq0, model=model)
 
-        self._set_energy_offset(energy_offset=-delta, model=self.model)
+        self._set_delta_energy_offset(energy_offset=-delta, model=model)
+        # TODO: model not being used here!
         mat_neg = self._orbmat.get_respm(add_rfline=True)
 
-        self._set_rf_frequency(frequency=rf_freq0, model=self.model)
+        self._set_rf_frequency(frequency=rf_freq0, model=model)
 
         oeorm = (mat_pos - mat_neg) / 2 / delta
 
@@ -307,38 +307,33 @@ class NOECOFit(LeastSquaresOptimize):
         if ravel:
             oeorm = _np.ravel(oeorm)
 
-        if strengths is not None and idempotent:
+        if strengths is not None:
             self.set_strengths(strengths0)
 
         return oeorm
 
-    def get_chroms(self, strengths=None, idempotent=True):
+    def get_chroms(self, strengths=None):
         """."""
         if strengths is not None:
             strengths0 = self.get_strengths()
             self.set_strengths(strengths)
 
-        chroms = get_chromaticities(self.model)
+        chroms = _get_chromaticities(self.model)
 
-        if strengths is not None and idempotent:
+        if strengths is not None:
             self.set_strengths(strengths0)
 
         return _np.array(chroms)
 
-    def calc_merit_figure(self, strengths=None):
+    def calc_merit_figure(self, pos):
         """."""
-        if strengths is None:
-            pos = self.get_default_pos()
-            strengths, *_ = self.parse_params_from_pos(pos)
-
-        oeorm = self.get_oeorm(
+        strengths, *_ = self.parse_params_from_pos(pos)
+        return self.get_oeorm(
             strengths=strengths,
-            idempotent=True,
             delta=self.params.denergy_oeorm_calc,
             normalize_rf=True,
             ravel=True,
         )
-        return oeorm
 
     def calc_residual(self, merit_figure_meas, merit_figure_goal=None):
         """."""
