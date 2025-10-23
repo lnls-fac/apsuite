@@ -235,13 +235,10 @@ class NOECOFit(LeastSquaresOptimize):
 
         if not len(self.params.initial_position):
             print('No initial position specified. Using default pos.')
-            pos = self.get_strengths()
-            if self.params.fit_gain_corr:
-                pos = _np.r_[pos, self.params.init_gain_corr]
-            if self.params.fit_gain_bpms:
-                pos = _np.r_[pos, self.params.init_gain_bpms]
-            if self.params.fit_coup_bpms:
-                pos = _np.r_[pos, self.params.init_coup_bpms]
+            pos = self.get_initial_pos()
+            if not len(pos):
+                print('No parameters to fit!')
+                return False
             self.params.initial_position = pos
 
         self.params.limit_lower = _np.full(
@@ -520,8 +517,25 @@ class NOECOFit(LeastSquaresOptimize):
         pos = (
             self.positions_evaluated[-1]
             if len(self.positions_evaluated)
-            else self.params.initial_position
+            else (
+                self.params.initial_position
+                if len(self.params.initial_position)
+                else self.get_initial_pos()
+            )
         )
+        return pos
+
+    def get_initial_pos(self):
+        """."""
+        pos = []
+        if self.params.fit_sexts:
+            pos = _np.r_[pos, self.get_strengths()]
+        if self.params.fit_gain_corr:
+            pos = _np.r_[pos, self.params.init_gain_corr]
+        if self.params.fit_gain_bpms:
+            pos = _np.r_[pos, self.params.init_gain_bpms]
+        if self.params.fit_coup_bpms:
+            pos = _np.r_[pos, self.params.init_coup_bpms]
         return pos
 
     def parse_params_from_pos(self, pos):
