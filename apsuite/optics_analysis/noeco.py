@@ -58,6 +58,7 @@ class NOECOParams(LeastSquaresParams):
         self.chromy = 2.5
 
         self.sextfams2fit = self.SEXT_FAMS_CHROM
+        self.fit_sexts = True
         self.fit_gain_bpms = True
         self.fit_coup_bpms = True
         self.fit_gain_corr = True
@@ -162,9 +163,7 @@ class NOECOFit(LeastSquaresOptimize):
                 'self.model is None. Call create_model() or set model first'
             )
 
-        self._orbmat = OrbRespmat(
-            model=self.model, acc='SI', use6dtrack=True
-        )
+        self._orbmat = OrbRespmat(model=self.model, acc='SI', use6dtrack=True)
         self._tunecorr = TuneCorr(model=self.model, acc='SI')
         self._chromcorr = ChromCorr(model=self.model, acc='SI')
 
@@ -330,7 +329,6 @@ class NOECOFit(LeastSquaresOptimize):
         """."""
         if strengths is None:
             pos = self.get_default_pos()
-            pos = self.params.initial_position
             strengths, *_ = self.parse_params_from_pos(pos)
 
         oeorm = self.get_oeorm(
@@ -441,26 +439,41 @@ class NOECOFit(LeastSquaresOptimize):
         if pos is None:
             pos = self.get_default_pos()
 
-        if self.jacobian_sexts is not None:
-            jacobian_sexts = self.jacobian_sexts
+        jacobians = []
 
-        if self.jacobian_gains is not None:
-            jacobian_gains = self.jacobian_gains
+        # --- sexts ---
+        if self.params.fit_sexts:
+            if self.jacobian_sexts is not None:
+                jacobian_sexts = self.jacobian_sexts
 
-        if self.jacobian_sexts is None or self.params.update_jacobian_sexts:
-            strengths, _, _, _ = self.parse_params_from_pos(pos)
-            jacobian_sexts = self.calc_jacobian_sexts(strengths, step)
+            update_sexts = self.params.update_jacobian_sexts
+            if self.jacobian_sexts is None or update_sexts:
+                strengths, _, _, _ = self.parse_params_from_pos(pos)
+                jacobian_sexts = self.calc_jacobian_sexts(strengths, step)
 
-        if self.jacobian_gains is None or self.params.update_jacobian_gains:
-            jacobian_gains = self.calc_jacobian_gains(pos)
+            jacobians.append(jacobian_sexts)
 
-        gains = self.params.fit_gain_bpms or self.params.fit_coup_bpms
-        gains = gains or self.params.fit_gain_corr
+        # --- gains ---
+        fit_gains = (
+            self.params.fit_gain_bpms
+            or self.params.fit_coup_bpms
+            or self.params.fit_gain_corr
+        )
 
-        if gains:
-            jacobian = _np.hstack((jacobian_sexts, jacobian_gains))
+        if fit_gains:
+            if self.jacobian_gains is not None:
+                jacobian_gains = self.jacobian_gains
+
+            update_gains = self.params.update_jacobian_gains
+            if self.jacobian_gains is None or update_gains:
+                jacobian_gains = self.calc_jacobian_gains(pos)
+
+            jacobians.append(jacobian_gains)
+
+        if jacobians:
+            jacobian = _np.hstack(jacobians)
         else:
-            jacobian = jacobian_sexts
+            jacobian = None
 
         self.jacobian = jacobian
 
@@ -540,12 +553,14 @@ class NOECOFit(LeastSquaresOptimize):
 
     def parse_params_from_pos(self, pos):
         """."""
+        sexts = None
         gains_corrs = None
         gains_bpms = None
         coup_bpms = None
-
-        n = self.params.nr_sexts
-        sexts = pos[:n]
+        n = 0
+        if self.params.fit_sexts:
+            n = self.params.nr_sexts
+            sexts = pos[:n]
         if self.params.fit_gain_corr:
             gains_corrs = pos[n : n + self.params.nr_corrs]
             n += self.params.nr_corrs
