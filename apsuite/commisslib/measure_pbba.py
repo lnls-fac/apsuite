@@ -597,7 +597,7 @@ class DoParallelBBA(_BaseClass):
         sts = DoParallelBBA.STATUS.Success
         for qname in self.data['quadnames']:
             if qname not in self.devices.keys():
-                print(f'\n{qname}: offline')
+                print(f'\n    {qname}: offline')
             else:
                 delta_kl = (
                     self.devices[qname]
@@ -605,7 +605,7 @@ class DoParallelBBA(_BaseClass):
                     init_strengths[qname]
                     )
                 if abs(delta_kl) > 0.001:
-                    msg = f'\n{qname}: KL-RB (now)'
+                    msg = f'\n    {qname}: KL-RB (now)'
                     msg += f' - {self.params.kl_pv_2track} (initial)'
                     msg += f' = {delta_kl}'
                     print(msg)
@@ -938,20 +938,22 @@ class DoParallelBBA(_BaseClass):
 
         sofb = self.devices['sofb']
         if sofb.autocorrsts:
-            print('SOFB feedback is enabled. Please desable it first.')
+            print('\nSOFB feedback is enabled. Please desable it first.')
             return
 
         for group_id in range(len(self.data['groups2dopbba'])):
             if self._stopevt.is_set():
-                print('Stopped!')
+                print('\nStopped!')
                 break
             if not self.havebeam:
-                print('Beam was Lost')
+                print('\nBeam was Lost')
                 break
             if not self.check_strengths():
-                msg = "Restoring initial strengths...\n"
-                self._restore_init_conditions(massage=msg, correct_orbit=False)
-            print('Correcting Orbit... ', end='')
+                self._restore_init_conditions(
+                    massage="\nRestoring initial strengths...",
+                    correct_orbit=False
+                )
+            print('\nCorrecting Orbit... ', end='')
             self.correct_orbit()
             print('Ok!')
             if self._dopbba_single_group(group_id):
@@ -960,13 +962,13 @@ class DoParallelBBA(_BaseClass):
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)
         dtime = dtime.split('.')[0]
-        print('Finished! Elapsed time {:s}'.format(dtime))
+        print('\nFinished! Elapsed time {:s}'.format(dtime))
 
     def _dopbba_single_group(self, group_id):
         """."""
         tini = _datetime.datetime.fromtimestamp(_time.time())
         strtini = tini.strftime('%Hh%Mm%Ss')
-        print(f'{strtini:s} --> Doing PBBA for Group {group_id:d}')
+        print(f'{strtini:s}: Doing PBBA for Group {group_id:d}')
 
         jac = self.data['jacobians'][group_id]
         inv_jac = _np.linalg.pinv(jac, self.params.inv_jac_rcond)
@@ -978,27 +980,38 @@ class DoParallelBBA(_BaseClass):
         }
         ios_iter, dkicks_iter = [], []
         nr_iters = self.params.corr_nr_iters
-        print('    correcting IOS:', end='')
+        print('    Correcting IOS:')
         sts = self.STATUS.Fail
         for i in range(nr_iters):
-            print('    {:02d}/{:02d} --> '.format(i + 1, nr_iters), end='')
-            if self._stopevt.is_set() or not self.havebeam:
-                self._restore_init_conditions()
+            print('        {:02d}/{:02d} --> '.format(i + 1, nr_iters), end='')
+            if self._stopevt.is_set():
+                self._restore_init_conditions(
+                    extra_info_before_message="Measurement stopped. "
+                )
+                break
+            if not self.havebeam:
+                self._restore_init_conditions(
+                    extra_info_before_message="Error: beam is off. "
+                )
                 break
             ios, sts = self.meas_ios(group_id)
             if not sts:
-                self._restore_init_conditions()
+                self._restore_init_conditions(
+                    extra_info_before_message="Fail while measuring IOS. "
+                )
                 break
             ios_iter.append(ios)
             dkicks = list(-1 * _np.dot(inv_jac, ios))
             dkicks_iter.append(dkicks)
             self.set_delta_kicks(dkicks)
-            print('Done.')
+            print('Done')
 
         # final ios
         ios, sts = self.meas_ios(group_id)
         if not sts:
-            self._restore_init_conditions()
+            self._restore_init_conditions(
+                extra_info_before_message="Fail while measuring IOS. "
+            )
         ios_iter.append(ios)
 
         group_data['kicks_end'] = self.get_kicks()
@@ -1013,18 +1026,20 @@ class DoParallelBBA(_BaseClass):
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)
         dtime = dtime.split('.')[0]
+        msg = '    Finished. Status: '
         if sts:
-            print('Finished. Status: OK! Elapsed time: {:s}\n'.format(dtime))
+            print(msg + 'OK! Elapsed time: {:s}'.format(dtime))
         else:
-            print('Finished. Status: Fail! Elapsed time: {:s}\n'.format(dtime))
+            print(msg + 'Fail! Elapsed time: {:s}'.format(dtime))
         return sts
 
     def _restore_init_conditions(self,
-            message="Restoring initial conditions and exiting...\n",
-            correct_orbit=True
+            message="Restoring initial conditions and exiting...",
+            correct_orbit=True,
+            extra_info_before_message=""
         ):
         """."""
-        print(message, end='')
+        print(extra_info_before_message+message)
         if self.params.kl_pv_2track == 'KLRef-Mon':
             init_strengths = self.data['KLRef_strengths']
         else:
@@ -1043,7 +1058,9 @@ class DoParallelBBA(_BaseClass):
                 abs_tol=0.1 * self.params.quad_deltakl,
                 timeout=self.params.wait_quadrupole
             ):
-                print(f'{qname}: could not be restored to initial strenght')
+                print(
+                    f'    {qname}: Could not be restored to initial strenght'
+                )
 
         if correct_orbit:
             self.correct_orbit()
