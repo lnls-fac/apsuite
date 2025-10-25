@@ -950,14 +950,25 @@ class DoParallelBBA(_BaseClass):
                 break
             if not self.check_strengths():
                 self._restore_init_conditions(
-                    massage="\nRestoring initial strengths...",
+                    message="\nRestoring initial strengths...",
                     correct_orbit=False
                 )
             print('\nCorrecting Orbit... ', end='')
             self.correct_orbit()
             print('Ok!')
-            if self._dopbba_single_group(group_id):
+            if not self._dopbba_single_group(group_id):
                 break
+
+        # check strengths before leaving
+        print('\nStarting clean-up: ')
+        if not self.check_strengths():
+            self._restore_init_conditions(
+                "\nRestoring initial strengths...",
+                correct_orbit=False
+            )
+        print('\nCorrecting Orbit... ', end='')
+        self.correct_orbit()
+        print('Ok!')
 
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)
