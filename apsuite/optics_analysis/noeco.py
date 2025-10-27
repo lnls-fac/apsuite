@@ -369,7 +369,7 @@ class NOECOFit(LeastSquaresOptimize):
                 oeorm, pos, bpms=True, corrs=False
             )
             jacobian_gains_corrs = _np.vstack([
-                block_diag(m) for m in oeorm_bpms_gains
+                _np.diag(m) for m in oeorm_bpms_gains
             ])
             if self.params.errorbars is not None:
                 jacobian_gains_corrs /= self.params.errorbars[:, None]
@@ -427,6 +427,9 @@ class NOECOFit(LeastSquaresOptimize):
 
         # --- sexts ---
         if self.params.fit_sexts:
+            if self.jacobian_sexts is not None:
+                jacobian_sexts = self.jacobian_sexts
+
             update_sexts = self.params.update_jacobian_sexts
             if self.jacobian_sexts is None or update_sexts:
                 strengths, *_ = self.parse_params_from_pos(pos)
@@ -442,6 +445,9 @@ class NOECOFit(LeastSquaresOptimize):
         )
 
         if fit_gains:
+            if self.jacobian_gains is not None:
+                jacobian_gains = self.jacobian_gains
+
             update_gains = self.params.update_jacobian_gains
             if self.jacobian_gains is None or update_gains:
                 jacobian_gains = self.calc_jacobian_gains(pos)
