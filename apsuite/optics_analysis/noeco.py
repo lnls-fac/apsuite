@@ -325,8 +325,10 @@ class NOECOFit(LeastSquaresOptimize):
 
         return _np.array(chroms)
 
-    def calc_merit_figure(self, pos):
+    def calc_merit_figure(self, pos=None):
         """."""
+        if pos is None:
+            pos = self.get_initial_pos()
         strengths, *_ = self.parse_params_from_pos(pos)
         return self.get_oeorm(
             strengths=strengths,
@@ -335,23 +337,22 @@ class NOECOFit(LeastSquaresOptimize):
             ravel=True,
         )
 
-    def calc_residual(self, merit_figure_meas, merit_figure_goal=None):
+    def calc_residual(self, pos=None, merit_figure_goal=None):
         """."""
+        if pos is None:
+            pos = self.get_initial_pos()
+
         if merit_figure_goal is None:
             merit_figure_goal = self.oeorm_goal
 
-        if merit_figure_goal.ndim == 1:
-            merit_figure_goal = merit_figure_goal.reshape((
-                2 * self.params.nr_bpms,
-                self.params.nr_corrs + 1,
-            ))
+        merit_figure_goal = self.apply_gains(merit_figure_goal, pos).ravel()
 
-        merit_figure_goal = self.apply_gains(merit_figure_goal).ravel()
+        return super().calc_residual(pos, merit_figure_goal)
 
-        return super().calc_residual(merit_figure_meas, merit_figure_goal)
-
-    def calc_jacobian_sexts(self, strengths, step):
+    def calc_jacobian_sexts(self, strengths=None, step=1e-4):
         """."""
+        if strengths is None:
+            strengths, *_ = self.parse_params_from_pos(self.get_default_pos())
         jacobian = super().calc_jacobian(strengths, step)
         self.jacobian_sexts = jacobian
         return jacobian
@@ -361,7 +362,7 @@ class NOECOFit(LeastSquaresOptimize):
         if pos is None:
             pos = self.get_default_pos()
 
-        oeorm_meas = self.oeorm_goal
+        oeorm = self.oeorm_goal
         jacobian = None
 
         # corr. gains Jacobian jth col = measured OEORM jth col & zeros
@@ -375,7 +376,7 @@ class NOECOFit(LeastSquaresOptimize):
         if self.params.fit_gain_corr:
             # apply BPMs gains and calculate corrs gains jacobian
             oeorm_bpms_gains = self.apply_gains(
-                oeorm_meas, pos, bpms=True, corrs=False
+                oeorm, pos, bpms=True, corrs=False
             )
             jacobian_gains_corrs = block_diag(*oeorm_bpms_gains.T).T
             if self.params.errorbars is not None:
@@ -383,9 +384,7 @@ class NOECOFit(LeastSquaresOptimize):
 
             jacobian = jacobian_gains_corrs[:, : self.params.nr_corrs]
 
-        oeorm_corr_gains = self.apply_gains(
-            oeorm_meas, pos, bpms=False, corrs=True
-        )
+        oeorm_corr_gains = self.apply_gains(oeorm, pos, bpms=False, corrs=True)
         # BPM gains Jacobian jth col = measured OEORM jth line, padded with
         # zeros
         # J_gains = [[oeorm_corr_gains[0, :].T, zeros, ...      zeros        ],
@@ -429,7 +428,7 @@ class NOECOFit(LeastSquaresOptimize):
 
         return jacobian
 
-    def calc_jacobian(self, pos=None, step=0.0001):
+    def calc_jacobian(self, pos=None, step=1e-4):
         """."""
         if pos is None:
             pos = self.get_default_pos()
@@ -443,7 +442,7 @@ class NOECOFit(LeastSquaresOptimize):
 
             update_sexts = self.params.update_jacobian_sexts
             if self.jacobian_sexts is None or update_sexts:
-                strengths, _, _, _ = self.parse_params_from_pos(pos)
+                strengths, *_ = self.parse_params_from_pos(pos)
                 jacobian_sexts = self.calc_jacobian_sexts(strengths, step)
 
             jacobians.append(jacobian_sexts)
@@ -493,10 +492,18 @@ class NOECOFit(LeastSquaresOptimize):
         """."""
         if pos is None:
             pos = self.get_default_pos()
-        _, *ret = self.parse_params_from_pos(pos)
-        gains_corrs, gains_bpms, coup_bpms = ret
 
         oeorm_ = oeorm.copy()
+        ravel = False
+        if oeorm_.ndim == 1:
+            ravel = True
+            oeorm_ = oeorm_.reshape((
+                2 * self.params.nr_bpms,
+                self.params.nr_corrs + 1,
+            ))
+
+        _, *ret = self.parse_params_from_pos(pos)
+        gains_corrs, gains_bpms, coup_bpms = ret
 
         if corrs and gains_corrs is not None:
             oeorm_ = oeorm_ * _np.r_[gains_corrs, [1]]
@@ -505,7 +512,7 @@ class NOECOFit(LeastSquaresOptimize):
             Gb = self.bpms_gains_matrix(gains_bpms, coup_bpms)
             oeorm_ = Gb @ oeorm_
 
-        return oeorm_
+        return oeorm_.ravel() if ravel else oeorm_
 
     def bpms_gains_matrix(self, gains, coups):
         """."""
@@ -523,13 +530,9 @@ class NOECOFit(LeastSquaresOptimize):
     def get_default_pos(self):
         """."""
         pos = (
-            self.positions_evaluated[-1]
-            if len(self.positions_evaluated)
-            else (
-                self.params.initial_position
-                if len(self.params.initial_position)
-                else self.get_initial_pos()
-            )
+            self.params.initial_position
+            if len(self.params.initial_position)
+            else self.get_initial_pos()
         )
         return pos
 
