@@ -5,7 +5,7 @@ import matplotlib.gridspec as mpl_gs
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pyaccel
+import pyaccel as _pa
 from mathphys.functions import load as _load, save as _save
 from matplotlib import rc
 from pymodels import si
@@ -47,29 +47,49 @@ class LOCOAnalysis:
 
     def calc_twiss(self):
         """."""
-        self.twi_fit, *_ = pyaccel.optics.calc_twiss(
-            self.loco_fit['fit_model'], indices='open'
-        )
+        mod = self.loco_fit['fit_model']
+        cav = mod.cavity_on
+        rad = mod.radiation_on
+        mod.cavity_on = False
+        mod.radiation_on = False
+        self.twi_fit, *_ = _pa.optics.calc_twiss(mod, indices='open')
+        mod.cavity_on = cav
+        mod.radiation_on = rad
 
         if self.nom_model is None:
             self.nom_model, _ = self.get_nominal_model()
 
-        self.twi_nom, *_ = pyaccel.optics.calc_twiss(
-            self.nom_model, indices='open'
-        )
+        mod = self.nom_model
+        cav = mod.cavity_on
+        rad = mod.radiation_on
+        mod.cavity_on = False
+        mod.radiation_on = False
+        self.twi_nom, *_ = _pa.optics.calc_twiss(mod, indices='open')
+        mod.cavity_on = cav
+        mod.radiation_on = rad
 
     def calc_edteng(self):
         """."""
-        self.edteng_fit, *_ = pyaccel.optics.calc_edwards_teng(
-            self.loco_fit['fit_model'], indices='open'
-        )
+        mod = self.loco_fit['fit_model']
+        cav = mod.cavity_on
+        rad = mod.radiation_on
+        mod.cavity_on = False
+        mod.radiation_on = False
+        self.edteng_fit, *_ = _pa.optics.calc_edwards_teng(mod, indices='open')
+        mod.cavity_on = cav
+        mod.radiation_on = rad
 
         if self.nom_model is None:
             self.nom_model, _ = self.get_nominal_model()
 
-        self.edteng_nom, *_ = pyaccel.optics.calc_edwards_teng(
-            self.nom_model, indices='open'
-        )
+        mod = self.nom_model
+        cav = mod.cavity_on
+        rad = mod.radiation_on
+        mod.cavity_on = False
+        mod.radiation_on = False
+        self.edteng_nom, *_ = _pa.optics.calc_edwards_teng(mod, indices='open')
+        mod.cavity_on = cav
+        mod.radiation_on = rad
 
     def get_nominal_model(self):
         """."""
@@ -99,10 +119,8 @@ class LOCOAnalysis:
         # Get nominal orbit matrix and dispersion
         matrix_nominal = OrbRespmat(simod, 'SI', True).get_respm()
 
-        alpha0 = pyaccel.optics.get_mcf(simod)
-        idx = pyaccel.lattice.find_indices(
-            simod, 'pass_method', 'cavity_pass'
-        )[0]
+        alpha0 = _pa.optics.get_mcf(simod)
+        idx = _pa.lattice.find_indices(simod, 'pass_method', 'cavity_pass')[0]
         # rf_freq = setup['rf_frequency']
         rf_freq = simod[idx].frequency
 
@@ -130,8 +148,8 @@ class LOCOAnalysis:
             matrix_fitting, gain_bpm, roll_bpm, gain_corr
         )
 
-        alpha_fit = pyaccel.optics.get_mcf(model_fitting)
-        idx = pyaccel.lattice.find_indices(
+        alpha_fit = _pa.optics.get_mcf(model_fitting)
+        idx = _pa.lattice.find_indices(
             model_fitting, 'pass_method', 'cavity_pass'
         )[0]
         rf_freq_mod = model_fitting[idx].frequency
@@ -180,8 +198,8 @@ class LOCOAnalysis:
         ksl_strength = []
         famidx = self.get_famidx_quad()
         for q in famidx:
-            kl_strength.append(pyaccel.lattice.get_attribute(model, 'KL', q))
-            ksl_strength.append(pyaccel.lattice.get_attribute(model, 'KsL', q))
+            kl_strength.append(_pa.lattice.get_attribute(model, 'KL', q))
+            ksl_strength.append(_pa.lattice.get_attribute(model, 'KsL', q))
         kl_strength = np.array(kl_strength, dtype=list)
         ksl_strength = np.array(ksl_strength, dtype=list)
         return kl_strength, ksl_strength
@@ -193,9 +211,9 @@ class LOCOAnalysis:
         ksl_strength = []
         famidx = self.get_famidx_sext()
         for q in famidx:
-            kl_strength.append(pyaccel.lattice.get_attribute(model, 'KL', q))
-            sl_strength.append(pyaccel.lattice.get_attribute(model, 'SL', q))
-            ksl_strength.append(pyaccel.lattice.get_attribute(model, 'KsL', q))
+            kl_strength.append(_pa.lattice.get_attribute(model, 'KL', q))
+            sl_strength.append(_pa.lattice.get_attribute(model, 'SL', q))
+            ksl_strength.append(_pa.lattice.get_attribute(model, 'KsL', q))
         kl_strength = np.array(kl_strength)
         sl_strength = np.array(sl_strength)
         ksl_strength = np.array(ksl_strength)
@@ -447,10 +465,10 @@ class LOCOAnalysis:
         fam = self.famdata
         qn = np.array(fam['QN']['index']).ravel()
         kl = np.array(
-            pyaccel.lattice.get_attribute(fit_model, 'KL', indices=qn)
+            _pa.lattice.get_attribute(fit_model, 'KL', indices=qn)
         ).flatten()
         kl_nom = np.array(
-            pyaccel.lattice.get_attribute(nom_model, 'KL', indices=qn)
+            _pa.lattice.get_attribute(nom_model, 'KL', indices=qn)
         ).ravel()
         dkl = kl - kl_nom
 
@@ -479,10 +497,10 @@ class LOCOAnalysis:
         fam = self.famdata
         qs = np.array(fam['QS']['index']).flatten()
         ksl_fit = np.array(
-            pyaccel.lattice.get_attribute(fit_model, 'KsL', indices=qs)
+            _pa.lattice.get_attribute(fit_model, 'KsL', indices=qs)
         ).flatten()
         ksl_nom = np.array(
-            pyaccel.lattice.get_attribute(nom_model, 'KsL', indices=qs)
+            _pa.lattice.get_attribute(nom_model, 'KsL', indices=qs)
         ).flatten()
         dksl = ksl_fit - ksl_nom
 
@@ -496,18 +514,18 @@ class LOCOAnalysis:
         gs = mpl_gs.GridSpec(1, 1)
         ax1 = plt.subplot(gs[0, 0])
 
-        spos = pyaccel.lattice.find_spos(nom_model)
+        spos = _pa.lattice.find_spos(nom_model)
         fam_nom = self.famdata
         qnlist_nom = fam_nom['QN']['index']
         qnidx = np.array(qnlist_nom).flatten()
         knom = np.array(
-            pyaccel.lattice.get_attribute(nom_model, 'KL', qnlist_nom)
+            _pa.lattice.get_attribute(nom_model, 'KL', qnlist_nom)
         )
 
         fam_fit = si.get_family_data(fit_model)
         qnlist_fit = fam_fit['QN']['index']
         kfit = np.array(
-            pyaccel.lattice.get_attribute(fit_model, 'KL', qnlist_fit)
+            _pa.lattice.get_attribute(fit_model, 'KL', qnlist_fit)
         )
         perc = (kfit - knom) / knom * 100
         ax1.plot(
@@ -532,18 +550,18 @@ class LOCOAnalysis:
         gs = mpl_gs.GridSpec(1, 1)
         ax1 = plt.subplot(gs[0, 0])
 
-        spos = pyaccel.lattice.find_spos(nom_model)
+        spos = _pa.lattice.find_spos(nom_model)
         fam_nom = self.famdata
         qslist_nom = fam_nom['QS']['index']
         qsidx = np.array(qslist_nom).flatten()
         knom = np.array(
-            pyaccel.lattice.get_attribute(nom_model, 'KsL', qslist_nom)
+            _pa.lattice.get_attribute(nom_model, 'KsL', qslist_nom)
         )
 
         fam_fit = si.get_family_data(fit_model)
         qslist_fit = fam_fit['QS']['index']
         kfit = np.array(
-            pyaccel.lattice.get_attribute(fit_model, 'KsL', qslist_fit)
+            _pa.lattice.get_attribute(fit_model, 'KsL', qslist_fit)
         )
         if sum(knom):
             percentage = (kfit - knom) / knom * 100
@@ -570,7 +588,7 @@ class LOCOAnalysis:
         if self.nom_model is None:
             self.nom_model, _ = self.get_nominal_model()
 
-        spos = pyaccel.lattice.find_spos(self.nom_model)
+        spos = _pa.lattice.find_spos(self.nom_model)
         fam = self.famdata
         bpm_idx = np.array(fam['BPM']['index']).ravel()
         ch_idx = np.array(fam['CH']['index']).ravel()
@@ -736,11 +754,11 @@ class LOCOAnalysis:
         ax2 = plt.subplot(gs[1, 0])
 
         bpm_idx_nom = np.array(
-            pyaccel.lattice.find_indices(self.nom_model, 'fam_name', 'BPM')
+            _pa.lattice.find_indices(self.nom_model, 'fam_name', 'BPM')
         ).flatten()
 
         bpm_idx_fit = np.array(
-            pyaccel.lattice.find_indices(
+            _pa.lattice.find_indices(
                 self.loco_fit['fit_model'], 'fam_name', 'BPM'
             )
         ).flatten()
@@ -830,18 +848,18 @@ class LOCOAnalysis:
 
     def emittance_and_coupling(self):
         """."""
-        eqnom = pyaccel.optics.EqParamsFromBeamEnvelope(self.nom_model)
-        eqfit = pyaccel.optics.EqParamsFromBeamEnvelope(
+        eqnom = _pa.optics.EqParamsFromBeamEnvelope(self.nom_model)
+        eqfit = _pa.optics.EqParamsFromBeamEnvelope(
             self.loco_fit['fit_model']
         )
 
         if self.edteng_fit is None or self.edteng_nom is None:
             self.calc_edteng()
 
-        min_sep_nom, *_ = pyaccel.optics.estimate_coupling_parameters(
+        min_sep_nom, *_ = _pa.optics.estimate_coupling_parameters(
             self.edteng_nom
         )
-        min_sep_fit, *_ = pyaccel.optics.estimate_coupling_parameters(
+        min_sep_fit, *_ = _pa.optics.estimate_coupling_parameters(
             self.edteng_fit
         )
 
