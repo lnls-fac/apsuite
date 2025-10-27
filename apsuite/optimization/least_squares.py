@@ -55,9 +55,7 @@ class LeastSquaresOptimize(Optimize):
 
     def objective_function(self, pos):
         """."""
-        merit_figure = self.calc_merit_figure(pos)
-        residual = self.calc_residual(merit_figure)
-        return residual
+        return self.calc_residual(pos)
 
     def calc_chi2(self, residual):
         """."""
@@ -65,8 +63,10 @@ class LeastSquaresOptimize(Optimize):
         self.history_chi2.append(chi2)
         return chi2
 
-    def calc_residual(self, merit_figure_meas, merit_figure_goal=None):
+    def calc_residual(self, pos, merit_figure_goal=None):
         """."""
+        merit_figure_meas = self.calc_merit_figure(pos)
+
         if merit_figure_goal is None:
             merit_figure_goal = self.merit_figure_goal
 
