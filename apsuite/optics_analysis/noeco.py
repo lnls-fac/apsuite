@@ -416,7 +416,7 @@ class NOECOFit(LeastSquaresOptimize):
             else:
                 jacobian = _np.hstack((jacobian, jacobian_coup_bpms))
 
-        return jacobian
+        return -jacobian
 
     def calc_jacobian(self, pos=None, step=1e-4):
         """."""
