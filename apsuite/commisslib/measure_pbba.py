@@ -8,7 +8,6 @@ import numpy as _np
 import pyaccel as _pyacc
 from mathphys.functions import get_namedtuple as _get_namedtuple
 from pymodels import si as _si
-from siriuspy.clientconfigdb import ConfigDBClient
 from siriuspy.devices import (
     CurrInfoSI as _CurrInfoSI,
     PowerSupply as _PowerSupply,
@@ -559,7 +558,8 @@ class DoParallelBBA(_BaseClass):
             if qname in self.devices:
                 continue
             self.devices[qname] = _PowerSupply(
-                qname, props2init=('PwrState-Sts', 'KL-SP', 'KL-RB')
+                qname,
+                props2init=('PwrState-Sts', 'KL-SP', 'KL-RB', 'KLRef-Mon')
             )
 
     def get_orbit(self):
@@ -637,7 +637,11 @@ class DoParallelBBA(_BaseClass):
             quadname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[quadname]
             if not quad._wait_float(
-                'KLRef-Mon', strength, timeout=self.params.wait_quadrupole
+                'KLRef-Mon',
+                strength,
+                rel_tol=0.0,
+                abs_tol=0.05*self.params.quad_deltakl,
+                timeout=self.params.wait_quadrupole
             ):
                 return DoParallelBBA.STATUS.Fail
         return DoParallelBBA.STATUS.Success
@@ -655,10 +659,16 @@ class DoParallelBBA(_BaseClass):
             strengths.append(quad.strength)
         return _np.array(strengths)
 
-    def meas_ios(self, group_id):
+    def meas_ios(self, group_id, init_strengths=None):
         """."""
         delta_strens = self.data['delta_kl'][group_id]
-        strens_orig = self.get_quad_strengths(group_id)
+
+        if init_strengths is None:
+            strens_orig = self.get_quad_strengths(group_id)
+            _time.sleep(self.params.wait_quadrupole)
+        else:
+            strens_orig = init_strengths
+
         if not self.set_quad_strengths(
             group_id, strens_orig + delta_strens / 2
         ):
@@ -678,7 +688,7 @@ class DoParallelBBA(_BaseClass):
 
         return orb_pos - orb_neg, DoParallelBBA.STATUS.Success
 
-    def calc_ios_jacobians(self, groups_to_calc=None):
+    def calc_ios_jacobians(self, groups_to_calc=None):  # noqa: C901
         """Calculate the IOS Response Matrices for all groups."""
         model = self.model
         _orbcorr = _OrbitCorr(
@@ -882,75 +892,93 @@ class DoParallelBBA(_BaseClass):
 
         sofb = self.devices['sofb']
         if sofb.autocorrsts:
-            print('SOFB feedback is enabled. Please desable it first.')
+            print('\nSOFB feedback is enabled. Please desable it first.')
             return
 
         for group_id in range(len(self.data['groups2dopbba'])):
             if self._stopevt.is_set():
-                print('Stopped!')
+                print('\nStopped!')
                 break
             if not self.havebeam:
-                print('Beam was Lost')
+                print('\nBeam was Lost')
                 break
             print('\nCorrecting Orbit... ', end='')
             self.correct_orbit()
             print('Ok!')
-            if self._dopbba_single_group(group_id):
+            if not self._dopbba_single_group(group_id):
                 break
+
+        print('\nCorrecting Orbit... ', end='')
+        self.correct_orbit()
+        print('Ok!')
 
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)
         dtime = dtime.split('.')[0]
-        print('Finished! Elapsed time {:s}'.format(dtime))
+        print('\nFinished! Elapsed time {:s}'.format(dtime))
 
     def _dopbba_single_group(self, group_id):
         """."""
         tini = _datetime.datetime.fromtimestamp(_time.time())
         strtini = tini.strftime('%Hh%Mm%Ss')
-        print(f'{strtini:s} --> Doing PBBA for Group {group_id:d}')
+        print(f'{strtini:s}: Doing PBBA for Group {group_id:d}')
 
         jac = self.data['jacobians'][group_id]
         inv_jac = _np.linalg.pinv(jac, self.params.inv_jac_rcond)
 
         group_data = {
             'bpms': self.data['groups2dopbba'][group_id],
+            'strengths_init': self.get_quad_strengths(group_id),
             'orbit_init': self.get_orbit(),
             'kicks_init': self.get_kicks(),
-            'strengths_init': self.get_quad_strengths(group_id),
         }
+
         ios_iter, dkicks_iter = [], []
         nr_iters = self.params.corr_nr_iters
-        print('    correcting IOS:', end='')
+
+        print('    Correcting IOS:')
         sts = self.STATUS.Fail
         for i in range(nr_iters):
-            print('    {:02d}/{:02d} --> '.format(i + 1, nr_iters), end='')
-            if self._stopevt.is_set() or not self.havebeam:
+            print('        {:02d}/{:02d} --> '.format(i + 1, nr_iters), end='')
+            if self._stopevt.is_set():
                 self._restore_init_conditions(
-                    group_id, init_strengths=group_data['strengths_init']
+                    group_id,
+                    group_data['strengths_init'],
+                    extra_info_before_message="Measurement stopped. "
                 )
-                print('   exiting...')
                 break
-            ios, sts = self.meas_ios(group_id)
+            if not self.havebeam:
+                self._restore_init_conditions(
+                    group_id,
+                    group_data['strengths_init'],
+                    extra_info_before_message="Error: beam is off. "
+                )
+                break
+            ios, sts = self.meas_ios(group_id, group_data['strengths_init'])
             if not sts:
                 self._restore_init_conditions(
-                    group_id, init_strengths=group_data['strengths_init']
+                    group_id,
+                    group_data['strengths_init'],
+                    extra_info_before_message="Fail while measuring IOS. "
                 )
                 break
             ios_iter.append(ios)
             dkicks = list(-1 * _np.dot(inv_jac, ios))
             dkicks_iter.append(dkicks)
             self.set_delta_kicks(dkicks)
-            print('Done.')
-        else:
-            sts = self.STATUS.Success
+            print('Done')
 
         # final ios
-        ios, sts = self.meas_ios(group_id)
-        if not sts:
-            self._restore_init_conditions(
-                group_id, init_strengths=group_data['strengths_init']
-            )
-        ios_iter.append(ios)
+        if sts:
+            ios, sts = self.meas_ios(group_id, group_data['strengths_init'])
+            if not sts:
+                self._restore_init_conditions(
+                    group_id,
+                    group_data['strengths_init'],
+                    extra_info_before_message="Fail while measuring IOS. "
+                )
+            else:
+                ios_iter.append(ios)
 
         group_data['kicks_end'] = self.get_kicks()
         group_data['ios_iter'] = ios_iter
@@ -964,14 +992,42 @@ class DoParallelBBA(_BaseClass):
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)
         dtime = dtime.split('.')[0]
+        msg = '    Finished. Status: '
         if sts:
-            print('Done! Elapsed time: {:s}\n'.format(dtime))
+            print(msg + 'OK! Elapsed time: {:s}'.format(dtime))
         else:
-            print('Fail! Elapsed time: {:s}\n'.format(dtime))
+            print(msg + 'Fail! Elapsed time: {:s}'.format(dtime))
         return sts
 
-    def _restore_init_conditions(self, group_id, init_strengths):
+    def _restore_init_conditions(self,
+            group_id,
+            init_strengths,
+            message="Restoring initial conditions and exiting...",
+            correct_orbit=True,
+            extra_info_before_message=""
+        ):
         """."""
+        print(extra_info_before_message+message)
+
         self.set_quad_strengths(group_id, init_strengths, ignore_timeout=True)
-        _time.sleep(self.params.wait_quadrupole)
-        self.correct_orbit()
+
+        bpms = self.data['groups2dopbba'][group_id]
+        quad_names = self.data['quadnames']
+        bpm_names = self.data['bpmnames']
+
+        for strength, bpmname in zip(init_strengths, bpms):  # noqa: B905
+            qname = quad_names[bpm_names.index(bpmname)]
+            quad = self.devices[qname]
+            if not quad._wait_float(
+                'KLRef-Mon',
+                strength,
+                rel_tol=0.0,
+                abs_tol=0.05*self.params.quad_deltakl,
+                timeout=self.params.wait_quadrupole
+            ):
+                print(
+                    f'    {qname}: Could not be restored to initial strength'
+                )
+
+        if correct_orbit:
+            self.correct_orbit()
