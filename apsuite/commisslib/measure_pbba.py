@@ -637,10 +637,10 @@ class DoParallelBBA(_BaseClass):
             quadname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[quadname]
             if not quad._wait_float(
-                'KL-RB',  # or KL-Mon ?
+                'KLRef-Mon',
                 strength,
                 rel_tol=0.0,
-                abs_tol=0.1*self.params.quad_deltakl,
+                abs_tol=0.05*self.params.quad_deltakl,
                 timeout=self.params.wait_quadrupole
             ):
                 return DoParallelBBA.STATUS.Fail
@@ -659,10 +659,16 @@ class DoParallelBBA(_BaseClass):
             strengths.append(quad.strength)
         return _np.array(strengths)
 
-    def meas_ios(self, group_id):
+    def meas_ios(self, group_id, init_strengths=None):
         """."""
         delta_strens = self.data['delta_kl'][group_id]
-        strens_orig = self.get_quad_strengths(group_id)
+
+        if init_strengths is None:
+            strens_orig = self.get_quad_strengths(group_id)
+            _time.sleep(self.params.wait_quadrupole)
+        else:
+            strens_orig = init_strengths
+
         if not self.set_quad_strengths(
             group_id, strens_orig + delta_strens / 2
         ):
@@ -682,7 +688,7 @@ class DoParallelBBA(_BaseClass):
 
         return orb_pos - orb_neg, DoParallelBBA.STATUS.Success
 
-    def calc_ios_jacobians(self, groups_to_calc=None):
+    def calc_ios_jacobians(self, groups_to_calc=None):  # noqa: C901
         """Calculate the IOS Response Matrices for all groups."""
         model = self.model
         _orbcorr = _OrbitCorr(
@@ -922,28 +928,37 @@ class DoParallelBBA(_BaseClass):
 
         group_data = {
             'bpms': self.data['groups2dopbba'][group_id],
+            'strengths_init': self.get_quad_strengths(group_id),
             'orbit_init': self.get_orbit(),
             'kicks_init': self.get_kicks(),
         }
+
         ios_iter, dkicks_iter = [], []
         nr_iters = self.params.corr_nr_iters
+
         print('    Correcting IOS:')
         sts = self.STATUS.Fail
         for i in range(nr_iters):
             print('        {:02d}/{:02d} --> '.format(i + 1, nr_iters), end='')
             if self._stopevt.is_set():
                 self._restore_init_conditions(
+                    group_id,
+                    group_data['strengths_init'],
                     extra_info_before_message="Measurement stopped. "
                 )
                 break
             if not self.havebeam:
                 self._restore_init_conditions(
+                    group_id,
+                    group_data['strengths_init'],
                     extra_info_before_message="Error: beam is off. "
                 )
                 break
-            ios, sts = self.meas_ios(group_id)
+            ios, sts = self.meas_ios(group_id, group_data['strengths_init'])
             if not sts:
                 self._restore_init_conditions(
+                    group_id,
+                    group_data['strengths_init'],
                     extra_info_before_message="Fail while measuring IOS. "
                 )
                 break
@@ -954,12 +969,16 @@ class DoParallelBBA(_BaseClass):
             print('Done')
 
         # final ios
-        ios, sts = self.meas_ios(group_id)
-        if not sts:
-            self._restore_init_conditions(
-                extra_info_before_message="Fail while measuring IOS. "
-            )
-        ios_iter.append(ios)
+        if sts:
+            ios, sts = self.meas_ios(group_id, group_data['strengths_init'])
+            if not sts:
+                self._restore_init_conditions(
+                    group_id,
+                    group_data['strengths_init'],
+                    extra_info_before_message="Fail while measuring IOS. "
+                )
+            else:
+                ios_iter.append(ios)
 
         group_data['kicks_end'] = self.get_kicks()
         group_data['ios_iter'] = ios_iter
@@ -981,6 +1000,8 @@ class DoParallelBBA(_BaseClass):
         return sts
 
     def _restore_init_conditions(self,
+            group_id,
+            init_strengths,
             message="Restoring initial conditions and exiting...",
             correct_orbit=True,
             extra_info_before_message=""
@@ -995,17 +1016,17 @@ class DoParallelBBA(_BaseClass):
         bpm_names = self.data['bpmnames']
 
         for strength, bpmname in zip(init_strengths, bpms):  # noqa: B905
-            quadname = quad_names[bpm_names.index(bpmname)]
-            quad = self.devices[quadname]
+            qname = quad_names[bpm_names.index(bpmname)]
+            quad = self.devices[qname]
             if not quad._wait_float(
-                'KL-RB',  # or KL-Mon ?
-                init_strengths[qname],
+                'KLRef-Mon',
+                strength,
                 rel_tol=0.0,
-                abs_tol=0.1 * self.params.quad_deltakl,
+                abs_tol=0.05*self.params.quad_deltakl,
                 timeout=self.params.wait_quadrupole
             ):
                 print(
-                    f'    {qname}: Could not be restored to initial strenght'
+                    f'    {qname}: Could not be restored to initial strength'
                 )
 
         if correct_orbit:
