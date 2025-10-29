@@ -353,8 +353,6 @@ class ParallelBBAParams(_ParamsBaseClass):
     BPMNAMES = tuple([_PVName(bpm) for bpm in BPMNAMES])
     QUADNAMES = tuple([_PVName(quad) for quad in QUADNAMES])
 
-    KLMON_TYPES = ['KLRef-Mon', 'KL-RB']
-
     def __init__(self):
         """."""
         super().__init__()
@@ -371,7 +369,6 @@ class ParallelBBAParams(_ParamsBaseClass):
         self.sofb_nrpoints = 20
         self.sofb_maxcorriter = 5
         self.sofb_maxorberr = 5  # [um]
-        self._kl_pv_2track = 'KLRef-Mon'
 
     def __str__(self):
         """."""
@@ -385,7 +382,6 @@ class ParallelBBAParams(_ParamsBaseClass):
         stg += f'sofb_nrpoints      = {self.sofb_nrpoints:.3f}\n'
         stg += f'sofb_maxcorriter   = {self.sofb_maxcorriter:.3f}\n'
         stg += f'sofb_maxorberr     = {self.sofb_maxorberr:.3f}\n'
-        stg += f'kl_pv_2track       = {self._kl_pv_2track}\n'
         return stg
 
     @staticmethod
@@ -427,19 +423,6 @@ class ParallelBBAParams(_ParamsBaseClass):
             d[::2] *= -1
         return dkl
 
-    @property
-    def kl_pv_2track(self):
-        """."""
-        return self._kl_pv_2track
-
-    @kl_pv_2track.setter
-    def kl_pv_2track(self, value):
-        """."""
-        if value in ParallelBBAParams.KLMON_TYPES:
-            self._kl_pv_2track = value
-        else:
-            raise ValueError('Choose between: ', ParallelBBAParams.KLMON_TYPES)
-
 
 class DoParallelBBA(_BaseClass):
     """."""
@@ -461,9 +444,6 @@ class DoParallelBBA(_BaseClass):
         self.data['jacobians'] = list()
         self._model = None
         self._fam_data = None
-
-        self.data['KLRef_strengths'] = dict()
-        self.data['KL_init_strengths'] = dict()
 
         if self.isonline:
             self.devices['sofb'] = _SOFB(_SOFB.DEVICES.SI)
@@ -581,38 +561,6 @@ class DoParallelBBA(_BaseClass):
                 qname,
                 props2init=('PwrState-Sts', 'KL-SP', 'KL-RB', 'KLRef-Mon')
             )
-            self.data['KLRef_strengths'] = self.devices[qname].strengthref_mon
-            self.data['KL_init_strengths'] = self.devices[qname].strength
-
-    def check_strengths(self):
-        """."""
-        print('Checking strengths... ', end='')
-        if self.params.kl_pv_2track == 'KLRef-Mon':
-            init_strengths = self.data['KLRef_strengths']
-        else:
-            init_strengths = self.data['KL_init_strengths']
-        if not init_strengths:
-            print('Make sure quadrupoles are connected!')
-            return
-        sts = DoParallelBBA.STATUS.Success
-        for qname in self.data['quadnames']:
-            if qname not in self.devices.keys():
-                print(f'\n    {qname}: offline')
-            else:
-                delta_kl = (
-                    self.devices[qname]
-                    -
-                    init_strengths[qname]
-                    )
-                if abs(delta_kl) > 0.001:
-                    msg = f'\n    {qname}: KL-RB (now)'
-                    msg += f' - {self.params.kl_pv_2track} (initial)'
-                    msg += f' = {delta_kl}'
-                    print(msg)
-                    sts = DoParallelBBA.STATUS.Fail
-        if sts:
-            print('OK!')
-        return sts
 
     def get_orbit(self):
         """."""
@@ -948,24 +896,12 @@ class DoParallelBBA(_BaseClass):
             if not self.havebeam:
                 print('\nBeam was Lost')
                 break
-            if not self.check_strengths():
-                self._restore_init_conditions(
-                    message="\nRestoring initial strengths...",
-                    correct_orbit=False
-                )
             print('\nCorrecting Orbit... ', end='')
             self.correct_orbit()
             print('Ok!')
             if not self._dopbba_single_group(group_id):
                 break
 
-        # check strengths before leaving
-        print('\nStarting clean-up: ')
-        if not self.check_strengths():
-            self._restore_init_conditions(
-                "\nRestoring initial strengths...",
-                correct_orbit=False
-            )
         print('\nCorrecting Orbit... ', end='')
         self.correct_orbit()
         print('Ok!')
@@ -1051,17 +987,16 @@ class DoParallelBBA(_BaseClass):
         ):
         """."""
         print(extra_info_before_message+message)
-        if self.params.kl_pv_2track == 'KLRef-Mon':
-            init_strengths = self.data['KLRef_strengths']
-        else:
-            init_strengths = self.data['KL_init_strengths']
 
-        for qname in self.data['quadnames']:
-            quad = self.devices[qname]
-            quad.strength = init_strengths[qname]
+        self.set_quad_strengths(group_id, init_strengths, ignore_timeout=True)
 
-        for qname in self.data['quadnames']:
-            quad = self.devices[qname]
+        bpms = self.data['groups2dopbba'][group_id]
+        quad_names = self.data['quadnames']
+        bpm_names = self.data['bpmnames']
+
+        for strength, bpmname in zip(init_strengths, bpms):  # noqa: B905
+            quadname = quad_names[bpm_names.index(bpmname)]
+            quad = self.devices[quadname]
             if not quad._wait_float(
                 'KL-RB',  # or KL-Mon ?
                 init_strengths[qname],
