@@ -428,8 +428,9 @@ class DoParallelBBA(_BaseClass):
     """."""
 
     STATUS = _get_namedtuple('Status', ['Fail', 'Success'])
+    METHODS = _get_namedtuple('Methods', ['XiaobiaoPBBA', 'ModifiedPBBA'])
 
-    def __init__(self, isonline=True):
+    def __init__(self, isonline=True, method='XiaobiaoPBBA'):
         """."""
         super().__init__(
             params=ParallelBBAParams(), target=self._do_pbba, isonline=isonline
@@ -445,6 +446,9 @@ class DoParallelBBA(_BaseClass):
         self._model = None
         self._fam_data = None
 
+        self._method = None
+        self.method = method
+
         if self.isonline:
             self.devices['sofb'] = _SOFB(_SOFB.DEVICES.SI)
             self.devices['currinfosi'] = _CurrInfoSI()
@@ -452,7 +456,8 @@ class DoParallelBBA(_BaseClass):
 
     def __str__(self):
         """."""
-        stn = 'Params\n'
+        stn = f'PBBA (method: {self.method})\n'
+        stn += 'Params\n'
         stp = self.params.__str__()
         stp = '    ' + stp.replace('\n', '\n    ')
         stn += stp + '\n'
@@ -511,6 +516,32 @@ class DoParallelBBA(_BaseClass):
             if any([abs(v) > _max for v in value[i]]):
                 raise ValueError(f"values for delta kl can't exceed {_max}")
         self.data['delta_kl'] = _dcopy(value)
+
+    @property
+    def method(self):
+        """Parallel BBA Method."""
+        return DoParallelBBA.METHODS._fields[self._method]
+
+    @method.setter
+    def method(self, value):
+        """."""
+        _method = self._method
+        if isinstance(value, str):
+            self._method = DoParallelBBA.METHODS._fields.index(value)
+        elif isinstance(value, int):
+            self._method = DoParallelBBA.METHODS[value]
+        else:
+            raise ValueError(
+                'Invalid Method! Choose between:'
+                + ' (str:"XiaobiaoPBBA", int: 0)" or'
+                + ' (str:"ModifiedPBBA", int: 1)"'
+            )
+        if self.data['jacobians'] and self._method != _method:
+            self.data['jacobians'] = list()
+            print(
+                'PBBA method has changed! '
+                + 'Jacobians were discarded... please re-calculate and set.'
+            )
 
     @property
     def jacobians(self):
