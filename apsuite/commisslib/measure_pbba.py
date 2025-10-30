@@ -549,11 +549,27 @@ class DoParallelBBA(_BaseClass):
         return _dcopy(self.data['jacobians'])
 
     @jacobians.setter
-    def jacobians(self, jacs):
+    def jacobians(self, value):
         """."""
-        if len(jacs) != len(self.data['groups2dopbba']):
+        if self._method == DoParallelBBA.METHODS.XiaobiaoPBBA:
+            if len(value) != len(self.data['groups2dopbba']):
             raise ValueError('Size not compatible.')
-        self.data['jacobians'] = _dcopy(jacs)
+            if not all(isinstance(j, _np.ndarray) for j in value):
+                raise ValueError(
+                    'Jacobians list must contain only NumPy arrays'
+                )
+            self.data['jacobians'] = _dcopy(value)
+        elif self._method == DoParallelBBA.METHODS.ModifiedPBBA:
+            if isinstance(value, list):
+                if len(value) != 1:
+                    raise ValueError('Size not compatible.')
+                if not isinstance(value[0], _np.ndarray):
+                    raise ValueError(
+                        'Jacobians list must contain only NumPy arrays'
+                    )
+                self.data['jacobians'] = [_dcopy(value[0])]
+            if isinstance(value, _np.ndarray):
+                self.data['jacobians'] = [_dcopy(value)]
 
     @property
     def model(self):
@@ -719,8 +735,27 @@ class DoParallelBBA(_BaseClass):
 
         return orb_pos - orb_neg, DoParallelBBA.STATUS.Success
 
-    def calc_ios_jacobians(self, groups_to_calc=None):  # noqa: C901
-        """Calculate the IOS Response Matrices for all groups."""
+    def calc_ios_jacobians(self, groups_to_calc=None):
+        """Calculate the IOS Response Matrix (or Matrices) for PBBA.
+
+        Args:
+            groups_to_calc (_type_, optional): groups to calculate jacobians
+                     (only if chosen Method is XiaobiaoPBBA). Defaults to None.
+
+        Returns:
+           list(numpy.ndarray): List of jacobians for PBBA,
+                                                if Method is "XiaobiaoPBBA".
+
+           numpy.ndarray: Jacobian for Modified PBBA,
+                                                if Method is "ModifiedPBBA".
+        """
+        if self._method == DoParallelBBA.METHODS.XiaobiaoPBBA:
+            return self._calc_pbba_jacobians(groups_to_calc)
+        elif self._method == DoParallelBBA.METHODS.ModifiedPBBA:
+            return [self._calc_modpbba_jacobian()]
+
+    def _calc_pbba_jacobians(self, groups_to_calc=None):  # noqa: C901
+        """IOS Response Matrices for all (or selected) groups."""
         model = self.model
         _orbcorr = _OrbitCorr(
             model=model, acc='SI', corr_system='SOFB', use6dtrack=True
@@ -782,6 +817,113 @@ class DoParallelBBA(_BaseClass):
             jacobians.append(jac)
         return jacobians
 
+    def _calc_modpbba_jacobian(self):
+        """IOS Response Matrices for all (or selected) groups."""
+        model = self.model
+        quadindices = self._get_quads_indices_in_model(self.data['quadnames'])
+        bpmindices = self._get_bpms_indices_in_model(self.data['bpmnames'])
+
+        m_mat, t_mat = _pyacc.tracking.find_m66(model, indices='open')
+
+        n_bpms = len(bpmindices)
+        n_quads = len(quadindices)
+        respxx = _np.zeros((n_bpms, n_quads), dtype=float)
+        respxy = _np.zeros((n_bpms, n_quads), dtype=float)
+        respyx = _np.zeros((n_bpms, n_quads), dtype=float)
+        respyy = _np.zeros((n_bpms, n_quads), dtype=float)
+
+        for col, q in enumerate(quadindices):
+            rq_mat = t_mat[q].copy()  # shape: (6, 6)
+            rb_mat = t_mat[bpmindices]  # shape: (Nbpms, 6, 6)
+
+            # Create "half quad" transfer map
+            length = model[q].length
+            kl = getattr(self.model[q], 'KL', 0.0)
+            ksl = getattr(self.model[q], 'KsL', 0.0)
+
+            drift = _np.eye(rq_mat.shape[0], dtype=float)
+            drift[0, 1] = length / 2 / 2
+            drift[2, 3] = length / 2 / 2
+            quad = _np.eye(rq_mat.shape[0], dtype=float)
+            quad[1, 0] = -kl / 2
+            quad[3, 2] = -kl / 2
+            quad[1, 2] = -ksl / 2
+            quad[3, 0] = -ksl / 2
+            half_quad = drift @ quad @ drift
+
+            # Transport Rq throught half quad
+            rq_mat = half_quad @ rq_mat
+
+            # Compute the one turn matrix at the center of the quad
+            # Mq = Rq * M1turn * Rq^-1
+            mq_mat = _np.linalg.solve(rq_mat.T, (rq_mat @ m_mat).T).T
+
+            # inverse: (1-Mq)^-1
+            mqi = _np.eye(mq_mat.shape[0], dtype=float) - mq_mat
+
+            # Compute tranfer matrix from quad to BPMs
+            rqbl = _np.linalg.solve(rq_mat.T, rb_mat.transpose((0, 2, 1)))
+            rqbl = rqbl.transpose((0, 2, 1))
+
+            # Split BPMs before/after quad
+            small = _np.array(bpmindices) < q
+            large = ~small
+
+            # For BPMs before quad: multiply por Mq
+            # Rq->b = Rb * Rq^-1 * Mq = Rb * M1turn * Rq^-1
+            rqbs = rqbl[small] @ mq_mat
+
+            # For BPMs after quad: Rq->b = Rb * Rq^-1
+            rqbl = rqbl[large]
+
+            # Apply closed-orbit inverse (I-Mq)^{-1}
+            # -> We solve mci^T x = rcbl^T  -> x = (mci^{-T} rcbl^T)^T
+            if rqbl.size:
+                rqbl = _np.linalg.solve(
+                    mqi.T, rqbl.transpose((0, 2, 1))
+                ).transpose((0, 2, 1))
+            if rqbs.size:
+                rqbs = _np.linalg.solve(
+                    mqi.T, rqbs.transpose((0, 2, 1))
+                ).transpose((0, 2, 1))
+
+            # Join rqb matrices (before/after)
+            rqb = _np.zeros(
+                shape=(n_bpms, rq_mat.shape[0], rq_mat.shape[1]), dtype=float
+            )
+            rqb[large] = rqbl
+            rqb[small] = rqbs
+
+            # Define the quadrupolar kick vectors
+            e_x = _np.array([0, 1.0, 0, 0, 0, 0])
+            e_y = _np.array([0, 0, 0, 1.0, 0, 0])
+
+            # Compute orbit response to horizontal shift (x_q = 1, y_q = 0)
+            inv_action_x = _np.linalg.solve(mqi.T, e_x.reshape(-1, 1)).ravel()
+            delta_x = _np.tensordot(rqb, inv_action_x, axes=([1], [0]))
+            respxx[:, col] = delta_x[:, 0]
+            respyx[:, col] = delta_x[:, 2]
+
+            # Compute orbit response to vertical shift (x_q = 0, y_q = 1)
+            inv_action_y = _np.linalg.solve(mqi.T, e_y.reshape(-1, 1)).ravel()
+            delta_y = _np.tensordot(rqb, inv_action_y, axes=([1], [0]))
+            respxy[:, col] = delta_y[:, 0]
+            respyy[:, col] = delta_y[:, 2]
+
+        return _np.vstack((
+            _np.hstack((respxx, respxy)),
+            _np.hstack((respyx, respyy)),
+        ))
+
+    def get_modpbba_projection(self, group_id):
+        """."""
+        bpmnames = self.data['bpmnames']
+        p = _np.zeros(len(bpmnames))
+        for j, bpm in enumerate(self.data['groups2dopbba'][group_id]):
+            i = bpmnames.index(bpm)
+            p[i] = self.data['delta_kl'][group_id][j]
+        return _np.diag(list(p) + list(p))
+
     def analyze_groups(self, analyze_coupling=False):
         """Helper function to analyze the groups' properties."""
         if not self.data['jacobians']:
@@ -795,7 +937,11 @@ class DoParallelBBA(_BaseClass):
 
     def analyze_group(self, group_id, analyze_coupling=False):
         """Helper function to analyze group's properties."""
+        if self._method == DoParallelBBA.METHODS.XiaobiaoPBBA:
         jacobian = self.data['jacobians'][group_id]
+        elif self._method == DoParallelBBA.METHODS.ModifiedPBBA:
+            jacobian = self.data['jacobians'][0]
+
         u_mat, svals, vt_mat = _np.linalg.svd(jacobian)
 
         model = self.model
@@ -909,6 +1055,17 @@ class DoParallelBBA(_BaseClass):
             qindex = qindex[0] if len(qindex) == 1 else qindex
             quadindices.append(qindex)
         return quadindices
+
+    def _get_bpms_indices_in_model(self, bpmnames):
+        """."""
+        fam_data = self.fam_data
+        bpmindices = []
+        for bname in bpmnames:
+            idx = fam_data['BPM']['devnames'].index(bname)
+            bindex = fam_data['BPM']['index'][idx]
+            bindex = bindex[0] if len(bindex) == 1 else bindex
+            bpmindices.append(bindex)
+        return bpmindices
 
     def _do_pbba(self):
         tini = _datetime.datetime.fromtimestamp(_time.time())
