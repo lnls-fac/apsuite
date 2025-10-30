@@ -1105,23 +1105,41 @@ class DoParallelBBA(_BaseClass):
         dtime = dtime.split('.')[0]
         print('\nFinished! Elapsed time {:s}'.format(dtime))
 
-    def _dopbba_single_group(self, group_id):
+    def _dopbba_single_group(self, group_id):  # noqa: C901
         """."""
         tini = _datetime.datetime.fromtimestamp(_time.time())
         strtini = tini.strftime('%Hh%Mm%Ss')
         print(f'{strtini:s}: Doing PBBA for Group {group_id:d}')
 
+        if self._method == DoParallelBBA.METHODS.XiaobiaoPBBA:
         jac = self.data['jacobians'][group_id]
         inv_jac = _np.linalg.pinv(jac, self.params.inv_jac_rcond)
+
+        elif self._method == DoParallelBBA.METHODS.ModifiedPBBA:
+            jac = self.data['jacobians'][0]
+            proj = self.get_modpbba_projection(group_id)
+            inv_jac = _np.linalg.pinv(jac @ proj, self.params.inv_jac_rcond)
 
         group_data = {
             'bpms': self.data['groups2dopbba'][group_id],
             'strengths_init': self.get_quad_strengths(group_id),
             'orbit_init': self.get_orbit(),
-            'kicks_init': self.get_kicks(),
         }
 
-        ios_iter, dkicks_iter = [], []
+        if self._method == DoParallelBBA.METHODS.XiaobiaoPBBA:
+            group_data['kicks_init'] = self.get_kicks()
+            dkicks_iter = []
+
+        if self._method == DoParallelBBA.METHODS.ModifiedPBBA:
+            bpmnames = self.data['bpmnames']
+            n_bpms = len(bpmnames)
+            sofb = self.devices['sofb']
+            group_data['refx'] = _dcopy(sofb.refx)
+            group_data['refy'] = _dcopy(sofb.refy)
+            group_data['bpmxenbl'] = _dcopy(sofb.bpmxenbl)
+            group_data['bpmyenbl'] = _dcopy(sofb.bpmyenbl)
+
+        ios_iter = []
         nr_iters = self.params.corr_nr_iters
 
         print('    Correcting IOS:')
@@ -1151,9 +1169,32 @@ class DoParallelBBA(_BaseClass):
                 )
                 break
             ios_iter.append(ios)
+
+            if self._method == DoParallelBBA.METHODS.XiaobiaoPBBA:
             dkicks = list(-1 * _np.dot(inv_jac, ios))
             dkicks_iter.append(dkicks)
             self.set_delta_kicks(dkicks)
+
+            elif self._method == DoParallelBBA.METHODS.ModifiedPBBA:
+                u = list(-1 * _np.dot(inv_jac, ios))
+                refx = _dcopy(sofb.refx)
+                refy = _dcopy(sofb.refy)
+                enbl_x = _np.zeros_like(group_data['bpmxenbl'], dtype=bool)
+                enbl_y = _np.zeros_like(group_data['bpmyenbl'], dtype=bool)
+                for bname in group_data['bpms']:
+                    idx = bpmnames.index(bname)
+                    refx[idx] = u[idx]
+                    refy[idx] = u[idx + n_bpms]
+                    enbl_x[idx] = True
+                    enbl_y[idx] = True
+                sofb.refx = refx
+                sofb.refy = refy
+                sofb.bpmxenbl = enbl_x
+                sofb.bpmyenbl = enbl_y
+                self.correct_orbit()
+                sofb.bpmxenbl = group_data['bpmxenbl']
+                sofb.bpmyenbl = group_data['bpmyenbl']
+
             print('Done')
 
         # final ios
@@ -1168,13 +1209,21 @@ class DoParallelBBA(_BaseClass):
             else:
                 ios_iter.append(ios)
 
-        group_data['kicks_end'] = self.get_kicks()
         group_data['ios_iter'] = ios_iter
-        group_data['dkicks_iter'] = dkicks_iter
         group_data['orbit_end'] = self.get_orbit()
         group_data['delta_kl'] = self.data['delta_kl'][group_id]
-        self.data['measure'].append(group_data)
 
+        if self._method == DoParallelBBA.METHODS.XiaobiaoPBBA:
+            group_data['kicks_end'] = self.get_kicks()
+            group_data['dkicks_iter'] = dkicks_iter
+
+        elif self._method == DoParallelBBA.METHODS.ModifiedPBBA:
+            sofb.refx = group_data['refy']
+            sofb.refy = group_data['refy']
+            sofb.bpmxenbl = group_data['bpmxenbl']
+            sofb.bpmyenbl = group_data['bpmyenbl']
+
+        self.data['measure'].append(group_data)
         self.correct_orbit()
 
         tfin = _datetime.datetime.fromtimestamp(_time.time())
