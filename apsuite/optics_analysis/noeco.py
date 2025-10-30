@@ -50,7 +50,6 @@ class NOECOParams(LeastSquaresParams):
 
     def __init__(self):
         """."""
-        super().__init__()
         self.denergy_oeorm_calc = 1e-2  # 1 %
         self.tunex = 49.16
         self.tuney = 14.22
@@ -63,10 +62,11 @@ class NOECOParams(LeastSquaresParams):
         self.fit_coup_bpms = True
         self.fit_gain_corr = True
 
-        self.use_diag_blocks = True
-        self.use_hor_disp = True
-        self.use_ver_disp = False
-        self.use_offdiag_blocks = False
+        self._use_diag_blocks = None
+        self._use_hor_disp = None
+        self._use_ver_disp = None
+        self._use_offdiag_blocks = None
+        self.oeorm_mask = None
 
         self.update_jacobian_sexts = False
         self.update_jacobian_gains = True
@@ -79,11 +79,88 @@ class NOECOParams(LeastSquaresParams):
         self.init_gain_corr = _np.ones(self.nr_corrs)
         self.init_gain_bpms = _np.ones(2 * self.nr_bpms)  # Gx, Gy
         self.init_coup_bpms = _np.zeros(2 * self.nr_bpms)  # Cc, Cy
+        super().__init__()
+
+        self.use_diag_blocks = True
+        self.use_hor_disp = True
+        self.use_offdiag_blocks = False
+        self.use_ver_disp = False
 
     @property
     def nr_sexts(self):
         """."""
         return len(self.sextfams2fit)
+
+    @property
+    def use_diag_blocks(self):
+        """."""
+        return self._use_diag_blocks
+
+    @use_diag_blocks.setter
+    def use_diag_blocks(self, value):
+        """."""
+        self._use_diag_blocks = value
+        self._update_oeorm_mask()
+
+    @property
+    def use_offdiag_blocks(self):
+        """."""
+        return self._use_offdiag_blocks
+
+    @use_offdiag_blocks.setter
+    def use_offdiag_blocks(self, value):
+        """."""
+        self._use_offdiag_blocks = value
+        if not value:
+            self.fit_coup_bpms = value  # don't fit coupling
+        self._update_oeorm_mask()
+
+    @property
+    def use_hor_disp(self):
+        """."""
+        return self._use_hor_disp
+
+    @use_hor_disp.setter
+    def use_hor_disp(self, value):
+        """."""
+        self._use_hor_disp = value
+        self._update_oeorm_mask()
+
+    @property
+    def use_ver_disp(self):
+        """."""
+        return self._use_ver_disp
+
+    @use_ver_disp.setter
+    def use_ver_disp(self, value):
+        """."""
+        self._use_ver_disp = value
+        self._update_oeorm_mask()
+
+    def _update_oeorm_mask(self):
+        """."""
+        self.oeorm_mask = self._get_oeorm_mask()
+
+    def _get_oeorm_mask(self):
+        """."""
+        n, m = self.nr_bpms, self.nr_corrs + 1
+        mask = _np.zeros((2 * n, m), dtype=bool)
+
+        if self.use_diag_blocks:
+            mask[:n, : self.nr_chs] = True
+            mask[n:, self.nr_chs : self.nr_corrs] = True
+
+        if self.use_offdiag_blocks:
+            mask[:n, self.nr_chs : self.nr_corrs] = True
+            mask[n:, : self.nr_chs] = True
+
+        if self.use_hor_disp:
+            mask[:n, -1] = True
+
+        if self.use_ver_disp:
+            mask[n:, -1] = True
+
+        return mask
 
 
 class NOECOFit(LeastSquaresOptimize):
@@ -141,9 +218,17 @@ class NOECOFit(LeastSquaresOptimize):
         """."""
         if oeorm is None:
             raise ValueError('oeorm_goal must not be None.')
-        oeorm_ = self._select_matrix_blocks(oeorm)
-        self._oeorm_goal = oeorm_
-        self.merit_figure_goal = oeorm_.ravel()
+        self._oeorm_goal = oeorm
+
+    @property
+    def merit_figure_goal(self):
+        """."""
+        return self.oeorm_goal.ravel()[self.params.oeorm_mask.ravel()]
+
+    @merit_figure_goal.setter
+    def merit_figure_goal(self, merit_figure):
+        """."""
+        pass  # compatibility only
 
     @property
     def bpms_noise(self):
@@ -189,23 +274,7 @@ class NOECOFit(LeastSquaresOptimize):
         self._model.cavity_on = cav
         self._model.radiation_on = rad
 
-    def _select_matrix_blocks(self, oeorm):
-        n, m = self.params.nr_bpms, self.params.nr_corrs + 1
-        xx, xy, dispx, yx, yy, dispy = self.get_oeorm_blocks(oeorm)
-        oeorm_ = _np.zeros((2 * n, m))
-        if self.params.use_diag_blocks:
-            oeorm_[:n, : self.params.nr_chs] = xx
-            oeorm_[n:, self.params.nr_chs : self.params.nr_corrs] = yy
-        if self.params.use_offdiag_blocks:
-            oeorm_[:n, self.params.nr_chs : self.params.nr_corrs] = xy
-            oeorm_[n:, : self.params.nr_chs] = yx
-        if self.params.use_hor_disp:
-            oeorm_[:n, -1] = dispx
-        if self.params.use_ver_disp:
-            oeorm_[n:, -1] = dispy
-        return oeorm_.reshape((2 * n, m))
-
-    def _set_delta_energy_offset(self, energy_offset, model=None):
+        def _set_delta_energy_offset(self, energy_offset, model=None):
         """."""
         if model is None:
             model = self.model
@@ -275,6 +344,7 @@ class NOECOFit(LeastSquaresOptimize):
         delta=1e-2,
         normalize_rf=True,
         ravel=False,
+        filter_blocks=False,
     ):
         """."""
         if model is None:
@@ -302,7 +372,8 @@ class NOECOFit(LeastSquaresOptimize):
         if normalize_rf:
             oeorm[:, -1] *= 1e6  # [um/Hz]
 
-        oeorm = self._select_matrix_blocks(oeorm)
+        if filter_blocks:
+            oeorm = oeorm[self.params.oeorm_mask]
 
         if ravel:
             oeorm = _np.ravel(oeorm)
@@ -335,6 +406,7 @@ class NOECOFit(LeastSquaresOptimize):
             delta=self.params.denergy_oeorm_calc,
             normalize_rf=True,
             ravel=True,
+            filter_blocks=True,
         )
 
     def calc_residual(self, pos=None, merit_figure_goal=None):
@@ -345,12 +417,16 @@ class NOECOFit(LeastSquaresOptimize):
         if merit_figure_goal is None:
             merit_figure_goal = self.oeorm_goal
 
-        merit_figure_goal = self.apply_gains(merit_figure_goal, pos).ravel()
+        merit_figure_goal = self.apply_gains(merit_figure_goal, pos)
+        merit_figure_goal = merit_figure_goal[self.params.oeorm_mask]
 
         return super().calc_residual(pos, merit_figure_goal)
 
     def calc_jacobian_sexts(self, strengths=None, step=1e-4):
         """."""
+        # TODO: bug when calculating sextupole jacobian
+        # with errorbars & block selections
+        # array shape issue
         if strengths is None:
             strengths, *_ = self.parse_params_from_pos(self.get_default_pos())
         return super().calc_jacobian(strengths, step)
@@ -374,7 +450,9 @@ class NOECOFit(LeastSquaresOptimize):
             if self.params.errorbars is not None:
                 jacobian_gains_corrs /= self.params.errorbars[:, None]
 
-            jacobian = jacobian_gains_corrs[:, : self.params.nr_corrs]
+            jacobian = jacobian_gains_corrs[
+                self.params.oeorm_mask.ravel(), : self.params.nr_corrs
+            ]
 
         oeorm_corr_gains = self.apply_gains(oeorm, pos, bpms=False, corrs=True)
         # BPM gains Jacobian jth col = measured OEORM jth line, padded with
@@ -390,6 +468,10 @@ class NOECOFit(LeastSquaresOptimize):
             jacobian_gains_bpms = block_diag(*oeorm_corr_gains).T
             if self.params.errorbars is not None:
                 jacobian_gains_bpms /= self.params.errorbars[:, None]
+
+            jacobian_gains_bpms = jacobian_gains_bpms[
+                self.params.oeorm_mask.ravel()
+            ]
 
             if jacobian is None:
                 jacobian = jacobian_gains_bpms
@@ -416,7 +498,7 @@ class NOECOFit(LeastSquaresOptimize):
             else:
                 jacobian = _np.hstack((jacobian, jacobian_coup_bpms))
 
-        return -jacobian
+        return -jacobian  # oposite sign convention for numeric & analytic jacs
 
     def calc_jacobian(self, pos=None, step=1e-4):
         """."""
