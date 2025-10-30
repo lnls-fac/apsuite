@@ -274,7 +274,7 @@ class NOECOFit(LeastSquaresOptimize):
         self._model.cavity_on = cav
         self._model.radiation_on = rad
 
-        def _set_delta_energy_offset(self, energy_offset, model=None):
+    def _set_delta_energy_offset(self, energy_offset, model=None):
         """."""
         if model is None:
             model = self.model
@@ -395,6 +395,43 @@ class NOECOFit(LeastSquaresOptimize):
             self.set_strengths(strengths0)
 
         return _np.array(chroms)
+
+    def get_chrom_optics(self, strengths=None):
+        """."""
+        # NOTE: get this to pyaccel maybe?
+        if strengths is not None:
+            strengths0 = self.get_strengths()
+            self.set_strengths(strengths)
+
+        model = self.model
+
+        cav = model.cavity_on
+        rad = model.radiation_on
+        model.cavity_on = False
+        model.radiation_on = False
+        bpms_idcs = _pa.lattice.flatten(self.famdata['BPM']['index'])
+
+        delta = 1e-3
+        twissp, *_ = _pa.optics.calc_twiss(
+            model, indices=bpms_idcs, energy_offset=delta / 2
+        )
+        twissn, *_ = _pa.optics.calc_twiss(
+            model, indices=bpms_idcs, energy_offset=-delta / 2
+        )
+
+        model.cavity_on = cav
+        model.radiation_on = rad
+
+        betax = (twissp.betax - twissn.betax) / delta
+        betay = (twissp.betay - twissn.betay) / delta
+        mux = (twissp.mux - twissn.mux) / delta
+        muy = (twissp.muy - twissn.muy) / delta
+        etax = (twissp.etax - twissn.etax) / delta
+
+        if strengths is not None:
+            self.set_strengths(strengths0)
+
+        return betax, betay, mux, muy, etax
 
     def calc_merit_figure(self, pos=None):
         """."""
@@ -638,21 +675,138 @@ class NOECOFit(LeastSquaresOptimize):
             coup_bpms = pos[n : n + 2 * self.params.nr_bpms]
         return sexts, gains_corrs, gains_bpms, coup_bpms
 
-    def plot_strengths(self, strengths=None, fig=None, ax=None, label=None):
+    def plot_strengths(
+        self,
+        strengths=None,
+        fig=None,
+        ax=None,
+        label=None,
+        diff_from_init=False,
+        percentual_diff=True,
+    ):
         """."""
         if fig is None or ax is None:
             fig, ax = _mplt.subplots(figsize=(12, 4))
         if strengths is None:
             strengths = self.get_strengths()
 
-        ax.plot(strengths, 'o-', mfc='none', label=label)
+        strengths_ = strengths.copy()
+
+        if diff_from_init:
+            str0, *_ = self.parse_params_from_pos(self.params.initial_position)
+            strengths_ -= str0
+            if percentual_diff:
+                strengths_ /= str0 / 100
+
+        ax.plot(strengths_, 'o-', mfc='none', label=label)
         tick_label = self.params.sextfams2fit
         tick_pos = list(range(len(tick_label)))
         ax.set_xticks(tick_pos, labels=tick_label, rotation=45)
-        ax.set_ylabel(r'SL [m$^{-2}$]')
+        line_label = 'SL'
+        if diff_from_init:
+            line_label = "delta " + line_label
+        if diff_from_init and percentual_diff:
+            line_label = "percentual " + line_label + ' [\%]'
+        else:
+            line_label = line_label + r' [m$^{-2}$]'
+        ax.set_ylabel(line_label)
         ax.set_xlabel('chromatic sextupole families')
         if label:
             ax.legend()
         fig.tight_layout()
         fig.show()
         return fig, ax
+
+    def plot_matrix_diff(self, mat1=None, mat2=None, residual=None, title=''):
+        """."""
+        if mat1 is not None and mat2 is not None:
+            residual = _np.abs(mat1 - mat2)
+
+        if residual.ndim == 1:
+            residual.reshape(2 * self.params.nr_bpms, self.params.nr_corrs + 1)
+
+        x = _np.arange(residual.shape[1])  # colunas
+        y = _np.arange(residual.shape[0])  # linhas
+        X, Y = _np.meshgrid(x, y)
+
+        fig = _mplt.figure()
+        fig.suptitle(title)
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot_surface(X, Y, _np.abs(residual), cmap='viridis')
+
+        ax.set_xlabel('corrs. index')
+        ax.set_ylabel('BPMs index')
+        ax.set_zlabel('OEORM abs. diff [m/rad]')
+
+        _mplt.show()
+
+        return fig, ax
+
+    def plot_chrom_optics(
+        self,
+        betax=None,
+        betay=None,
+        mux=None,
+        muy=None,
+        etax=None,
+        fig=None,
+        axes=None,
+        title='',
+        diff_from_init=False,
+    ):
+        """."""
+        if fig is None:
+            fig, axes = _mplt.subplots(3, 1, sharex=True, figsize=(12, 10))
+
+        if (betax, betay, mux, muy, etax) == (None, None, None, None, None):
+            betax, betay, mux, muy, etax = self.get_chrom_optics()
+
+        betax_ = betax.copy()
+        betay_ = betay.copy()
+        mux_ = mux.copy()
+        muy_ = muy.copy()
+        etax_ = etax.copy()
+
+        if diff_from_init:
+            # plot deviation from initial strengths optics
+            str0, *_ = self.parse_params_from_pos(self.params.initial_position)
+            betax0, betay0, mux0, muy0, etax0 = self.get_chrom_optics(str0)
+            betax_ -= betax0
+            betay_ -= betay0
+            mux_ -= mux0
+            muy_ -= muy0
+            etax_ -= etax0
+
+        ax0 = axes[0]
+        ax0.set_title('chromatic beta')
+        ax0.set_ylabel(r'$\beta_x^{(1)}$ [m]', color='blue')
+        ax0.plot(betax_, color='blue', label='hor')
+        ax0.tick_params(axis='y', labelcolor='blue')
+
+        ax0tw = ax0.twinx()
+        ax0tw.set_ylabel(r'$\beta_y^{(1)}$ [m]', color='red')
+        ax0tw.plot(betay_, color='red', label=r'$\beta_y$')
+        ax0tw.tick_params(axis='y', labelcolor='red')
+
+        axes[1].set_title('2nd-order dispersion')
+        axes[1].set_ylabel(r'$\eta^{(2)}$ [cm]')
+        axes[1].plot(etax_ * 100, color='green')
+
+        ax1 = axes[2]
+        ax1.set_title('chromatic phase advance')
+        ax1.set_xlabel('BPMs indices')
+        ax1.set_ylabel(r'$\phi_x^{(1)}$ [rad]', color='blue')
+        ax1.plot(mux_, color='blue', label=r'$\beta_y$')
+        ax1.tick_params(axis='y', labelcolor='blue')
+
+        ax1tw = ax1.twinx()
+        ax1tw.set_ylabel(r'$\phi_y^{(1)}$ [rad]', color='red')
+        ax1tw.plot(muy_, color='red', label=r'$\mu_y$')
+        ax1tw.tick_params(axis='y', labelcolor='red')
+
+        if title:
+            fig.suptitle(title)
+        fig.tight_layout()
+        fig.show()
+
+        return fig, axes
