@@ -463,9 +463,7 @@ class DoParallelBBA(_BaseClass):
         stn += stp + '\n'
         connected = str(self.connected & len(self.devices.keys()) > 0)
         stn += 'Connected?  ' + connected + '\n\n'
-        stn += '     {:^20s} {:^20s} {:^7s}\n'.format(
-            'BPM', 'Quad', 'dKL'
-        )
+        stn += '     {:^20s} {:^20s} {:^7s}\n'.format('BPM', 'Quad', 'dKL')
         tmplt = '{:03d}: {:^20s} {:^20s} {:+.3f}\n'
         dta = self.data
         for group_id, group in enumerate(self.data['groups2dopbba']):
@@ -476,7 +474,7 @@ class DoParallelBBA(_BaseClass):
                     idx,
                     dta['bpmnames'][idx],
                     dta['quadnames'][idx],
-                    dta['delta_kl'][group_id][j]
+                    dta['delta_kl'][group_id][j],
                 )
             stn += '\n'
         return stn
@@ -553,7 +551,7 @@ class DoParallelBBA(_BaseClass):
         """."""
         if self._method == DoParallelBBA.METHODS.XiaobiaoPBBA:
             if len(value) != len(self.data['groups2dopbba']):
-            raise ValueError('Size not compatible.')
+                raise ValueError('Size not compatible.')
             if not all(isinstance(j, _np.ndarray) for j in value):
                 raise ValueError(
                     'Jacobians list must contain only NumPy arrays'
@@ -606,7 +604,7 @@ class DoParallelBBA(_BaseClass):
                 continue
             self.devices[qname] = _PowerSupply(
                 qname,
-                props2init=('PwrState-Sts', 'KL-SP', 'KL-RB', 'KLRef-Mon')
+                props2init=('PwrState-Sts', 'KL-SP', 'KL-RB', 'KLRef-Mon'),
             )
 
     def get_orbit(self):
@@ -662,7 +660,9 @@ class DoParallelBBA(_BaseClass):
             drf * 0,
         )
         sofb.mancorrgainch, sofb.mancorrgaincv, sofb.mancorrgainrf = (
-            factch, factcv, factrf
+            factch,
+            factcv,
+            factrf,
         )
 
     # #### pbba utils #####
@@ -687,8 +687,8 @@ class DoParallelBBA(_BaseClass):
                 'KLRef-Mon',
                 strength,
                 rel_tol=0.0,
-                abs_tol=0.05*self.params.quad_deltakl,
-                timeout=self.params.wait_quadrupole
+                abs_tol=0.05 * self.params.quad_deltakl,
+                timeout=self.params.wait_quadrupole,
             ):
                 return DoParallelBBA.STATUS.Fail
         return DoParallelBBA.STATUS.Success
@@ -938,7 +938,7 @@ class DoParallelBBA(_BaseClass):
     def analyze_group(self, group_id, analyze_coupling=False):
         """Helper function to analyze group's properties."""
         if self._method == DoParallelBBA.METHODS.XiaobiaoPBBA:
-        jacobian = self.data['jacobians'][group_id]
+            jacobian = self.data['jacobians'][group_id]
         elif self._method == DoParallelBBA.METHODS.ModifiedPBBA:
             jacobian = self.data['jacobians'][0]
 
@@ -952,6 +952,7 @@ class DoParallelBBA(_BaseClass):
         tune_variation = [_pyacc.optics.get_frac_tunes(model)[:2]]
 
         if analyze_coupling:
+
             def _get_coupling_parameters():
                 rad_on, cav_on = model.radiation_on, model.cavity_on
                 model.radiation_on = 0
@@ -1019,7 +1020,7 @@ class DoParallelBBA(_BaseClass):
                 'x0': orbit[bpm_idx],
                 'y0': orbit[bpm_idx + nbpms],
                 'stdx0': stdx0,
-                'stdy0': stdy0
+                'stdy0': stdy0,
             }
 
     def get_pbba_results(self, error=False):
@@ -1112,8 +1113,8 @@ class DoParallelBBA(_BaseClass):
         print(f'{strtini:s}: Doing PBBA for Group {group_id:d}')
 
         if self._method == DoParallelBBA.METHODS.XiaobiaoPBBA:
-        jac = self.data['jacobians'][group_id]
-        inv_jac = _np.linalg.pinv(jac, self.params.inv_jac_rcond)
+            jac = self.data['jacobians'][group_id]
+            inv_jac = _np.linalg.pinv(jac, self.params.inv_jac_rcond)
 
         elif self._method == DoParallelBBA.METHODS.ModifiedPBBA:
             jac = self.data['jacobians'][0]
@@ -1150,14 +1151,14 @@ class DoParallelBBA(_BaseClass):
                 self._restore_init_conditions(
                     group_id,
                     group_data['strengths_init'],
-                    extra_info_before_message="Measurement stopped. "
+                    extra_info_before_message='Measurement stopped. ',
                 )
                 break
             if not self.havebeam:
                 self._restore_init_conditions(
                     group_id,
                     group_data['strengths_init'],
-                    extra_info_before_message="Error: beam is off. "
+                    extra_info_before_message='Error: beam is off. ',
                 )
                 break
             ios, sts = self.meas_ios(group_id, group_data['strengths_init'])
@@ -1165,15 +1166,15 @@ class DoParallelBBA(_BaseClass):
                 self._restore_init_conditions(
                     group_id,
                     group_data['strengths_init'],
-                    extra_info_before_message="Fail while measuring IOS. "
+                    extra_info_before_message='Fail while measuring IOS. ',
                 )
                 break
             ios_iter.append(ios)
 
             if self._method == DoParallelBBA.METHODS.XiaobiaoPBBA:
-            dkicks = list(-1 * _np.dot(inv_jac, ios))
-            dkicks_iter.append(dkicks)
-            self.set_delta_kicks(dkicks)
+                dkicks = list(-1 * _np.dot(inv_jac, ios))
+                dkicks_iter.append(dkicks)
+                self.set_delta_kicks(dkicks)
 
             elif self._method == DoParallelBBA.METHODS.ModifiedPBBA:
                 u = list(-1 * _np.dot(inv_jac, ios))
@@ -1204,7 +1205,7 @@ class DoParallelBBA(_BaseClass):
                 self._restore_init_conditions(
                     group_id,
                     group_data['strengths_init'],
-                    extra_info_before_message="Fail while measuring IOS. "
+                    extra_info_before_message='Fail while measuring IOS. ',
                 )
             else:
                 ios_iter.append(ios)
@@ -1236,15 +1237,16 @@ class DoParallelBBA(_BaseClass):
             print(msg + 'Fail! Elapsed time: {:s}'.format(dtime))
         return sts
 
-    def _restore_init_conditions(self,
-            group_id,
-            init_strengths,
-            message="Restoring initial conditions and exiting...",
-            correct_orbit=True,
-            extra_info_before_message=""
-        ):
+    def _restore_init_conditions(
+        self,
+        group_id,
+        init_strengths,
+        message='Restoring initial conditions and exiting...',
+        correct_orbit=True,
+        extra_info_before_message='',
+    ):
         """."""
-        print(extra_info_before_message+message)
+        print(extra_info_before_message + message)
 
         self.set_quad_strengths(group_id, init_strengths, ignore_timeout=True)
 
@@ -1259,8 +1261,8 @@ class DoParallelBBA(_BaseClass):
                 'KLRef-Mon',
                 strength,
                 rel_tol=0.0,
-                abs_tol=0.05*self.params.quad_deltakl,
-                timeout=self.params.wait_quadrupole
+                abs_tol=0.05 * self.params.quad_deltakl,
+                timeout=self.params.wait_quadrupole,
             ):
                 print(
                     f'    {qname}: Could not be restored to initial strength'
