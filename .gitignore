@@ -65,3 +65,6 @@ examples/.*
 test/flatfile2.txt
 
 .vscode/
+
+# Local file: Misalign Analysis sub-module
+apsuite/optics_analysis/misalign_analysis/Default_Buttons.pickle
