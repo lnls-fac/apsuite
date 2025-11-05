@@ -2344,7 +2344,7 @@ class MeasACORM(_ThreadBaseClass):
         for cmn in corr_names:
             dt_ = _time.time()
             cmo = self.devices[cmn]
-            if not cmo._wait('OpMode-Sts', mode_sts, timeout=timeout):
+            if not cmo.wait('OpMode-Sts', mode_sts, timeout=timeout):
                 self._log('ERR:' + cmn + ' did not change to ' + mode)
                 return False
             dt_ -= _time.time()
