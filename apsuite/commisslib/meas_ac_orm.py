@@ -28,6 +28,7 @@ from siriuspy.devices import (
     PowerSupply,
     RFGen,
     StrengthConv,
+    SOFB,
     Trigger,
     Tune
 )
@@ -46,7 +47,7 @@ from .measure_orbit_stability import OrbitAnalysis as _OrbitAnalysis
 class ACORMParams(_ParamsBaseClass):
     """."""
 
-    RFModes = _get_namedtuple('RFModes', ('Step', 'Phase'))
+    RFModes = _get_namedtuple('RFModes', ('Step', 'Phase', 'Standard'))
 
     def __init__(self):
         """."""
@@ -56,12 +57,14 @@ class ACORMParams(_ParamsBaseClass):
         self.ref_respmat_name = 'ref_respmat'
         self.meas_bpms_noise = True
         self.meas_rf_line = True
+        self.meas_magnets = True
 
         self.corrs_ch2meas = 'all'
         self.corrs_cv2meas = 'all'
         self.corrs_nrruns_per_acq = 4
         self.corrs_excit_time = 4  # [s]
         self.corrs_delay = 5e-3  # [s]
+        self.correct_orbit_between_acqs = True
         self.corrs_norm_kicks = False
         self.corrs_ch_kick = 5  # [urad]
         self.corrs_cv_kick = 5  # [urad]
@@ -73,7 +76,7 @@ class ACORMParams(_ParamsBaseClass):
 
         self.rf_excit_time = 1  # [s]
         self._rf_mode = self.RFModes.Phase
-        self.rf_step_kick = 5  # [Hz]
+        self.rf_step_kick = 37.5  # [Hz]
         self.rf_step_delay = 200e-3  # [s]
         self.rf_phase_amp = 2  # [°]
         self._rf_llrf2use = 'B'  # (A or B)
@@ -90,12 +93,18 @@ class ACORMParams(_ParamsBaseClass):
         stg += stmp('ref_respmat_name', self.ref_respmat_name, '')
         stg += stmp('meas_bpms_noise', str(self.meas_bpms_noise), '')
         stg += stmp('meas_rf_line', str(self.meas_rf_line), '')
+        stg += stmp('meas_magnets', str(self.meas_magnets), '')
 
         stg += stmp('corrs_ch2meas', str(self.corrs_ch2meas), '')
         stg += stmp('corrs_cv2meas', str(self.corrs_cv2meas), '')
         stg += dtmp('corrs_nrruns_per_acq', self.corrs_nrruns_per_acq, '')
         stg += ftmp('corrs_excit_time', self.corrs_excit_time, '[s]')
         stg += ftmp('corrs_delay', self.corrs_delay, '[s]')
+        stg += stmp(
+            'correct_orbit_between_acqs',
+            str(self.correct_orbit_between_acqs),
+            '',
+        )
         stg += stmp('corrs_norm_kicks', str(self.corrs_norm_kicks), '')
         stg += ftmp(
             'corrs_ch_kick',
@@ -125,7 +134,7 @@ class ACORMParams(_ParamsBaseClass):
         stg += ftmp('rf_step_kick', self.rf_step_kick, '[Hz]')
         stg += ftmp('rf_step_delay', self.rf_step_delay, '[s]')
         stg += ftmp('rf_phase_amp', self.rf_phase_amp, '[°]')
-        stg += ftmp('rf_llrf2use', self.rf_llrf2use, '(A or B)')
+        stg += stmp('rf_llrf2use', self.rf_llrf2use, '(A or B)')
         return stg
 
     @property
@@ -156,7 +165,7 @@ class ACORMParams(_ParamsBaseClass):
         if isinstance(value, str) and value.upper() in {'A', 'B'}:
             self._rf_llrf2use = value.upper()
         else:
-            raise ValueError('value must be "A" or "B")
+            raise ValueError('value must be "A" or "B"')
 
     @staticmethod
     def find_primes(n_primes, start=3):
@@ -186,6 +195,8 @@ class MeasACORM(_ThreadBaseClass):
     RF_CONDITIONING_FREQ = 1 / 12 / 4e6  # in units of RF frequency
     RF_CONDITIONING_VOLTAGEMIN = 30  # [mV]
     RF_CONDITIONING_DUTY = 55  # [%]
+    _RF_PHASE_MIN_HARM = 1300  # [Hz]
+    _RF_PHASE_MAX_HARM = 2500  # [Hz]
 
     def __init__(self, isonline=True):
         """."""
@@ -380,8 +391,12 @@ class MeasACORM(_ThreadBaseClass):
 
         """
         corr = (arr1 * arr2).sum(axis=-2)
-        corr /= _np.linalg.norm(arr1, axis=-2)
-        corr /= _np.linalg.norm(arr2, axis=-2)
+        norm1 = _np.linalg.norm(arr1, axis=-2)
+        norm2 = _np.linalg.norm(arr2, axis=-2)
+        idx1 = norm1 != 0
+        idx2 = norm2 != 0
+        corr[idx1] /= norm1[idx1]
+        corr[idx2] /= norm2[idx2]
         return corr
 
     def save_loco_input_data(
@@ -487,7 +502,7 @@ class MeasACORM(_ThreadBaseClass):
         """
         sofb = self.sofb_data
         mat = _np.zeros((2 * sofb.nr_bpms, sofb.nr_corrs), dtype=float)
-        anls = self.analysis['magnets']
+        anls = self.analysis.get('magnets', dict())
         for anly in anls:
             mat[: sofb.nr_bpms, anly['mat_idcs']] = anly[propty + 'x']
             mat[sofb.nr_bpms :, anly['mat_idcs']] = anly[propty + 'y']
@@ -524,9 +539,10 @@ class MeasACORM(_ThreadBaseClass):
                 was used as RFMode in measurement.
 
         """
-        self.analysis['magnets'] = self._process_magnets(
-            self.data['magnets'], mag_idx_ini
-        )
+        if 'magnets' in self.data:
+            self.analysis['magnets'] = self._process_magnets(
+                self.data['magnets'], mag_idx_ini
+            )
 
         rf_d = self.data.get('rf')
         if rf_d is not None:
@@ -534,8 +550,12 @@ class MeasACORM(_ThreadBaseClass):
                 anly = self._process_rf_phase(
                     rf_d, rf_phase_window, central_freq=rf_phase_central_freq
                 )
-            else:
+            elif 'mode' in rf_d and rf_d['mode'] == self.params.RFModes.Step:
                 anly = self._process_rf_step(rf_d, rf_step_trans_len)
+            elif (
+                'mode' in rf_d and rf_d['mode'] == self.params.RFModes.Standard
+            ):
+                anly = self._process_rf_sofb(rf_d)
             self.analysis['rf'] = anly
         bpms_data = self.data.get('bpms_noise')
         if bpms_data is not None:
@@ -1248,6 +1268,9 @@ class MeasACORM(_ThreadBaseClass):
         self.devices['fambpms'] = self.bpms
         self._log(f'ET: = {_time.time() - t00:.2f}s')
 
+        # Create SOFB
+        self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
+
     # ---------------- Measurement Methods ----------------
 
     def _do_measure(self):
@@ -1269,7 +1292,9 @@ class MeasACORM(_ThreadBaseClass):
             self._log('Stopped!')
             return
 
-        self.data['magnets'] = self._do_measure_magnets()
+        if self.params.meas_magnets:
+            self.data['magnets'] = self._do_measure_magnets()
+
         self._set_timing_state(tim_state)
         self._log('All measurements finished!!')
 
@@ -1343,12 +1368,50 @@ class MeasACORM(_ThreadBaseClass):
         par = self.params
         self._log('Measuring RF Line:')
 
+        data = dict()
+        if par.rf_mode == par.RFModes.Standard:
+            sofb, rfgen = self.devices['sofb'], self.devices['rfgen']
+            freq0 = rfgen.frequency
+
+            rfgen.set_frequency(freq0 + self.params.rf_step_kick)
+            sofb.cmd_reset()
+            _time.sleep(self.params.rf_step_delay)
+            sofb.wait_buffer()
+
+            orbx_pos = sofb.orbx
+            orby_pos = sofb.orby
+
+            rfgen.set_frequency(freq0 - self.params.rf_step_kick)
+            sofb.cmd_reset()
+            _time.sleep(self.params.rf_step_delay)
+            sofb.wait_buffer()
+
+            orbx_neg = sofb.orbx
+            orby_neg = sofb.orby
+
+            rfgen.set_frequency(freq0)
+
+            data.update(self.get_general_data())
+            data['mode'] = par.rf_mode
+            data['step_kick'] = par.rf_step_kick
+            data['orbx_pos'] = orbx_pos
+            data['orbx_neg'] = orbx_neg
+            data['orby_pos'] = orby_pos
+            data['orby_neg'] = orby_neg
+
+            elt -= _time.time()
+            elt *= -1
+            self._log(f'    Elapsed Time: {elt:.2f}s')
+            return data
+
         rate = 'FOFB' if par.rf_mode == par.RFModes.Phase else 'FAcq'
 
         t00 = _time.time()
         self._log('    Configuring BPMs...', end='')
         rf_freq = self.devices['rfgen'].frequency
-        nr_points = par.rf_excit_time + par.rf_step_delay * 2
+        nr_points = par.rf_excit_time
+        if par.rf_mode == par.RFModes.Step:
+            nr_points += par.rf_step_delay * 2
         nr_points *= self.bpms.get_sampling_frequency(rf_freq, acq_rate=rate)
         nr_points = int(_np.ceil(nr_points))
         ret = self._config_bpms(nr_points, rate=rate)
@@ -1402,7 +1465,6 @@ class MeasACORM(_ThreadBaseClass):
             self._meas_finished_ok = False
         self._log(f'Done! ET: {_time.time() - t00:.2f}s')
 
-        data = dict()
         llrf = self.devices['llrfa']
         data['llrfa_cond_voltage_min'] = llrf.voltage_refmin_sp
         data['llrfa_cond_phase_min'] = llrf.phase_refmin_sp
@@ -1639,6 +1701,10 @@ class MeasACORM(_ThreadBaseClass):
             ):
                 self._log('Problem: Correctors not in SlowRef mode.')
                 break
+            if self.params.correct_orbit_between_acqs:
+                self.devices['sofb'].correct_orbit_manually(
+                    nr_iters=5, residue=1
+                )
             self._log(f'Done! ET: {_time.time() - t00:.2f}s')
 
             elt -= _time.time()
@@ -1737,7 +1803,7 @@ class MeasACORM(_ThreadBaseClass):
         self._log(f'Done! ET: {_time.time() - t0_:2f}s')
         return anly
 
-    def _process_rf_phase(self, data, window=10, central_freq=None):
+    def _process_rf_phase(self, data, window=20, central_freq=None):
         anly = dict()
 
         t0_ = _time.time()
@@ -1779,8 +1845,8 @@ class MeasACORM(_ThreadBaseClass):
         # Find peak with maximum amplitude to filter data
         if central_freq is None:
             # Possible range to find peak
-            harm_min = int(1700 / f_cond)
-            harm_max = int(2300 / f_cond)
+            harm_min = int(self._RF_PHASE_MIN_HARM / f_cond)
+            harm_max = int(self._RF_PHASE_MAX_HARM / f_cond)
             freqs = _np.arange(harm_min, harm_max) * f_cond
             freqx = _np.fft.rfftfreq(orbx.shape[0], d=dtim)
 
@@ -1822,6 +1888,27 @@ class MeasACORM(_ThreadBaseClass):
         eta_meas = _OrbitAnalysis.calculate_eta_meas(orbx, orby, etax, etay)
         anly['mat_colsx'] = eta_meas[:nrbpms]
         anly['mat_colsy'] = eta_meas[nrbpms:]
+
+        self._log(f'Done! ET: {_time.time() - t0_:2f}s')
+        return anly
+
+    def _process_rf_sofb(self, data):
+        t0_ = _time.time()
+        self._log('Processing SOFB RF col meas ...', end='')
+
+        orbx_pos = data['orbx_pos'].copy()
+        orby_pos = data['orby_pos'].copy()
+        orbx_neg = data['orbx_neg'].copy()
+        orby_neg = data['orby_neg'].copy()
+        kick = data['step_kick']
+
+        anly = dict()
+        anly['orbx_neg'] = orbx_neg
+        anly['orby_neg'] = orby_neg
+        anly['orbx_pos'] = orbx_pos
+        anly['orby_pos'] = orby_pos
+        anly['mat_colsx'] = (orbx_pos - orbx_neg) / kick / 2
+        anly['mat_colsy'] = (orby_pos - orby_neg) / kick / 2
 
         self._log(f'Done! ET: {_time.time() - t0_:2f}s')
         return anly
@@ -2257,7 +2344,7 @@ class MeasACORM(_ThreadBaseClass):
         for cmn in corr_names:
             dt_ = _time.time()
             cmo = self.devices[cmn]
-            if not cmo._wait('OpMode-Sts', mode_sts, timeout=timeout):
+            if not cmo.wait('OpMode-Sts', mode_sts, timeout=timeout):
                 self._log('ERR:' + cmn + ' did not change to ' + mode)
                 return False
             dt_ -= _time.time()
