@@ -364,7 +364,8 @@ class ParallelBBAParams(_ParamsBaseClass):
         self.timeout_wait_orbit = 3  # [s]
 
         self.corr_nr_iters = 6
-        self.inv_jac_rcond = 1e-5
+        self.inv_jac_rcond = 1e-5  # ????? For Xiaobiao's PBBA
+        # self.inv_jac_rcond = s[5]/s[0]  # ????? For Modified's PBBA
 
         self.sofb_nrpoints = 20
         self.sofb_maxcorriter = 5
@@ -820,7 +821,8 @@ class DoParallelBBA(_BaseClass):
     def _calc_modpbba_jacobian(self):
         """IOS Response Matrices for all (or selected) groups."""
         model = self.model
-        quadindices = self._get_quads_indices_in_model(self.data['quadnames'])
+        quadnames = self.data['quadnames']
+        quadindices = self._get_quads_indices_in_model(quadnames)
         bpmindices = self._get_bpms_indices_in_model(self.data['bpmnames'])
 
         m_mat, t_mat = _pyacc.tracking.find_m66(model, indices='open')
@@ -831,6 +833,8 @@ class DoParallelBBA(_BaseClass):
         respxy = _np.zeros((n_bpms, n_quads), dtype=float)
         respyx = _np.zeros((n_bpms, n_quads), dtype=float)
         respyy = _np.zeros((n_bpms, n_quads), dtype=float)
+
+        jacs = []
 
         for col, q in enumerate(quadindices):
             rq_mat = t_mat[q].copy()  # shape: (6, 6)
@@ -846,74 +850,80 @@ class DoParallelBBA(_BaseClass):
             drift[2, 3] = length / 2 / 2
             quad = _np.eye(rq_mat.shape[0], dtype=float)
             quad[1, 0] = -kl / 2
-            quad[3, 2] = -kl / 2
+            quad[3, 2] = +kl / 2
             quad[1, 2] = -ksl / 2
             quad[3, 0] = -ksl / 2
             half_quad = drift @ quad @ drift
 
-            # Transport Rq throught half quad
+            # Transport to quad center
             rq_mat = half_quad @ rq_mat
 
             # Compute the one turn matrix at the center of the quad
             # Mq = Rq * M1turn * Rq^-1
             mq_mat = _np.linalg.solve(rq_mat.T, (rq_mat @ m_mat).T).T
 
-            # inverse: (1-Mq)^-1
-            mqi = _np.eye(mq_mat.shape[0], dtype=float) - mq_mat
+            # calculate: (1-Mq)
+            one_minus_mq = _np.eye(mq_mat.shape[0], dtype=float) - mq_mat
 
-            # Compute tranfer matrix from quad to BPMs
-            rqbl = _np.linalg.solve(rq_mat.T, rb_mat.transpose((0, 2, 1)))
-            rqbl = rqbl.transpose((0, 2, 1))
+            # Compute tranfer matrix from quad to BPMs (Rb * Rq^{-1})
+            rqb = _np.linalg.solve(
+                rq_mat.T, rb_mat.transpose((0, 2, 1))
+            ).transpose((0, 2, 1))
 
             # Split BPMs before/after quad
-            small = _np.array(bpmindices) < q
-            large = ~small
+            before = _np.array(bpmindices) < q
+            after = ~before
 
-            # For BPMs before quad: multiply por Mq
-            # Rq->b = Rb * Rq^-1 * Mq = Rb * M1turn * Rq^-1
-            rqbs = rqbl[small] @ mq_mat
+            # For BPMs before quad: Rq->b = Rb * Rq^-1 * Mq
+            rqb_before = rqb[before] @ mq_mat
 
             # For BPMs after quad: Rq->b = Rb * Rq^-1
-            rqbl = rqbl[large]
+            rqb_after = rqb[after]
 
-            # Apply closed-orbit inverse (I-Mq)^{-1}
-            # -> We solve mci^T x = rcbl^T  -> x = (mci^{-T} rcbl^T)^T
-            if rqbl.size:
-                rqbl = _np.linalg.solve(
-                    mqi.T, rqbl.transpose((0, 2, 1))
-                ).transpose((0, 2, 1))
-            if rqbs.size:
-                rqbs = _np.linalg.solve(
-                    mqi.T, rqbs.transpose((0, 2, 1))
-                ).transpose((0, 2, 1))
+            # ?????
+            # calculate M_hat: (Mq = H * M_hat * H)
+            # -> M_hat = H^{-1} * Mq * H^{-1}
+            # m_hat = _np.linalg.solve(
+            #     half_quad.T, (_np.linalg.solve(half_quad, mq_mat)).T
+            # ).T
+
+            # define M_dk
+            m_dk = _np.zeros_like(mq_mat)
+
+            if quadnames[col].dev == "QS":
+                m_dk[1, 2] = +1.0  # ????
+                m_dk[3, 0] = +1.0  # ????
+            else:
+                m_dk[1, 0] = -1.0
+                m_dk[3, 2] = +1.0
+
+            # calculate jac = (1 - Mq)^{-1} * M_hat * M_dk
+            # jac_q = _np.linalg.solve(one_minus_mq, m_hat @ m_dk)  # ??????
+            jac_q = _np.linalg.solve(one_minus_mq, mq_mat @ m_dk)
 
             # Join rqb matrices (before/after)
             rqb = _np.zeros(
                 shape=(n_bpms, rq_mat.shape[0], rq_mat.shape[1]), dtype=float
             )
-            rqb[large] = rqbl
-            rqb[small] = rqbs
+            rqb[before] = rqb_before
+            rqb[after] = rqb_after
 
-            # Define the quadrupolar kick vectors
-            e_x = _np.array([0, 1.0, 0, 0, 0, 0])
-            e_y = _np.array([0, 0, 0, 1.0, 0, 0])
+            jac = rqb @ jac_q
 
-            # Compute orbit response to horizontal shift (x_q = 1, y_q = 0)
-            inv_action_x = _np.linalg.solve(mqi.T, e_x.reshape(-1, 1)).ravel()
-            delta_x = _np.tensordot(rqb, inv_action_x, axes=([1], [0]))
-            respxx[:, col] = delta_x[:, 0]
-            respyx[:, col] = delta_x[:, 2]
+            delta_xoff = jac @ _np.array([1, 0, 0, 0, 0, 0]).T
+            respxx[:, col] = delta_xoff[:, 0]
+            respyx[:, col] = delta_xoff[:, 2]
 
-            # Compute orbit response to vertical shift (x_q = 0, y_q = 1)
-            inv_action_y = _np.linalg.solve(mqi.T, e_y.reshape(-1, 1)).ravel()
-            delta_y = _np.tensordot(rqb, inv_action_y, axes=([1], [0]))
-            respxy[:, col] = delta_y[:, 0]
-            respyy[:, col] = delta_y[:, 2]
+            delta_yoff = jac @ _np.array([0, 0, 1, 0, 0, 0]).T
+            respxy[:, col] = delta_yoff[:, 0]
+            respyy[:, col] = delta_yoff[:, 2]
+
+            jacs.append(jac)
 
         return _np.vstack((
             _np.hstack((respxx, respxy)),
             _np.hstack((respyx, respyy)),
-        ))
+        ))  # , jacs, jac_q
 
     def get_modpbba_projection(self, group_id):
         """."""
