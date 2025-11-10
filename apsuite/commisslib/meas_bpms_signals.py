@@ -1,5 +1,6 @@
 """."""
 
+
 import time as _time
 
 import numpy as _np
@@ -18,11 +19,11 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
 
     def __init__(self):
         """."""
-        self.trigbpm_delay = None
+        self.trigbpm_delay_raw = None
         self.trigbpm_nrpulses = 1
         self.do_pulse_evg = True
         self._timing_event = "Study"
-        self.event_delay = None
+        self.event_delay_raw = None
         self.event_mode = "External"
         self.timeout = 40
         self.nrpoints_before = 0
@@ -37,23 +38,27 @@ class AcqBPMsSignalsParams(_ParamsBaseClass):
         dtmp = "{0:26s} = {1:9d}  {2:s}\n".format
         stmp = "{0:26s} = {1:9}  {2:s}\n".format
         stg = ""
-        dly = self.trigbpm_delay
+        dly = self.trigbpm_delay_raw
         if dly is None:
             stg += stmp(
-                "trigbpm_delay", "same", "(current value will not be changed)"
+                "trigbpm_delay_raw",
+                "same",
+                "(current value will not be changed)"
             )
         else:
-            stg += ftmp("trigbpm_delay", dly, "[us]")
+            stg += dtmp("trigbpm_delay_raw", int(dly), "")
         stg += dtmp("trigbpm_nrpulses", self.trigbpm_nrpulses, "")
         stg += stmp("do_pulse_evg", str(self.do_pulse_evg), "")
         stg += stmp("timing_event", self.timing_event, "")
-        dly = self.event_delay
+        dly = self.event_delay_raw
         if dly is None:
             stg += stmp(
-                "event_delay", "same", "(current value will not be changed)"
+                "event_delay_raw",
+                "same",
+                "(current value will not be changed)"
             )
         else:
-            stg += ftmp("event_delay", dly, "[us]")
+            stg += dtmp("event_delay_raw", int(dly), "")
         stg += stmp("event_mode", self.event_mode, "")
         stg += ftmp("timeout", self.timeout, "[s]")
         stg += dtmp("nrpoints_before", self.nrpoints_before, "")
@@ -90,18 +95,21 @@ class AcqBPMsSignals(_BaseClass):
     BPM_TRIGGER = "SI-Fam:TI-BPM"
     PSM_TRIGGER = "SI-Fam:TI-BPM-PsMtm"
 
-    def __init__(self, isonline=True, ispost_mortem=False):
+    def __init__(self, params=None, isonline=True, ispost_mortem=False):
         """."""
-        super().__init__(params=AcqBPMsSignalsParams(), isonline=isonline)
+        params = params or AcqBPMsSignalsParams()
+        super().__init__(params=params, isonline=isonline)
         self._ispost_mortem = ispost_mortem
 
         if self.isonline:
             self.create_devices()
 
     calc_positions_from_amplitudes = staticmethod(
-        FamBPMs.calc_positions_from_amplitudes)
-    calc_positions_from_amplitudes.__doc__ = \
+        FamBPMs.calc_positions_from_amplitudes
+    )
+    calc_positions_from_amplitudes.__doc__ = (
         FamBPMs.calc_positions_from_amplitudes.__doc__
+    )
 
     def load_and_apply(self, fname: str):
         """Load and apply `data` and `params` from pickle or HDF5 file.
@@ -144,16 +152,16 @@ class AcqBPMsSignals(_BaseClass):
         trigbpm = self.devices["trigbpm"]
 
         state = dict()
-        state["trigbpm_source"] = trigbpm.source
+        state["trigbpm_source"] = trigbpm.source_str
         state["trigbpm_nrpulses"] = trigbpm.nr_pulses
-        state["trigbpm_delay"] = trigbpm.delay
+        state["trigbpm_delay_raw"] = trigbpm.delay_raw
         if self.params.do_pulse_evg:
             state["evg_nrpulses"] = self.devices["evg"].nrpulses
 
         evt = self._get_event(self.params.timing_event)
         if evt is not None:
-            state["evt_delay"] = evt.delay
-            state["evt_mode"] = evt.mode
+            state["event_delay_raw"] = evt.delay_raw
+            state["event_mode"] = evt.mode_str
         return state
 
     def recover_timing_state(self, state):
@@ -165,9 +173,9 @@ class AcqBPMsSignals(_BaseClass):
         state = dict() if state is None else state
 
         trigbpm = self.devices["trigbpm"]
-        dly = state.get("trigbpm_delay", self.params.trigbpm_delay)
+        dly = state.get("trigbpm_delay_raw", self.params.trigbpm_delay_raw)
         if dly is not None:
-            trigbpm.delay = dly
+            trigbpm.delay_raw = dly
 
         trigbpm.nr_pulses = state.get(
             "trigbpm_nrpulses", self.params.trigbpm_nrpulses
@@ -177,21 +185,23 @@ class AcqBPMsSignals(_BaseClass):
 
         evt = self._get_event(self.params.timing_event)
         if evt is not None:
-            dly = state.get("evt_delay", self.params.event_delay)
+            dly = state.get("event_delay_raw", self.params.event_delay_raw)
             if dly is not None:
-                evt.delay = dly
-            evt.mode = state.get("evt_mode", self.params.event_mode)
+                evt.delay_raw = dly
+            evt.mode = state.get("event_mode", self.params.event_mode)
 
-        nrpul = 1 if self.params.do_pulse_evg else None
-        nrpul = state.get("evg_nrpulses", nrpul)
-        if nrpul is not None:
-            evg = self.devices["evg"]
-            evg.set_nrpulses(nrpul)
-            evg.cmd_update_events()
+            if self.params.event_mode != "External":
+                nrpul = 1 if self.params.do_pulse_evg else None
+                nrpul = state.get("evg_nrpulses", nrpul)
+                if nrpul is not None:
+                    self.devices["evg"].set_nrpulses(nrpul)
+
+            self.devices["evg"].cmd_update_events()
 
     def trigger_timing_signal(self):
         """."""
         if not self.params.do_pulse_evg:
+            print("Waiting for trigger event to be fired.")
             return
         evt = self._get_event(self.params.timing_event)
         if evt is not None and evt.mode_str == "External":
@@ -215,13 +225,14 @@ class AcqBPMsSignals(_BaseClass):
         """."""
         fambpms = self.devices["fambpms"]
         ret = self.prepare_bpms_acquisition()
-        tag = self._bpm_tag(idx=abs(int(ret))-1)
+        tag = self._bpm_tag(idx=abs(int(ret)) - 1)
         if ret < 0:
             print(tag + " did not finish last acquisition.")
         elif ret > 0:
             print(tag + " is not ready for acquisition.")
 
         fambpms.reset_mturn_initial_state()
+
         self.trigger_timing_signal()
 
         time0 = _time.time()
@@ -230,7 +241,7 @@ class AcqBPMsSignals(_BaseClass):
         if ret != 0:
             print("There was a problem with acquisition")
             if ret > 0:
-                tag = self._bpm_tag(idx=int(ret)-1)
+                tag = self._bpm_tag(idx=int(ret) - 1)
                 pos = fambpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
                 print("This BPM did not update: " + tag + ", signal " + pos)
             elif ret == -1:
@@ -281,6 +292,7 @@ class AcqBPMsSignals(_BaseClass):
         data["switching_frequency"] = fbpms.get_switching_frequency(rf_freq)
         data["tunex_enable"] = tune.enablex
         data["tuney_enable"] = tune.enabley
+        data["timing_state"] = self.get_timing_state()
         return data
 
     @staticmethod
@@ -360,7 +372,7 @@ class AcqBPMsSignals(_BaseClass):
         """
         ds = downsampling
         fil = _np.ones(ds) / ds
-        return _sp_sig.convolve(orb, fil[:, None], mode='same')
+        return _sp_sig.convolve(orb, fil[:, None], mode="same")
 
     @staticmethod
     def calc_spectrum(data, fs=1.0, axis=0):
