@@ -54,7 +54,7 @@ class NOECOParams(LeastSquaresParams):
         self.tunex = 49.16
         self.tuney = 14.22
         self.chromx = 3.11
-        self.chromy = 2.5
+        self.chromy = 2.66
 
         self.sextfams2fit = self.SEXT_FAMS_CHROM
         self.fit_sexts = True
@@ -79,12 +79,14 @@ class NOECOParams(LeastSquaresParams):
         self.init_gain_corr = _np.ones(self.nr_corrs)
         self.init_gain_bpms = _np.ones(2 * self.nr_bpms)  # Gx, Gy
         self.init_coup_bpms = _np.zeros(2 * self.nr_bpms)  # Cc, Cy
+        self.chrom_weights = _np.array([1, 1])
         super().__init__()
 
         self.use_diag_blocks = True
-        self.use_hor_disp = True
         self.use_offdiag_blocks = False
+        self.use_hor_disp = True
         self.use_ver_disp = False
+        self.use_chroms = False
 
     @property
     def nr_sexts(self):
@@ -173,6 +175,7 @@ class NOECOFit(LeastSquaresOptimize):
         params = NOECOParams()
 
         self._oeorm_goal = None
+        self._chroms_goal = _np.array([params.chromx, params.chromy])
         self._bpms_noise = None
         self._model = None
         self.famdata = None
@@ -221,9 +224,25 @@ class NOECOFit(LeastSquaresOptimize):
         self._oeorm_goal = oeorm
 
     @property
+    def chroms_goal(self):
+        """."""
+        return self._chroms_goal
+
+    @chroms_goal.setter
+    def chroms_goal(self, chroms):
+        """."""
+        if chroms is None:
+            raise ValueError('chroms_goal must not be None.')
+        self._chroms_goal = chroms
+
+    @property
     def merit_figure_goal(self):
         """."""
-        return self.oeorm_goal.ravel()[self.params.oeorm_mask.ravel()]
+        figgoal = self.oeorm_goal.ravel()[self.params.oeorm_mask.ravel()]
+        if self.params.use_chroms:
+            chroms = (self.params.chrom_weights * self.chroms_goal).ravel()
+            figgoal = _np.concatenate((figgoal, chroms))
+        return figgoal
 
     @merit_figure_goal.setter
     def merit_figure_goal(self, merit_figure):
@@ -438,13 +457,19 @@ class NOECOFit(LeastSquaresOptimize):
         if pos is None:
             pos = self.get_initial_pos()
         strengths, *_ = self.parse_params_from_pos(pos)
-        return self.get_oeorm(
+        merit_fig = self.get_oeorm(
             strengths=strengths,
             delta=self.params.denergy_oeorm_calc,
             normalize_rf=True,
             ravel=True,
             filter_blocks=True,
         )
+        if self.params.use_chroms:
+            chroms = self.get_chroms(strengths)
+            chroms *= self.params.chrom_weights
+            merit_fig = _np.concatenate((merit_fig, chroms.ravel()))
+
+        return merit_fig
 
     def calc_residual(self, pos=None, merit_figure_goal=None):
         """."""
@@ -456,6 +481,12 @@ class NOECOFit(LeastSquaresOptimize):
 
         merit_figure_goal = self.apply_gains(merit_figure_goal, pos)
         merit_figure_goal = merit_figure_goal[self.params.oeorm_mask]
+
+        if self.params.use_chroms:
+            merit_figure_goal = _np.concatenate((
+                merit_figure_goal,
+                (self.params.chrom_weights * self.chroms_goal).ravel(),
+            ))
 
         return super().calc_residual(pos, merit_figure_goal)
 
@@ -523,8 +554,8 @@ class NOECOFit(LeastSquaresOptimize):
         if self.params.fit_coup_bpms:
             jacobian_coup_bpms = block_diag(
                 *_np.vstack((
-                    oeorm_corr_gains[self.params.nr_bpms :],
-                    oeorm_corr_gains[: self.params.nr_bpms],
+                    oeorm_corr_gains[self.params.nr_bpms :],  #TODO: coups
+                    oeorm_corr_gains[: self.params.nr_bpms],  # and no disps
                 ))
             ).T
             if self.params.errorbars is not None:
@@ -534,6 +565,12 @@ class NOECOFit(LeastSquaresOptimize):
                 jacobian = jacobian_coup_bpms
             else:
                 jacobian = _np.hstack((jacobian, jacobian_coup_bpms))
+
+        if self.params.use_chroms:
+            jacobian = _np.vstack((
+                jacobian,
+                _np.zeros((2, jacobian.shape[-1])),
+            ))
 
         return -jacobian  # oposite sign convention for numeric & analytic jacs
 
@@ -704,9 +741,9 @@ class NOECOFit(LeastSquaresOptimize):
         ax.set_xticks(tick_pos, labels=tick_label, rotation=45)
         line_label = 'SL'
         if diff_from_init:
-            line_label = "delta " + line_label
+            line_label = 'delta ' + line_label
         if diff_from_init and percentual_diff:
-            line_label = "percentual " + line_label + ' [\%]'
+            line_label = 'percentual ' + line_label + ' [\%]'
         else:
             line_label = line_label + r' [m$^{-2}$]'
         ax.set_ylabel(line_label)
