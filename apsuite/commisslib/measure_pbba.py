@@ -482,6 +482,7 @@ class DoParallelBBA(_BaseClass):
         haveb = self.devices['currinfosi']
         return haveb.connected and haveb.storedbeam
 
+    # #### pbba groups and deltas #####
     @property
     def groups2dopbba(self):
         """."""
@@ -512,6 +513,7 @@ class DoParallelBBA(_BaseClass):
                 raise ValueError(f"values for delta kl can't exceed {_max}")
         self.data['delta_kl'] = _dcopy(value)
 
+    # #### model utils #####
     @property
     def jacobians(self):
         """."""
@@ -552,6 +554,7 @@ class DoParallelBBA(_BaseClass):
         """."""
         return self._fam_data
 
+    # ### quadrupole connection #####
     def connect_to_quadrupoles(self):
         """."""
         for qname in self.data['quadnames']:
@@ -562,6 +565,7 @@ class DoParallelBBA(_BaseClass):
                 props2init=('PwrState-Sts', 'KL-SP', 'KL-RB', 'KLRef-Mon')
             )
 
+    # #### sofb utils #####
     def get_orbit(self):
         """."""
         if not self.havebeam:
@@ -617,6 +621,27 @@ class DoParallelBBA(_BaseClass):
         sofb.mancorrgainch, sofb.mancorrgaincv, sofb.mancorrgainrf = (
             factch, factcv, factrf
         )
+
+    @property
+    def enbllistbpm(self):
+        """."""
+        sofb = self.devices['sofb']
+        enblx = sofb.bpmxenbl.copy()
+        enbly = sofb.bpmyenbl.copy()
+        return _np.array(_np.hstack([enblx, enbly]), dtype=bool)
+
+    @enbllistbpm.setter
+    def enbllistbpm(self, value):
+        sofb = self.devices['sofb']
+        nbpms = sofb._data.nr_bpms
+        if len(value) != 2 * nbpms:
+            raise ValueError(f'Invalid size! Must be {2*nbpms}.')
+        if all(v in [0, 1, True, False] for v in value):
+            value = _np.array(value, dtype=bool)
+        else:
+            raise ValueError('Values must be boolean (0 / 1 or True / False).')
+        sofb.bpmxenbl = value[:nbpms]
+        sofb.bpmyenbl = value[nbpms:]
 
     # #### pbba utils #####
 
@@ -923,7 +948,8 @@ class DoParallelBBA(_BaseClass):
         strtini = tini.strftime('%Hh%Mm%Ss')
         print(f'{strtini:s}: Doing PBBA for Group {group_id:d}')
 
-        jac = self.data['jacobians'][group_id]
+        enblbpm = self.enbllistbpm  # cut jacobian with only enabled bpms
+        jac = (self.data['jacobians'][group_id])[enblbpm, :]
         inv_jac = _np.linalg.pinv(jac, self.params.inv_jac_rcond)
 
         group_data = {
@@ -931,6 +957,7 @@ class DoParallelBBA(_BaseClass):
             'strengths_init': self.get_quad_strengths(group_id),
             'orbit_init': self.get_orbit(),
             'kicks_init': self.get_kicks(),
+            'enbllistbpm': enblbpm.copy(),
         }
 
         ios_iter, dkicks_iter = [], []
@@ -962,7 +989,8 @@ class DoParallelBBA(_BaseClass):
                     extra_info_before_message="Fail while measuring IOS. "
                 )
                 break
-            ios_iter.append(ios)
+            ios_iter.append(ios)  # save ios (all bpms)
+            ios = ios[enblbpm]  # use only enabled bpms for correction
             dkicks = list(-1 * _np.dot(inv_jac, ios))
             dkicks_iter.append(dkicks)
             self.set_delta_kicks(dkicks)
