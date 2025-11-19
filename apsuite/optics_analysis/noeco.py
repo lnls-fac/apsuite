@@ -80,6 +80,7 @@ class NOECOParams(LeastSquaresParams):
         self.init_gain_bpms = _np.ones(2 * self.nr_bpms)  # Gx, Gy
         self.init_coup_bpms = _np.zeros(2 * self.nr_bpms)  # Cc, Cy
         self.chrom_weights = _np.array([1, 1])
+        self.disp_weight = 1
         super().__init__()
 
         self.use_diag_blocks = True
@@ -260,7 +261,10 @@ class NOECOFit(LeastSquaresOptimize):
         if bpms_noise is None:
             return
         self._bpms_noise = bpms_noise
-        self.params.errorbars = self._get_errorbars(bpms_noise)
+        if bpms_noise.squeeze().ndim == 1:
+            self.params.errorbars = self._get_errorbars(bpms_noise)
+        else:
+            self.params.errorbars = bpms_noise[self.params.oeorm_mask].ravel()
 
     def create_model(self):
         """."""
@@ -340,7 +344,7 @@ class NOECOFit(LeastSquaresOptimize):
         errorbar = _np.ones(2 * n * m)
         for i, sigma in enumerate(bpms_noise, start=0):
             errorbar[i * m : (i + 1) * m] = _np.repeat(sigma, m)
-        return errorbar
+        return errorbar[self.params.oeorm_mask.ravel()]
 
     def get_strengths(self):
         """."""
@@ -363,7 +367,6 @@ class NOECOFit(LeastSquaresOptimize):
         delta=1e-2,
         normalize_rf=True,
         ravel=False,
-        filter_blocks=False,
     ):
         """."""
         if model is None:
@@ -390,9 +393,6 @@ class NOECOFit(LeastSquaresOptimize):
 
         if normalize_rf:
             oeorm[:, -1] *= 1e6  # [um/Hz]
-
-        if filter_blocks:
-            oeorm = oeorm[self.params.oeorm_mask]
 
         if ravel:
             oeorm = _np.ravel(oeorm)
@@ -461,9 +461,13 @@ class NOECOFit(LeastSquaresOptimize):
             strengths=strengths,
             delta=self.params.denergy_oeorm_calc,
             normalize_rf=True,
-            ravel=True,
-            filter_blocks=True,
+            ravel=False,
         )
+
+        if self.params.disp_weight:
+            merit_fig[:, -1] *= self.params.disp_weight
+        merit_fig = merit_fig[self.params.oeorm_mask].ravel()
+
         if self.params.use_chroms:
             chroms = self.get_chroms(strengths)
             chroms *= self.params.chrom_weights
@@ -479,8 +483,15 @@ class NOECOFit(LeastSquaresOptimize):
         if merit_figure_goal is None:
             merit_figure_goal = self.oeorm_goal
 
+        if merit_figure_goal.ndim == 1:
+            merit_figure_goal = self.reshape_merit_fig(merit_figure_goal)
+
         merit_figure_goal = self.apply_gains(merit_figure_goal, pos)
-        merit_figure_goal = merit_figure_goal[self.params.oeorm_mask]
+
+        if self.params.disp_weight:
+            merit_figure_goal[:, -1] *= self.params.disp_weight
+
+        merit_figure_goal = merit_figure_goal[self.params.oeorm_mask].ravel()
 
         if self.params.use_chroms:
             merit_figure_goal = _np.concatenate((
@@ -489,6 +500,14 @@ class NOECOFit(LeastSquaresOptimize):
             ))
 
         return super().calc_residual(pos, merit_figure_goal)
+
+    def reshape_merit_fig(self, merit_fig):
+        """."""
+        merit_fig = merit_fig.reshape((
+            2 * self.params.nr_bpms,
+            self.params.nr_corrs + 1,
+        ))
+        return merit_fig
 
     def calc_jacobian_sexts(self, strengths=None, step=1e-4):
         """."""
@@ -514,13 +533,11 @@ class NOECOFit(LeastSquaresOptimize):
             )
             jacobian_gains_corrs = _np.vstack([
                 _np.diag(m) for m in oeorm_bpms_gains
-            ])
+            ])[self.params.oeorm_mask.ravel()]
+
             if self.params.errorbars is not None:
                 jacobian_gains_corrs /= self.params.errorbars[:, None]
-
-            jacobian = jacobian_gains_corrs[
-                self.params.oeorm_mask.ravel(), : self.params.nr_corrs
-            ]
+            jacobian = jacobian_gains_corrs[:, : self.params.nr_corrs]
 
         oeorm_corr_gains = self.apply_gains(oeorm, pos, bpms=False, corrs=True)
         # BPM gains Jacobian jth col = measured OEORM jth line, padded with
@@ -534,12 +551,11 @@ class NOECOFit(LeastSquaresOptimize):
         # this is implemented below
         if self.params.fit_gain_bpms:
             jacobian_gains_bpms = block_diag(*oeorm_corr_gains).T
-            if self.params.errorbars is not None:
-                jacobian_gains_bpms /= self.params.errorbars[:, None]
-
             jacobian_gains_bpms = jacobian_gains_bpms[
                 self.params.oeorm_mask.ravel()
             ]
+            if self.params.errorbars is not None:
+                jacobian_gains_bpms /= self.params.errorbars[:, None]
 
             if jacobian is None:
                 jacobian = jacobian_gains_bpms
@@ -554,10 +570,13 @@ class NOECOFit(LeastSquaresOptimize):
         if self.params.fit_coup_bpms:
             jacobian_coup_bpms = block_diag(
                 *_np.vstack((
-                    oeorm_corr_gains[self.params.nr_bpms :],  #TODO: coups
+                    oeorm_corr_gains[self.params.nr_bpms :],  # TODO: coups
                     oeorm_corr_gains[: self.params.nr_bpms],  # and no disps
                 ))
             ).T
+            jacobian_coup_bpms = jacobian_gains_corrs[
+                self.params.oeorm_mask.ravel()
+            ]
             if self.params.errorbars is not None:
                 jacobian_coup_bpms /= self.params.errorbars[:, None]
 
@@ -637,13 +656,6 @@ class NOECOFit(LeastSquaresOptimize):
             pos = self.get_default_pos()
 
         oeorm_ = oeorm.copy()
-        ravel = False
-        if oeorm_.ndim == 1:
-            ravel = True
-            oeorm_ = oeorm_.reshape((
-                2 * self.params.nr_bpms,
-                self.params.nr_corrs + 1,
-            ))
 
         _, *ret = self.parse_params_from_pos(pos)
         gains_corrs, gains_bpms, coup_bpms = ret
@@ -655,7 +667,7 @@ class NOECOFit(LeastSquaresOptimize):
             Gb = self.bpms_gains_matrix(gains_bpms, coup_bpms)
             oeorm_ = Gb @ oeorm_
 
-        return oeorm_.ravel() if ravel else oeorm_
+        return oeorm_
 
     def bpms_gains_matrix(self, gains, coups):
         """."""
