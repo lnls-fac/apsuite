@@ -1,33 +1,30 @@
-import numpy as _np
 import copy as _copy
 
+import numpy as _np
 import pyaccel as _pyaccel
 import pymodels as _pymodels
-from apsuite.orbcorr import OrbitCorr, CorrParams
-from apsuite.optics_analysis import TuneCorr, OpticsCorr, CouplingCorr
+from mathphys.functions import load as _load, save as _save
+
 from apsuite.commisslib.measure_bba import BBAParams
-from mathphys.functions import save as _save, load as _load
+from apsuite.optics_analysis import CouplingCorr, OpticsCorr, TuneCorr
+from apsuite.orbcorr import CorrParams, OrbitCorr
 
 
 class MachinesParams:
-
     class CoupCorrParams:
-
         def __init__(self):
             self.nr_singval = 80
             self.weight_dispy = 1e5
             self.tolerance = 1e-8
 
     class OptCorrParams:
-
         def __init__(self):
             self.nr_singval = 150
             self.tolerance = 1e-6
 
     def __init__(self):
-
         self.acc = 'SI'
-        self.orbcorr_params = CorrParams()  # Orbit corr params
+        self.orbcorr_params = CorrParams(use6dtrack=False)  # Orbit corr params
         self.optcorr_params = self.OptCorrParams()  # Optics corr params
         self.coupcorr_params = self.CoupCorrParams()  # Coupling corr params
         self.ramp_with_ids = False
@@ -62,7 +59,8 @@ class GenerateMachines:
             'pitch': _pyaccel.lattice.add_error_rotation_pitch,
             'yaw': _pyaccel.lattice.add_error_rotation_yaw,
             'excit': _pyaccel.lattice.add_error_excitation_main,
-            'kdip': _pyaccel.lattice.add_error_excitation_kdip}
+            'kdip': _pyaccel.lattice.add_error_excitation_kdip,
+        }
         self.params = params
 
     @property
@@ -228,12 +226,10 @@ class GenerateMachines:
 
     @property
     def optcorr_params(self):
-
         return self.params.optcorr_params
 
     @property
     def coupcorr_params(self):
-
         return self.params.coupcorr_params
 
     @property
@@ -343,7 +339,8 @@ class GenerateMachines:
                     continue
                 errors = family[error_type]
                 self._functions[error_type](
-                    self.models[mach], inds, errors[mach]/nr_steps)
+                    self.models[mach], inds, errors[mach] / nr_steps
+                )
         print('Done!')
 
     def apply_multipoles_errors(self, nr_steps, mach):
@@ -362,18 +359,21 @@ class GenerateMachines:
                 continue
             main_monoms = {'B': 1, 'Q': 2, 'S': 3, 'QS': -2}
             mag_key = fam[0] if fam != 'QS' else fam
-            main_monom = _np.ones(len(inds))*main_monoms[mag_key]
+            main_monom = _np.ones(len(inds)) * main_monoms[mag_key]
             r0 = family[error_type]['r0']
             polb_order = list(family[error_type]['normal'])
             pola_order = list(family[error_type]['skew'])
-            Bn_norm = _np.zeros((len(inds), max(polb_order)+1))
-            An_norm = _np.zeros((len(inds), max(pola_order)+1))
+            Bn_norm = _np.zeros((len(inds), max(polb_order) + 1))
+            An_norm = _np.zeros((len(inds), max(pola_order) + 1))
             for n in polb_order:
-                Bn_norm[:, n] = family[error_type]['normal'][n][mach]/nr_steps
+                Bn_norm[:, n] = (
+                    family[error_type]['normal'][n][mach] / nr_steps
+                )
             for n in pola_order:
-                An_norm[:, n] = family[error_type]['skew'][n][mach]/nr_steps
+                An_norm[:, n] = family[error_type]['skew'][n][mach] / nr_steps
             _pyaccel.lattice.add_error_multipoles(
-                self.models[mach], inds, r0, main_monom, Bn_norm, An_norm)
+                self.models[mach], inds, r0, main_monom, Bn_norm, An_norm
+            )
 
     def _get_girder_errors(self, nr_steps, step, idcs, mach):
         """Get a fraction of the girder errors.
@@ -398,7 +398,7 @@ class GenerateMachines:
                     continue
                 gir_errx.append(fam_girs['posx'][mach][i])
                 gir_erry.append(fam_girs['posy'][mach][i])
-        return _np.array(gir_errx + gir_erry).ravel() * (step/nr_steps)
+        return _np.array(gir_errx + gir_erry).ravel() * (step / nr_steps)
 
     def simulate_bba(self, bba_quad_idcs, nr_steps, step, mach):
         """Simulate the bba method.
@@ -414,15 +414,19 @@ class GenerateMachines:
         """
         bpms = _np.array(self.famdata['BPM']['index']).ravel()
         orb_len = len(bpms)
-        orb0 = _np.zeros(2*orb_len)
+        orb0 = _np.zeros(2 * orb_len)
         orb0[:orb_len] += _pyaccel.lattice.get_error_misalignment_x(
-                self.models[mach], bba_quad_idcs).ravel()
+            self.models[mach], bba_quad_idcs
+        ).ravel()
         orb0[:orb_len] += _pyaccel.lattice.get_error_misalignment_x(
-                self.models[mach], bpms).ravel()
+            self.models[mach], bpms
+        ).ravel()
         orb0[orb_len:] += _pyaccel.lattice.get_error_misalignment_y(
-                self.models[mach], bba_quad_idcs).ravel()
+            self.models[mach], bba_quad_idcs
+        ).ravel()
         orb0[orb_len:] += _pyaccel.lattice.get_error_misalignment_y(
-                self.models[mach], bpms).ravel()
+            self.models[mach], bpms
+        ).ravel()
 
         # NOTE: The BPM errors will contain their girder errors. We need to
         # isolate the BBA errors from girder errors where the BPM is installed.
@@ -441,7 +445,11 @@ class GenerateMachines:
             2D numpy array: Orbit response matrix.
         """
         self.orbcorr = OrbitCorr(
-            self.nominal_model, self.params.acc, params=self.orbcorr_params)
+            self.nominal_model,
+            self.params.acc,
+            params=self.orbcorr_params,
+            use6dtrack=False,
+        )
         if jac is None:
             jac = self.orbcorr.get_jacobian_matrix()
         self.orbmat = jac
@@ -461,7 +469,8 @@ class GenerateMachines:
         print('Correcting orbit...', end='')
         self.orbcorr.respm.model = self.models[mach]
         corr_status = self.orbcorr.correct_orbit(
-            jacobian_matrix=self.orbmat, goal_orbit=orb0)
+            jacobian_matrix=self.orbmat, goal_orbit=orb0
+        )
         if corr_status == 0:
             print('Done\n')
         elif corr_status == 1:
@@ -499,8 +508,11 @@ class GenerateMachines:
             if i > nriter:
                 self.orbcorr_params.numsingval = numsingval
                 return False
-            print('Number of singular values: {:.0f}'.format(
-                    self.orbcorr_params.numsingval))
+            print(
+                'Number of singular values: {:.0f}'.format(
+                    self.orbcorr_params.numsingval
+                )
+            )
             orb_t, kicks_t, corr_stts = self._correct_orbit_once(orb0, mach)
             i += 1
 
@@ -522,8 +534,11 @@ class GenerateMachines:
 
         """
         self.tunecorr = TuneCorr(
-            self.nominal_model, self.params.acc, method='Proportional',
-            grouping='TwoKnobs')
+            self.nominal_model,
+            self.params.acc,
+            method='Proportional',
+            grouping='TwoKnobs',
+        )
         if jac is None:
             jac = self.tunecorr.calc_jacobian_matrix()
         self.tunemat = jac
@@ -539,8 +554,10 @@ class GenerateMachines:
 
         """
         self.tunecorr.correct_parameters(
-            model=self.models[mach], goal_parameters=self.goal_tunes,
-            jacobian_matrix=self.tunemat)
+            model=self.models[mach],
+            goal_parameters=self.goal_tunes,
+            jacobian_matrix=self.tunemat,
+        )
 
     def _calc_coupling(self, mach):
         """Calc minimum tune separation.
@@ -553,8 +570,9 @@ class GenerateMachines:
 
         """
         ed_teng, *_ = _pyaccel.optics.calc_edwards_teng(self.models[mach])
-        min_tunesep, ratio =\
-            _pyaccel.optics.estimate_coupling_parameters(ed_teng)
+        min_tunesep, ratio = _pyaccel.optics.estimate_coupling_parameters(
+            ed_teng
+        )
 
         return min_tunesep
 
@@ -576,12 +594,14 @@ class GenerateMachines:
         for idx, sub in zip(qs_fam['index'], qs_fam['subsection']):
             if 'C2' not in sub:
                 idcs.append(idx)
-        self.coup_corr = CouplingCorr(self.nominal_model,
-                                      self.params.acc, skew_list=idcs)
+        self.coup_corr = CouplingCorr(
+            self.nominal_model, self.params.acc, skew_list=idcs
+        )
         if jac is None:
             weight_dispy = self.coupcorr_params.weight_dispy
             jac = self.coup_corr.calc_jacobian_matrix(
-                model=self.nominal_model, weight_dispy=weight_dispy)
+                model=self.nominal_model, weight_dispy=weight_dispy
+            )
         self.coupmat = jac
         return jac
 
@@ -597,8 +617,11 @@ class GenerateMachines:
         nsv = self.coupcorr_params.nr_singval
         tol = self.coupcorr_params.tolerance
         self.coup_corr.coupling_correction(
-            jacobian_matrix=self.coupmat, nsv=nsv, tol=tol,
-            weight_dispy=weight_dispy)
+            jacobian_matrix=self.coupmat,
+            nsv=nsv,
+            tol=tol,
+            weight_dispy=weight_dispy,
+        )
 
     def _config_optics_corr(self, jac=None):
         """Config OpticsCorr object.
@@ -630,8 +653,11 @@ class GenerateMachines:
         nsv = self.optcorr_params.nr_singval
         tol = self.optcorr_params.tolerance
         return self.opt_corr.optics_corr_loco(
-            goal_model=self.nominal_model, nsv=nsv,
-            jacobian_matrix=self.optmat, tol=tol)
+            goal_model=self.nominal_model,
+            nsv=nsv,
+            jacobian_matrix=self.optmat,
+            tol=tol,
+        )
 
     def _do_all_opt_corrections(self, mach):
         """Do all optics corrections - beta, tunes and coupling.
@@ -660,12 +686,14 @@ class GenerateMachines:
         print()
 
         if self.do_coupling_corr:
-            print('Correcting coupling:')        
+            print('Correcting coupling:')
             mintune = self._calc_coupling(mach)
-            print(f'Minimum tune separation before corr: {100*mintune:.3f} %')
+            print(
+                f'Minimum tune separation before corr: {100 * mintune:.3f} %'
+            )
             self._correct_coupling(mach)
             mintune = self._calc_coupling(mach)
-            print(f'Minimum tune separation after corr: {100*mintune:.3f} %')
+            print(f'Minimum tune separation after corr: {100 * mintune:.3f} %')
             print()
 
         return
@@ -734,9 +762,8 @@ class GenerateMachines:
         return data
 
     def _corr_machines_ramping_sv(
-            self, mach, nr_steps, bba_quad_idcs,
-            step_data):
-
+        self, mach, nr_steps, bba_quad_idcs, step_data
+    ):
         mod = self.models[mach]
         # Save sextupoles values and set then to zero
         sx_idx = self.famdata['SN']['index']
@@ -747,22 +774,25 @@ class GenerateMachines:
         init_numsingval = self.original_numsingval
         j = 1
         while not corr_sucess:
-            print('Initial nr of singular values: {:.0f}'.format(
-                init_numsingval))
+            print(
+                'Initial nr of singular values: {:.0f}'.format(init_numsingval)
+            )
             for step in range(nr_steps):
-                print(f'Errors Ramping Step {step+1:d}/{nr_steps:d}')
+                print(f'Errors Ramping Step {step + 1:d}/{nr_steps:d}')
                 self.apply_errors(nr_steps, mach)
 
                 # Orbit set by BBA or set to zero
-                orb0 = _np.zeros(2*len(self.famdata['BPM']['index']))
+                orb0 = _np.zeros(2 * len(self.famdata['BPM']['index']))
                 if self.do_bba:
-                    orb0 = _np.zeros(2*len(bba_quad_idcs))
+                    orb0 = _np.zeros(2 * len(bba_quad_idcs))
                     orb0 = self.simulate_bba(
-                        bba_quad_idcs, nr_steps, step+1, mach)
+                        bba_quad_idcs, nr_steps, step + 1, mach
+                    )
 
                 if j > 10:
                     orb_t, kicks_t, corr_stts = self._correct_orbit_once(
-                        orb0, mach)
+                        orb0, mach
+                    )
                     print('Correcting optics...')
                     res = self._correct_optics(mach) == 1
                     print('Optics correction tolerance achieved: ', res)
@@ -787,7 +817,8 @@ class GenerateMachines:
                 step_data['step_' + str(step + 1)] = step_dict
 
                 _pyaccel.lattice.set_attribute(
-                    mod, 'SL', sx_idx, (step + 1)*sx_stren/nr_steps)
+                    mod, 'SL', sx_idx, (step + 1) * sx_stren / nr_steps
+                )
 
             if corr_sucess:
                 # Perform one orbit correction after turning ON sextupoles
@@ -805,10 +836,7 @@ class GenerateMachines:
                 j += 1
         return step_data, orbf, orb0, kicks_, corr_status
 
-    def _corr_machines_fix_sv(
-            self, mach, nr_steps, bba_quad_idcs,
-            step_data):
-
+    def _corr_machines_fix_sv(self, mach, nr_steps, bba_quad_idcs, step_data):
         mod = self.models[mach]
         # Save sextupoles values and set then to zero
         sx_idx = self.famdata['SN']['index']
@@ -816,15 +844,16 @@ class GenerateMachines:
         _pyaccel.lattice.set_attribute(mod, 'SL', sx_idx, 0.0)
 
         for step in range(nr_steps):
-            print(f'Errors Ramping Step {step+1:d}/{nr_steps:d}')
+            print(f'Errors Ramping Step {step + 1:d}/{nr_steps:d}')
             self.apply_errors(nr_steps, mach)
 
             # Orbit set by BBA or set to zero
-            orb0 = _np.zeros(2*len(self.famdata['BPM']['index']))
+            orb0 = _np.zeros(2 * len(self.famdata['BPM']['index']))
             if self.do_bba:
-                orb0 = _np.zeros(2*len(bba_quad_idcs))
+                orb0 = _np.zeros(2 * len(bba_quad_idcs))
                 orb0 = self.simulate_bba(
-                    bba_quad_idcs, nr_steps, step+1, mach)
+                    bba_quad_idcs, nr_steps, step + 1, mach
+                )
 
             orbf, kicks, corr_stts = self._correct_orbit_once(orb0, mach)
 
@@ -836,7 +865,8 @@ class GenerateMachines:
             step_data['step_' + str(step + 1)] = step_dict
 
             _pyaccel.lattice.set_attribute(
-                mod, 'SL', sx_idx, (step + 1)*sx_stren/nr_steps)
+                mod, 'SL', sx_idx, (step + 1) * sx_stren / nr_steps
+            )
 
         # Perform one orbit correction after turning ON sextupoles
         orbf, kicks, corr_stts = self._correct_orbit_once(orb0, mach)
@@ -867,10 +897,12 @@ class GenerateMachines:
             step_data = dict()
             if self.params.force_orb_correction:
                 res = self._corr_machines_ramping_sv(
-                    mach, nr_steps, bba_quad_idcs, step_data)
+                    mach, nr_steps, bba_quad_idcs, step_data
+                )
             else:
                 res = self._corr_machines_fix_sv(
-                    mach, nr_steps, bba_quad_idcs, step_data)
+                    mach, nr_steps, bba_quad_idcs, step_data
+                )
             step_data, orbf, orb0, kicks_, corr_status = res
 
             # Save last orbit corr data
@@ -900,8 +932,8 @@ class GenerateMachines:
             twiss, *_ = _pyaccel.optics.calc_twiss(self.models[mach])
             twiss0, *_ = _pyaccel.optics.calc_twiss(self.nominal_model)
 
-            dbetax = (twiss.betax - twiss0.betax)/twiss0.betax
-            dbetay = (twiss.betay - twiss0.betay)/twiss0.betay
+            dbetax = (twiss.betax - twiss0.betax) / twiss0.betax
+            dbetay = (twiss.betay - twiss0.betay) / twiss0.betay
             step_dict['orbcorr_status'] = corr_status
             step_dict['ref_orb'] = orb0
             step_dict['orbit'] = orbf
@@ -932,12 +964,13 @@ class GenerateMachines:
 
         """
         kickmaps, _ = _pymodels.si.lattice.create_id_kickmaps_dict(
-            self.ids, energy=3e9)
+            self.ids, energy=3e9
+        )
         twiss, *_ = _pyaccel.optics.calc_twiss(model, indices='closed')
         print('Model without ID:')
         print('length : {:.4f} m'.format(model.length))
-        print('tunex  : {:.6f}'.format(twiss.mux[-1]/2/_np.pi))
-        print('tuney  : {:.6f}'.format(twiss.muy[-1]/2/_np.pi))
+        print('tunex  : {:.6f}'.format(twiss.mux[-1] / 2 / _np.pi))
+        print('tuney  : {:.6f}'.format(twiss.muy[-1] / 2 / _np.pi))
         print()
 
         for id_ in self.ids:
@@ -948,8 +981,8 @@ class GenerateMachines:
         twiss, *_ = _pyaccel.optics.calc_twiss(model, indices='closed')
         print('Model with ID:')
         print('length : {:.4f} m'.format(model.length))
-        print('tunex  : {:.6f}'.format(twiss.mux[-1]/2/_np.pi))
-        print('tuney  : {:.6f}'.format(twiss.muy[-1]/2/_np.pi))
+        print('tunex  : {:.6f}'.format(twiss.mux[-1] / 2 / _np.pi))
+        print('tuney  : {:.6f}'.format(twiss.muy[-1] / 2 / _np.pi))
         print()
         return model
 
@@ -978,7 +1011,8 @@ class GenerateMachines:
             ref_orb = data_mach[mach]['data']['step_final']['ref_orb']
             # correct orbit
             orbf, kicks, corr_stts = self._correct_orbit_once(
-                                            ref_orb, mach=mach)
+                ref_orb, mach=mach
+            )
             # do all optics corretions
             for i in range(1):
                 self._do_all_opt_corrections(mach)
@@ -987,8 +1021,8 @@ class GenerateMachines:
             twiss, *_ = _pyaccel.optics.calc_twiss(self.models[mach])
             twiss0, *_ = _pyaccel.optics.calc_twiss(self.nominal_model)
 
-            dbetax = (twiss.betax - twiss0.betax)/twiss0.betax
-            dbetay = (twiss.betay - twiss0.betay)/twiss0.betay
+            dbetax = (twiss.betax - twiss0.betax) / twiss0.betax
+            dbetay = (twiss.betay - twiss0.betay) / twiss0.betay
             step_dict = dict()
             step_dict['twiss'] = twiss
             step_dict['edtang'] = edteng
