@@ -661,7 +661,7 @@ class DoParallelBBA(_BaseClass):
         for strength, bpmname in zip(strengths, bpms):  # noqa: B905
             quadname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[quadname]
-            if not quad._wait_float(
+            if not quad.wait_float(
                 'KLRef-Mon',
                 strength,
                 rel_tol=0.0,
@@ -1046,7 +1046,7 @@ class DoParallelBBA(_BaseClass):
         for strength, bpmname in zip(init_strengths, bpms):  # noqa: B905
             qname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[qname]
-            if not quad._wait_float(
+            if not quad.wait_float(
                 'KLRef-Mon',
                 strength,
                 rel_tol=0.0,
