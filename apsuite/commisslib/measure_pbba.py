@@ -370,6 +370,8 @@ class ParallelBBAParams(_ParamsBaseClass):
         self.sofb_maxcorriter = 5
         self.sofb_maxorberr = 5  # [um]
 
+        self.cycling_nr_steps = 2
+
     def __str__(self):
         """."""
         stg = ''
@@ -382,6 +384,7 @@ class ParallelBBAParams(_ParamsBaseClass):
         stg += f'sofb_nrpoints      = {self.sofb_nrpoints:.3f}\n'
         stg += f'sofb_maxcorriter   = {self.sofb_maxcorriter:.3f}\n'
         stg += f'sofb_maxorberr     = {self.sofb_maxorberr:.3f}\n'
+        stg += f'cycling_nr_steps   = {self.cycling_nr_steps:.3f}\n'
         return stg
 
     @staticmethod
@@ -960,10 +963,23 @@ class DoParallelBBA(_BaseClass):
             'enbllistbpm': enblbpm.copy(),
         }
 
-        ios_iter, dkicks_iter = [], []
-        nr_iters = self.params.corr_nr_iters
+        print('    Cycling:')
+        msg, sts = self._do_cycling(
+            group_id,
+            group_data['strengths_init'],
+        )
+        if not sts:
+            self._restore_init_conditions(
+                group_id,
+                group_data['strengths_init'],
+                extra_info_before_message=msg
+            )
+            nr_iters = 0
+        else:  # proceed to IOS correction
+            print('    Correcting IOS:')
+            nr_iters = self.params.corr_nr_iters
 
-        print('    Correcting IOS:')
+        ios_iter, dkicks_iter = [], []
         sts = self.STATUS.Fail
         for i in range(nr_iters):
             print('        {:02d}/{:02d} --> '.format(i + 1, nr_iters), end='')
@@ -1026,6 +1042,33 @@ class DoParallelBBA(_BaseClass):
         else:
             print(msg + 'Fail! Elapsed time: {:s}'.format(dtime))
         return sts
+
+    def _do_cycling(self, group_id, init_strengths):
+        delta_strengths = self.data['delta_kl'][group_id]
+        nr_cycles = self.params.cycling_nr_steps
+        for i in range(nr_cycles):
+            print('        {:02d}/{:02d} --> '.format(i+1, nr_cycles), end='')
+            if self._stopevt.is_set():
+                return "Event stopped! ", DoParallelBBA.STATUS.Fail
+            if not self.havebeam:
+                return "No beam! ", DoParallelBBA.STATUS.Fail
+            if not self.set_quad_strengths(
+                group_id,
+                init_strengths + delta_strengths / 2
+            ):
+                return "Fail! ", DoParallelBBA.STATUS.Fail
+            if not self.set_quad_strengths(
+                group_id,
+                init_strengths - delta_strengths / 2
+            ):
+                return "Fail! ", DoParallelBBA.STATUS.Fail
+            if not self.set_quad_strengths(
+                group_id,
+                init_strengths
+            ):
+                return "Fail! ", DoParallelBBA.STATUS.Fail
+            print('Ok')
+        return "", DoParallelBBA.STATUS.Success
 
     def _restore_init_conditions(self,
             group_id,
