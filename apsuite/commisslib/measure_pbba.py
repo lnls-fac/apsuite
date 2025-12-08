@@ -26,328 +26,328 @@ class ParallelBBAParams(_ParamsBaseClass):
     """."""
 
     BPMNAMES = (
-        'SI-01M2:DI-BPM',
-        'SI-01C1:DI-BPM-1',
-        'SI-01C1:DI-BPM-2',
-        'SI-01C2:DI-BPM',
-        'SI-01C3:DI-BPM-1',
-        'SI-01C3:DI-BPM-2',
-        'SI-01C4:DI-BPM',
-        'SI-02M1:DI-BPM',
-        'SI-02M2:DI-BPM',
-        'SI-02C1:DI-BPM-1',
-        'SI-02C1:DI-BPM-2',
-        'SI-02C2:DI-BPM',
-        'SI-02C3:DI-BPM-1',
-        'SI-02C3:DI-BPM-2',
-        'SI-02C4:DI-BPM',
-        'SI-03M1:DI-BPM',
-        'SI-03M2:DI-BPM',
-        'SI-03C1:DI-BPM-1',
-        'SI-03C1:DI-BPM-2',
-        'SI-03C2:DI-BPM',
-        'SI-03C3:DI-BPM-1',
-        'SI-03C3:DI-BPM-2',
-        'SI-03C4:DI-BPM',
-        'SI-04M1:DI-BPM',
-        'SI-04M2:DI-BPM',
-        'SI-04C1:DI-BPM-1',
-        'SI-04C1:DI-BPM-2',
-        'SI-04C2:DI-BPM',
-        'SI-04C3:DI-BPM-1',
-        'SI-04C3:DI-BPM-2',
-        'SI-04C4:DI-BPM',
-        'SI-05M1:DI-BPM',
-        'SI-05M2:DI-BPM',
-        'SI-05C1:DI-BPM-1',
-        'SI-05C1:DI-BPM-2',
-        'SI-05C2:DI-BPM',
-        'SI-05C3:DI-BPM-1',
-        'SI-05C3:DI-BPM-2',
-        'SI-05C4:DI-BPM',
-        'SI-06M1:DI-BPM',
-        'SI-06M2:DI-BPM',
-        'SI-06C1:DI-BPM-1',
-        'SI-06C1:DI-BPM-2',
-        'SI-06C2:DI-BPM',
-        'SI-06C3:DI-BPM-1',
-        'SI-06C3:DI-BPM-2',
-        'SI-06C4:DI-BPM',
-        'SI-07M1:DI-BPM',
-        'SI-07M2:DI-BPM',
-        'SI-07C1:DI-BPM-1',
-        'SI-07C1:DI-BPM-2',
-        'SI-07C2:DI-BPM',
-        'SI-07C3:DI-BPM-1',
-        'SI-07C3:DI-BPM-2',
-        'SI-07C4:DI-BPM',
-        'SI-08M1:DI-BPM',
-        'SI-08M2:DI-BPM',
-        'SI-08C1:DI-BPM-1',
-        'SI-08C1:DI-BPM-2',
-        'SI-08C2:DI-BPM',
-        'SI-08C3:DI-BPM-1',
-        'SI-08C3:DI-BPM-2',
-        'SI-08C4:DI-BPM',
-        'SI-09M1:DI-BPM',
-        'SI-09M2:DI-BPM',
-        'SI-09C1:DI-BPM-1',
-        'SI-09C1:DI-BPM-2',
-        'SI-09C2:DI-BPM',
-        'SI-09C3:DI-BPM-1',
-        'SI-09C3:DI-BPM-2',
-        'SI-09C4:DI-BPM',
-        'SI-10M1:DI-BPM',
-        'SI-10M2:DI-BPM',
-        'SI-10C1:DI-BPM-1',
-        'SI-10C1:DI-BPM-2',
-        'SI-10C2:DI-BPM',
-        'SI-10C3:DI-BPM-1',
-        'SI-10C3:DI-BPM-2',
-        'SI-10C4:DI-BPM',
-        'SI-11M1:DI-BPM',
-        'SI-11M2:DI-BPM',
-        'SI-11C1:DI-BPM-1',
-        'SI-11C1:DI-BPM-2',
-        'SI-11C2:DI-BPM',
-        'SI-11C3:DI-BPM-1',
-        'SI-11C3:DI-BPM-2',
-        'SI-11C4:DI-BPM',
-        'SI-12M1:DI-BPM',
-        'SI-12M2:DI-BPM',
-        'SI-12C1:DI-BPM-1',
-        'SI-12C1:DI-BPM-2',
-        'SI-12C2:DI-BPM',
-        'SI-12C3:DI-BPM-1',
-        'SI-12C3:DI-BPM-2',
-        'SI-12C4:DI-BPM',
-        'SI-13M1:DI-BPM',
-        'SI-13M2:DI-BPM',
-        'SI-13C1:DI-BPM-1',
-        'SI-13C1:DI-BPM-2',
-        'SI-13C2:DI-BPM',
-        'SI-13C3:DI-BPM-1',
-        'SI-13C3:DI-BPM-2',
-        'SI-13C4:DI-BPM',
-        'SI-14M1:DI-BPM',
-        'SI-14M2:DI-BPM',
-        'SI-14C1:DI-BPM-1',
-        'SI-14C1:DI-BPM-2',
-        'SI-14C2:DI-BPM',
-        'SI-14C3:DI-BPM-1',
-        'SI-14C3:DI-BPM-2',
-        'SI-14C4:DI-BPM',
-        'SI-15M1:DI-BPM',
-        'SI-15M2:DI-BPM',
-        'SI-15C1:DI-BPM-1',
-        'SI-15C1:DI-BPM-2',
-        'SI-15C2:DI-BPM',
-        'SI-15C3:DI-BPM-1',
-        'SI-15C3:DI-BPM-2',
-        'SI-15C4:DI-BPM',
-        'SI-16M1:DI-BPM',
-        'SI-16M2:DI-BPM',
-        'SI-16C1:DI-BPM-1',
-        'SI-16C1:DI-BPM-2',
-        'SI-16C2:DI-BPM',
-        'SI-16C3:DI-BPM-1',
-        'SI-16C3:DI-BPM-2',
-        'SI-16C4:DI-BPM',
-        'SI-17M1:DI-BPM',
-        'SI-17M2:DI-BPM',
-        'SI-17C1:DI-BPM-1',
-        'SI-17C1:DI-BPM-2',
-        'SI-17C2:DI-BPM',
-        'SI-17C3:DI-BPM-1',
-        'SI-17C3:DI-BPM-2',
-        'SI-17C4:DI-BPM',
-        'SI-18M1:DI-BPM',
-        'SI-18M2:DI-BPM',
-        'SI-18C1:DI-BPM-1',
-        'SI-18C1:DI-BPM-2',
-        'SI-18C2:DI-BPM',
-        'SI-18C3:DI-BPM-1',
-        'SI-18C3:DI-BPM-2',
-        'SI-18C4:DI-BPM',
-        'SI-19M1:DI-BPM',
-        'SI-19M2:DI-BPM',
-        'SI-19C1:DI-BPM-1',
-        'SI-19C1:DI-BPM-2',
-        'SI-19C2:DI-BPM',
-        'SI-19C3:DI-BPM-1',
-        'SI-19C3:DI-BPM-2',
-        'SI-19C4:DI-BPM',
-        'SI-20M1:DI-BPM',
-        'SI-20M2:DI-BPM',
-        'SI-20C1:DI-BPM-1',
-        'SI-20C1:DI-BPM-2',
-        'SI-20C2:DI-BPM',
-        'SI-20C3:DI-BPM-1',
-        'SI-20C3:DI-BPM-2',
-        'SI-20C4:DI-BPM',
-        'SI-01M1:DI-BPM',
+        "SI-01M2:DI-BPM",
+        "SI-01C1:DI-BPM-1",
+        "SI-01C1:DI-BPM-2",
+        "SI-01C2:DI-BPM",
+        "SI-01C3:DI-BPM-1",
+        "SI-01C3:DI-BPM-2",
+        "SI-01C4:DI-BPM",
+        "SI-02M1:DI-BPM",
+        "SI-02M2:DI-BPM",
+        "SI-02C1:DI-BPM-1",
+        "SI-02C1:DI-BPM-2",
+        "SI-02C2:DI-BPM",
+        "SI-02C3:DI-BPM-1",
+        "SI-02C3:DI-BPM-2",
+        "SI-02C4:DI-BPM",
+        "SI-03M1:DI-BPM",
+        "SI-03M2:DI-BPM",
+        "SI-03C1:DI-BPM-1",
+        "SI-03C1:DI-BPM-2",
+        "SI-03C2:DI-BPM",
+        "SI-03C3:DI-BPM-1",
+        "SI-03C3:DI-BPM-2",
+        "SI-03C4:DI-BPM",
+        "SI-04M1:DI-BPM",
+        "SI-04M2:DI-BPM",
+        "SI-04C1:DI-BPM-1",
+        "SI-04C1:DI-BPM-2",
+        "SI-04C2:DI-BPM",
+        "SI-04C3:DI-BPM-1",
+        "SI-04C3:DI-BPM-2",
+        "SI-04C4:DI-BPM",
+        "SI-05M1:DI-BPM",
+        "SI-05M2:DI-BPM",
+        "SI-05C1:DI-BPM-1",
+        "SI-05C1:DI-BPM-2",
+        "SI-05C2:DI-BPM",
+        "SI-05C3:DI-BPM-1",
+        "SI-05C3:DI-BPM-2",
+        "SI-05C4:DI-BPM",
+        "SI-06M1:DI-BPM",
+        "SI-06M2:DI-BPM",
+        "SI-06C1:DI-BPM-1",
+        "SI-06C1:DI-BPM-2",
+        "SI-06C2:DI-BPM",
+        "SI-06C3:DI-BPM-1",
+        "SI-06C3:DI-BPM-2",
+        "SI-06C4:DI-BPM",
+        "SI-07M1:DI-BPM",
+        "SI-07M2:DI-BPM",
+        "SI-07C1:DI-BPM-1",
+        "SI-07C1:DI-BPM-2",
+        "SI-07C2:DI-BPM",
+        "SI-07C3:DI-BPM-1",
+        "SI-07C3:DI-BPM-2",
+        "SI-07C4:DI-BPM",
+        "SI-08M1:DI-BPM",
+        "SI-08M2:DI-BPM",
+        "SI-08C1:DI-BPM-1",
+        "SI-08C1:DI-BPM-2",
+        "SI-08C2:DI-BPM",
+        "SI-08C3:DI-BPM-1",
+        "SI-08C3:DI-BPM-2",
+        "SI-08C4:DI-BPM",
+        "SI-09M1:DI-BPM",
+        "SI-09M2:DI-BPM",
+        "SI-09C1:DI-BPM-1",
+        "SI-09C1:DI-BPM-2",
+        "SI-09C2:DI-BPM",
+        "SI-09C3:DI-BPM-1",
+        "SI-09C3:DI-BPM-2",
+        "SI-09C4:DI-BPM",
+        "SI-10M1:DI-BPM",
+        "SI-10M2:DI-BPM",
+        "SI-10C1:DI-BPM-1",
+        "SI-10C1:DI-BPM-2",
+        "SI-10C2:DI-BPM",
+        "SI-10C3:DI-BPM-1",
+        "SI-10C3:DI-BPM-2",
+        "SI-10C4:DI-BPM",
+        "SI-11M1:DI-BPM",
+        "SI-11M2:DI-BPM",
+        "SI-11C1:DI-BPM-1",
+        "SI-11C1:DI-BPM-2",
+        "SI-11C2:DI-BPM",
+        "SI-11C3:DI-BPM-1",
+        "SI-11C3:DI-BPM-2",
+        "SI-11C4:DI-BPM",
+        "SI-12M1:DI-BPM",
+        "SI-12M2:DI-BPM",
+        "SI-12C1:DI-BPM-1",
+        "SI-12C1:DI-BPM-2",
+        "SI-12C2:DI-BPM",
+        "SI-12C3:DI-BPM-1",
+        "SI-12C3:DI-BPM-2",
+        "SI-12C4:DI-BPM",
+        "SI-13M1:DI-BPM",
+        "SI-13M2:DI-BPM",
+        "SI-13C1:DI-BPM-1",
+        "SI-13C1:DI-BPM-2",
+        "SI-13C2:DI-BPM",
+        "SI-13C3:DI-BPM-1",
+        "SI-13C3:DI-BPM-2",
+        "SI-13C4:DI-BPM",
+        "SI-14M1:DI-BPM",
+        "SI-14M2:DI-BPM",
+        "SI-14C1:DI-BPM-1",
+        "SI-14C1:DI-BPM-2",
+        "SI-14C2:DI-BPM",
+        "SI-14C3:DI-BPM-1",
+        "SI-14C3:DI-BPM-2",
+        "SI-14C4:DI-BPM",
+        "SI-15M1:DI-BPM",
+        "SI-15M2:DI-BPM",
+        "SI-15C1:DI-BPM-1",
+        "SI-15C1:DI-BPM-2",
+        "SI-15C2:DI-BPM",
+        "SI-15C3:DI-BPM-1",
+        "SI-15C3:DI-BPM-2",
+        "SI-15C4:DI-BPM",
+        "SI-16M1:DI-BPM",
+        "SI-16M2:DI-BPM",
+        "SI-16C1:DI-BPM-1",
+        "SI-16C1:DI-BPM-2",
+        "SI-16C2:DI-BPM",
+        "SI-16C3:DI-BPM-1",
+        "SI-16C3:DI-BPM-2",
+        "SI-16C4:DI-BPM",
+        "SI-17M1:DI-BPM",
+        "SI-17M2:DI-BPM",
+        "SI-17C1:DI-BPM-1",
+        "SI-17C1:DI-BPM-2",
+        "SI-17C2:DI-BPM",
+        "SI-17C3:DI-BPM-1",
+        "SI-17C3:DI-BPM-2",
+        "SI-17C4:DI-BPM",
+        "SI-18M1:DI-BPM",
+        "SI-18M2:DI-BPM",
+        "SI-18C1:DI-BPM-1",
+        "SI-18C1:DI-BPM-2",
+        "SI-18C2:DI-BPM",
+        "SI-18C3:DI-BPM-1",
+        "SI-18C3:DI-BPM-2",
+        "SI-18C4:DI-BPM",
+        "SI-19M1:DI-BPM",
+        "SI-19M2:DI-BPM",
+        "SI-19C1:DI-BPM-1",
+        "SI-19C1:DI-BPM-2",
+        "SI-19C2:DI-BPM",
+        "SI-19C3:DI-BPM-1",
+        "SI-19C3:DI-BPM-2",
+        "SI-19C4:DI-BPM",
+        "SI-20M1:DI-BPM",
+        "SI-20M2:DI-BPM",
+        "SI-20C1:DI-BPM-1",
+        "SI-20C1:DI-BPM-2",
+        "SI-20C2:DI-BPM",
+        "SI-20C3:DI-BPM-1",
+        "SI-20C3:DI-BPM-2",
+        "SI-20C4:DI-BPM",
+        "SI-01M1:DI-BPM",
     )
     QUADNAMES = (
-        'SI-01M2:PS-QS',
-        'SI-01C1:PS-Q1',
-        'SI-01C1:PS-QS',
-        'SI-01C2:PS-QS',
-        'SI-01C3:PS-Q4',
-        'SI-01C3:PS-QS',
-        'SI-01C4:PS-Q1',
-        'SI-02M1:PS-QDB2',
-        'SI-02M2:PS-QDB2',
-        'SI-02C1:PS-Q1',
-        'SI-02C1:PS-QS',
-        'SI-02C2:PS-QS',
-        'SI-02C3:PS-Q4',
-        'SI-02C3:PS-QS',
-        'SI-02C4:PS-Q1',
-        'SI-03M1:PS-QDP2',
-        'SI-03M2:PS-QDP2',
-        'SI-03C1:PS-Q1',
-        'SI-03C1:PS-QS',
-        'SI-03C2:PS-QS',
-        'SI-03C3:PS-Q4',
-        'SI-03C3:PS-QS',
-        'SI-03C4:PS-Q1',
-        'SI-04M1:PS-QDB2',
-        'SI-04M2:PS-QDB2',
-        'SI-04C1:PS-Q1',
-        'SI-04C1:PS-QS',
-        'SI-04C2:PS-QS',
-        'SI-04C3:PS-Q4',
-        'SI-04C3:PS-QS',
-        'SI-04C4:PS-Q1',
-        'SI-05M1:PS-QS',
-        'SI-05M2:PS-QS',
-        'SI-05C1:PS-Q1',
-        'SI-05C1:PS-QS',
-        'SI-05C2:PS-QS',
-        'SI-05C3:PS-Q4',
-        'SI-05C3:PS-QS',
-        'SI-05C4:PS-Q1',
-        'SI-06M1:PS-QDB2',
-        'SI-06M2:PS-QDB2',
-        'SI-06C1:PS-Q1',
-        'SI-06C1:PS-QS',
-        'SI-06C2:PS-QS',
-        'SI-06C3:PS-Q4',
-        'SI-06C3:PS-QS',
-        'SI-06C4:PS-Q1',
-        'SI-07M1:PS-QDP2',
-        'SI-07M2:PS-QDP2',
-        'SI-07C1:PS-Q1',
-        'SI-07C1:PS-QS',
-        'SI-07C2:PS-QS',
-        'SI-07C3:PS-Q4',
-        'SI-07C3:PS-QS',
-        'SI-07C4:PS-Q1',
-        'SI-08M1:PS-QDB2',
-        'SI-08M2:PS-QDB2',
-        'SI-08C1:PS-Q1',
-        'SI-08C1:PS-QS',
-        'SI-08C2:PS-QS',
-        'SI-08C3:PS-Q4',
-        'SI-08C3:PS-QS',
-        'SI-08C4:PS-Q1',
-        'SI-09M1:PS-QS',
-        'SI-09M2:PS-QS',
-        'SI-09C1:PS-Q1',
-        'SI-09C1:PS-QS',
-        'SI-09C2:PS-QS',
-        'SI-09C3:PS-Q4',
-        'SI-09C3:PS-QS',
-        'SI-09C4:PS-Q1',
-        'SI-10M1:PS-QDB2',
-        'SI-10M2:PS-QDB2',
-        'SI-10C1:PS-Q1',
-        'SI-10C1:PS-QS',
-        'SI-10C2:PS-QS',
-        'SI-10C3:PS-Q4',
-        'SI-10C3:PS-QS',
-        'SI-10C4:PS-Q1',
-        'SI-11M1:PS-QDP2',
-        'SI-11M2:PS-QDP2',
-        'SI-11C1:PS-Q1',
-        'SI-11C1:PS-QS',
-        'SI-11C2:PS-QS',
-        'SI-11C3:PS-Q4',
-        'SI-11C3:PS-QS',
-        'SI-11C4:PS-Q1',
-        'SI-12M1:PS-QDB2',
-        'SI-12M2:PS-QDB2',
-        'SI-12C1:PS-Q1',
-        'SI-12C1:PS-QS',
-        'SI-12C2:PS-QS',
-        'SI-12C3:PS-Q4',
-        'SI-12C3:PS-QS',
-        'SI-12C4:PS-Q1',
-        'SI-13M1:PS-QS',
-        'SI-13M2:PS-QS',
-        'SI-13C1:PS-Q1',
-        'SI-13C1:PS-QS',
-        'SI-13C2:PS-QS',
-        'SI-13C3:PS-Q4',
-        'SI-13C3:PS-QS',
-        'SI-13C4:PS-Q1',
-        'SI-14M1:PS-QDB2',
-        'SI-14M2:PS-QDB2',
-        'SI-14C1:PS-Q1',
-        'SI-14C1:PS-QS',
-        'SI-14C2:PS-QS',
-        'SI-14C3:PS-Q4',
-        'SI-14C3:PS-QS',
-        'SI-14C4:PS-Q1',
-        'SI-15M1:PS-QDP2',
-        'SI-15M2:PS-QDP2',
-        'SI-15C1:PS-Q1',
-        'SI-15C1:PS-QS',
-        'SI-15C2:PS-QS',
-        'SI-15C3:PS-Q4',
-        'SI-15C3:PS-QS',
-        'SI-15C4:PS-Q1',
-        'SI-16M1:PS-QDB2',
-        'SI-16M2:PS-QDB2',
-        'SI-16C1:PS-Q1',
-        'SI-16C1:PS-QS',
-        'SI-16C2:PS-QS',
-        'SI-16C3:PS-Q4',
-        'SI-16C3:PS-QS',
-        'SI-16C4:PS-Q1',
-        'SI-17M1:PS-QS',
-        'SI-17M2:PS-QS',
-        'SI-17C1:PS-Q1',
-        'SI-17C1:PS-QS',
-        'SI-17C2:PS-QS',
-        'SI-17C3:PS-Q4',
-        'SI-17C3:PS-QS',
-        'SI-17C4:PS-Q1',
-        'SI-18M1:PS-QDB2',
-        'SI-18M2:PS-QDB2',
-        'SI-18C1:PS-Q1',
-        'SI-18C1:PS-QS',
-        'SI-18C2:PS-QS',
-        'SI-18C3:PS-Q4',
-        'SI-18C3:PS-QS',
-        'SI-18C4:PS-Q1',
-        'SI-19M1:PS-QDP2',
-        'SI-19M2:PS-QDP2',
-        'SI-19C1:PS-Q1',
-        'SI-19C1:PS-QS',
-        'SI-19C2:PS-QS',
-        'SI-19C3:PS-Q4',
-        'SI-19C3:PS-QS',
-        'SI-19C4:PS-Q1',
-        'SI-20M1:PS-QDB2',
-        'SI-20M2:PS-QDB2',
-        'SI-20C1:PS-Q1',
-        'SI-20C1:PS-QS',
-        'SI-20C2:PS-QS',
-        'SI-20C3:PS-Q4',
-        'SI-20C3:PS-QS',
-        'SI-20C4:PS-Q1',
-        'SI-01M1:PS-QS',
+        "SI-01M2:PS-QS",
+        "SI-01C1:PS-Q1",
+        "SI-01C1:PS-QS",
+        "SI-01C2:PS-QS",
+        "SI-01C3:PS-Q4",
+        "SI-01C3:PS-QS",
+        "SI-01C4:PS-Q1",
+        "SI-02M1:PS-QDB2",
+        "SI-02M2:PS-QDB2",
+        "SI-02C1:PS-Q1",
+        "SI-02C1:PS-QS",
+        "SI-02C2:PS-QS",
+        "SI-02C3:PS-Q4",
+        "SI-02C3:PS-QS",
+        "SI-02C4:PS-Q1",
+        "SI-03M1:PS-QDP2",
+        "SI-03M2:PS-QDP2",
+        "SI-03C1:PS-Q1",
+        "SI-03C1:PS-QS",
+        "SI-03C2:PS-QS",
+        "SI-03C3:PS-Q4",
+        "SI-03C3:PS-QS",
+        "SI-03C4:PS-Q1",
+        "SI-04M1:PS-QDB2",
+        "SI-04M2:PS-QDB2",
+        "SI-04C1:PS-Q1",
+        "SI-04C1:PS-QS",
+        "SI-04C2:PS-QS",
+        "SI-04C3:PS-Q4",
+        "SI-04C3:PS-QS",
+        "SI-04C4:PS-Q1",
+        "SI-05M1:PS-QS",
+        "SI-05M2:PS-QS",
+        "SI-05C1:PS-Q1",
+        "SI-05C1:PS-QS",
+        "SI-05C2:PS-QS",
+        "SI-05C3:PS-Q4",
+        "SI-05C3:PS-QS",
+        "SI-05C4:PS-Q1",
+        "SI-06M1:PS-QDB2",
+        "SI-06M2:PS-QDB2",
+        "SI-06C1:PS-Q1",
+        "SI-06C1:PS-QS",
+        "SI-06C2:PS-QS",
+        "SI-06C3:PS-Q4",
+        "SI-06C3:PS-QS",
+        "SI-06C4:PS-Q1",
+        "SI-07M1:PS-QDP2",
+        "SI-07M2:PS-QDP2",
+        "SI-07C1:PS-Q1",
+        "SI-07C1:PS-QS",
+        "SI-07C2:PS-QS",
+        "SI-07C3:PS-Q4",
+        "SI-07C3:PS-QS",
+        "SI-07C4:PS-Q1",
+        "SI-08M1:PS-QDB2",
+        "SI-08M2:PS-QDB2",
+        "SI-08C1:PS-Q1",
+        "SI-08C1:PS-QS",
+        "SI-08C2:PS-QS",
+        "SI-08C3:PS-Q4",
+        "SI-08C3:PS-QS",
+        "SI-08C4:PS-Q1",
+        "SI-09M1:PS-QS",
+        "SI-09M2:PS-QS",
+        "SI-09C1:PS-Q1",
+        "SI-09C1:PS-QS",
+        "SI-09C2:PS-QS",
+        "SI-09C3:PS-Q4",
+        "SI-09C3:PS-QS",
+        "SI-09C4:PS-Q1",
+        "SI-10M1:PS-QDB2",
+        "SI-10M2:PS-QDB2",
+        "SI-10C1:PS-Q1",
+        "SI-10C1:PS-QS",
+        "SI-10C2:PS-QS",
+        "SI-10C3:PS-Q4",
+        "SI-10C3:PS-QS",
+        "SI-10C4:PS-Q1",
+        "SI-11M1:PS-QDP2",
+        "SI-11M2:PS-QDP2",
+        "SI-11C1:PS-Q1",
+        "SI-11C1:PS-QS",
+        "SI-11C2:PS-QS",
+        "SI-11C3:PS-Q4",
+        "SI-11C3:PS-QS",
+        "SI-11C4:PS-Q1",
+        "SI-12M1:PS-QDB2",
+        "SI-12M2:PS-QDB2",
+        "SI-12C1:PS-Q1",
+        "SI-12C1:PS-QS",
+        "SI-12C2:PS-QS",
+        "SI-12C3:PS-Q4",
+        "SI-12C3:PS-QS",
+        "SI-12C4:PS-Q1",
+        "SI-13M1:PS-QS",
+        "SI-13M2:PS-QS",
+        "SI-13C1:PS-Q1",
+        "SI-13C1:PS-QS",
+        "SI-13C2:PS-QS",
+        "SI-13C3:PS-Q4",
+        "SI-13C3:PS-QS",
+        "SI-13C4:PS-Q1",
+        "SI-14M1:PS-QDB2",
+        "SI-14M2:PS-QDB2",
+        "SI-14C1:PS-Q1",
+        "SI-14C1:PS-QS",
+        "SI-14C2:PS-QS",
+        "SI-14C3:PS-Q4",
+        "SI-14C3:PS-QS",
+        "SI-14C4:PS-Q1",
+        "SI-15M1:PS-QDP2",
+        "SI-15M2:PS-QDP2",
+        "SI-15C1:PS-Q1",
+        "SI-15C1:PS-QS",
+        "SI-15C2:PS-QS",
+        "SI-15C3:PS-Q4",
+        "SI-15C3:PS-QS",
+        "SI-15C4:PS-Q1",
+        "SI-16M1:PS-QDB2",
+        "SI-16M2:PS-QDB2",
+        "SI-16C1:PS-Q1",
+        "SI-16C1:PS-QS",
+        "SI-16C2:PS-QS",
+        "SI-16C3:PS-Q4",
+        "SI-16C3:PS-QS",
+        "SI-16C4:PS-Q1",
+        "SI-17M1:PS-QS",
+        "SI-17M2:PS-QS",
+        "SI-17C1:PS-Q1",
+        "SI-17C1:PS-QS",
+        "SI-17C2:PS-QS",
+        "SI-17C3:PS-Q4",
+        "SI-17C3:PS-QS",
+        "SI-17C4:PS-Q1",
+        "SI-18M1:PS-QDB2",
+        "SI-18M2:PS-QDB2",
+        "SI-18C1:PS-Q1",
+        "SI-18C1:PS-QS",
+        "SI-18C2:PS-QS",
+        "SI-18C3:PS-Q4",
+        "SI-18C3:PS-QS",
+        "SI-18C4:PS-Q1",
+        "SI-19M1:PS-QDP2",
+        "SI-19M2:PS-QDP2",
+        "SI-19C1:PS-Q1",
+        "SI-19C1:PS-QS",
+        "SI-19C2:PS-QS",
+        "SI-19C3:PS-Q4",
+        "SI-19C3:PS-QS",
+        "SI-19C4:PS-Q1",
+        "SI-20M1:PS-QDB2",
+        "SI-20M2:PS-QDB2",
+        "SI-20C1:PS-Q1",
+        "SI-20C1:PS-QS",
+        "SI-20C2:PS-QS",
+        "SI-20C3:PS-Q4",
+        "SI-20C3:PS-QS",
+        "SI-20C4:PS-Q1",
+        "SI-01M1:PS-QS",
     )
 
     BPMNAMES = tuple([_PVName(bpm) for bpm in BPMNAMES])
@@ -373,16 +373,16 @@ class ParallelBBAParams(_ParamsBaseClass):
 
     def __str__(self):
         """."""
-        stg = ''
-        stg += f'quad_deltakl       = {self.quad_deltakl:.3f}\n'
-        stg += f'wait_correctors    = {self.wait_correctors:.3f}\n'
-        stg += f'wait_quadrupole    = {self.wait_quadrupole:.3f}\n'
-        stg += f'timeout_wait_orbit = {self.timeout_wait_orbit:.3f}\n'
-        stg += f'corr_nr_iters      = {self.corr_nr_iters:.3f}\n'
-        stg += f'inv_jac_rcond      = {self.inv_jac_rcond:.3e}\n'
-        stg += f'sofb_nrpoints      = {self.sofb_nrpoints:.3f}\n'
-        stg += f'sofb_maxcorriter   = {self.sofb_maxcorriter:.3f}\n'
-        stg += f'sofb_maxorberr     = {self.sofb_maxorberr:.3f}\n'
+        stg = ""
+        stg += f"quad_deltakl       = {self.quad_deltakl:.3f}\n"
+        stg += f"wait_correctors    = {self.wait_correctors:.3f}\n"
+        stg += f"wait_quadrupole    = {self.wait_quadrupole:.3f}\n"
+        stg += f"timeout_wait_orbit = {self.timeout_wait_orbit:.3f}\n"
+        stg += f"corr_nr_iters      = {self.corr_nr_iters:.3f}\n"
+        stg += f"inv_jac_rcond      = {self.inv_jac_rcond:.3e}\n"
+        stg += f"sofb_nrpoints      = {self.sofb_nrpoints:.3f}\n"
+        stg += f"sofb_maxcorriter   = {self.sofb_maxcorriter:.3f}\n"
+        stg += f"sofb_maxorberr     = {self.sofb_maxorberr:.3f}\n"
         return stg
 
     @staticmethod
@@ -396,11 +396,11 @@ class ParallelBBAParams(_ParamsBaseClass):
                     if (e.sub[2:], e.idx) in k
                 ],
                 key=lambda x: {
-                    'Q4': 0,
-                    'Q1': 1,
-                    'QDB2': 2,
-                    'QDP2': 3,
-                    'QS': 4,
+                    "Q4": 0,
+                    "Q1": 1,
+                    "QDB2": 2,
+                    "QDP2": 3,
+                    "QS": 4,
                 }.get(
                     ParallelBBAParams.QUADNAMES[
                         ParallelBBAParams.BPMNAMES.index(x)
@@ -409,10 +409,10 @@ class ParallelBBAParams(_ParamsBaseClass):
                 ),
             )
             for k in [
-                [('M2', ''), ('C3', '1')],
-                [('C1', '1'), ('C3', '2')],
-                [('C1', '2'), ('C4', '')],
-                [('C2', ''), ('M1', '')],
+                [("M2", ""), ("C3", "1")],
+                [("C1", "1"), ("C3", "2")],
+                [("C1", "2"), ("C4", "")],
+                [("C2", ""), ("M1", "")],
             ]
         ]
 
@@ -428,70 +428,68 @@ class ParallelBBAParams(_ParamsBaseClass):
 class DoParallelBBA(_BaseClass):
     """."""
 
-    STATUS = _get_namedtuple('Status', ['Fail', 'Success'])
+    STATUS = _get_namedtuple("Status", ["Fail", "Success"])
 
     def __init__(self, isonline=True):
         """."""
         super().__init__(
             params=ParallelBBAParams(), target=self._do_pbba, isonline=isonline
         )
-        self.data['bpmnames'] = list(ParallelBBAParams.BPMNAMES)
-        self.data['quadnames'] = list(ParallelBBAParams.QUADNAMES)
-        self.data['measure'] = list()
-        self.data['groups2dopbba'] = ParallelBBAParams.get_default_groups()
-        self.data['delta_kl'] = self.params.get_default_dkl(
-            self.data['groups2dopbba']
+        self.data["bpmnames"] = list(ParallelBBAParams.BPMNAMES)
+        self.data["quadnames"] = list(ParallelBBAParams.QUADNAMES)
+        self.data["measure"] = list()
+        self.data["groups2dopbba"] = ParallelBBAParams.get_default_groups()
+        self.data["delta_kl"] = self.params.get_default_dkl(
+            self.data["groups2dopbba"]
         )
-        self.data['jacobian'] = None
+        self.data["jacobian"] = None
         self._model = None
         self._fam_data = None
 
         if self.isonline:
-            self.devices['sofb'] = _SOFB(_SOFB.DEVICES.SI)
-            self.devices['currinfosi'] = _CurrInfoSI()
+            self.devices["sofb"] = _SOFB(_SOFB.DEVICES.SI)
+            self.devices["currinfosi"] = _CurrInfoSI()
             self.connect_to_quadrupoles()
 
     def __str__(self):
         """."""
-        stn = 'Params\n'
+        stn = "Params\n"
         stp = self.params.__str__()
-        stp = '    ' + stp.replace('\n', '\n    ')
-        stn += stp + '\n'
+        stp = "    " + stp.replace("\n", "\n    ")
+        stn += stp + "\n"
         connected = str(self.connected & len(self.devices.keys()) > 0)
-        stn += 'Connected?  ' + connected + '\n\n'
-        stn += '     {:^20s} {:^20s} {:^7s}\n'.format(
-            'BPM', 'Quad', 'dKL'
-        )
-        tmplt = '{:03d}: {:^20s} {:^20s} {:+.3f}\n'
+        stn += "Connected?  " + connected + "\n\n"
+        stn += "     {:^20s} {:^20s} {:^7s}\n".format("BPM", "Quad", "dKL")
+        tmplt = "{:03d}: {:^20s} {:^20s} {:+.3f}\n"
         dta = self.data
-        for group_id, group in enumerate(self.data['groups2dopbba']):
-            stn += f'> Group {group_id:03d}\n'
+        for group_id, group in enumerate(self.data["groups2dopbba"]):
+            stn += f"> Group {group_id:03d}\n"
             for j, bpm in enumerate(group):
-                idx = dta['bpmnames'].index(bpm)
+                idx = dta["bpmnames"].index(bpm)
                 stn += tmplt.format(
                     idx,
-                    dta['bpmnames'][idx],
-                    dta['quadnames'][idx],
-                    dta['delta_kl'][group_id][j]
+                    dta["bpmnames"][idx],
+                    dta["quadnames"][idx],
+                    dta["delta_kl"][group_id][j],
                 )
-            stn += '\n'
+            stn += "\n"
         return stn
 
     @property
     def havebeam(self):
         """."""
-        haveb = self.devices['currinfosi']
+        haveb = self.devices["currinfosi"]
         return haveb.connected and haveb.storedbeam
 
     # #### pbba groups and deltas #####
     @property
     def groups2dopbba(self):
         """."""
-        return _dcopy(self.data['groups2dopbba'])
+        return _dcopy(self.data["groups2dopbba"])
 
     @groups2dopbba.setter
     def groups2dopbba(self, groups):
-        self.data['groups2dopbba'] = [
+        self.data["groups2dopbba"] = [
             [_PVName(bpm) for bpm in group if isinstance(bpm, str)]
             for group in groups
             if isinstance(group, (list, tuple, _np.ndarray))
@@ -500,36 +498,36 @@ class DoParallelBBA(_BaseClass):
     @property
     def delta_kl(self):
         """."""
-        return _dcopy(self.data['delta_kl'])
+        return _dcopy(self.data["delta_kl"])
 
     @delta_kl.setter
     def delta_kl(self, value):
         _max = self.params.quad_deltakl
-        for i, group in enumerate(self.data['groups2dopbba']):
+        for i, group in enumerate(self.data["groups2dopbba"]):
             if len(value[i]) != len(group):
                 raise ValueError(
-                    f'size mismatch between group {i} and given delta_kl'
+                    f"size mismatch between group {i} and given delta_kl"
                 )
             if any([abs(v) > _max for v in value[i]]):
                 raise ValueError(f"values for delta kl can't exceed {_max}")
-        self.data['delta_kl'] = _dcopy(value)
+        self.data["delta_kl"] = _dcopy(value)
 
     # #### model utils #####
     @property
     def jacobian(self):
         """."""
-        return _dcopy(self.data['jacobian'])
+        return _dcopy(self.data["jacobian"])
 
     @jacobian.setter
     def jacobian(self, jac):
         """."""
-        self.data['jacobian'] = jac.copy()
+        self.data["jacobian"] = jac.copy()
 
     @property
     def model(self):
         """."""
         if self._model is None:
-            print('\n     Undefined model... setting a default one')
+            print("\n     Undefined model... setting a default one")
             self._model = _si.create_accelerator()
             self._model.cavity_on = True
             self._model.radiation_on = 1
@@ -543,7 +541,7 @@ class DoParallelBBA(_BaseClass):
     def model(self, value):
         if not value.cavity_on and value.radiation_on != 1:
             raise ValueError(
-                'cavity_on must be True and radiation_on must be 1'
+                "cavity_on must be True and radiation_on must be 1"
             )
         self._model = value
         self._fam_data = _si.families.get_family_data(self._model)
@@ -556,12 +554,12 @@ class DoParallelBBA(_BaseClass):
     # ### quadrupole connection #####
     def connect_to_quadrupoles(self):
         """."""
-        for qname in self.data['quadnames']:
+        for qname in self.data["quadnames"]:
             if qname in self.devices:
                 continue
             self.devices[qname] = _PowerSupply(
                 qname,
-                props2init=('PwrState-Sts', 'KL-SP', 'KL-RB', 'KLRef-Mon')
+                props2init=("PwrState-Sts", "KL-SP", "KL-RB", "KLRef-Mon"),
             )
 
     # #### sofb utils #####
@@ -569,7 +567,7 @@ class DoParallelBBA(_BaseClass):
         """."""
         if not self.havebeam:
             return
-        sofb = self.devices['sofb']
+        sofb = self.devices["sofb"]
         sofb.cmd_reset()
         sofb.wait_buffer(self.params.timeout_wait_orbit)
         return _np.hstack([sofb.orbx, sofb.orby])
@@ -578,7 +576,7 @@ class DoParallelBBA(_BaseClass):
         """."""
         if not self.havebeam:
             return
-        sofb = self.devices['sofb']
+        sofb = self.devices["sofb"]
         sofb.correct_orbit_manually(
             nr_iters=self.params.sofb_maxcorriter,
             residue=self.params.sofb_maxorberr,
@@ -586,16 +584,16 @@ class DoParallelBBA(_BaseClass):
 
     def get_kicks(self):
         """."""
-        sofb = self.devices['sofb']
+        sofb = self.devices["sofb"]
         return _np.r_[sofb.kickch, sofb.kickcv, sofb.kickrf]
 
     def set_delta_kicks(self, dkicks):
         """."""
-        sofb = self.devices['sofb']
+        sofb = self.devices["sofb"]
         nch, ncv, nrf = sofb._data.nr_ch, sofb._data.nr_cv, 1
         if len(dkicks) != nch + ncv + nrf:
             raise ValueError(
-                f'invalid dim for dkicks, must have shape=({nch + ncv + nrf},)'
+                f"invalid dim for dkicks, must have shape=({nch + ncv + nrf},)"
             )
         dch, dcv, drf = dkicks[:nch], dkicks[nch : nch + ncv], dkicks[-1]
 
@@ -618,41 +616,43 @@ class DoParallelBBA(_BaseClass):
             drf * 0,
         )
         sofb.mancorrgainch, sofb.mancorrgaincv, sofb.mancorrgainrf = (
-            factch, factcv, factrf
+            factch,
+            factcv,
+            factrf,
         )
 
     @property
     def enbllistbpm(self):
         """."""
-        sofb = self.devices['sofb']
+        sofb = self.devices["sofb"]
         enblx = sofb.bpmxenbl.copy()
         enbly = sofb.bpmyenbl.copy()
         return _np.array(_np.hstack([enblx, enbly]), dtype=bool)
 
     @enbllistbpm.setter
     def enbllistbpm(self, value):
-        sofb = self.devices['sofb']
+        sofb = self.devices["sofb"]
         nbpms = sofb._data.nr_bpms
         if len(value) != 2 * nbpms:
-            raise ValueError(f'Invalid size! Must be {2*nbpms}.')
+            raise ValueError(f"Invalid size! Must be {2 * nbpms}.")
         if all(v in [0, 1, True, False] for v in value):
             value = _np.array(value, dtype=bool)
         else:
-            raise ValueError('Values must be boolean (0 / 1 or True / False).')
+            raise ValueError("Values must be boolean (0 / 1 or True / False).")
         sofb.bpmxenbl = value[:nbpms]
         sofb.bpmyenbl = value[nbpms:]
 
     def get_reforb(self):
         """."""
-        sofb = self.devices['sofb']
+        sofb = self.devices["sofb"]
         return _np.hstack([sofb.refx.copy(), sofb.refy.copy()])
 
     def set_reforb(self, reforb):
         """."""
-        sofb = self.devices['sofb']
+        sofb = self.devices["sofb"]
         nbpms = sofb._data.nr_bpms
         if len(reforb) != 2 * nbpms:
-            raise ValueError(f'Invalid size! Must be {2*nbpms}.')
+            raise ValueError(f"Invalid size! Must be {2 * nbpms}.")
         sofb.refx = reforb[:nbpms]
         sofb.refy = reforb[nbpms:]
 
@@ -660,9 +660,9 @@ class DoParallelBBA(_BaseClass):
 
     def set_quad_strengths(self, group_id, strengths, ignore_timeout=False):
         """."""
-        bpms = self.data['groups2dopbba'][group_id]
-        quad_names = self.data['quadnames']
-        bpm_names = self.data['bpmnames']
+        bpms = self.data["groups2dopbba"][group_id]
+        quad_names = self.data["quadnames"]
+        bpm_names = self.data["bpmnames"]
         for strength, bpmname in zip(strengths, bpms):  # noqa: B905
             quadname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[quadname]
@@ -675,20 +675,20 @@ class DoParallelBBA(_BaseClass):
             quadname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[quadname]
             if not quad._wait_float(
-                'KLRef-Mon',
+                "KLRef-Mon",
                 strength,
                 rel_tol=0.0,
-                abs_tol=0.05*self.params.quad_deltakl,
-                timeout=self.params.wait_quadrupole
+                abs_tol=0.05 * self.params.quad_deltakl,
+                timeout=self.params.wait_quadrupole,
             ):
                 return DoParallelBBA.STATUS.Fail
         return DoParallelBBA.STATUS.Success
 
     def get_quad_strengths(self, group_id):
         """."""
-        bpms = self.data['groups2dopbba'][group_id]
-        quad_names = self.data['quadnames']
-        bpm_names = self.data['bpmnames']
+        bpms = self.data["groups2dopbba"][group_id]
+        quad_names = self.data["quadnames"]
+        bpm_names = self.data["bpmnames"]
 
         strengths = []
         for bpmname in bpms:
@@ -699,7 +699,7 @@ class DoParallelBBA(_BaseClass):
 
     def meas_ios(self, group_id, init_strengths=None):
         """."""
-        delta_strens = self.data['delta_kl'][group_id]
+        delta_strens = self.data["delta_kl"][group_id]
 
         if init_strengths is None:
             strens_orig = self.get_quad_strengths(group_id)
@@ -729,59 +729,291 @@ class DoParallelBBA(_BaseClass):
     def calc_ios_jacobian(self):  # noqa: C901
         """Calculate the IOS Response Matrix."""
         model = self.model
-        _orbcorr = _OrbitCorr(
-            model=model, acc='SI', corr_system='SOFB', use6dtrack=True
-        )
-        quadindices = self._get_quads_indices_in_model(self.data['quadnames'])
-        bpmindices = self._get_bpms_indices_in_model(self.data['bpmnames'])
 
-        m_mat, t_mat = _pyacc.tracking.find_m66(model, indices='open')
+        quadindices = self._get_quads_indices_in_model(self.data["quadnames"])
+        bpmindices = self._get_bpms_indices_in_model(self.data["bpmnames"])
+
+        m_mat, t_mat = _pyacc.tracking.find_m66(model, indices="open")
 
         n_bpms = len(bpmindices)
         n_quads = len(quadindices)
+
+        mat = _np.zeros((n_bpms*2, n_quads*2))
 
         for col, q in enumerate(quadindices):
             rq_mat = t_mat[q].copy()  # shape: (6, 6)
             rb_mat = t_mat[bpmindices]  # shape: (Nbpms, 6, 6)
 
             length = model[q].length
-        return
+            if self.data["quadnames"][col].dev == 'QS':
+                _, m_dk = self._get_quad_m_and_dm(ks=model[q].Ks, l=length)
+            else:
+                _, m_dk = self._get_quad_m_and_dm(k=model[q].K, l=length)
+            zero = _np.zeros_like(m_mat, dtype=float)
+            zero[:4, :4] = m_dk
+            m_dk = zero
+
+            # one tune matrix at the start of quad, Mq = Rq * M0 * Rq^-1:
+            mq_mat = _np.linalg.solve(rq_mat.T, (rq_mat @ m_mat).T).T
+
+            # one tune matrix without the quad M = Mhat * Mq
+            m_hat = _np.linalg.solve(t_mat[q+1].T, (rq_mat @ m_mat).T).T
+
+            # closed orbit condition at the start of quad:
+            identity = _np.eye(mq_mat.shape[0], dtype=float)
+            dr = _np.linalg.solve(identity - mq_mat, (m_hat @ m_dk))
+
+            small = _np.array(bpmindices) < q
+            large = _np.logical_not(small)
+
+            # transfer matrix from the start of quad to BPM, Rq->b:
+            # first, calculate Rb * Rq^-1
+            rqbl_mat = _np.linalg.solve(rq_mat.T, rb_mat.transpose((0, 2, 1)))
+            rqbl_mat = rqbl_mat.transpose((0, 2, 1))
+
+            # if bpm is before the quad, Rq->b = Rb * Rq^-1 * Mq
+            rqbs_mat = (rqbl_mat[small] @ mq_mat) @ dr
+
+            # if bpm is after corrector, Rq->b = Rb * Rq^-1
+            rqbl_mat = rqbl_mat[large] @ dr
+
+            respxx = _np.zeros(n_bpms)
+            respyx = _np.zeros(n_bpms)
+            respxy = _np.zeros(n_bpms)
+            respyy = _np.zeros(n_bpms)
+
+            respxx[large] = rqbl_mat[:, 0, 0]
+            respyx[large] = rqbl_mat[:, 2, 0]
+            respxy[large] = rqbl_mat[:, 0, 2]
+            respyy[large] = rqbl_mat[:, 2, 2]
+
+            respxx[small] = rqbs_mat[:, 0, 0]
+            respyx[small] = rqbs_mat[:, 2, 0]
+            respxy[small] = rqbs_mat[:, 0, 2]
+            respyy[small] = rqbs_mat[:, 2, 2]
+
+            mat[:, col] = _np.hstack([respxx, respyx])
+            mat[:, col+n_quads] = _np.hstack([respxy, respyy])
+
+        return mat
+
+    def _get_quad_m_and_dm(self, k=None, ks=None, l=0.0):
+        """."""
+        if (
+            (k is None and ks is None)
+            or (k is not None and ks is not None)
+            or (l < 0)
+        ):
+            raise ValueError("invalid args")
+
+        ktype = "normal" if k is not None else "skew"
+        ksign = _np.sign(k) if k is not None else _np.sign(ks)
+        k = _np.abs(k) if k is not None else _np.abs(ks)
+
+        sqrtk = _np.sqrt(k)
+
+        C = _np.cos(sqrtk * l)
+        Ch = _np.cosh(sqrtk * l)
+        S = _np.sin(sqrtk * l)
+        Sh = _np.sinh(sqrtk * l)
+
+        Cp = _np.cos(sqrtk * l) + _np.cosh(sqrtk * l)
+        Cm = _np.cos(sqrtk * l) - _np.cosh(sqrtk * l)
+        Sp = _np.sin(sqrtk * l) + _np.sinh(sqrtk * l)
+        Sm = _np.sin(sqrtk * l) - _np.sinh(sqrtk * l)
+
+        if k < 1e-14:
+            mat = _np.array([
+                [1, l, 0, 0],
+                [0, 1, 0, 0],
+                [0, 0, 1, l],
+                [0, 0, 0, 1],
+            ])
+            if ktype == "normal":
+                dmat = _np.array([
+                    [-(l**2) / 2, -(l**3) / 6, 0, 0],
+                    [-l, -(l**2) / 2, 0, 0],
+                    [0, 0, l**2 / 2, l**3 / 6],
+                    [0, 0, l, l**2 / 2],
+                ])
+
+            else:
+                dmat = _np.array([
+                    [0, 0, -(l**2) / 2, -(l**3) / 6],
+                    [0, 0, -l, -(l**2) / 2],
+                    [-(l**2) / 2, -(l**3) / 6, 0, 0],
+                    [-l, -(l**2) / 2, 0, 0],
+                ])
+
+            if ksign < 0:
+                dmat *= -1
+
+            return mat, dmat
+
+        #  quadd normal+
+        if ktype == "normal" and ksign > 0:
+            mat = _np.array([
+                [C, S / sqrtk, 0, 0],
+                [-sqrtk * S, C, 0, 0],
+                [0, 0, Ch, Sh / sqrtk],
+                [0, 0, sqrtk * Sh, Ch],
+            ])
+
+            dmat = _np.array([
+                [
+                    -l * mat[0, 1] / 2,
+                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
+                    0,
+                    0,
+                ],
+                [-(l * mat[0, 0] + mat[0, 1]) / 2, -l * mat[0, 1] / 2, 0, 0],
+                [
+                    0,
+                    0,
+                    l * mat[2, 3] / 2,
+                    (l * mat[2, 2] - mat[2, 3]) / (2 * k),
+                ],
+                [0, 0, (l * mat[2, 2] + mat[2, 3]) / 2, l * mat[2, 3] / 2],
+            ])
+
+        #  quadd normal-
+        elif ktype == "normal" and ksign < 0:
+            mat = _np.array([
+                [Ch, Sh / sqrtk, 0, 0],
+                [sqrtk * Sh, Ch, 0, 0],
+                [0, 0, C, S / sqrtk],
+                [0, 0, -sqrtk * S, C],
+            ])
+
+            dmat = _np.array([
+                [
+                    l * mat[0, 1] / 2,
+                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
+                    0,
+                    0,
+                ],
+                [(l * mat[0, 0] + mat[0, 1]) / 2, l * mat[0, 1] / 2, 0, 0],
+                [
+                    0,
+                    0,
+                    -l * mat[2, 3] / 2,
+                    (l * mat[2, 2] - mat[2, 3]) / (2 * k),
+                ],
+                [0, 0, -(l * mat[2, 2] + mat[2, 3]) / 2, -l * mat[2, 3] / 2],
+            ])
+
+        #  quadd skew+
+        elif ktype == "skew" and ksign > 0:
+            mat = _np.array([
+                [Cp / 2, Sp / (2 * sqrtk), Cm / 2, Sm / (2 * sqrtk)],
+                [-sqrtk * Sm / 2, Cp / 2, -sqrtk * Sp / 2, Cm / 2],
+                [Cm / 2, Sm / (2 * sqrtk), Cp / 2, Sp / (2 * sqrtk)],
+                [-sqrtk * Sp / 2, Cm / 2, -sqrtk * Sm / 2, Cp / 2],
+            ])
+
+            dmat = _np.array([
+                [
+                    -l * mat[0, 3] / 2,
+                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
+                    -l * mat[0, 1] / 2,
+                    (l * mat[0, 2] - mat[0, 3]) / (2 * k),
+                ],
+                [
+                    -(l * mat[0, 2] + mat[0, 3]) / 2,
+                    -l * mat[0, 3] / 2,
+                    -(l * mat[0, 0] + mat[0, 1]) / 2,
+                    -l * mat[0, 1] / 2,
+                ],
+                [
+                    -l * mat[0, 1] / 2,
+                    (l * mat[0, 2] - mat[0, 3]) / (2 * k),
+                    -l * mat[0, 3] / 2,
+                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
+                ],
+                [
+                    -(l * mat[0, 0] + mat[0, 1]) / 2,
+                    -l * mat[0, 1] / 2,
+                    -(l * mat[0, 2] + mat[0, 3]) / 2,
+                    -l * mat[0, 3] / 2,
+                ],
+            ])
+
+        #  quadd skew-
+        elif ktype == "skew" and ksign < 0:
+            mat = _np.array([
+                [Cp / 2, Sp / (2 * sqrtk), -Cm / 2, -Sm / (2 * sqrtk)],
+                [-sqrtk * Sm / 2, Cp / 2, sqrtk * Sp / 2, -Cm / 2],
+                [-Cm / 2, -Sm / (2 * sqrtk), Cp / 2, Sp / (2 * sqrtk)],
+                [sqrtk * Sp / 2, -Cm / 2, -sqrtk * Sm / 2, Cp / 2],
+            ])
+
+            dmat = _np.array([
+                [
+                    l * mat[0, 3] / 2,
+                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
+                    l * mat[0, 1] / 2,
+                    (2 * k ** (3 / 2) * l * mat[0, 2] + k * Sm)
+                    / (4 * k ** (5 / 2)),
+                ],
+                [
+                    (l * mat[0, 2] + mat[0, 3]) / 2,
+                    l * mat[0, 3] / 2,
+                    (l * mat[0, 0] + mat[0, 1]) / 2,
+                    l * mat[0, 1] / 2,
+                ],
+                [
+                    l * mat[0, 1] / 2,
+                    (2 * k ** (3 / 2) * l * mat[0, 2] + k * Sm)
+                    / (4 * k ** (5 / 2)),
+                    l * mat[0, 3] / 2,
+                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
+                ],
+                [
+                    (l * mat[0, 0] + mat[0, 1]) / 2,
+                    l * mat[0, 1] / 2,
+                    (l * mat[0, 2] + mat[0, 3]) / 2,
+                    l * mat[0, 3] / 2,
+                ],
+            ])
+
+        return mat, dmat
 
     def get_projection(self, group_id):
         """."""
-        bpmnames = self.data['bpmnames']
+        bpmnames = self.data["bpmnames"]
         p = _np.zeros(len(bpmnames))
-        for j, bpm in enumerate(self.data['groups2dopbba'][group_id]):
+        for j, bpm in enumerate(self.data["groups2dopbba"][group_id]):
             i = bpmnames.index(bpm)
-            p[i] = self.data['delta_kl'][group_id][j]
+            p[i] = self.data["delta_kl"][group_id][j]
         return _np.diag(list(p) + list(p))
 
     def analyze_groups(self, analyze_coupling=False):
         """Helper function to analyze the groups' properties."""
-        if not self.data['jacobian']:
-            raise ValueError('Please calculate and set the jacobian first.')
+        if not self.data["jacobian"]:
+            raise ValueError("Please calculate and set the jacobian first.")
 
         anl = []
-        for group_id in range(len(self.data['groups2dopbba'])):
-            print(f'Analyzing group: {group_id:d}')
+        for group_id in range(len(self.data["groups2dopbba"])):
+            print(f"Analyzing group: {group_id:d}")
             anl.append(self.analyze_group(group_id, analyze_coupling))
         return anl
 
     def analyze_group(self, group_id, analyze_coupling=False):
         """Helper function to analyze group's properties."""
-        jacobian = self.data['jacobian']
+        jacobian = self.data["jacobian"]
         projection = self.get_projection(group_id)
         jacobian = jacobian @ projection
         u_mat, svals, vt_mat = _np.linalg.svd(jacobian)
 
         model = self.model
-        quadindices = self._get_quads_indices_in_model(self.data['quadnames'])
-        delta_strens = self.data['delta_kl'][group_id]
-        group = self.data['groups2dopbba'][group_id]
+        quadindices = self._get_quads_indices_in_model(self.data["quadnames"])
+        delta_strens = self.data["delta_kl"][group_id]
+        group = self.data["groups2dopbba"][group_id]
 
         tune_variation = [_pyacc.optics.get_frac_tunes(model)[:2]]
 
         if analyze_coupling:
+
             def _get_coupling_parameters():
                 rad_on, cav_on = model.radiation_on, model.cavity_on
                 model.radiation_on = 0
@@ -798,10 +1030,10 @@ class DoParallelBBA(_BaseClass):
 
         for fac in [1, -2, 1]:
             for dkl, bpm in zip(delta_strens, group):  # noqa: B905
-                _id = self.data['bpmnames'].index(bpm)
-                qname = self.data['quadnames'][_id]
+                _id = self.data["bpmnames"].index(bpm)
+                qname = self.data["quadnames"][_id]
                 qidx = quadindices[_id]
-                if 'QS' in qname:
+                if "QS" in qname:
                     model[qidx].KsL += fac * dkl / 2
                 else:
                     model[qidx].KL += fac * dkl / 2
@@ -812,34 +1044,34 @@ class DoParallelBBA(_BaseClass):
                     std_ratio_variation.append(std_ratio)
 
         ret = {
-            'u_matrix': u_mat,
-            'vt_matrix': vt_mat,
-            'svals': svals,
-            'tune_variation': _np.array(tune_variation),
+            "u_matrix": u_mat,
+            "vt_matrix": vt_mat,
+            "svals": svals,
+            "tune_variation": _np.array(tune_variation),
         }
         if analyze_coupling:
-            ret['min_tunesep_variation'] = _np.array(min_tunesep_variation)
-            ret['std_ratio_variation'] = _np.array(std_ratio_variation)
+            ret["min_tunesep_variation"] = _np.array(min_tunesep_variation)
+            ret["std_ratio_variation"] = _np.array(std_ratio_variation)
         return ret
 
-    def process_data(self, method='by_reforb'):
+    def process_data(self, method="by_reforb"):
         """."""
-        for group_id in range(len(self.data['groups2dopbba'])):
+        for group_id in range(len(self.data["groups2dopbba"])):
             self.process_data_single_group(group_id, method=method)
 
-    def process_data_single_group(self, group_id, method='by_reforb'):
+    def process_data_single_group(self, group_id, method="by_reforb"):
         """."""
-        if method not in ['by_orbit', 'by_reforb']:
+        if method not in ["by_orbit", "by_reforb"]:
             raise ValueError("method must be 'by_orbit' or 'by_reforb'")
 
-        meas_data = self.data['measure'][group_id]
-        bpmnames = self.data['bpmnames']
+        meas_data = self.data["measure"][group_id]
+        bpmnames = self.data["bpmnames"]
         nbpms = len(bpmnames)
 
-        if method == 'by_orbit':
-            orbit = meas_data['orbit_end']
+        if method == "by_orbit":
+            orbit = meas_data["orbit_end"]
         else:
-            orbit = meas_data['reforb_end']
+            orbit = meas_data["reforb_end"]
 
         # #### error estimation ? #####
         # ios_iter = meas_data['ios_iter']
@@ -850,18 +1082,18 @@ class DoParallelBBA(_BaseClass):
         stdx0 = 0.0
         stdy0 = 0.0
 
-        for bpm in meas_data['bpms']:
+        for bpm in meas_data["bpms"]:
             bpm_idx = bpmnames.index(bpm)
             self.analysis[bpm] = {
-                'x0': orbit[bpm_idx],
-                'y0': orbit[bpm_idx + nbpms],
-                'stdx0': stdx0,
-                'stdy0': stdy0
+                "x0": orbit[bpm_idx],
+                "y0": orbit[bpm_idx + nbpms],
+                "stdx0": stdx0,
+                "stdy0": stdy0,
             }
 
     def get_pbba_results(self, error=False):
         """."""
-        bpms = self.data['bpmnames']
+        bpms = self.data["bpmnames"]
         bbax = _np.zeros(len(bpms))
         bbay = _np.zeros(len(bpms))
         if error:
@@ -871,11 +1103,11 @@ class DoParallelBBA(_BaseClass):
             res = self.analysis.get(bpm)
             if not res:
                 continue
-            bbax[idx] = res['x0']
-            bbay[idx] = res['y0']
-            if error and 'stdx0' in res:
-                bbaxerr[idx] = res['stdx0']
-                bbayerr[idx] = res['stdy0']
+            bbax[idx] = res["x0"]
+            bbay[idx] = res["y0"]
+            if error and "stdx0" in res:
+                bbaxerr[idx] = res["stdx0"]
+                bbayerr[idx] = res["stdy0"]
         if error:
             return bbax, bbay, bbaxerr, bbayerr
         return bbax, bbay
@@ -887,8 +1119,8 @@ class DoParallelBBA(_BaseClass):
         quadindices = []
         for qname in quadnames:
             key = qname.dev
-            idx = fam_data[key]['devnames'].index(qname)
-            qindex = fam_data[key]['index'][idx]
+            idx = fam_data[key]["devnames"].index(qname)
+            qindex = fam_data[key]["index"][idx]
             qindex = qindex[0] if len(qindex) == 1 else qindex
             quadindices.append(qindex)
         return quadindices
@@ -898,8 +1130,8 @@ class DoParallelBBA(_BaseClass):
         fam_data = self.fam_data
         bpmindices = []
         for bname in bpmnames:
-            idx = fam_data['BPM']['devnames'].index(bname)
-            bpmindex = fam_data['BPM']['index'][idx]
+            idx = fam_data["BPM"]["devnames"].index(bname)
+            bpmindex = fam_data["BPM"]["index"][idx]
             bpmindex = bpmindex[0] if len(bpmindex) == 1 else bpmindex
             bpmindices.append(bpmindex)
         return bpmindices
@@ -907,48 +1139,48 @@ class DoParallelBBA(_BaseClass):
     def _do_pbba(self):
         tini = _datetime.datetime.fromtimestamp(_time.time())
         print(
-            'Starting measurement at {:s}'.format(
-                tini.strftime('%Y-%m-%d %Hh%Mm%Ss')
+            "Starting measurement at {:s}".format(
+                tini.strftime("%Y-%m-%d %Hh%Mm%Ss")
             )
         )
 
-        self.data['jacobian'] = self.calc_ios_jacobian()
-        self.data['measure'] = list()
+        self.data["jacobian"] = self.calc_ios_jacobian()
+        self.data["measure"] = list()
 
-        sofb = self.devices['sofb']
+        sofb = self.devices["sofb"]
         if sofb.autocorrsts:
-            print('\nSOFB feedback is enabled. Please desable it first.')
+            print("\nSOFB feedback is enabled. Please desable it first.")
             return
 
-        for group_id in range(len(self.data['groups2dopbba'])):
+        for group_id in range(len(self.data["groups2dopbba"])):
             if self._stopevt.is_set():
-                print('\nStopped!')
+                print("\nStopped!")
                 break
             if not self.havebeam:
-                print('\nBeam was Lost')
+                print("\nBeam was Lost")
                 break
-            print('\nCorrecting Orbit... ', end='')
+            print("\nCorrecting Orbit... ", end="")
             self.correct_orbit()
-            print('Ok!')
+            print("Ok!")
             if not self._dopbba_single_group(group_id):
                 break
 
-        print('\nCorrecting Orbit... ', end='')
+        print("\nCorrecting Orbit... ", end="")
         self.correct_orbit()
-        print('Ok!')
+        print("Ok!")
 
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)
-        dtime = dtime.split('.')[0]
-        print('\nFinished! Elapsed time {:s}'.format(dtime))
+        dtime = dtime.split(".")[0]
+        print("\nFinished! Elapsed time {:s}".format(dtime))
 
     def _cycle_magnets(self, group_id, init_strengths=None):
         """."""
         tini = _datetime.datetime.fromtimestamp(_time.time())
-        strtini = tini.strftime('%Hh%Mm%Ss')
-        print(f'{strtini:s}: Cycling magnets of Group {group_id:d} ', end='')
+        strtini = tini.strftime("%Hh%Mm%Ss")
+        print(f"{strtini:s}: Cycling magnets of Group {group_id:d} ", end="")
 
-        delta_strens = self.data['delta_kl'][group_id]
+        delta_strens = self.data["delta_kl"][group_id]
         if init_strengths is None:
             strens_orig = self.get_quad_strengths(group_id)
             _time.sleep(self.params.wait_quadrupole)
@@ -959,160 +1191,161 @@ class DoParallelBBA(_BaseClass):
             if not self.set_quad_strengths(
                 group_id, strens_orig + delta_strens / 2
             ):
-                print('... Fail!')
+                print("... Fail!")
                 return DoParallelBBA.STATUS.Fail
             _time.sleep(self.params.wait_quadrupole)
             if not self.set_quad_strengths(
                 group_id, strens_orig - delta_strens / 2
             ):
-                print('... Fail!')
+                print("... Fail!")
                 return DoParallelBBA.STATUS.Fail
 
         if not self.set_quad_strengths(group_id, strens_orig):
-            print('... Fail!')
+            print("... Fail!")
             return DoParallelBBA.STATUS.Fail
 
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)
-        dtime = dtime.split('.')[0]
-        print('... Done! Elapsed time {:s}'.format(dtime))
+        dtime = dtime.split(".")[0]
+        print("... Done! Elapsed time {:s}".format(dtime))
         return DoParallelBBA.STATUS.Success
 
     def _dopbba_single_group(self, group_id):
         """."""
         tini = _datetime.datetime.fromtimestamp(_time.time())
-        strtini = tini.strftime('%Hh%Mm%Ss')
-        print(f'{strtini:s}: Doing PBBA for Group {group_id:d}')
+        strtini = tini.strftime("%Hh%Mm%Ss")
+        print(f"{strtini:s}: Doing PBBA for Group {group_id:d}")
 
         enblbpm = self.enbllistbpm  # cut jacobian with only enabled bpms
-        jac = (self.data['jacobian'])[enblbpm, :]
+        jac = (self.data["jacobian"])[enblbpm, :]
         projection = self.get_projection(group_id)
         jac = jac @ projection
         inv_jac = _np.linalg.pinv(jac, self.params.inv_jac_rcond)
 
-        bpmnames = self.data['bpmnames']
+        bpmnames = self.data["bpmnames"]
         nbpms = len(bpmnames)
 
         group_data = {
-            'bpms': self.data['groups2dopbba'][group_id],
-            'strengths_init': self.get_quad_strengths(group_id),
-            'orbit_init': self.get_orbit(),
-            'enbllistbpm': enblbpm.copy(),
-            'reforb_init': self.get_reforb(),
+            "bpms": self.data["groups2dopbba"][group_id],
+            "strengths_init": self.get_quad_strengths(group_id),
+            "orbit_init": self.get_orbit(),
+            "enbllistbpm": enblbpm.copy(),
+            "reforb_init": self.get_reforb(),
         }
 
         # cycle magnets
-        if not self._cycle_magnets(group_id, group_data['strengths_init']):
+        if not self._cycle_magnets(group_id, group_data["strengths_init"]):
             self._restore_init_conditions(
                 group_id,
-                group_data['strengths_init'],
-                extra_info_before_message="Fail while cycling. "
+                group_data["strengths_init"],
+                extra_info_before_message="Fail while cycling. ",
             )
             return self.STATUS.Fail
 
         ios_iter = []
         nr_iters = self.params.corr_nr_iters
 
-        print('    Correcting IOS:')
+        print("    Correcting IOS:")
         sts = self.STATUS.Fail
         for i in range(nr_iters):
-            print('        {:02d}/{:02d} --> '.format(i + 1, nr_iters), end='')
+            print("        {:02d}/{:02d} --> ".format(i + 1, nr_iters), end="")
             if self._stopevt.is_set():
                 self._restore_init_conditions(
                     group_id,
-                    group_data['strengths_init'],
-                    extra_info_before_message="Measurement stopped. "
+                    group_data["strengths_init"],
+                    extra_info_before_message="Measurement stopped. ",
                 )
                 break
             if not self.havebeam:
                 self._restore_init_conditions(
                     group_id,
-                    group_data['strengths_init'],
-                    extra_info_before_message="Error: beam is off. "
+                    group_data["strengths_init"],
+                    extra_info_before_message="Error: beam is off. ",
                 )
                 break
-            ios, sts = self.meas_ios(group_id, group_data['strengths_init'])
+            ios, sts = self.meas_ios(group_id, group_data["strengths_init"])
             if not sts:
                 self._restore_init_conditions(
                     group_id,
-                    group_data['strengths_init'],
-                    extra_info_before_message="Fail while measuring IOS. "
+                    group_data["strengths_init"],
+                    extra_info_before_message="Fail while measuring IOS. ",
                 )
                 break
             ios_iter.append(ios)  # save ios (all bpms)
             ios = ios[enblbpm]  # use only enabled bpms for correction
             u = -1 * _np.dot(inv_jac, ios)
             reforb = self.get_reforb()
-            enbl = _np.zeros_like(group_data['enbllistbpm'], dtype=bool)
-            for bname in group_data['bpms']:
+            enbl = _np.zeros_like(group_data["enbllistbpm"], dtype=bool)
+            for bname in group_data["bpms"]:
                 idx = bpmnames.index(bname)
                 reforb[[idx, idx + nbpms]] = u[[idx, idx + nbpms]]
                 enbl[[idx, idx + nbpms]] = True
             self.set_reforb(reforb)
             self.enbllistbpm = enbl
             self.correct_orbit()  # orbit -> reforb (for the bpms in the group)
-            self.enbllistbpm = group_data['enbllistbpm']
-            print('Done')
+            self.enbllistbpm = group_data["enbllistbpm"]
+            print("Done")
 
         # final ios
         if sts:
-            ios, sts = self.meas_ios(group_id, group_data['strengths_init'])
+            ios, sts = self.meas_ios(group_id, group_data["strengths_init"])
             if not sts:
                 self._restore_init_conditions(
                     group_id,
-                    group_data['strengths_init'],
-                    extra_info_before_message="Fail while measuring IOS. "
+                    group_data["strengths_init"],
+                    extra_info_before_message="Fail while measuring IOS. ",
                 )
             else:
                 ios_iter.append(ios)
 
-        group_data['ios_iter'] = ios_iter
-        group_data['orbit_end'] = self.get_orbit()
-        group_data['reforb_end'] = self.get_reforb()
-        group_data['delta_kl'] = self.data['delta_kl'][group_id]
-        self.data['measure'].append(group_data)
+        group_data["ios_iter"] = ios_iter
+        group_data["orbit_end"] = self.get_orbit()
+        group_data["reforb_end"] = self.get_reforb()
+        group_data["delta_kl"] = self.data["delta_kl"][group_id]
+        self.data["measure"].append(group_data)
 
-        self.set_reforb(group_data['reforb_init'])
+        self.set_reforb(group_data["reforb_init"])
         self.correct_orbit()
 
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)
-        dtime = dtime.split('.')[0]
-        msg = '    Finished. Status: '
+        dtime = dtime.split(".")[0]
+        msg = "    Finished. Status: "
         if sts:
-            print(msg + 'OK! Elapsed time: {:s}'.format(dtime))
+            print(msg + "OK! Elapsed time: {:s}".format(dtime))
         else:
-            print(msg + 'Fail! Elapsed time: {:s}'.format(dtime))
+            print(msg + "Fail! Elapsed time: {:s}".format(dtime))
         return sts
 
-    def _restore_init_conditions(self,
-            group_id,
-            init_strengths,
-            message="Restoring initial conditions and exiting...",
-            correct_orbit=True,
-            extra_info_before_message=""
-        ):
+    def _restore_init_conditions(
+        self,
+        group_id,
+        init_strengths,
+        message="Restoring initial conditions and exiting...",
+        correct_orbit=True,
+        extra_info_before_message="",
+    ):
         """."""
-        print(extra_info_before_message+message)
+        print(extra_info_before_message + message)
 
         self.set_quad_strengths(group_id, init_strengths, ignore_timeout=True)
 
-        bpms = self.data['groups2dopbba'][group_id]
-        quad_names = self.data['quadnames']
-        bpm_names = self.data['bpmnames']
+        bpms = self.data["groups2dopbba"][group_id]
+        quad_names = self.data["quadnames"]
+        bpm_names = self.data["bpmnames"]
 
         for strength, bpmname in zip(init_strengths, bpms):  # noqa: B905
             qname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[qname]
             if not quad._wait_float(
-                'KLRef-Mon',
+                "KLRef-Mon",
                 strength,
                 rel_tol=0.0,
-                abs_tol=0.05*self.params.quad_deltakl,
-                timeout=self.params.wait_quadrupole
+                abs_tol=0.05 * self.params.quad_deltakl,
+                timeout=self.params.wait_quadrupole,
             ):
                 print(
-                    f'    {qname}: Could not be restored to initial strength'
+                    f"    {qname}: Could not be restored to initial strength"
                 )
 
         if correct_orbit:
