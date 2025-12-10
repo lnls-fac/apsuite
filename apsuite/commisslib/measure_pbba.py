@@ -740,6 +740,11 @@ class DoParallelBBA(_BaseClass):
 
         mat = _np.zeros((n_bpms*2, n_quads*2))
 
+        list_of_dr = []
+        list_of_mq = []
+        list_of_mdk = []
+        list_of_mhat = []
+
         for col, q in enumerate(quadindices):
             rq_mat = t_mat[q].copy()  # shape: (6, 6)
             rb_mat = t_mat[bpmindices]  # shape: (Nbpms, 6, 6)
@@ -762,6 +767,11 @@ class DoParallelBBA(_BaseClass):
             # closed orbit condition at the start of quad:
             identity = _np.eye(mq_mat.shape[0], dtype=float)
             dr = _np.linalg.solve(identity - mq_mat, (m_hat @ m_dk))
+
+            list_of_dr.append(dr)
+            list_of_mq.append(mq_mat)
+            list_of_mdk.append(m_dk)
+            list_of_mhat.append(m_hat)
 
             small = _np.array(bpmindices) < q
             large = _np.logical_not(small)
@@ -795,7 +805,7 @@ class DoParallelBBA(_BaseClass):
             mat[:, col] = _np.hstack([respxx, respyx])
             mat[:, col+n_quads] = _np.hstack([respxy, respyy])
 
-        return mat
+        return mat, list_of_dr, list_of_mq, list_of_mdk, list_of_mhat
 
     def _get_quad_m_and_dm(self, k=None, ks=None, l=0.0):
         """."""
