@@ -95,8 +95,8 @@ class LOCOAnalysis:
         """."""
         # Get nominal model
         simod = si.create_accelerator()
-        simod.cavity_on = True
-        simod.radiation_on = True
+        simod.cavity_on = False
+        simod.radiation_on = False
 
         # Adjust tunes to match measured ones
         tunex_goal = 49 + self.loco_setup['tunex']
@@ -116,6 +116,8 @@ class LOCOAnalysis:
         )
         # print('    tunes final : ', tunecorr.get_tunes(simod))
 
+        simod.cavity_on = True
+        simod.radiation_on = True
         # Get nominal orbit matrix and dispersion
         matrix_nominal = OrbRespmat(simod, 'SI', True).get_respm()
 
