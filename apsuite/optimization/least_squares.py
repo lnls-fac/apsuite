@@ -20,14 +20,11 @@ class LeastSquaresParams(OptimizeParams):
         self.rcond = 1e-15
         self.damping_constant = 1.0
         self.damping_factor = 10.0
+        self.max_damping_constant = 1e10
         self.ridge_constant = 0.0
         self.jacobian = None
         self.jacobian_update_rate = 0
         self.verbose = True
-        self.learning_rate = 1.0
-        self.min_learning_rate = 1e-3
-        self.backtracking_factor = 2
-        self.patience = 5
         self.errorbars = None
 
 
@@ -110,86 +107,71 @@ class LeastSquaresOptimize(Optimize):
         niter = self.params.max_number_iters
         atol = self.params.abs_tol_convergence
         rtol = self.params.rel_tol_convergence
-        jacobian = self.jacobian
-        damping_constant = self.params.damping_constant
-        damping_factor = self.params.damping_factor
-        ridge_constant = self.params.ridge_constant
-        jacobian_update_rate = self.params.jacobian_update_rate
-        lr = self.params.learning_rate
-        lr_min = self.params.min_learning_rate
-        lr_factor = self.params.backtracking_factor
-        patience = self.params.patience
+        rcond = self.params.rcond
 
-        pos0 = self.params.initial_position
-        pos = pos0.copy()
+        damping = self.params.damping_constant
+        damping_factor = self.params.damping_factor
+        damping_max = self.params.max_damping_constant
+
+        ridge = self.params.ridge_constant
+        jacobian_update_rate = self.params.jacobian_update_rate
+        jacobian = self.jacobian
+
+        pos = self.params.initial_position.copy()
 
         res = self._objective_func(pos)
         chi2 = self.calc_chi2(res)
         M = self.calc_jacobian(pos) if jacobian is None else jacobian
-
-        # if c:
-        #     chi2 += w * _np.std(res0) * _np.linalg.norm(pos0)
+        MTM = M.T @ M
+        ridge_reg = ridge * _np.eye(MTM.shape[0])
 
         print_(f'initial chi²: {chi2:.6g}')
 
-        MTM = M.T @ M
-        ridge_reg = ridge_constant * _np.eye(
-            MTM.shape[0]
-        )  # Ridge regularization
-
         for it in range(niter):
             print_(f'iteration {it:03d}')
-
-            pos_init = pos.copy()
 
             if jacobian_update_rate and it:
                 if not it % jacobian_update_rate:
                     M = self.calc_jacobian(pos)
                     MTM = M.T @ M
 
-            lm_reg = _np.diag(
-                damping_constant * _np.diag(MTM)
-            )  # Levenberg-Macquardt regularization
-
+            lm_reg = _np.diag(damping * _np.diag(MTM))
             matrix = MTM + ridge_reg + lm_reg
 
-            res = self.objfuncs_evaluated[-1]  # last evaluated residual
-            delta = (
-                _np.linalg.pinv(matrix, rcond=self.params.rcond) @ M.T @ res
-            )  # LM/GN Normal equation
-            # TODO: include processing of pseudo-inverse for singvals selection
+            res = self.objfuncs_evaluated[-1]
+            delta = _np.linalg.pinv(matrix, rcond=rcond) @ (M.T @ res)
+            # TODO: chi2 for Ridge
+
             if _np.any(_np.isnan(delta)):
-                print_('\tProblem in step calculation. Aborting.')
+                print_('\tInvalid step direction. Aborting.')
                 break
 
-            pos -= lr * delta  # position update
-            for _ in range(patience):
-                try:
-                    res = self._objective_func(pos)
-                    if not _np.any(_np.isnan(res)):
-                        break
-                    print_('NaN in objective function. Back-tracking.')
-                except Exception:
-                    print_('Merit figure evaluation failed. Back-tracking.')
-                lr /= lr_factor  # reduce step size
-                lr = max(lr, lr_min)
-                pos = pos_init - lr * delta  # apply smaller step
+            pos_trial = pos - delta
+            chi2_old = chi2
 
-            chi2_old = self.history_chi2[-1]
-            chi2_new = self.calc_chi2(res)
-            # if c:
-            #     chi2 += w * _np.std(res) * _np.linalg.norm(pos)
-            print_(f'\tchi²: {chi2_new:.6g}')
+            try:
+                res_trial = self._objective_func(pos_trial)
+                if _np.any(_np.isnan(res_trial)):
+                    raise ValueError
+                chi2_trial = self.calc_chi2(res_trial)
+                success = chi2_trial < chi2_old
+            except Exception:
+                success = False
 
-            if _math.isclose(chi2_new, chi2_old, rel_tol=rtol, abs_tol=atol):
-                print_('\tConvergence tolerance reached. Exiting.')
+            if success:
+                pos = pos_trial
+                res = res_trial
+                chi2 = chi2_trial
+                damping /= damping_factor
+                print_(f'\tchi²: {chi2:.6g} (accepted)')
+            else:
+                damping *= damping_factor
+                print_('\tchi² increased. Step rejected.')
+
+            if damping > damping_max:
+                print_('\tDamping exceeded maximum value. Aborting.')
                 break
 
-            delta_chi2 = chi2_old - chi2_new
-            if damping_constant:
-                if delta_chi2 > 0:
-                    damping_constant /= damping_factor
-                    print_('\tImproved fit. Decreasing LM damping_constant.')
-                else:
-                    damping_constant *= damping_factor
-                    print_('\tWorsened fit. Increasing LM damping_constant.')
+            if _math.isclose(chi2, chi2_old, rel_tol=rtol, abs_tol=atol):
+                print_('\tConvergence tolerance reached.')
+                break
