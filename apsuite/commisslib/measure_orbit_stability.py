@@ -1,16 +1,14 @@
 """."""
-import numpy as _np
-import scipy.fft as _sp_fft
-import matplotlib.pyplot as _plt
+
 import datetime as _datetime
 
-from pymodels import si as _si
+import matplotlib.pyplot as _plt
+import numpy as _np
 import pyaccel as _pa
-
 import siriuspy.clientconfigdb as _sconf
+from pymodels import si as _si
 
 from .. import asparams as _asparams
-
 from .meas_bpms_signals import AcqBPMsSignals as _AcqBPMsSignals
 
 
@@ -21,10 +19,11 @@ class OrbitAnalysis(_AcqBPMsSignals):
     NUM_BPMS = _asparams.SI_NUM_BPMS
     HARM_NUM = _asparams.SI_HARM_NUM
     ENERGY_SPREAD = _asparams.SI_ENERGY_SPREAD
+    DEF_RFFREQ = _asparams.RF_FREQ
 
     def __init__(
-                self, filename='', orm_name='', isonline=False,
-                ispost_mortem=False):
+        self, filename='', orm_name='', isonline=False, ispost_mortem=False
+    ):
         """Analysis of orbit over time at BPMs for a given acquisition rate.
 
         Args:
@@ -32,28 +31,50 @@ class OrbitAnalysis(_AcqBPMsSignals):
                 data. Defaults to ''
             orm_name (str, optional): name of the ORM to be used as reference
                 for orbit analysis. Defaults to ''
+            isonline (bool, optional): whether to connect to devices.
+                Defaults to False.
+            ispost_mortem (bool, optional): whether to connect with post
+                mortem BPM PVs or general acquisition. Defaults to False.
         """
         super().__init__(isonline=isonline, ispost_mortem=ispost_mortem)
         self._fname = filename
         self._etax, self._etay = None, None
         self._orbx, self._orby = None, None
         self._orm_meas = None
+        self._orm_name = orm_name
         self._sampling_freq = None
         self._switching_freq = None
         self._rf_freq = None
         self.orm_client = _sconf.ConfigDBClient(config_type='si_orbcorr_respm')
         if self.fname:
-            self.load_orb()
-            self.get_appropriate_orm_data(orm_name)
+            self.load_and_apply(self.fname)
+        self.get_appropriate_orm_data(orm_name)
+
+    def __str__(self):
+        """."""
+        data = self.data
+        timestamp = _datetime.datetime.fromtimestamp(data['timestamp'])
+        gtmp = '{0:<20s} = {1:}  {2:}\n'.format
+        ftmp = '{0:<20s} = {1:9.5f}  {2:}\n'.format
+        stg = gtmp('filename', self.fname, '')
+        stg += gtmp('timestamp', timestamp, '')
+        stg += ftmp('stored_current', data['stored_current'], 'mA')
+        stg += ftmp('rf_frequency', data['rf_frequency'], 'Hz')
+        stg += ftmp('tunex', data['tunex'], '')
+        stg += ftmp('tuney', data['tuney'], '')
+        stg += gtmp('tunex_enable', bool(data['tunex_enable']), '')
+        stg += gtmp('tuney_enable', bool(data['tuney_enable']), '')
+        stg += gtmp('acq_rate', data['acq_rate'], '')
+        stg += gtmp('switching_mode', data['switching_mode'], '')
+        stg += gtmp('switching_frequency', data['switching_frequency'], '')
+        stg += gtmp('nrsamples_pre', data['nrsamples_pre'], '')
+        stg += gtmp('nrsamples_post', data['nrsamples_post'], '')
+        return stg
 
     @property
     def fname(self):
         """."""
         return self._fname
-
-    @fname.setter
-    def fname(self, val):
-        self._fname = val
 
     @property
     def orbx(self):
@@ -92,76 +113,39 @@ class OrbitAnalysis(_AcqBPMsSignals):
         self._etay = val
 
     @property
+    def orm_name(self):
+        """."""
+        return self._orm_name
+
+    @property
     def orm(self):
         """."""
         return self._orm
 
     @orm.setter
     def orm(self, val):
+        self._orm_name = ''
         self._orm = val
+        etaxy = val[:, -1]
+        etaxy *= -self.MOM_COMPACT * self.rf_freq  # units of [um]
+        self.etax, self.etay = etaxy[: self.NUM_BPMS], etaxy[self.NUM_BPMS :]
 
     @property
     def sampling_freq(self):
         """."""
         return self._sampling_freq
 
-    @sampling_freq.setter
-    def sampling_freq(self, val):
-        self._sampling_freq = val
-
     @property
     def switching_freq(self):
         """."""
         return self._switching_freq
 
-    @switching_freq.setter
-    def switching_freq(self, val):
-        self._switching_freq = val
-
     @property
     def rf_freq(self):
         """."""
-        return self._rf_freq
+        return self._rf_freq if self._rf_freq else self.DEF_RFFREQ
 
-    @rf_freq.setter
-    def rf_freq(self, val):
-        self._rf_freq = val
-
-    def load_orb(self):
-        """Load files in old format."""
-        keys = self.load_and_apply(self.fname)
-        if keys:
-            print('The following keys were not used:')
-            print('    ', str(keys))
-        data = self.data
-        timestamp = _datetime.datetime.fromtimestamp(data['timestamp'])
-        gtmp = '{0:<20s} = {1:}  {2:}\n'.format
-        ftmp = '{0:<20s} = {1:9.5f}  {2:}\n'.format
-        stg = gtmp('filename', self.fname, '')
-        stg += gtmp('timestamp', timestamp, '')
-        stg += ftmp('stored_current', data['stored_current'], 'mA')
-        stg += ftmp('rf_frequency', data['rf_frequency'], 'Hz')
-        stg += ftmp('tunex', data['tunex'], '')
-        stg += ftmp('tuney', data['tuney'], '')
-        stg += gtmp('tunex_enable', bool(data['tunex_enable']), '')
-        stg += gtmp('tuney_enable', bool(data['tuney_enable']), '')
-        stg += gtmp('acq_rate', data['acq_rate'], '')
-        stg += gtmp('switching_mode', data['switching_mode'], '')
-        stg += gtmp(
-            'switching_frequency', data['switching_frequency'], '')
-        stg += gtmp('nrsamples_pre', data['nrsamples_pre'], '')
-        stg += gtmp('nrsamples_post', data['nrsamples_post'], '')
-        orbx, orby = data['orbx'].copy(), data['orby'].copy()
-        # zero mean in samples dimension
-        orbx -= orbx.mean(axis=0)[None, :]
-        orby -= orby.mean(axis=0)[None, :]
-        self.orbx, self.orby = orbx, orby
-        self.rf_freq = data['rf_frequency']
-        self._get_sampling_freq()
-        self._get_switching_freq()
-        return stg
-
-    def load_and_apply(self, fname, orm_name=''):
+    def load_and_apply(self, fname):
         """Load and apply `data` and `params` from pickle or HDF5 file.
 
         Args:
@@ -169,68 +153,43 @@ class OrbitAnalysis(_AcqBPMsSignals):
                 '.pickle' will be added and a pickle file will be assumed.
                 If provided, must be '.pickle' for pickle files or
                 {'.h5', '.hdf5', '.hdf', '.hd5'} for HDF5 files.
+            orm_name (str, optional): name of the orbit response matrix
+                configuration to use in analysis. Defaults to '', which means
+                the matrix of the configuration with creation timestamp
+                closest to data timestamp will be loaded.
 
         """
         keys = super().load_and_apply(fname)
-        self.get_appropriate_orm_data(orm_name)
+        self._fname = fname
         self._get_sampling_freq()
         self._get_switching_freq()
+        self._subtract_average_orb()
+        self._rf_freq = self.data['rf_frequency']
         return keys
 
     def get_appropriate_orm_data(self, orm_name=''):
-        """Find Orbit Response Matrix measured close to data acquisition."""
+        """Find Orbit Response Matrix measured close to data acquisition.
+
+        Args:
+            orm_name (str, optional): name of the orbit response matrix
+                configuration to use in analysis. Defaults to '', which means
+                the matrix of the configuration with creation timestamp
+                closest to data timestamp will be loaded.
+
+        """
         if not orm_name:
             orm_meas = self.find_orm_with_closest_created_time(
-                orm_client=self.orm_client, timestamp=self.data['timestamp'])
+                orm_client=self.orm_client, timestamp=self.data['timestamp']
+            )
         else:
             orm_meas = _np.array(
-                self.orm_client.get_config_value(name=orm_name))
-        self.rf_freq = self.data['rf_frequency']
-        etaxy = orm_meas[:, -1]
-        etaxy *= (-self.MOM_COMPACT*self.rf_freq)  # units of [um]
-        self.etax, self.etay = etaxy[:self.NUM_BPMS], etaxy[self.NUM_BPMS:]
+                self.orm_client.get_config_value(name=orm_name)
+            )
         self.orm = orm_meas
 
-    def calc_integrated_spectrum(self, spec, inverse=False):
-        """."""
-        spec_abs = _np.abs(spec)
-        spec2 = spec_abs*spec_abs
-        if inverse:
-            intpsd = _np.sqrt(2*_np.cumsum(spec2[::-1], axis=0))[::-1]
-        else:
-            intpsd = _np.sqrt(2*_np.cumsum(spec2, axis=0))
-        return intpsd
-
-    def filter_switching(self, orb):
-        """."""
-        fsmp = self.sampling_freq
-        fswt = self.switching_freq
-        sw_mode = self.data['switching_mode']
-        # remove switching only if switching mode was on during acquisition
-        # AND the sampling frequency is greater than switching frequency
-        if fsmp / fswt > 1 and sw_mode == 'switching':
-            return self.filter_switching_cycles(orb, fsmp, fswt)
-        return orb
-
-    def filter_around_freq(
-            self, orbx=None, orby=None, central_freq=24*64, window=5):
-        """."""
-        if orbx is None:
-            orbx = self.orbx.copy()
-        if orby is None:
-            orby = self.orby.copy()
-        fmin = central_freq - window/2
-        fmax = central_freq + window/2
-        fs = self.sampling_freq
-        fil_orbx = self.filter_data_frequencies(
-            orbx, fmin=fmin, fmax=fmax, fsampling=fs)
-        fil_orby = self.filter_data_frequencies(
-            orby, fmin=fmin, fmax=fmax, fsampling=fs)
-        return fil_orbx, fil_orby
-
-    def energy_stability_analysis(
-            self, central_freq=24*64, window=5, inverse=True,
-            use_eta_meas=True):
+    def process_data_energy(
+        self, central_freq=24 * 64, window=5, inverse=True, use_eta_meas=True
+    ):
         """Calculate energy deviation and dispersion function from orbit.
 
         1) Filter orbit array around synchrotron frequency with some frequency
@@ -260,8 +219,11 @@ class OrbitAnalysis(_AcqBPMsSignals):
         orbx_ns = self.filter_switching(self.orbx)
         orby_ns = self.filter_switching(self.orby)
         orbx, orby = self.filter_around_freq(
-            orbx=orbx_ns, orby=orby_ns,
-            central_freq=central_freq, window=window)
+            orbx=orbx_ns,
+            orby=orby_ns,
+            central_freq=central_freq,
+            window=window,
+        )
 
         if use_eta_meas:
             eta2use = self.calculate_eta_meas(orbx, orby, self.etax, self.etay)
@@ -275,19 +237,27 @@ class OrbitAnalysis(_AcqBPMsSignals):
         energy_spec, freq = self.calc_spectrum(denergy, fs=self.sampling_freq)
         intpsd = self.calc_integrated_spectrum(energy_spec, inverse=inverse)
 
-        self.analysis['measured_dispersion'] = eta2use if use_eta_meas \
-            else None
-        self.analysis['energy_freqmax'] = central_freq + window/2
-        self.analysis['energy_freqmin'] = central_freq - window/2
+        self.analysis['measured_dispersion'] = (
+            eta2use if use_eta_meas else None
+        )
+        self.analysis['energy_freqmax'] = central_freq + window / 2
+        self.analysis['energy_freqmin'] = central_freq - window / 2
         self.analysis['energy_deviation'] = denergy
         self.analysis['energy_spectrum'] = energy_spec
         self.analysis['energy_freq'] = freq
         self.analysis['energy_ipsd'] = intpsd
 
-    def orbit_stability_analysis(
-            self, central_freq=60, window=10, inverse=False, pca=True,
-            split_planes=True):
-        """Calculate orbit spectrum, integrated PSD and apply SVD in orbit
+    def process_data_orbit(
+        self,
+        central_freq=60,
+        window=10,
+        inverse=False,
+        pca=True,
+        split_planes=True,
+    ):
+        """Perform orbit stability analysis.
+
+        Calculate orbit spectrum, integrated PSD and apply SVD in orbit
             data by filtering around a center frequency with a window.
 
         Args:
@@ -307,16 +277,19 @@ class OrbitAnalysis(_AcqBPMsSignals):
         orbx_ns = self.filter_switching(self.orbx)
         orby_ns = self.filter_switching(self.orby)
         orbx_fil, orby_fil = self.filter_around_freq(
-            orbx=orbx_ns, orby=orby_ns,
-            central_freq=central_freq, window=window)
+            orbx=orbx_ns,
+            orby=orby_ns,
+            central_freq=central_freq,
+            window=window,
+        )
         orbx_spec, freqx = self.calc_spectrum(orbx_fil, fs=self.sampling_freq)
         orby_spec, freqy = self.calc_spectrum(orby_fil, fs=self.sampling_freq)
         ipsdx = self.calc_integrated_spectrum(orbx_spec, inverse=inverse)
         ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
         self.analysis['orbx_filtered'] = orbx_fil
         self.analysis['orby_filtered'] = orby_fil
-        self.analysis['orb_freqmax'] = central_freq + window/2
-        self.analysis['orb_freqmin'] = central_freq - window/2
+        self.analysis['orb_freqmax'] = central_freq + window / 2
+        self.analysis['orb_freqmin'] = central_freq - window / 2
         self.analysis['orbx_spectrum'] = orbx_spec
         self.analysis['orby_spectrum'] = orby_spec
         self.analysis['orbx_freq'] = freqx
@@ -342,32 +315,127 @@ class OrbitAnalysis(_AcqBPMsSignals):
             self.analysis['orbxy_svals'] = svalsxy
             self.analysis['orbxy_vhmat'] = vhmatxy
 
-    def process_data_energy(
-            self, central_freq=24*64, window=5, inverse=True, orm_name='',
-            use_eta_meas=True):
-        """Energy Stability Analysis."""
-        self.subtract_average_orb()
-        self.get_appropriate_orm_data(orm_name)
-        self.energy_stability_analysis(
-            central_freq=central_freq, window=window, inverse=inverse,
-            use_eta_meas=use_eta_meas)
-
-    def process_data_orbit(
-            self, central_freq=60, window=10, inverse=False, pca=True,
-            split_planes=True):
-        """Orbit Stability Analysis."""
-        self.subtract_average_orb()
-        self.orbit_stability_analysis(
-            central_freq=central_freq, window=window,
-            inverse=inverse, pca=pca, split_planes=split_planes)
-
-    def subtract_average_orb(self):
+    def calc_integrated_spectrum(self, spec, inverse=False):
         """."""
-        orbx = self.data['orbx'].copy()
-        orby = self.data['orby'].copy()
-        orbx -= orbx.mean(axis=0)[None, :]
-        orby -= orby.mean(axis=0)[None, :]
-        self.orbx, self.orby = orbx, orby
+        spec_abs = _np.abs(spec)
+        spec2 = spec_abs * spec_abs
+        if inverse:
+            intpsd = _np.sqrt(2 * _np.cumsum(spec2[::-1], axis=0))[::-1]
+        else:
+            intpsd = _np.sqrt(2 * _np.cumsum(spec2, axis=0))
+        return intpsd
+
+    def filter_switching(self, orb):
+        """."""
+        fsmp = self.sampling_freq
+        fswt = self.switching_freq
+        sw_mode = self.data['switching_mode']
+        # remove switching only if switching mode was on during acquisition
+        # AND the sampling frequency is greater than switching frequency
+        if fsmp / fswt > 1 and sw_mode == 'switching':
+            return self.filter_switching_cycles(orb, fsmp, fswt)
+        return orb
+
+    def filter_around_freq(
+        self, orbx=None, orby=None, central_freq=24 * 64, window=5
+    ):
+        """."""
+        if orbx is None:
+            orbx = self.orbx.copy()
+        if orby is None:
+            orby = self.orby.copy()
+        fmin = central_freq - window / 2
+        fmax = central_freq + window / 2
+        fs = self.sampling_freq
+        fil_orbx = self.filter_data_frequencies(
+            orbx, fmin=fmin, fmax=fmax, fsampling=fs
+        )
+        fil_orby = self.filter_data_frequencies(
+            orby, fmin=fmin, fmax=fmax, fsampling=fs
+        )
+        return fil_orbx, fil_orby
+
+    def calc_pca_spatial_modes(
+        self,
+        modes=None,
+        orbx=None,
+        orby=None,
+        spacx0=None,
+        spacy0=None,
+        split_planes=True,
+    ):
+        """Calculate spatial modes from PCA decomposition.
+
+        Args:
+            modes (list, optional): list of integers defining which modes to
+                calculate. Defaults to None, which means only mode 0 (most
+                proeminent mode) will be returned.
+            orbx (numpy.ndarray, optional): Horizontal orbit from which modes
+                will be calculated. Defaults to None, which means `self.orbx`
+                will used.
+            orby (numpy.ndarray, optional): Vertical orbit from which modes
+                will be calculated. Defaults to None, which means `self.orby`
+                will used.
+            spacx0 (numpy.ndarray, (160, len(modes)), optional): Since the
+                decomposition is arbitrary by a global sign, this reference
+                spatial mode can be provided, so that the resulting spatial
+                modes will have the same sign. This assumes that both signs
+                are highly correlated. Defaults to None, which means sign is
+                arbitrary.
+            spacy0 (numpy.ndarray, (160, len(modes)), optional): Since the
+                decomposition is arbitrary by a global sign, this reference
+                spatial mode can be provided, so that the resulting spatial
+                modes will have the same sign. This assumes that both signs
+                are highly correlated. Defaults to None, which means sign is
+                arbitrary.
+            split_planes (bool, optional): whether to perform PCA on planes
+                separately or to concatenate the orbits into one.
+                Defaults to True.
+
+        Raises:
+            RuntimeError: If orbx or orby is not provided and PCA was not
+                calculated yet.
+
+        Returns:
+            spacx (numpy.ndarray, (160, len(modes))): horizontal spatial modes.
+            spacy (numpy.ndarray, (160, len(modes))): vertical spatial modes.
+        """
+        modes = modes or [0]
+        if orbx is None and orby is None:
+            anl = self.analysis
+            if 'orbx_umat' in anl:
+                umx, vhmx = anl['orbx_umat'], anl['orbx_vhmat']
+                umy, vhmy = anl['orby_umat'], anl['orby_vhmat']
+                svsx = anl['orbx_svals']
+                svsy = anl['orby_svals']
+                spacx = vhmx[modes].T * svsx[modes] / _np.sqrt(umx.shape[0])
+                spacy = vhmy[modes].T * svsy[modes] / _np.sqrt(umy.shape[0])
+            elif 'orbxy_umat' in anl:
+                um, vhm = anl['orbxy_umat'], anl['orbxy_vhmat']
+                svs = anl['orbxy_svals']
+                spac = vhm[modes].T * svs[modes] / _np.sqrt(um.shape[0])
+                spacx = spac[:160]
+                spacy = spac[160:]
+            else:
+                raise RuntimeError('PCA was not performed yet for saved data.')
+        else:
+            if split_planes:
+                umx, svsx, vhmx = self.calc_svd(orbx)
+                umy, svsy, vhmy = self.calc_svd(orby)
+                spacx = vhmx[modes].T * svsx[modes] / _np.sqrt(umx.shape[0])
+                spacy = vhmy[modes].T * svsy[modes] / _np.sqrt(umy.shape[0])
+            else:
+                orb = _np.hstack((orbx, orby))
+                um, svs, vhm = self.calc_svd(orb)
+                spac = vhm[modes].T * svs[modes] / _np.sqrt(um.shape[0])
+                spacx = spac[:160]
+                spacy = spac[160:]
+
+        if spacx0 is not None:
+            spacx *= _np.sign(_np.sum(spacx * spacx0, axis=0))
+        if spacy0 is not None:
+            spacy *= _np.sign(_np.sum(spacy * spacy0, axis=0))
+        return spacx, spacy
 
     def calculate_rms_orb(self, freq_min=1e-1, freq_max=1e3):
         """Calculates the RMS orbit for each BPM within a frequency range.
@@ -388,28 +456,28 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
         """
         if freq_min is None and freq_max is None:
-            orbx_rms = self.analysis["orbx_filtered"].std(axis=0)
-            orby_rms = self.analysis["orby_filtered"].std(axis=0)
+            orbx_rms = self.analysis['orbx_filtered'].std(axis=0)
+            orby_rms = self.analysis['orby_filtered'].std(axis=0)
             return orbx_rms, orby_rms
 
-        orbx_freq = self.analysis["orbx_freq"]
-        orby_freq = self.analysis["orby_freq"]
+        orbx_freq = self.analysis['orbx_freq']
+        orby_freq = self.analysis['orby_freq']
 
-        orbx_ipsd = self.analysis["orbx_ipsd"]
-        orby_ipsd = self.analysis["orby_ipsd"]
+        orbx_ipsd = self.analysis['orbx_ipsd']
+        orby_ipsd = self.analysis['orby_ipsd']
 
         freq_min = freq_min or orbx_freq.min()
         freq_max = freq_max or orbx_freq.max()
         idcs = (orbx_freq >= freq_min) & (orbx_freq <= freq_max)
         orbx_rms = _np.sqrt(
-            orbx_ipsd[idcs, :][-1]**2 - orbx_ipsd[idcs, :][0]**2
+            orbx_ipsd[idcs, :][-1] ** 2 - orbx_ipsd[idcs, :][0] ** 2
         )
 
         freq_min = freq_min or orby_freq.min()
         freq_max = freq_max or orby_freq.max()
         idcs = (orby_freq >= freq_min) & (orby_freq <= freq_max)
         orby_rms = _np.sqrt(
-            orby_ipsd[idcs, :][-1]**2 - orby_ipsd[idcs, :][0]**2
+            orby_ipsd[idcs, :][-1] ** 2 - orby_ipsd[idcs, :][0] ** 2
         )
 
         return orbx_rms, orby_rms
@@ -435,7 +503,7 @@ class OrbitAnalysis(_AcqBPMsSignals):
             model = _si.fitted_models.vertical_dispersion_and_coupling(model)
 
         bpms_idcs = _pa.lattice.flatten(
-            _si.get_family_data(model)["BPM"]["index"]
+            _si.get_family_data(model)['BPM']['index']
         )
         eqparam = _pa.optics.EqParamsFromBeamEnvelope(model)
 
@@ -443,10 +511,20 @@ class OrbitAnalysis(_AcqBPMsSignals):
         ver_sizes = _np.sqrt(eqparam.envelopes[bpms_idcs, 2, 2]) * 1e6
         return hor_sizes, ver_sizes
 
-    # plotting methods
+    # ########################### plotting methods ###########################
+
     def plot_orbit_spectrum(
-            self, bpmidx=0, orbx=None, orby=None,
-            title='', label='', figname='', fig=None, axs=None, color='C0'):
+        self,
+        bpmidx=0,
+        orbx=None,
+        orby=None,
+        title='',
+        label='',
+        figname='',
+        fig=None,
+        axs=None,
+        color='C0',
+    ):
         """."""
         if orbx is None:
             freqx = self.analysis['orbx_freq']
@@ -457,18 +535,18 @@ class OrbitAnalysis(_AcqBPMsSignals):
             freqy = self.analysis['orby_freq']
             orby_spec = self.analysis['orby_spectrum']
         else:
-            orby_spec, freqx = self.calc_spectrum(orby, fs=self.sampling_freq)
+            orby_spec, freqy = self.calc_spectrum(orby, fs=self.sampling_freq)
 
         if fig is None or axs is None:
             fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
         axs[0].plot(
-            freqx, _np.abs(orbx_spec)[:, bpmidx], label=label, color=color)
+            freqx, _np.abs(orbx_spec)[:, bpmidx], label=label, color=color
+        )
         axs[1].plot(
-            freqy, _np.abs(orby_spec)[:, bpmidx], label=label, color=color)
+            freqy, _np.abs(orby_spec)[:, bpmidx], label=label, color=color
+        )
         if title:
             axs[0].set_title(title)
-        axs[0].legend(
-            loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
         axs[0].set_ylabel(r'$x$ [$\mu$m]')
         axs[1].set_ylabel(r'$y$ [$\mu$m]')
         axs[1].set_xlabel('Frequency [Hz]')
@@ -478,9 +556,19 @@ class OrbitAnalysis(_AcqBPMsSignals):
         return fig, axs
 
     def plot_orbit_integrated_psd(
-            self, bpmidx=0, orbx=None, orby=None, inverse=False,
-            title='', label='', figname='', fig=None, axs=None, color='C0',
-            alpha=1.0):
+        self,
+        bpmidx=0,
+        orbx=None,
+        orby=None,
+        inverse=False,
+        title='',
+        label='',
+        figname='',
+        fig=None,
+        axs=None,
+        color='C0',
+        alpha=1.0,
+    ):
         """."""
         if orbx is None:
             ipsdx = self.analysis['orbx_ipsd']
@@ -497,18 +585,14 @@ class OrbitAnalysis(_AcqBPMsSignals):
         if fig is None or axs is None:
             fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
         axs[0].plot(
-            freqx, ipsdx[:, bpmidx], label=label,
-            color=color, alpha=alpha)
+            freqx, ipsdx[:, bpmidx], label=label, color=color, alpha=alpha
+        )
         axs[1].plot(
-            freqy, ipsdy[:, bpmidx], label=label,
-            color=color, alpha=alpha)
+            freqy, ipsdy[:, bpmidx], label=label, color=color, alpha=alpha
+        )
         if title:
             axs[0].set_title(title)
 
-        if label:
-            axs[0].legend(
-                loc='upper right', bbox_to_anchor=(1.25, 1.02),
-                prop={'size': 14})
         axs[0].set_ylabel(r'$x$ [$\mu$m]')
         axs[1].set_ylabel(r'$y$ [$\mu$m]')
         axs[1].set_xlabel('Frequency [Hz]')
@@ -517,39 +601,30 @@ class OrbitAnalysis(_AcqBPMsSignals):
             fig.savefig(figname, dpi=300, format='pdf')
         return fig, axs
 
-    def plot_orbit_spacial_modes(
-            self, modes=[], orbx=None, orby=None, spacx0=None, spacy0=None,
-            title='', label='', figname='', fig=None, axs=None, color='C0'):
+    def plot_pca_spatial_modes(
+        self,
+        modes=None,
+        orbx=None,
+        orby=None,
+        split_planes=True,
+        spacx0=None,
+        spacy0=None,
+        title='',
+        label='',
+        figname='',
+        fig=None,
+        axs=None,
+        color='C0',
+    ):
         """."""
-        if orbx is None:
-            anly = self.analysis
-            try:
-                umatx, vhmatx = anly['orbx_umat'], anly['orbx_vhmat']
-                svalsx = anly['orbx_svals']
-            except KeyError:
-                print('PCA results of x orbit missing in analysis dict.')
-                return None
-        else:
-            umatx, svalsx, vhmatx = self.calc_svd(orbx)
-        if orby is None:
-            anly = self.analysis
-            try:
-                umaty, vhmaty = anly['orby_umat'], anly['orby_vhmat']
-                svalsy = anly['orby_svals']
-            except KeyError:
-                print('PCA results of y orbit missing in analysis dict.')
-                return None
-        else:
-            umaty, svalsy, vhmaty = self.calc_svd(orby)
-
-        spacx = vhmatx[modes].T*svalsx[modes]/_np.sqrt(umatx.shape[0])
-        spacy = vhmaty[modes].T*svalsy[modes]/_np.sqrt(umaty.shape[0])
-        if spacx0 is None:
-            spacx0 = spacx
-        if spacy0 is None:
-            spacy0 = spacy
-        spacx *= _np.sign(_np.sum(spacx*spacx0, axis=0))
-        spacy *= _np.sign(_np.sum(spacy*spacy0, axis=0))
+        spacx, spacy = self.calc_pca_spatial_modes(
+            modes=modes,
+            orbx=orbx,
+            orby=orby,
+            spacx0=spacx0,
+            spacy0=spacy0,
+            split_planes=split_planes,
+        )
 
         if fig is None or axs is None:
             fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
@@ -558,8 +633,7 @@ class OrbitAnalysis(_AcqBPMsSignals):
         for mode, linx, liny in zip(modes, linesx, linesy):
             linx.set_label(label + f', mode = {mode:d}')
             liny.set_label(label + f', mode = {mode:d}')
-        axs[0].legend(
-            loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
+
         axs[0].set_ylabel(r'$x$ space modes [$\mu$m]')
         axs[1].set_ylabel(r'$y$ space modes [$\mu$m]')
         axs[1].set_xlabel('BPM index')
@@ -571,9 +645,21 @@ class OrbitAnalysis(_AcqBPMsSignals):
         return fig, axs
 
     def plot_rms_orb_by_bpm(
-            self, orbx_rms=None, orby_rms=None, title='', label='', figname='',
-            fig=None, axs='None', color='C0', freq_min=1e-1, freq_max=1e3,
-            beamsize_units=True, hor_sizes=None, ver_sizes=None):
+        self,
+        orbx_rms=None,
+        orby_rms=None,
+        title='',
+        label='',
+        figname='',
+        fig=None,
+        axs='None',
+        color='C0',
+        freq_min=1e-1,
+        freq_max=1e3,
+        beamsize_units=True,
+        hor_sizes=None,
+        ver_sizes=None,
+    ):
         """Plot integrated PSD within a specified range (RMS Orbit) at BPMs.
 
         Args:
@@ -618,18 +704,17 @@ class OrbitAnalysis(_AcqBPMsSignals):
         if fig is None or axs is None:
             fig, axs = _plt.subplots(2, 1, figsize=(18, 6))
 
-        axs[0].plot(orbx_rms, "o-", mfc='none', color=color, label=label)
-        axs[1].plot(orby_rms, "o-", mfc='none', color=color, label=label)
+        axs[0].plot(orbx_rms, 'o-', mfc='none', color=color, label=label)
+        axs[1].plot(orby_rms, 'o-', mfc='none', color=color, label=label)
 
         if beamsize_units:
-            axs[0].set_ylabel("RMS hor. orbit \n [\% of hor. beam size]")
-            axs[1].set_ylabel("RMS vert. orbit \n [\% of vert. beam size]")
+            axs[0].set_ylabel('RMS hor. orbit \n [\\% of hor. beam size]')
+            axs[1].set_ylabel('RMS vert. orbit \n [\\% of vert. beam size]')
         else:
-            axs[0].set_ylabel(r"RMS hor. orbit [$\mu$m]")
-            axs[1].set_ylabel(r"RMS vert. orbit [$\mu$m]")
+            axs[0].set_ylabel(r'RMS hor. orbit [$\mu$m]')
+            axs[1].set_ylabel(r'RMS vert. orbit [$\mu$m]')
 
-        axs[0].legend(loc='best')
-        axs[1].set_xlabel("BPM index")
+        axs[1].set_xlabel('BPM index')
 
         if title:
             axs[0].set_title(title)
@@ -639,26 +724,33 @@ class OrbitAnalysis(_AcqBPMsSignals):
         return fig, axs
 
     def plot_energy_spectrum(
-            self, denergy=None,
-            title='', label='', figname='', fig=None, axs=None, color='C0',
-            plot_rfjitter=True):
+        self,
+        denergy=None,
+        title='',
+        label='',
+        figname='',
+        fig=None,
+        axs=None,
+        color='C0',
+        plot_rfjitter=True,
+    ):
         """."""
         if denergy is None:
             energy_spec = self.analysis['energy_spectrum']
             freq = self.analysis['energy_freq']
         else:
             energy_spec, freq = self.calc_spectrum(
-                denergy, fs=self.sampling_freq)
+                denergy, fs=self.sampling_freq
+            )
 
         if fig is None or axs is None:
             fig, axs = _plt.subplots(1, 1, figsize=(18, 6))
-        axs.plot(freq, _np.abs(energy_spec)*100, label=label, color=color)
+        axs.plot(freq, _np.abs(energy_spec) * 100, label=label, color=color)
         if plot_rfjitter:
             self._plot_ripple_rfjitter_harmonics(freq, axs)
         axs.set_xlabel('Frequency [Hz]')
         axs.set_ylabel(r'Amplitude for DFT of $\delta(t)$')
-        axs.legend(
-            loc='upper right', bbox_to_anchor=(1.12, 1.02), prop={'size': 14})
+
         if title:
             axs.set_title(title)
         axs.set_yscale('log')
@@ -668,27 +760,36 @@ class OrbitAnalysis(_AcqBPMsSignals):
         return fig, axs
 
     def plot_energy_integrated_psd(
-            self, denergy_spec=None, freq=None, inverse=True,
-            title='', label='', figname='', fig=None, axs=None, color='C0',
-            plot_rfjitter=True):
+        self,
+        denergy_spec=None,
+        freq=None,
+        inverse=True,
+        title='',
+        label='',
+        figname='',
+        fig=None,
+        axs=None,
+        color='C0',
+        plot_rfjitter=True,
+    ):
         """."""
         if denergy_spec is None:
             intpsd = self.analysis['energy_ipsd']
             freq = self.analysis['energy_freq']
         else:
             intpsd = self.calc_integrated_spectrum(
-                denergy_spec, inverse=inverse)
+                denergy_spec, inverse=inverse
+            )
             if freq is None:
                 Exception('Frequency input is missing')
 
         if fig is None or axs is None:
             fig, axs = _plt.subplots(1, 1, figsize=(12, 6))
 
-        axs.plot(freq, intpsd*100, label=label, color=color)
+        axs.plot(freq, intpsd * 100, label=label, color=color)
         if plot_rfjitter:
             self._plot_ripple_rfjitter_harmonics(freq, axs)
-        axs.legend(
-            loc='upper right', bbox_to_anchor=(1.25, 1.02), prop={'size': 14})
+
         if title:
             axs.set_title(title)
         axs.set_xlabel('Frequency [Hz]')
@@ -698,24 +799,44 @@ class OrbitAnalysis(_AcqBPMsSignals):
             fig.savefig(figname, dpi=300, format='pdf')
         return fig, axs
 
+    # ############################ helper methods ############################
+
     def _get_sampling_freq(self):
         samp_freq = self.data.get('sampling_frequency')
         if samp_freq is None:
             print('sampling_frequency is not in the data.')
-        self.sampling_freq = samp_freq
+        self._sampling_freq = samp_freq
 
     def _get_switching_freq(self):
         swc_freq = self.data.get('switching_frequency')
         if swc_freq is None:
             print('switching_frequency is not in the data.')
-        self.switching_freq = swc_freq
+        self._switching_freq = swc_freq
 
-    # static methods
+    def _subtract_average_orb(self):
+        """."""
+        orbx = self.data['orbx'].copy()
+        orby = self.data['orby'].copy()
+        orbx -= orbx.mean(axis=0)[None, :]
+        orby -= orby.mean(axis=0)[None, :]
+        self.orbx, self.orby = orbx, orby
+
+    def _find_orm_with_closest_created_time(self, orm_client, timestamp):
+        """Find the measured ORM with created time closest to timestamp."""
+        configs = orm_client.find_configs()
+        delays = _np.array([cfg['created'] for cfg in configs])
+        delays -= timestamp
+        orm_name = configs[_np.argmin(_np.abs(delays))]['name']
+        self._orm_name = orm_name
+        return _np.array(orm_client.get_config_value(name=orm_name))
+
+    # ###################### static helper methods ######################
+
     @staticmethod
     def _calc_ripple_rfjitter_harmonics(freq):
-        rfreq = round(_np.max(freq)/60)
+        rfreq = round(_np.max(freq) / 60)
         ripple = _np.arange(0, rfreq) * 60
-        jfreq = round(_np.max(freq)/64)
+        jfreq = round(_np.max(freq) / 64)
         rfjitt = _np.arange(0, jfreq) * 64
         return ripple, rfjitt
 
@@ -744,14 +865,5 @@ class OrbitAnalysis(_AcqBPMsSignals):
         vheta_ = vhmat_[idx]
 
         # Find scale factor via least-squares minimization
-        gamma = _np.dot(etaxy, vheta_)/_np.dot(etaxy, etaxy)
-        return vheta/gamma
-
-    @staticmethod
-    def find_orm_with_closest_created_time(orm_client, timestamp):
-        """Find the measured ORM with created time closest to timestamp."""
-        configs = orm_client.find_configs()
-        delays = _np.array([cfg['created'] for cfg in configs])
-        delays -= timestamp
-        orm_name = configs[_np.argmin(_np.abs(delays))]['name']
-        return _np.array(orm_client.get_config_value(name=orm_name))
+        gamma = _np.dot(etaxy, vheta_) / _np.dot(etaxy, etaxy)
+        return vheta / gamma

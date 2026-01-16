@@ -12,7 +12,7 @@ class CorrParams:
 
     RESPMAT_MODE = _get_namedtuple('RespMatMode', ['Full', 'Mxx', 'Myy'])
 
-    def __init__(self, use6dorb=False):
+    def __init__(self, use6dtrack=True):
         """."""
         # The most restrictive of the two below will be the limiting factor:
         self.minsingval = 0.2
@@ -20,7 +20,7 @@ class CorrParams:
         self.tikhonovregconst = 0  # Tikhonov regularization constant
         self.respmatmode = self.RESPMAT_MODE.Full
         self.respmatrflinemult = 1e6  # Mult. factor of RF line in SVD.
-        self._enblrf = use6dorb
+        self._enblrf = use6dtrack
         self.enbllistbpm = None
         self.enbllistch = None
         self.enbllistcv = None
@@ -41,7 +41,7 @@ class CorrParams:
         self.useglobalcoef = False  # Use same kick factor for all correctors.
         self.updatejacobian = False  # jacobian should update in all iterations
 
-        self.use6dorb = use6dorb
+        self.use6dtrack = use6dtrack
 
     @property
     def enblrf(self):
@@ -51,8 +51,8 @@ class CorrParams:
     @enblrf.setter
     def enblrf(self, value):
         val = bool(value)
-        if val is True and self.use6dorb is not True:
-            raise ValueError('Cannot enable RF with use6dorb being False.')
+        if val is True and self.use6dtrack is not True:
+            raise ValueError('Cannot enable RF with use6dtrack being False.')
         self._enblrf = val
 
 
@@ -61,30 +61,27 @@ class OrbitCorr:
 
     CORR_STATUS = _get_namedtuple(
         'CorrStatus',
-        ['Sucess', 'OrbRMSWarning', 'ConvergenceFail', 'SaturationFail'])
+        ['Sucess', 'OrbRMSWarning', 'ConvergenceFail', 'SaturationFail'],
+    )
 
     def __init__(
-        self,
-        model,
-        acc,
-        params=None,
-        corr_system='SOFB',
-        use6dorb=True
+        self, model, acc, params=None, corr_system='SOFB', use6dtrack=True
     ):
         """."""
         self.acc = acc
-        if params is not None and params.use6dorb != use6dorb:
-            raise ValueError('Incompatible parameters use6dorb.')
+        if params is not None and params.use6dtrack != use6dtrack:
+            raise ValueError('Incompatible parameters use6dtrack.')
 
-        self.params = params or CorrParams(use6dorb=use6dorb)
+        self.params = params or CorrParams(use6dtrack=use6dtrack)
         self.respm = OrbRespmat(
             model=model,
             acc=self.acc,
-            use6dorb=use6dorb,
-            corr_system=corr_system
+            use6dtrack=use6dtrack,
+            corr_system=corr_system,
         )
         self.params.enbllistbpm = _np.ones(
-            self.respm.bpm_idx.size*2, dtype=bool)
+            self.respm.bpm_idx.size * 2, dtype=bool
+        )
         if corr_system == 'FOFB':
             enbllistbpm = self.params.enbllistbpm.reshape(40, -1)
             enbllistbpm[:, [1, 2, 5, 6]] = False
@@ -95,14 +92,12 @@ class OrbitCorr:
             raise ValueError('Corretion system must be "SOFB" or "FOFB"')
         if self.params.enblrf and model.cavity_on is False:
             raise ValueError(
-                "It is necessary to turn on the cavity if it is "
-                "to be used in correction."
+                'It is necessary to turn on the cavity if it is '
+                'to be used in correction.'
             )
 
-        self.params.enbllistch = _np.ones(
-            self.respm.ch_idx.size, dtype=bool)
-        self.params.enbllistcv = _np.ones(
-            self.respm.cv_idx.size, dtype=bool)
+        self.params.enbllistch = _np.ones(self.respm.ch_idx.size, dtype=bool)
+        self.params.enbllistcv = _np.ones(self.respm.cv_idx.size, dtype=bool)
 
     def get_jacobian_matrix(self):
         """."""
@@ -122,7 +117,7 @@ class OrbitCorr:
     @staticmethod
     def get_figm(res):
         """Calculate figure of merit from residue vector."""
-        return _np.sqrt(_np.sum(res*res)/res.size)
+        return _np.sqrt(_np.sum(res * res) / res.size)
 
     def get_inverse_matrix(self, jacobian_matrix, full=False):
         """Calculate the pseudo-inverse of jacobian_matrix.
@@ -176,7 +171,7 @@ class OrbitCorr:
         uuu, sing, vvv = self.calc_svd(mat)
 
         idcs = sing > par.minsingval
-        idcs[par.numsingval:] = False
+        idcs[par.numsingval :] = False
         singr = sing[idcs]
         nr_sv = _np.sum(idcs)
         if not nr_sv:
@@ -185,10 +180,10 @@ class OrbitCorr:
         # Apply Tikhonov regularization:
         regc = par.tikhonovregconst
         inv_s = _np.zeros(sing.size, dtype=float)
-        inv_s[idcs] = singr/(singr*singr + regc*regc)
+        inv_s[idcs] = singr / (singr * singr + regc * regc)
 
         # Calculate Inverse
-        imat = _np.dot(vvv.T*inv_s, uuu.T)
+        imat = _np.dot(vvv.T * inv_s, uuu.T)
         is_nan = _np.any(_np.isnan(imat))
         is_inf = _np.any(_np.isinf(imat))
         if is_nan or is_inf:
@@ -201,9 +196,9 @@ class OrbitCorr:
 
         # Calculate processed singular values
         singp = _np.zeros(sing.size, dtype=float)
-        singp[idcs] = 1/inv_s[idcs]
+        singp[idcs] = 1 / inv_s[idcs]
         sing_vals = _np.zeros(min(*inv_mat.shape), dtype=float)
-        sing_vals[:singp.size] = singp
+        sing_vals[: singp.size] = singp
         return inv_mat, uuu, singp, vvv
 
     def calc_svd(self, mat):
@@ -246,7 +241,7 @@ class OrbitCorr:
         dorb = orb - goal_orbit
         bestfigm = OrbitCorr.get_figm(dorb)
         for _ in range(self.params.maxnriters):
-            dkicks = -1*_np.dot(ismat, dorb)
+            dkicks = -1 * _np.dot(ismat, dorb)
             kicks, saturation_flag = self._process_kicks(dkicks)
             if saturation_flag:
                 return OrbitCorr.CORR_STATUS.SaturationFail
@@ -269,12 +264,14 @@ class OrbitCorr:
 
     def get_orbit(self):
         """."""
-        if self.params.use6dorb:
+        if self.params.use6dtrack:
             cod = pyaccel.tracking.find_orbit6(
-                self.respm.model, indices='open')
+                self.respm.model, indices='open'
+            )
         else:
             cod = pyaccel.tracking.find_orbit4(
-                self.respm.model, indices='open')
+                self.respm.model, indices='open'
+            )
         codx = cod[0, self.respm.bpm_idx].ravel()
         cody = cod[2, self.respm.bpm_idx].ravel()
         res = _np.r_[codx, cody]
@@ -292,7 +289,7 @@ class OrbitCorr:
         nch = len(self.respm.ch_idx)
         ncv = len(self.respm.cv_idx)
 
-        kickch, kickcv, kickrf = kicks[:nch], kicks[nch:nch+ncv], kicks[-1]
+        kickch, kickcv, kickrf = kicks[:nch], kicks[nch : nch + ncv], kicks[-1]
 
         for i, idx in enumerate(self.respm.ch_idx):
             model[idx].hkick_polynom = kickch[i]
@@ -311,7 +308,7 @@ class OrbitCorr:
         nch = len(chidx)
         ncv = len(cvidx)
 
-        kickch, kickcv, kickrf = kicks[:nch], kicks[nch:nch+ncv], kicks[-1]
+        kickch, kickcv, kickrf = kicks[:nch], kicks[nch : nch + ncv], kicks[-1]
 
         cond = _np.any(_np.abs(kickch) >= par.maxkickch)
         cond &= _np.any(_np.abs(kickcv) >= par.maxkickcv)
@@ -320,7 +317,7 @@ class OrbitCorr:
         if cond:
             raise ValueError('Kicks above maximum allowed value')
 
-        dkickch, dkickcv = dkicks[:nch], dkicks[nch:nch+ncv]
+        dkickch, dkickcv = dkicks[:nch], dkicks[nch : nch + ncv]
         dkickrf = dkicks[-1]
         maskch = dkickch != 0
         maskcv = dkickcv != 0
@@ -329,21 +326,24 @@ class OrbitCorr:
         if maskch.any():
             coef_ch = min(
                 par.corrgainch,
-                par.maxdeltakickch/_np.abs(dkickch[maskch]).max())
+                par.maxdeltakickch / _np.abs(dkickch[maskch]).max(),
+            )
         else:
             coef_ch = par.corrgainch
 
         if maskcv.any():
             coef_cv = min(
                 par.corrgaincv,
-                par.maxdeltakickcv/_np.abs(dkickcv[maskcv]).max())
+                par.maxdeltakickcv / _np.abs(dkickcv[maskcv]).max(),
+            )
         else:
             coef_cv = par.corrgaincv
 
         coef_rf = 1.0
         if par.enblrf and dkickrf != 0:
             coef_rf = min(
-                par.corrgainrf, par.maxdeltakickrf/_np.abs(dkickrf))
+                par.corrgainrf, par.maxdeltakickrf / _np.abs(dkickrf)
+            )
 
         # Do not allow kicks to be larger than maximum after application
         # Algorithm:
@@ -354,19 +354,19 @@ class OrbitCorr:
         # the positive one and take the minimum value along the columns
         # to be the multiplicative factor:
         if maskch.any():
-            que = [(-par.maxkickch - kickch[maskch]) / dkickch[maskch], ]
+            que = [(-par.maxkickch - kickch[maskch]) / dkickch[maskch]]
             que.append((par.maxkickch - kickch[maskch]) / dkickch[maskch])
             que = _np.max(que, axis=0)
             coef_ch = max(min(_np.min(que), coef_ch), 0)
 
         if maskch.any():
-            que = [(-par.maxkickcv - kickcv[maskcv]) / dkickcv[maskcv], ]
+            que = [(-par.maxkickcv - kickcv[maskcv]) / dkickcv[maskcv]]
             que.append((par.maxkickcv - kickcv[maskcv]) / dkickcv[maskcv])
             que = _np.max(que, axis=0)
             coef_cv = max(min(_np.min(que), coef_cv), 0)
 
         if self.params.enblrf and dkickrf != 0:
-            que = [(-par.maxkickrf - kickrf) / dkickrf, ]
+            que = [(-par.maxkickrf - kickrf) / dkickrf]
             que.append((par.maxkickrf - kickrf) / dkickrf)
             que = _np.max(que, axis=0)
             coef_rf = max(min(_np.min(que), coef_rf), 0)
@@ -384,6 +384,6 @@ class OrbitCorr:
         saturation_flag = _np.isclose(min_coef, 0)
 
         kicks[:nch] += dkickch
-        kicks[nch:nch+ncv] += dkickcv
+        kicks[nch : nch + ncv] += dkickcv
         kicks[-1] += dkickrf
         return kicks, saturation_flag
