@@ -194,19 +194,22 @@ class Bump(_BaseClass):
         )
         enblx = _np.ones(self.reforbx.size, dtype=bool)
         enbly = _np.ones(self.reforby.size, dtype=bool)
-        enblx[idcs_out[: n_bpms_out * 2]] = False
-        enbly[idcs_out[n_bpms_out * 2:] - 160] = False
+        if n_bpms_out != 0:
+            enblx[idcs_out[: n_bpms_out * 2]] = False
+            enbly[idcs_out[n_bpms_out * 2:] - 160] = False
 
         sofb.bpmxenbl = enblx
         sofb.bpmyenbl = enbly
-        sofb.bpmxenbl[idcs_out[: n_bpms_out * 2]] = False
-        sofb.bpmyenbl[idcs_out[n_bpms_out * 2:] - 160] = False
+        if n_bpms_out != 0:
+            sofb.bpmxenbl[idcs_out[: n_bpms_out * 2]] = False
+            sofb.bpmyenbl[idcs_out[n_bpms_out * 2:] - 160] = False
         if self.params.use_fofb:
             fofb = self.devices['fofb']
             enblx = _np.copy(self._orig_fofb_bpmxenbl)
             enbly = _np.copy(self._orig_fofb_bpmyenbl)
-            enblx[idcs_out[: n_bpms_out * 2]] = False
-            enbly[idcs_out[n_bpms_out * 2:] - 160] = False
+            if n_bpms_out != 0:
+                enblx[idcs_out[: n_bpms_out * 2]] = False
+                enbly[idcs_out[n_bpms_out * 2:] - 160] = False
             fofb.bpmxenbl = enblx
             fofb.bpmyenbl = enbly
         _time.sleep(0.5)  # NOTE: For some reason We have to wait here.
