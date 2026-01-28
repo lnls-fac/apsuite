@@ -1,47 +1,49 @@
-# [build-system]
-# requires = ["setuptools >= 61.0"]
-# build-backend = "setuptools.build_meta"
+[build-system]
+requires = ["setuptools>=44"]
+build-backend = "setuptools.build_meta"
 
-# [project]
-# name = "apsuite"
-# version = "2.50.0"
-# dependencies = []
-# requires-python = ">=3.6"
-# authors = [
-#   {name = "lnls-fac"},
-# ]
-# maintainers = [
-#   {name = "Ana Oliveira", email = "ana.clara@lnls.br"},
-#   {name = "Ximenes Resende", email = "xresende@gmail.com"},
-#   {name = "Fernando H. de Sá", email = "fernandohds564@gmail.com"},
-#   {name = "Murilo Barbosa Alves", email= "murilo.alves@lnls.br"}
-# ]
-# description = "High level Accelerator Physics functions"
-# readme = "README.md"
-# license='MIT'
-# keywords = ["SIRIUS", "python", "EPICS", "Accelerator Physics"]
-# classifiers = [
-#     "Intended Audience :: Science/Research",
-#     "Programming Language :: Python",
-#     "Topic :: Scientific/Engineering",
-# ]
+[project]
+name = "apsuite"
+authors = [{ name = "lnls-fac" } ]
+maintainers = [
+  {name = "Ana Oliveira", email = "ana.clara@lnls.br"},
+  {name = "Ximenes Resende", email = "xresende@gmail.com"},
+  {name = "Fernando H. de Sá", email = "fernandohds564@gmail.com"},
+  {name = "Murilo Barbosa Alves", email= "alvesb.murilo@gmail.com"}
+]
+description = "High level Accelerator Physics functions"
+readme = "README.md"
+dynamic = ["version", "dependencies"]
+requires-python = ">=3.6"
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering",
+]
+keywords = ["SIRIUS", "python", "EPICS", "Accelerator Physics"]
 
-# [project.urls]
-# # Homepage = ""
-# # Documentation = ""
-# Repository = "https://github.com/lnls-fac/apsuite"
-# "Bug Tracker" = "https://github.com/lnls-fac/apsuite/issues"
-# # Changelog = ""
+license = "MIT"
+license-files= [ "LICENSE", ]
 
-# # [project.optional-dependencies]
-# # gui = []
-# # cli = []
+[project.urls]
+Homepage = "https://github.com/lnls-fac/apsuite"
+Download = "https://github.com/lnls-fac/apsuite"
+Repository = "https://github.com/lnls-fac/apsuite.git"
+Issues = "https://github.com/lnls-fac/apsuite/issues"
 
-# # [project.scripts]
+# --- Setuptools specific configurations ---
+[tool.setuptools]
+include-package-data = true
 
-# # [project.gui-scripts]
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
+dependencies = { file = "requirements.txt" }
 
+[tool.setuptools.package-data]
+apsuite = ["VERSION"]
+"apsuite.loco" = ['*.jpg', ]
 
+# --- linter and formatter configurations ---
 [tool.ruff]
 select = [
     "W", "E", "A", "B", "C90", "D", "I002", "N", "F", "G", "ARG", "S", "NPY"]
