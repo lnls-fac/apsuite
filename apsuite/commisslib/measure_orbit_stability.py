@@ -178,7 +178,7 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
         """
         if not orm_name:
-            orm_meas = self.find_orm_with_closest_created_time(
+            orm_meas = self._find_orm_with_closest_created_time(
                 orm_client=self.orm_client, timestamp=self.data['timestamp']
             )
         else:
@@ -652,7 +652,7 @@ class OrbitAnalysis(_AcqBPMsSignals):
         label='',
         figname='',
         fig=None,
-        axs='None',
+        axs=None,
         color='C0',
         freq_min=1e-1,
         freq_max=1e3,
@@ -672,7 +672,7 @@ class OrbitAnalysis(_AcqBPMsSignals):
             figname (str, optional): Figure name. Defaults to ''.
             fig (matplotlib.pyplot.figure, optional): fig object. Defaults to
                 None, in which case it is created.
-            axs (matplotlib.axes, optional): axes object. Defaults to 'None',
+            axs (matplotlib.axes, optional): axes object. Defaults to None,
                 in which case it is created.
             color (str, optional): curve color. Defaults to 'C0'.
             freq_min (float, optional): Lower limit of the frequency range over
@@ -696,13 +696,14 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
         if beamsize_units and (hor_sizes is None and ver_sizes is None):
             hor_sizes, ver_sizes = self.get_beamsizes()
+        if beamsize_units:
             orbx_rms /= hor_sizes
             orbx_rms *= 100
             orby_rms /= ver_sizes
             orby_rms *= 100
 
         if fig is None or axs is None:
-            fig, axs = _plt.subplots(2, 1, figsize=(18, 6))
+            fig, axs = _plt.subplots(2, 1, figsize=(10, 6))
 
         axs[0].plot(orbx_rms, 'o-', mfc='none', color=color, label=label)
         axs[1].plot(orby_rms, 'o-', mfc='none', color=color, label=label)
