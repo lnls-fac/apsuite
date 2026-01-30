@@ -99,7 +99,7 @@ class MeasTomography(_BaseClass):
 
     @curr_range.setter
     def curr_range(self, values):
-        """."""
+        """Set a custom quadrupole current range (A)."""
         arr = _np.asarray(values, dtype=float)
         if arr.size == 0:
             raise ValueError('curr_range must not be empty.')
@@ -108,7 +108,7 @@ class MeasTomography(_BaseClass):
         self.params.nr_points = arr.size
 
     def reset_curr_range(self):
-        """."""
+        """Reset QF current range to the default linear range from Params."""
         self._curr_range = None
 
     @property
@@ -122,7 +122,15 @@ class MeasTomography(_BaseClass):
         )
 
     def make_measurement(self):
-        """."""
+        """Run quadrupole scan and acquire raw data.
+
+        Sets the QF current to each value in 'curr_range' and, for each point,
+        triggers a configurable number of shots. For every shot the method
+        reads beam current, quadrupole force, screen image and timing
+        information and stores them in 'self.data' as nested lists
+        [nr_points][nr_repeat]. The loop can be interrupted interactively via
+        the EVG pulse menu.
+        """
         curr0 = self.devices['qf'].current
 
         keys = [
@@ -188,6 +196,10 @@ class MeasTomography(_BaseClass):
         nr_workers=2,
     ):
         """Process raw images in self.data and fill self.analysis.
+
+        Optionally removes background, applies median filter, defines a 2D ROI
+        using FWHM in X and Y, recenters beam at (0, 0), builds the position
+        grid and computes normalized X/Y projections and their bins.
 
         Args:
             nr_bins (tuple of int, optional): Number of bins for the X and Y
@@ -314,7 +326,27 @@ class MeasTomography(_BaseClass):
         return results
 
     def get_projections_bins(self, image, posx, posy, nr_bins=(50, 50)):
-        """."""
+        """Compute normalized X and Y projections and their bins.
+
+        This method computes the sum of pixel intensities along the X and Y
+        axes of the given image, interpolates the projections onto a uniform
+        grid with a specified number of bins, and returns the corresponding bin
+        edges and bin sizes. Projections are normalized such that their
+        integrals is equals one.
+
+        Args:
+            image (ndarray): 2D image array.
+            posx (ndarray): X-axis positions corresponding to image columns.
+            posy (ndarray): Y-axis positions corresponding to image rows.
+            nr_bins (tuple of int, optional): Number of bins for X and Y axes.
+                Default is (50, 50).
+
+        Returns:
+            tuple: (projx, projy, bins_x, bins_y, bin_size_x, bin_size_y):
+                - projx, projy (ndarray): Normalized projections along X and Y.
+                - bins_x, bins_y (ndarray): Bin edges for X and Y axes.
+                - bin_size_x, bin_size_y (float): Bin sizes for X and Y axes.
+        """
         # Interpolates projections
         projx = _np.sum(image, axis=0)
         projy = _np.sum(image, axis=1)
@@ -343,7 +375,7 @@ class MeasTomography(_BaseClass):
 
     @staticmethod
     def remove_background(image):
-        """."""
+        """Remove background from image using morphological reconstruction."""
         # image = img_as_float(image)
         seed = _np.copy(image)
         seed[1:-1, 1:-1] = _np.min(image)
