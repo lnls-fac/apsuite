@@ -4,21 +4,18 @@ import time as _time
 from multiprocessing import Pool as _Pool
 
 import numpy as _np
-
+from mathphys.imgproc import Image2D_Fit as _Image2D_Fit
 from scipy.integrate import trapezoid as _trapezoid
 from scipy.interpolate import interp1d as _interp1d
 from scipy.ndimage import median_filter as _median_filter
-from skimage.morphology import reconstruction as _reconstruction
-
 from siriuspy.devices import CurrInfoLinear, EVG, PowerSupply, Screen, Trigger
 from siriuspy.magnet.factory import NormalizerFactory as _Normalizer
-from mathphys.imgproc import Image2D_Fit as _Image2D_Fit
+from skimage.morphology import reconstruction as _reconstruction
+
 from apsuite.commisslib.tomography_linac import trans_matrices as _ment_mats
 
-from ...utils import (
-    MeasBaseClass as _BaseClass,
-    ParamsBaseClass as _ParamsBaseClass,
-)
+from ...utils import MeasBaseClass as _BaseClass, \
+    ParamsBaseClass as _ParamsBaseClass
 
 
 def _process_single_wrapper(args):
@@ -77,6 +74,7 @@ class MeasTomography(_BaseClass):
     def __init__(self, isonline=True):
         """."""
         super().__init__(params=Params(), isonline=isonline)
+        self._curr_range = None
         if isonline:
             self.devices['qf'] = PowerSupply('LI-01:PS-QF3')
             self.devices['scrn'] = Screen(Screen.DEVICES.LI_5)
@@ -90,11 +88,28 @@ class MeasTomography(_BaseClass):
 
     @property
     def curr_range(self):
-        """."""
+        """Return QF current range (A). Custom if set, else linear."""
+        if self._curr_range is not None:
+            return self._curr_range
+
         cmin = self.params.quad_curr_min
         cmax = self.params.quad_curr_max
         nr_points = self.params.nr_points
         return _np.linspace(cmin, cmax, nr_points)
+
+    @curr_range.setter
+    def curr_range(self, values):
+        """."""
+        arr = _np.asarray(values, dtype=float)
+        if arr.size == 0:
+            raise ValueError('curr_range must not be empty.')
+        self._curr_range = arr
+        # keep nr_points consistent with custom range
+        self.params.nr_points = arr.size
+
+    def reset_curr_range(self):
+        """."""
+        self._curr_range = None
 
     @property
     def kl_range(self):
