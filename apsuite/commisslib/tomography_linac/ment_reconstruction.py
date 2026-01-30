@@ -17,8 +17,6 @@ from copy import deepcopy as _deepcopy
 
 import matplotlib.pyplot as _plt
 import numpy as _np
-from mathphys.imgproc import Image2D_ROI as _Image2D_ROI
-from scipy.interpolate import interp1d as _interp1d
 from scipy.spatial import ConvexHull as _ConvexHull, \
     HalfspaceIntersection as _HalfspaceIntersection
 
@@ -78,165 +76,6 @@ def paint_convex(hull: _ConvexHull, fig=None, ax=None, **kwargs):
     ax.fill(points[:, 0], points[:, 1], **kwargs)
 
     return fig, ax
-
-
-class ScreenProcess:
-    """Class used for processing and analysing screen images.
-
-    This class is used to scale, crop, and get projections of screen images,
-    as well as for handling related grid and bin operations.
-    """
-
-    def __init__(self, scrn_img, scale_x, scale_y):
-        """."""
-        self.image = scrn_img
-        self.scale_x = scale_x
-        self.scale_y = scale_y
-        self.shape = scrn_img.shape
-
-        self._roix = None
-        self._roiy = None
-
-    @property
-    def positions(self):
-        """Returns scaled positions of images."""
-        sy, sx = self.shape
-        x = _np.arange(sx) * self.scale_x
-        y = _np.arange(sy) * self.scale_y
-        x -= x[sx // 2]
-        y -= y[sy // 2]
-        return x, y
-
-    @property
-    def grids(self):
-        """."""
-        x, y = self.positions
-        return _np.meshgrid(x, y)
-
-    @property
-    def roix(self):
-        """."""
-        if self._roix is None:
-            sent = "Image not cropped. Call 'crop_image' first."
-            raise ValueError(sent)
-        return self._roix
-
-    @property
-    def roiy(self):
-        """."""
-        if self._roiy is None:
-            sent = "Image not cropped. Call 'crop_image' first."
-            raise ValueError(sent)
-        return self._roiy
-
-    def crop_image(self, fwhmx_factor=4, fwhmy_factor=4):
-        """Crops image based on fwhm and returns new grids and new image."""
-        img2droi = _Image2D_ROI(self.image)
-        img2droi.update_roi_with_fwhm(fwhmx_factor, fwhmy_factor)
-        self._roix = img2droi.roix
-        self._roiy = img2droi.roiy
-
-        img2droi_crop = img2droi.create_trimmed()
-        image_crop = img2droi_crop.data
-        x, y = self.positions
-        new_x = x[slice(*self.roix)]
-        new_y = y[slice(*self.roiy)]
-        new_gridx, new_gridy = _np.meshgrid(new_x, new_y)
-        return new_gridx, new_gridy, image_crop
-
-    def get_projections(self, nr_bins=(50, 50), bin_size=None):
-        """Computes the X and Y projections of the image.
-
-        This method computes the sum of pixel intensities along the X and Y
-        axes within the defined region of interest for the cropped image. Then,
-        it interpolates the projection data into a new array of adjustable
-        size. The number of bins for this new array can be specified either by
-        the given number of bins or by a fixed bin size.
-
-        Args:
-            nr_bins (tuple of int, optional): Number of bins for X and Y axes.
-                Default is (50, 50).
-            bin_size (tuple of float, optional): Fixed bin size for X and Y
-                axes. If not provided, the number of bins (`nr_bins`) will be
-                used instead to define the bin sizes.
-
-        Returns:
-            tuple: A tuple containing:
-                - (projx, projy) (tuple of ndarray): Projections along the X
-                and Y axes.
-                - (bins_x, bins_y) (tuple of ndarray): Bin edges for the X
-                and Y axes.
-                - (bin_size_x, bin_size_y) (tuple of float): The calculated bin
-                sizes for X and Y axes.
-        """
-        img = self.image[slice(*self.roiy), slice(*self.roix)]
-        projx = _np.sum(img, axis=0)
-        projy = _np.sum(img, axis=1)
-        x, y = self.positions
-        x = x[slice(*self.roix)]
-        y = y[slice(*self.roiy)]
-
-        # Interpolates projections
-        fx = _interp1d(x, projx)
-        fy = _interp1d(y, projy)
-        xmin, xmax = x[0], x[-1]
-        ymin, ymax = y[0], y[-1]
-
-        if bin_size is None:
-            new_x = _np.linspace(xmin, xmax, nr_bins[0])
-            new_y = _np.linspace(ymin, ymax, nr_bins[1])
-        else:
-            bin_size_x, bin_size_y = bin_size
-            lengthx = _np.abs(xmax - xmin)
-            lengthy = _np.abs(ymax - ymin)
-            nr_points_x, excess_x = divmod(lengthx, bin_size_x)
-            nr_points_y, excess_y = divmod(lengthy, bin_size_y)
-            new_x = self._adjust_limits(xmin, xmax, excess_x, int(nr_points_x))
-            new_y = self._adjust_limits(ymin, ymax, excess_y, int(nr_points_y))
-
-        projx = fx(new_x)
-        projy = fy(new_y)
-
-        # Create bins
-        bins_x = self.position_to_bin(new_x)
-        bins_y = self.position_to_bin(new_y)
-        bin_size_x = _np.abs(bins_x[1] - bins_x[0])
-        bin_size_y = _np.abs(bins_y[1] - bins_y[0])
-
-        return (projx, projy), (bins_x, bins_y), (bin_size_x, bin_size_y)
-
-    @staticmethod
-    def plot_image(gridx, gridy, image, fig=None, ax=None, **kwargs):
-        """."""
-        if fig is None or ax is None:
-            fig, ax = _plt.subplots(1, 1)
-
-        ax.pcolormesh(gridx, gridy, image, **kwargs)
-
-        return fig, ax
-
-    @staticmethod
-    def position_to_bin(x):
-        """Converts a 1D array of positions into bin edges."""
-        nr_points = len(x)
-        delta = x[1] - x[0]
-        xmin = x[0] - delta / 2
-        xmax = x[-1] + delta / 2
-        return _np.linspace(xmin, xmax, nr_points + 1)
-
-    @staticmethod
-    def bin_to_position(x):
-        """Converts bin edges into bin center positions."""
-        return (x[:-1] + x[1:]) / 2
-
-    def _adjust_limits(self, min_val, max_val, excess, nr_points):
-        if min_val < max_val:
-            min_val += excess / 2
-            max_val -= excess / 2
-        else:
-            min_val -= excess / 2
-            max_val += excess / 2
-        return _np.linspace(min_val, max_val, nr_points + 1)
 
 
 class Params(_ParamsBase):
@@ -711,7 +550,7 @@ class DistribReconstruction(_BaseClass):
             if i >= nr_projs:
                 ax.set_visible(False)
                 continue
-            x_plot = ScreenProcess.bin_to_position(bins[i])
+            x_plot = (bins[i][:-1] + bins[i][1:]) / 2
             ax.plot(x_plot, projs_meas[i], "-o", label="meas.")
             ax.plot(x_plot, projs_calc[i], "-o", label="calc.")
             if not i:
