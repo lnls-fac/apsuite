@@ -3,6 +3,7 @@
 import time as _time
 from multiprocessing import Pool as _Pool
 
+import matplotlib.pyplot as _plt
 import numpy as _np
 from mathphys.imgproc import Image2D_Fit as _Image2D_Fit
 from scipy.integrate import trapezoid as _trapezoid
@@ -478,3 +479,339 @@ class MeasTomography(_BaseClass):
         data['trigger_delay_raw'] = self.devices['li_trig'].delay_raw
 
         return data
+
+    # ----------Visualization Methods----------
+
+    def plot_raw_images(
+        self,
+        points=None,
+        repeat=None,
+        max_per_fig=9,
+        cmap='jet',
+        figsize=(9, 9),
+        suptitle=None,
+    ):
+        """Plot raw images for selected measurement points."""
+        if self.data is None or 'image_raw' not in self.data:
+            raise RuntimeError('No raw images available in self.data.')
+
+        nr_p = self.params.nr_points
+        nr_r = self.params.nr_repeat
+
+        # Select valid data points
+        repeat = self._resolve_repeat(repeat, nr_r)
+        indices = self._resolve_points(points, repeat, nr_p)
+
+        # Pagineted plot
+        self._plot_raw_images_paginated(
+            indices=indices,
+            repeat=repeat,
+            max_per_fig=max_per_fig,
+            cmap=cmap,
+            figsize=figsize,
+            suptitle=suptitle,
+        )
+
+    def plot_cropped_images(
+        self,
+        points=None,
+        repeat=None,
+        max_per_fig=9,
+        cmap='jet',
+        figsize=(9, 9),
+        suptitle=None,
+    ):
+        """Plot cropped images from self.analysis with their position grids."""
+        if self.analysis is None or 'image_cropped' not in self.analysis:
+            raise RuntimeError(
+                'No processed images available in self.analysis.'
+            )
+
+        nr_p = len(self.analysis['image_cropped'])
+        nr_r = self.params.nr_repeat
+
+        # resolve repeat e pontos válidos
+        repeat = self._resolve_repeat(repeat, nr_r)
+        indices = self._resolve_points_from_analysis(points, repeat, nr_p)
+
+        # paginação e plot
+        self._plot_cropped_images_paginated(
+            indices=indices,
+            repeat=repeat,
+            max_per_fig=max_per_fig,
+            cmap=cmap,
+            figsize=figsize,
+            suptitle=suptitle,
+        )
+
+    def plot_projections(
+        self,
+        points=None,
+        repeat=None,
+        plane='x',  # 'x' ou 'y' (removido 'both')
+        max_per_fig=9,
+        figsize=(12, 8),
+        suptitle=None,
+    ):
+        """Plot binned projections from self.analysis."""
+        if self.analysis is None or 'proj_x' not in self.analysis:
+            raise RuntimeError(
+                'No processed projections available in self.analysis.'
+            )
+
+        nr_p = len(self.analysis['image_cropped'])
+        nr_r = self.params.nr_repeat
+
+        if plane not in ('x', 'y'):
+            raise ValueError("plane must be 'x' or 'y'.")
+
+        repeat = self._resolve_repeat(repeat, nr_r)
+        indices = self._resolve_points_from_analysis(points, repeat, nr_p)
+
+        self._plot_projections_paginated(
+            indices=indices,
+            repeat=repeat,
+            plane=plane,
+            max_per_fig=max_per_fig,
+            figsize=figsize,
+            suptitle=suptitle,
+        )
+
+    def _resolve_repeat(self, repeat, nr_r):
+        """Return a valid repeat index."""
+        if repeat is None:
+            repeat = 0
+        if not (0 <= repeat < nr_r):
+            raise ValueError(
+                f'repeat must be in [0, {nr_r - 1}], got {repeat}.'
+            )
+        return repeat
+
+    def _resolve_points(self, points, repeat, nr_p):
+        """Return list of point indices with valid images for given repeat."""
+        if points is None:
+            points = list(range(nr_p))
+        else:
+            points = [int(p) for p in points if 0 <= int(p) < nr_p]
+
+        indices = [
+            p for p in points if self.data['image_raw'][p][repeat] is not None
+        ]
+        return indices
+
+    def _resolve_points_from_analysis(self, points, repeat, nr_p):
+        """Return list of point indices with valid cropped images."""
+        if points is None:
+            points = list(range(nr_p))
+        else:
+            points = [int(p) for p in points if 0 <= int(p) < nr_p]
+
+        indices = [
+            p
+            for p in points
+            if self.analysis['image_cropped'][p][repeat] is not None
+        ]
+        return indices
+
+    def _plot_raw_images_paginated(
+        self, indices, repeat, max_per_fig, cmap, figsize, suptitle
+    ):
+        """Iterate over pages and plot subsets of images."""
+        total = len(indices)
+        start = 0
+        fig_idx = 1
+
+        while start < total:
+            end = min(start + max_per_fig, total)
+            batch = indices[start:end]
+
+            self._plot_raw_images_page(
+                batch_indices=batch,
+                repeat=repeat,
+                cmap=cmap,
+                figsize=figsize,
+                page_idx=fig_idx,
+                suptitle=suptitle,
+            )
+
+            fig_idx += 1
+            start = end
+
+    def _plot_raw_images_page(
+        self, batch_indices, repeat, cmap, figsize, page_idx, suptitle
+    ):
+        """Plot a single page (figure) of raw images."""
+        n_imgs = len(batch_indices)
+        ncols = min(3, n_imgs)
+        nrows = (n_imgs + ncols - 1) // ncols
+
+        fig, axs = _plt.subplots(
+            nrows, ncols, figsize=figsize, sharex=True, sharey=True
+        )
+        axs = _np.array(axs).ravel()
+
+        for ax, p in zip(axs, batch_indices):
+            curr = self.data['quad_curr_rb'][p][repeat]
+            img = self.data['image_raw'][p][repeat]
+            ax.imshow(img, cmap=cmap)
+            ax.text(
+                0.5,
+                0.92,
+                f'QF3: {curr:.2f} A  (p={p}, r={repeat})',
+                color='white',
+                fontsize=9,
+                ha='center',
+                va='top',
+                transform=ax.transAxes,
+            )
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        # Hide unused axes
+        for ax in axs[n_imgs:]:
+            ax.axis('off')
+
+        if suptitle is not None:
+            title = suptitle
+        else:
+            title = f'Raw images (repeat={repeat}, page {page_idx})'
+        fig.suptitle(title)
+        fig.tight_layout()
+        _plt.show()
+
+    def _plot_cropped_images_paginated(
+        self, indices, repeat, max_per_fig, cmap, figsize, suptitle
+    ):
+        """Iterate over pages and plot subsets of cropped images."""
+        total = len(indices)
+        start = 0
+        fig_idx = 1
+
+        while start < total:
+            end = min(start + max_per_fig, total)
+            batch = indices[start:end]
+
+            self._plot_cropped_images_page(
+                batch_indices=batch,
+                repeat=repeat,
+                cmap=cmap,
+                figsize=figsize,
+                page_idx=fig_idx,
+                suptitle=suptitle,
+            )
+
+            fig_idx += 1
+            start = end
+
+    def _plot_cropped_images_page(
+        self, batch_indices, repeat, cmap, figsize, page_idx, suptitle
+    ):
+        """Plot a single page of cropped images."""
+        n_imgs = len(batch_indices)
+        ncols = min(3, n_imgs)
+        nrows = (n_imgs + ncols - 1) // ncols
+
+        fig, axs = _plt.subplots(
+            nrows, ncols, figsize=figsize, sharex=False, sharey=False
+        )
+        axs = _np.array(axs).ravel()
+
+        for ax, p in zip(axs, batch_indices):
+            curr = self.data['quad_curr_rb'][p][repeat]
+            img = self.analysis['image_cropped'][p][repeat]
+            gridx = self.analysis['grid_x'][p][repeat]
+            gridy = self.analysis['grid_y'][p][repeat]
+
+            ax.pcolormesh(gridx, gridy, img, cmap=cmap)
+            ax.text(
+                0.5,
+                0.92,
+                f'QF3: {curr:.2f} A  (p={p}, r={repeat})',
+                color='white',
+                fontsize=9,
+                ha='center',
+                va='top',
+                transform=ax.transAxes,
+            )
+            ax.set_aspect('equal')
+
+        # Hide unused axes
+        for ax in axs[n_imgs:]:
+            ax.axis('off')
+
+        if suptitle is not None:
+            title = suptitle
+        else:
+            title = f'Cropped images (repeat={repeat}, page {page_idx})'
+        fig.suptitle(title)
+        fig.tight_layout()
+        _plt.show()
+
+    def _plot_projections_paginated(
+        self, indices, repeat, plane, max_per_fig, figsize, suptitle
+    ):
+        """Iterate over pages and plot subsets of projections."""
+        total = len(indices)
+        start = 0
+        fig_idx = 1
+
+        while start < total:
+            end = min(start + max_per_fig, total)
+            batch = indices[start:end]
+
+            self._plot_projections_page(
+                batch_indices=batch,
+                repeat=repeat,
+                plane=plane,
+                figsize=figsize,
+                page_idx=fig_idx,
+                suptitle=suptitle,
+            )
+
+            fig_idx += 1
+            start = end
+
+    def _plot_projections_page(
+        self, batch_indices, repeat, plane, figsize, page_idx, suptitle
+    ):
+        """Plot a single page of projections (plane='x' or 'y')."""
+        n_imgs = len(batch_indices)
+        ncols = min(3, n_imgs)
+        nrows = (n_imgs + ncols - 1) // ncols
+
+        fig, axs = _plt.subplots(
+            nrows, ncols, figsize=figsize, sharex=True, sharey=False
+        )
+        axs = _np.array(axs).ravel()
+
+        color = 'C0' if plane == 'x' else 'C1'
+        for ax, p in zip(axs, batch_indices):
+            kl = self.data['quad_kl_rb'][p][repeat]
+
+            proj = self.analysis[f'proj_{plane}'][p][repeat]
+            bins_ = self.analysis[f'bins_{plane}'][p][repeat]
+            binsize = self.analysis[f'bin_size_{plane}'][p][repeat]
+
+            ax.bar(
+                bins_[:-1],
+                proj,
+                width=binsize,
+                align='edge',
+                color=color,
+                alpha=0.8,
+            )
+            ax.set_title(f'{plane.upper()} (KL={kl:.2f} 1/m)')
+            ax.set_ylabel('Intensity')
+
+        # Hide unused axes
+        for ax in axs[n_imgs:]:
+            ax.axis('off')
+
+        if suptitle is not None:
+            title = suptitle
+        else:
+            title = f'{plane.upper()} projections '
+            title += f'(repeat={repeat}, page {page_idx})'
+        fig.suptitle(title)
+        fig.tight_layout()
+        _plt.show()
