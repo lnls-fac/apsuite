@@ -19,29 +19,6 @@ from ...utils import MeasBaseClass as _BaseClass, \
     ParamsBaseClass as _ParamsBaseClass
 
 
-def _process_single_wrapper(args):
-    """Wrapper for multiprocessing.Pool.
-
-    Args:
-        args (tuple): (self_obj, image, scalex, scaley, nr_bins, nr_fwhms,
-        filter_background)
-
-    Returns:
-        tuple: Result of MeasTomography._process_single_image(...)
-    """
-    (self_obj, image, scalex, scaley, nr_bins, nr_fwhms, filter_background) = (
-        args
-    )
-    return self_obj._process_single_image(
-        image,
-        scalex,
-        scaley,
-        nr_bins=nr_bins,
-        nr_fwhms=nr_fwhms,
-        filter_background=filter_background,
-    )
-
-
 class Params(_ParamsBaseClass):
     """."""
 
@@ -240,13 +217,15 @@ class MeasTomography(_BaseClass):
 
         # Parallel processing of each valid image.
         args_list = [
-            (self, img, sx, sy, nr_bins, nr_fwhms, filter_background)
+            (img, sx, sy, nr_bins, nr_fwhms, filter_background)
             for img, sx, sy in zip(images, scalesx, scalesy)
         ]
 
         with _Pool(processes=nr_workers) as pool:
             # map sends each args tuple to _process_single_wrapper
-            results = pool.map(_process_single_wrapper, args_list)
+            results = pool.map(
+                MeasTomography._process_single_wrapper, args_list
+            )
 
         # Recompute nr_p: only points that were fully measured are kept.
         # Measurement logic guarantees len(images) is a multiple of nr_r.
@@ -280,24 +259,25 @@ class MeasTomography(_BaseClass):
         self.analysis['matrices_x'] = mx
         self.analysis['matrices_y'] = my
 
+    @staticmethod
     def _process_single_image(
-        self, image, scalex, scaley, nr_bins, nr_fwhms, filter_background
+        image, scalex, scaley, nr_bins, nr_fwhms, filter_background
     ):
         """."""
         img = _np.copy(image)
 
         if filter_background:
-            img = self.remove_background(img)
+            img = MeasTomography.remove_background(img)
 
         # Crop image
         img = _median_filter(img, size=3)
         img2dfit = _Image2D_Fit(data=img)
         img2dfit.update_roi_with_fwhm(nr_fwhms[0], nr_fwhms[1])
         roix, roiy = img2dfit.roix, img2dfit.roiy
-        img_crop = self.crop_image(img, roix, roiy)
+        img_crop = MeasTomography.crop_image(img, roix, roiy)
 
         # Determine positions and center beam in (0, 0)
-        posx, posy = self.get_positions(img, -scalex, -scaley)
+        posx, posy = MeasTomography.get_positions(img, -scalex, -scaley)
         x0 = posx[img2dfit.fitx.roi_center]
         y0 = posy[img2dfit.fity.roi_center]
         posx = posx - x0
@@ -307,7 +287,7 @@ class MeasTomography(_BaseClass):
         gridx, gridy = _np.meshgrid(posx, posy)
 
         projx, projy, bins_x, bins_y, bin_size_x, bin_size_y = (
-            self.get_projections_bins(
+            MeasTomography.get_projections_bins(
                 image=img_crop, posx=posx, posy=posy, nr_bins=nr_bins
             )
         )
@@ -326,7 +306,29 @@ class MeasTomography(_BaseClass):
 
         return results
 
-    def get_projections_bins(self, image, posx, posy, nr_bins=(50, 50)):
+    @staticmethod
+    def _process_single_wrapper(args):
+        """Wrapper for multiprocessing.Pool.
+
+        Args:
+            args (tuple): (self_obj, image, scalex, scaley, nr_bins, nr_fwhms,
+            filter_background)
+
+        Returns:
+            tuple: Result of MeasTomography._process_single_image(...)
+        """
+        (image, scalex, scaley, nr_bins, nr_fwhms, filter_background) = args
+        return MeasTomography._process_single_image(
+            image,
+            scalex,
+            scaley,
+            nr_bins=nr_bins,
+            nr_fwhms=nr_fwhms,
+            filter_background=filter_background,
+        )
+
+    @staticmethod
+    def get_projections_bins(image, posx, posy, nr_bins=(50, 50)):
         """Compute normalized X and Y projections and their bins.
 
         This method computes the sum of pixel intensities along the X and Y
@@ -363,14 +365,14 @@ class MeasTomography(_BaseClass):
         projy = fy(new_y)
 
         # Create bins
-        bins_x = self.position_to_bin(new_x)
-        bins_y = self.position_to_bin(new_y)
+        bins_x = MeasTomography.position_to_bin(new_x)
+        bins_y = MeasTomography.position_to_bin(new_y)
         bin_size_x = _np.abs(bins_x[1] - bins_x[0])
         bin_size_y = _np.abs(bins_y[1] - bins_y[0])
 
         # Normalize Projection
-        projx = self.normalize_projection(projx, bin_size_x)
-        projy = self.normalize_projection(projy, bin_size_y)
+        projx = MeasTomography.normalize_projection(projx, bin_size_x)
+        projy = MeasTomography.normalize_projection(projy, bin_size_y)
 
         return projx, projy, bins_x, bins_y, bin_size_x, bin_size_y
 
