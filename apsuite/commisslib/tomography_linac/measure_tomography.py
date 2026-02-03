@@ -6,7 +6,7 @@ from multiprocessing import Pool as _Pool
 import matplotlib.pyplot as _plt
 import numpy as _np
 from mathphys.imgproc import Image2D_Fit as _Image2D_Fit
-from scipy.integrate import trapezoid as _trapezoid
+from scipy.integrate import trapz as _trapezoid
 from scipy.interpolate import interp1d as _interp1d
 from scipy.ndimage import median_filter as _median_filter
 from siriuspy.devices import CurrInfoLinear, EVG, PowerSupply, Screen, Trigger
@@ -426,7 +426,7 @@ class MeasTomography(_BaseClass):
     def _set_current(self, value, timeout=10):
         qf = self.devices['qf']
         qf.current = value
-        return qf._wait_float(
+        return qf.wait_float(
             'Current-Mon', value, abs_tol=0.01, timeout=timeout
         )
 
@@ -461,12 +461,13 @@ class MeasTomography(_BaseClass):
         qf = self.devices['qf']
         curr = qf.current
         curr_mon = qf.current_mon
+        norm = self.normalizer
         data['quad_curr_rb'] = curr
         data['quad_curr_mon'] = curr_mon
-        data['quad_kl_rb'] = qf.conv_current_2_strength(
+        data['quad_kl_rb'] = norm.conv_current_2_strength(
             curr, strengths_dipole=self.params.bo_dip_energy
         )
-        data['quad_kl_mon'] = qf.conv_current_2_strength(
+        data['quad_kl_mon'] = norm.conv_current_2_strength(
             curr_mon, strengths_dipole=self.params.bo_dip_energy
         )
 
