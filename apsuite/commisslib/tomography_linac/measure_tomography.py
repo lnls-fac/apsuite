@@ -176,12 +176,6 @@ class MeasTomography(_BaseClass):
             # Meas loop is not broken during repetitions of same point.
             # It measures all repetitions and then breaks.
             if doexit:
-                qf.set_current(
-                    value=curr0,
-                    tol=0.01,
-                    timeout=self.params.wait_quad,
-                    wait_mon=True,
-                )
                 break
 
         qf.set_current(
