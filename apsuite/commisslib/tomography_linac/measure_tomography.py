@@ -22,13 +22,17 @@ from ...utils import MeasBaseClass as _BaseClass, \
 class Params(_ParamsBaseClass):
     """."""
 
+    DEFAULT_NR_POINTS = 16
+    DEFAULT_QUAD_CURR_MIN = -4.5  # [A]
+    DEFAULT_QUAD_CURR_MAX = 3.5   # [A]
+
     def __init__(self):
         """."""
         super().__init__()
-        self.nr_points = 16  # Number of measurement points
+        self.nr_points = self.DEFAULT_NR_POINTS  # Number of measurement points
         self.nr_repeat = 2  # Number of repetitions per point
-        self.quad_curr_min = -4.5  # [A]
-        self.quad_curr_max = 3.5  # [A]
+        self.quad_curr_min = self.DEFAULT_QUAD_CURR_MIN
+        self.quad_curr_max = self.DEFAULT_QUAD_CURR_MAX
         self.wait_quad = 2  # [s]
         self.wait_repeat = 1  # [s]
         self.bo_dip_energy = 0.144  # [GeV]
@@ -84,10 +88,15 @@ class MeasTomography(_BaseClass):
         self._curr_range = arr
         # keep nr_points consistent with custom range
         self.params.nr_points = arr.size
+        self.params.quad_curr_min = _np.min(arr)
+        self.params.quad_curr_max = _np.max(arr)
 
     def reset_curr_range(self):
         """Reset QF current range to the default linear range from Params."""
         self._curr_range = None
+        self.params.nr_points = self.params.DEFAULT_NR_POINTS
+        self.params.quad_curr_min = self.params.DEFAULT_QUAD_CURR_MIN
+        self.params.quad_curr_max = self.params.DEFAULT_QUAD_CURR_MAX
 
     @property
     def kl_range(self):
