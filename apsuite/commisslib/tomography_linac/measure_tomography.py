@@ -24,7 +24,7 @@ class Params(_ParamsBaseClass):
 
     DEFAULT_NR_POINTS = 16
     DEFAULT_QUAD_CURR_MIN = -4.5  # [A]
-    DEFAULT_QUAD_CURR_MAX = 3.5   # [A]
+    DEFAULT_QUAD_CURR_MAX = 3.5  # [A]
 
     def __init__(self):
         """."""
@@ -118,7 +118,8 @@ class MeasTomography(_BaseClass):
         [nr_points][nr_repeat]. The loop can be interrupted interactively via
         the EVG pulse menu.
         """
-        curr0 = self.devices['qf'].current
+        qf = self.devices['qf']
+        curr0 = qf.current
 
         keys = [
             'timestamp',
@@ -145,7 +146,12 @@ class MeasTomography(_BaseClass):
 
         doexit = False
         for idx1, curr in enumerate(self.curr_range):
-            self._set_current(curr, timeout=self.params.wait_quad)
+            qf.set_current(
+                value=curr,
+                tol=0.01,
+                timeout=self.params.wait_quad,
+                wait_mon=True,
+            )
 
             print(f'Measuring {idx1 + 1:02d}/{self.params.nr_points:02d}')
             print(f'QF current: {curr:.4f} A')
@@ -170,9 +176,17 @@ class MeasTomography(_BaseClass):
             # Meas loop is not broken during repetitions of same point.
             # It measures all repetitions and then breaks.
             if doexit:
+                qf.set_current(
+                    value=curr0,
+                    tol=0.01,
+                    timeout=self.params.wait_quad,
+                    wait_mon=True,
+                )
                 break
 
-        self._set_current(curr0, timeout=self.params.wait_quad)
+        qf.set_current(
+            value=curr0, tol=0.01, timeout=self.params.wait_quad, wait_mon=True
+        )
         print('Finished measurement!')
 
     def process_data(
@@ -431,13 +445,6 @@ class MeasTomography(_BaseClass):
         xmin = x[0] - delta / 2
         xmax = x[-1] + delta / 2
         return _np.linspace(xmin, xmax, nr_points + 1)
-
-    def _set_current(self, value, timeout=10):
-        qf = self.devices['qf']
-        qf.current = value
-        return qf.wait_float(
-            'Current-Mon', value, abs_tol=0.01, timeout=timeout
-        )
 
     def _pulse_evg(self):
         while True:
