@@ -101,7 +101,7 @@ class MeasTomography(_BaseClass):
     @property
     def kl_range(self):
         """."""
-        if not hasattr(self, 'normalizer'):
+        if not self.isonline:
             raise RuntimeError('Normalizer not available in offline mode.')
 
         return self.normalizer.conv_current_2_strength(
