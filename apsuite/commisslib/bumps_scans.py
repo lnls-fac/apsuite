@@ -118,7 +118,14 @@ class Bump(_BaseClass):
 
     @staticmethod
     def do_measurement():
+        """Measurement function.
+
+        Change this function by an external
+        function that does the measurement
+        you want to perform at each bump point.
+        """
         print('Not a measurement!')
+        return {}
 
     def _is_beam_alive(self):
         if self.devices['currinfo'].storedbeam:
