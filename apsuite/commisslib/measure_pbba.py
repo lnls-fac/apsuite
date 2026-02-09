@@ -687,6 +687,56 @@ class DoParallelBBA(_BaseClass):
             strengths.append(quad.strength)
         return _np.array(strengths)
 
+    def get_quad_strength_limits(self, group_id, margin=0.0005):
+        """."""
+        bpms = self.data['groups2dopbba'][group_id]
+        quad_names = self.data['quadnames']
+        bpm_names = self.data['bpmnames']
+
+        limits = []
+        for bpmname in bpms:
+            quadname = quad_names[bpm_names.index(bpmname)]
+            quad = self.devices[quadname]
+            pv = quad.pv_object('KL-SP')
+            upp = pv.upper_disp_limit
+            low = pv.lower_disp_limit
+            # Limits are interchanged in some quads:
+            lolim = min(upp, low) + margin
+            hilim = max(upp, low) - margin
+            limits.append([lolim, hilim])
+        return _np.array(limits, dtype=float)
+
+    def check_isvalid_dkl(self, group_id, init_strengths=None, margin=0.0005):
+        """."""
+        bpms = self.data['groups2dopbba'][group_id]
+        quad_names = self.data['quadnames']
+        bpm_names = self.data['bpmnames']
+
+        quadlims = self.get_quad_str_limits(group_id, margin=margin)
+        delta_kl = self.data['delta_kl'][group_id]
+
+        if init_strengths is None:
+            strengths = self.get_quad_strengths(group_id)
+        else:
+            strengths = init_strengths
+
+        ok = True
+        for idx, bpmname in enumerate(bpms):
+            quadname = quad_names[bpm_names.index(bpmname)]
+            stren = strengths[idx]
+            dkl = delta_kl[idx]
+            lolim, hilim = quadlims[idx]
+            low = min(stren+dkl, stren-dkl)
+            upp = max(stren+dkl, stren-dkl)
+            if upp > hilim or low < lolim:
+                max_delta_kl = min(hilim - stren, stren - lolim)
+                msg = f"WARN: {quadname} KL = {stren:.1g}, dKL = {abs(dkl):.1g}. "
+                msg += f"Limits: ({lolim:.1g}, {hilim:.1g}). Max. dKL = {max_delta_kl:.1g}."
+                print(msg)
+                ok = False
+        return ok
+
+
     def meas_ios(self, group_id, init_strengths=None):
         """."""
         delta_strens = self.data['delta_kl'][group_id]
