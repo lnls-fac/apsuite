@@ -313,7 +313,7 @@ class AcqBPMsSignals(_BaseClass):
 
     @staticmethod
     def filter_switching_cycles(orb, freq_sampling, freq_switching):
-        """Filter out the switching frequency from the TbT data.
+        """Filter out switching perturbation on orbit data.
 
         Args:
             orb (numpy.ndarray): Input signal of shape (Nsamples, Nbpms).
@@ -343,6 +343,42 @@ class AcqBPMsSignals(_BaseClass):
             sw_pert = _np.hstack([sw_pert, sw_sig[:, : osiz - siz]])
         # Subtract the replicated switching signature from the original data
         return orb - sw_pert.T
+
+    @staticmethod
+    def filter_switching_fofb_like(orb):
+        """Filter out switching perturbation on orbit data (FOFB rate only).
+
+        This method is specific for FOFB acquisition rate. It applies two IIR
+        filters in series to data, identical to filters that the Fast Orbit
+        Feedback System applies in run time. Each filter eliminates
+        frequencies related to the main harmonic and the second harmonic of
+        the switching frequency. The filters applied are:
+
+        sos1 = [2, 2, 0, 1, 0.6682, 0]
+        gain1 = 0.4170
+
+        sos2 = [2, -4.4409e-16, 2.0000, 1, -1.1148e-16, 0.8207]
+        gain2 = 0.4552
+
+        Args:
+            orb (numpy.ndarray): Input signal of shape (Nsamples, Nbpms).
+
+        Returns:
+            numpy.ndarray: Signal with the switching frequency removed, same
+            shape as the input.
+
+        """
+        sos1 = _np.array([2, 2, 0, 1, 0.6682, 0])
+        gain = 0.4170
+        sos1[:3] *= gain
+
+        sos2 = _np.array([2, -4.4409e-16, 2.0000, 1, -1.1148e-16, 0.8207])
+        gain = 0.4552
+        sos2[:3] *= gain
+
+        orb = _sp_sig.sosfilt(sos1, orb, axis=0)
+        orb = _sp_sig.sosfilt(sos2, orb, axis=0)
+        return orb
 
     @staticmethod
     def simulate_data_decimation(orb, downsampling=12 * 8):
