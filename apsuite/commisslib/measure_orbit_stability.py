@@ -95,6 +95,34 @@ class OrbitAnalysis(_AcqBPMsSignals):
         self._orby = val
 
     @property
+    def orbxy(self):
+        """."""
+        return _np.c_[self.orbx, self.orby]
+
+    @property
+    def orbx_filtered(self):
+        """."""
+        orbx = self.analysis.get('orbx_filtered')
+        if orbx is None:
+            raise ValueError('Run process_data_orbit first.')
+        return orbx
+
+    @property
+    def orby_filtered(self):
+        """."""
+        orby = self.analysis.get('orby_filtered')
+        if orby is None:
+            raise ValueError('Run process_data_orbit first.')
+        return orby
+
+    @property
+    def orbxy_filtered(self):
+        """."""
+        orbx_fil = self.analysis.get('orbx_filtered')
+        orby_fil = self.analysis.get('orby_filtered')
+        return _np.c_[orbx_fil, orby_fil]
+
+    @property
     def etax(self):
         """."""
         return self._etax
