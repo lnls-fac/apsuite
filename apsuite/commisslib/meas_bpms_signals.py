@@ -418,6 +418,24 @@ class AcqBPMsSignals(_BaseClass):
         return spec, freq
 
     @staticmethod
+    def calc_spectrum_welch(data, **kwargs):
+        """Calculate spectrun density via Welch's method.
+
+        Call scipy.signal.welch to calculate the spectrum density.
+
+        Args:
+            data (numpy.ndarray): Target array.
+            kwargs (dict): Keyword arguments for scipy.signal.welch.
+
+        Returns:
+            psd (numpy.ndarray): Power spectral density.
+            freq (numpy.ndarray): Frequency for which the DFT was calculated.
+
+        """
+        freq, psd = _sp_sig.welch(data, **kwargs)
+        return psd, freq
+
+    @staticmethod
     def calc_svd(data, full_matrices=False):
         """Calculate SVD decomposition of matrix using numpy.linalg.svd.
 
