@@ -388,15 +388,51 @@ class ParallelBBAParams(_ParamsBaseClass):
         return stg
 
     @staticmethod
-    def get_default_groups():
+    def get_default_groups(ngroups=4):
         """."""
-        return [
+        if ngroups == 2:
+            group_class = [
+                [('M2', ''), ('C3', '1'), ('C1', '2'), ('C4', '')],
+                [('C1', '1'), ('C3', '2'), ('C2', ''), ('M1', '')],
+            ]
+        elif ngroups in {8, 16}:
+            group_class = [
+                [('M2', '')],
+                [('C3', '1')],
+                [('C1', '1')],
+                [('C3', '2')],
+                [('C1', '2')],
+                [('C4', '')],
+                [('C2', '')],
+                [('M1', '')],
+            ]
+        else:
+            group_class = [
+                [('M2', ''), ('C3', '1')],
+                [('C1', '1'), ('C3', '2')],
+                [('C1', '2'), ('C4', '')],
+                [('C2', ''), ('M1', '')],
+            ]
+
+        groups = [
+            sorted([
+                e
+                for e in ParallelBBAParams.BPMNAMES
+                if (e.sub[2:], e.idx) in k
+            ])
+            for k in group_class
+        ]
+
+        if ngroups == 16:
+            groups_ = []
+            for grp in groups:
+                groups_.append(grp[::2])
+                groups_.append(grp[1::2])
+            groups = groups_
+
+        groups = [
             sorted(
-                [
-                    e
-                    for e in ParallelBBAParams.BPMNAMES
-                    if (e.sub[2:], e.idx) in k
-                ],
+                group,
                 key=lambda x: {
                     'Q4': 0,
                     'Q1': 1,
@@ -410,17 +446,13 @@ class ParallelBBAParams(_ParamsBaseClass):
                     999,
                 ),
             )
-            for k in [
-                [('M2', ''), ('C3', '1')],
-                [('C1', '1'), ('C3', '2')],
-                [('C1', '2'), ('C4', '')],
-                [('C2', ''), ('M1', '')],
-            ]
+            for group in groups
         ]
+        return groups
 
-    def get_default_dkl(self, groups=None):
+    def get_default_dkl(self, ngroups=4, groups=None):
         """."""
-        groups = self.get_default_groups() if groups is None else groups
+        groups = self.get_default_groups(ngroups) if groups is None else groups
         dkl = [_np.ones(len(g)) * self.quad_deltakl for g in groups]
         for d in dkl:
             d[::2] *= -1
@@ -442,7 +474,7 @@ class DoParallelBBA(_BaseClass):
         self.data['measure'] = list()
         self.data['groups2dopbba'] = ParallelBBAParams.get_default_groups()
         self.data['delta_kl'] = self.params.get_default_dkl(
-            self.data['groups2dopbba']
+            groups=self.data['groups2dopbba']
         )
         self.data['jacobians'] = list()
         self._model = None
@@ -459,7 +491,7 @@ class DoParallelBBA(_BaseClass):
         stp = self.params.__str__()
         stp = '    ' + stp.replace('\n', '\n    ')
         stn += stp + '\n'
-        connected = str(self.connected & len(self.devices.keys()) > 0)
+        connected = str(self.connected and len(self.devices.keys()) > 0)
         stn += 'Connected?  ' + connected + '\n\n'
         stn += '     {:^20s} {:^20s} {:^7s}\n'.format(
             'BPM', 'Quad', 'dKL'
@@ -603,27 +635,8 @@ class DoParallelBBA(_BaseClass):
             )
         dch, dcv, drf = dkicks[:nch], dkicks[nch : nch + ncv], dkicks[-1]
 
-        factch, factcv, factrf = (
-            sofb.mancorrgainch,
-            sofb.mancorrgaincv,
-            sofb.mancorrgainrf,
-        )
         sofb.deltakickch, sofb.deltakickcv, sofb.deltakickrf = dch, dcv, drf
-        nrsteps = _np.ceil(max(_np.abs(dch).max(), _np.abs(dcv).max()) / 1.0)
-        for i in range(int(nrsteps)):
-            sofb.mancorrgainch = (i + 1) / nrsteps * 100
-            sofb.mancorrgaincv = (i + 1) / nrsteps * 100
-            sofb.mancorrgainrf = (i + 1) / nrsteps * 100
-            sofb.cmd_applycorr_all()
-            _time.sleep(self.params.wait_correctors)
-        sofb.deltakickch, sofb.deltakickcv, sofb.deltakickrf = (
-            dch * 0,
-            dcv * 0,
-            drf * 0,
-        )
-        sofb.mancorrgainch, sofb.mancorrgaincv, sofb.mancorrgainrf = (
-            factch, factcv, factrf
-        )
+        sofb.cmd_applycorr_all()
 
     @property
     def enbllistbpm(self):
@@ -712,7 +725,7 @@ class DoParallelBBA(_BaseClass):
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
 
-        quadlims = self.get_quad_str_limits(group_id, margin=margin)
+        quadlims = self.get_quad_strength_limits(group_id, margin=margin)
         delta_kl = self.data['delta_kl'][group_id]
 
         if init_strengths is None:
@@ -726,12 +739,12 @@ class DoParallelBBA(_BaseClass):
             stren = strengths[idx]
             dkl = delta_kl[idx]
             lolim, hilim = quadlims[idx]
-            low = min(stren+dkl, stren-dkl)
-            upp = max(stren+dkl, stren-dkl)
+            low = min(stren+dkl/2, stren-dkl/2)
+            upp = max(stren+dkl/2, stren-dkl/2)
             if upp > hilim or low < lolim:
                 max_delta_kl = min(hilim - stren, stren - lolim)
-                msg = f"WARN: {quadname} KL = {stren:.1g}, dKL = {abs(dkl):.1g}. "
-                msg += f"Limits: ({lolim:.1g}, {hilim:.1g}). Max. dKL = {max_delta_kl:.1g}."
+                msg = f"WARN: {quadname} KL = {stren:.2g}, dKL = {abs(dkl):.2g}. "
+                msg += f"Limits: ({lolim:.2g}, {hilim:.2g}). Max. dKL = {max_delta_kl*2:.2g}."
                 print(msg)
                 ok = False
         return ok
@@ -965,6 +978,11 @@ class DoParallelBBA(_BaseClass):
             )
         )
 
+        groups = self.data['groups2dopbba']
+        if not all([self.check_isvalid_dkl(g) for g, _ in enumerate(groups)]):
+            print('Adjust quad strength or change dKL first.')
+            return
+
         self.data['jacobians'] = self.calc_ios_jacobians()
         self.data['measure'] = list()
 
@@ -973,7 +991,7 @@ class DoParallelBBA(_BaseClass):
             print('\nSOFB feedback is enabled. Please desable it first.')
             return
 
-        for group_id in range(len(self.data['groups2dopbba'])):
+        for gid, _ in enumerate(groups):
             if self._stopevt.is_set():
                 print('\nStopped!')
                 break
@@ -983,7 +1001,7 @@ class DoParallelBBA(_BaseClass):
             print('\nCorrecting Orbit... ', end='')
             self.correct_orbit()
             print('Ok!')
-            if not self._dopbba_single_group(group_id):
+            if not self._dopbba_single_group(gid):
                 break
 
         print('\nCorrecting Orbit... ', end='')
