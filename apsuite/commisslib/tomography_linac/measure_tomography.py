@@ -768,6 +768,10 @@ class MeasTomography(_BaseClass):
         start = 0
         fig_idx = 1
 
+        global_xmin, global_xmax = self._get_global_xlim(
+            indices, repeat, plane
+        )
+
         while start < total:
             end = min(start + max_per_fig, total)
             batch = indices[start:end]
@@ -779,13 +783,34 @@ class MeasTomography(_BaseClass):
                 figsize=figsize,
                 page_idx=fig_idx,
                 suptitle=suptitle,
+                global_xlim=(global_xmin, global_xmax),
             )
 
             fig_idx += 1
             start = end
 
+    def _get_global_xlim(self, indices, repeat, plane):
+        all_bins = []
+        for p in indices:
+            bins = self.analysis[f'bins_{plane}'][p][repeat]
+            all_bins.append(bins)
+
+        xmin = _np.min(all_bins)
+        xmax = _np.max(all_bins)
+        delta = xmax - xmin
+        lim_min = xmin - 0.05 * delta
+        lim_max = xmax + 0.05 * delta
+        return lim_min, lim_max
+
     def _plot_projections_page(
-        self, batch_indices, repeat, plane, figsize, page_idx, suptitle
+        self,
+        batch_indices,
+        repeat,
+        plane,
+        figsize,
+        page_idx,
+        suptitle,
+        global_xlim,
     ):
         """Plot a single page of projections (plane='x' or 'y')."""
         n_imgs = len(batch_indices)
@@ -815,6 +840,7 @@ class MeasTomography(_BaseClass):
             )
             ax.set_title(f'{plane.upper()} (KL={kl:.2f} 1/m)')
             ax.set_ylabel('Intensity')
+            ax.set_xlim(global_xlim)
 
         # Hide unused axes
         for ax in axs[n_imgs:]:
