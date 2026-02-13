@@ -27,7 +27,7 @@ class BumpParams(_ParamsBaseClass):
 
         self.n_bpms_out = 3
         self.minsingval = 0.2
-        self.bump_residue = 5  # [um]
+        self.bump_residue = 3  # [um]
         self.bump_max_residue = 10  # [um]
         self.fofb_max_kick = 4  # [urad]
 
@@ -283,6 +283,22 @@ class Bump(_BaseClass):
         sofb.refx = orbx
         sofb.refy = orby
 
+    def _check_rms_conditions(
+        self, rms_residue, bump_residue, refx, refy, idcs_bpm
+    ):
+        sofb = self.devices['sofb']
+        bump_max_residue = self.params.bump_max_residue
+        sofb.cmd_reset()
+        sofb.wait_buffer()
+        rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
+        print(
+            f'    orb_rms = {rms_residue:.3f} um, '
+            f'    bump_rms = {bump_residue:.3f} um, '
+        )
+        bump_residue *= 1.2
+        if bump_residue > bump_max_residue:
+            raise ValueError('Could not correct orbit.')
+
     def implement_bump(self, agx=0, agy=0, psx=0, psy=0, subsec=None):
         """."""
         sofb = self.devices['sofb']
@@ -294,7 +310,6 @@ class Bump(_BaseClass):
         nr_iters = self.params.orbcorr_nr_iters
         residue = self.params.orbcorr_residue
         bump_residue = self.params.bump_residue
-        bump_max_residue = self.params.bump_max_residue
         fofb_max_kick = self.params.fofb_max_kick
 
         refx, refy = sofb.si_calculate_bumps(
@@ -323,28 +338,24 @@ class Bump(_BaseClass):
         if self.params.closed_loops:
             fofb = self.devices['fofb']
         print('Waiting orbit...')
-        while rms_residue > bump_residue or kick > fofb_max_kick:
-            sofb.cmd_reset()
-            sofb.wait_buffer()
-            rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
-            if self.params.closed_loops:
+        if self.params.closed_loops:
+            while rms_residue > bump_residue and kick > fofb_max_kick:
                 kick = _np.max((
                     _np.abs(fofb.kickch_acc),
                     _np.abs(fofb.kickcv_acc),
                 ))
-            else:
+                self._check_rms_conditions(
+                    rms_residue, bump_residue, refx, refy, idcs_bpm
+                )
+                print(f'    kick fofb = {kick:.3f} urad, ')
+        else:
+            while rms_residue > bump_residue:
                 _ = sofb.correct_orbit_manually(
                     nr_iters=nr_iters, residue=residue
                 )
-            print(
-                f'    orb_rms = {rms_residue:.3f} um, '
-                f'    bump_rms = {bump_residue:.3f} um, '
-                f'maxkick = {kick:.3f} urad'
-            )
-            bump_residue *= 1.2
-            if bump_residue > bump_max_residue:
-                raise ValueError('Could not correct orbit.')
-
+                self._check_rms_conditions(
+                    rms_residue, bump_residue, refx, refy, idcs_bpm
+                )
         print('Done!')
 
     def do_scan(self):
