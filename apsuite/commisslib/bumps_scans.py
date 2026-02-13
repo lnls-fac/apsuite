@@ -36,8 +36,10 @@ class BumpParams(_ParamsBaseClass):
         self.orbcorr_nr_iters = 5
         self.orbcorr_residue = 5  # [um]
 
-        self.use_fofb = False
+        self.closed_loops = False
         self.timeout_fofb_ramp = 15
+
+        self.sleep_time = 0.5  # [s]
 
         clt = _ConfigDBClient(config_type='si_orbit')
         ref_orb = clt.get_config_value('ref_orb')
@@ -64,6 +66,10 @@ class BumpParams(_ParamsBaseClass):
         stg += ftmp('wait_meas', self.wait_meas, '[s]')
         stg += dtmp('orbcorr_nr_iters', self.orbcorr_nr_iters)
         stg += ftmp('orbcorr_residue', self.orbcorr_residue, '[um]')
+
+        stg += dtmp('closed_loops', self.closed_loops)
+        stg += dtmp('timeout_fofb_ramp', self.timeout_fofb_ramp, '')
+        stg += dtmp('sleep_time', self.sleep_time, '')
 
         stg += stmp(
             'pts_psx',
@@ -152,16 +158,6 @@ class Bump(_BaseClass):
         section_type = subsec[2:]
         return section_type, section_nr
 
-    def update_reforb(self, refx, refy):
-        """Update reforb.
-
-        Args:
-            refx (1d numpy array): Horizontal orbit
-            refy (1d numpy array): Vertical orbit
-        """
-        self.reforbx = refx
-        self.reforby = refy
-
     def get_measurement_data(self):
         """."""
         currinfo = self.devices['currinfo']
@@ -184,7 +180,7 @@ class Bump(_BaseClass):
         # slow to update multi-turn orbits.
         sofb.wait_buffer(timeout=sofb.nr_points * 0.5 * 8)
         print('Done!')
-        if self.params.use_fofb:
+        if self.params.closed_loops:
             sofb.cmd_turn_on_autocorr()
             fofb.cmd_turn_on_loop_state()
         else:
@@ -215,7 +211,7 @@ class Bump(_BaseClass):
         sofb.refy = self.params.reforby
         sofb.bpmxenbl = self._bpmxenbl
         sofb.bpmyenbl = self._bpmyenbl
-        if self.params.use_fofb:
+        if self.params.closed_loops:
             fofb.bpmxenbl = self._fofb_bpmxenbl
             fofb.bpmyenbl = self._fofb_bpmyenbl
 
@@ -242,7 +238,7 @@ class Bump(_BaseClass):
         sofb.bpmxenbl = enblx
         sofb.bpmyenbl = enbly
 
-        if self.params.use_fofb:
+        if self.params.closed_loops:
             fofb = self.devices['fofb']
             enblx = self._fofb_bpmxenbl
             enbly = self._fofb_bpmyenbl
@@ -251,7 +247,9 @@ class Bump(_BaseClass):
             )
             fofb.bpmxenbl = enblx
             fofb.bpmyenbl = enbly
-        _time.sleep(0.5)  # NOTE: For some reason We have to wait here.
+        _time.sleep(
+            self.params.sleep_time
+        )  # NOTE: For some reason We have to wait here.
 
     def get_orbrms(self, refx, refy, idx):
         """Calculate rms of orbit distortion.
@@ -264,22 +262,20 @@ class Bump(_BaseClass):
         Returns:
             float: rms of orbit distortion
         """
-        idcx = idx[:2]
-        idcy = idx[2:] - 160
-        dorbx = self.devices['sofb'].orbx - refx
-        dorby = self.devices['sofb'].orby - refy
-        dorbx = dorbx[idcx]
-        dorby = dorby[idcy]
-        return _np.sqrt(_np.sum(_np.hstack([dorbx, dorby] ** 2)))
+        sofb = self.devices['sofb']
+        ref = _np.r_[refx, refy]
+        orb = _np.r_[sofb.orbx, sofb.orby]
+        dorb = (orb - ref)[idx] ** 2
+        return _np.sqrt(dorb.sum())
 
-    def set_orb(self, orbx, orby):
+    def set_reforb(self, orbx, orby):
         """Update orbit of corr. sytems.
 
         Args:
             orbx (1d numpy array): Horizontal orbit
             orby (1d numpy array): Vertical orbit
         """
-        if self.params.use_fofb:
+        if self.params.closed_loops:
             fofb = self.devices['fofb']
             fofb.refx = orbx
             fofb.refy = orby
@@ -319,17 +315,17 @@ class Bump(_BaseClass):
         )
 
         # Set orbit
-        self.set_orb(refx, refy)
+        self.set_reforb(refx, refy)
 
         # Verify orbit correction
         rms_residue = bump_residue + 1
         kick = fofb_max_kick - 1
-        if self.params.use_fofb:
+        if self.params.closed_loops:
             fofb = self.devices['fofb']
         print('Waiting orbit...')
         while rms_residue > bump_residue or kick > fofb_max_kick:
             rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
-            if self.params.use_fofb:
+            if self.params.closed_loops:
                 kick = _np.max((
                     _np.abs(fofb.kickch_acc),
                     _np.abs(fofb.kickcv_acc),
@@ -348,7 +344,8 @@ class Bump(_BaseClass):
 
         print('Done!')
 
-    def _do_scan(self):
+    def do_scan(self):
+        """Start bumps scan."""
         subsec = self.params.subsec
         n_bpms_out = self.params.n_bpms_out
         section_type, section_nr = self.subsec_2_sectype_nr(subsec)
@@ -394,7 +391,3 @@ class Bump(_BaseClass):
         print('Returning to ref_orb...')
         self.restore_sofb_reforb()
         print('Finished!')
-
-    def save_data(self, fname, overwrite=False, compress=False):
-        """."""
-        return super().save_data(fname, overwrite, compress)
