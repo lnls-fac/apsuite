@@ -324,6 +324,8 @@ class Bump(_BaseClass):
             fofb = self.devices['fofb']
         print('Waiting orbit...')
         while rms_residue > bump_residue or kick > fofb_max_kick:
+            sofb.cmd_reset()
+            sofb.wait_buffer()
             rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
             if self.params.closed_loops:
                 kick = _np.max((
@@ -336,6 +338,7 @@ class Bump(_BaseClass):
                 )
             print(
                 f'    orb_rms = {rms_residue:.3f} um, '
+                f'    bump_rms = {bump_residue:.3f} um, '
                 f'maxkick = {kick:.3f} urad'
             )
             bump_residue *= 1.2
@@ -357,9 +360,9 @@ class Bump(_BaseClass):
             x_span, y_span = prms.pts_psx, prms.pts_psy
 
         # zig-zag type of scan in the y plane
-        idy, idx = _np.meshgrid(range(len(x_span)), range(len(y_span)))
-        idy[1::2] = _np.flip(idy[1::2])
-        idx, idy = idx.ravel(), idy.ravel()
+        idx, idy = _np.meshgrid(range(len(x_span)), range(len(y_span)))
+        idx[1::2] = _np.flip(idx[1::2])
+        idy, idx = idy.ravel(), idx.ravel()
 
         data = list()
         for i in range(idx.size):
