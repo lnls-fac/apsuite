@@ -1032,12 +1032,14 @@ class DoParallelBBA(_BaseClass):
         bpmnames = self.data["bpmnames"]
         nbpms = len(bpmnames)
 
+        reforb_init = self.get_reforb()
         group_data = {
             "bpms": self.data["groups2dopbba"][group_id],
-            "strengths_init": self.get_quad_strengths(group_id),
-            "orbit_init": self.get_orbit(),
             "enbllistbpm": enblbpm.copy(),
-            "reforb_init": self.get_reforb(),
+            "strengths_init": self.get_quad_strengths(group_id),
+            "orbit_iter": [self.get_orbit()],
+            "reforb_iter": [reforb_init],
+            "delta_kl": self.data["delta_kl"][group_id],
         }
 
         # cycle magnets
@@ -1070,6 +1072,7 @@ class DoParallelBBA(_BaseClass):
                     extra_info_before_message="Error: beam is off. ",
                 )
                 break
+            # self.correct_orbit()  #? to ensure: current orbit == reforb
             ios, sts = self.meas_ios(group_id, group_data["strengths_init"])
             if not sts:
                 self._restore_init_conditions(
@@ -1080,17 +1083,19 @@ class DoParallelBBA(_BaseClass):
                 break
             ios_iter.append(ios)  # save ios (all bpms)
             ios = ios[enblbpm]  # use only enabled bpms for correction
-            u = -1 * _np.dot(inv_jac, ios)
+            u = _np.dot(inv_jac, ios)
             reforb = self.get_reforb()
             enbl = _np.zeros_like(group_data["enbllistbpm"], dtype=bool)
             for bname in group_data["bpms"]:
                 idx = bpmnames.index(bname)
-                reforb[[idx, idx + nbpms]] = u[[idx, idx + nbpms]]
+                reforb[[idx, idx + nbpms]] -= u[[idx, idx + nbpms]]
                 enbl[[idx, idx + nbpms]] = True
             self.set_reforb(reforb)
+            group_data["reforb_iter"].append(reforb)
             self.enbllistbpm = enbl
             self.correct_orbit()  # orbit -> reforb (for the bpms in the group)
             self.enbllistbpm = group_data["enbllistbpm"]
+            group_data["orbit_iter"].append(self.get_orbit())
             print("Done")
 
         # final ios
@@ -1106,12 +1111,11 @@ class DoParallelBBA(_BaseClass):
                 ios_iter.append(ios)
 
         group_data["ios_iter"] = ios_iter
-        group_data["orbit_end"] = self.get_orbit()
-        group_data["reforb_end"] = self.get_reforb()
-        group_data["delta_kl"] = self.data["delta_kl"][group_id]
+        group_data["orbit_iter"].append(self.get_orbit())
+        group_data["reforb_iter"].append(self.get_reforb())
         self.data["measure"].append(group_data)
 
-        self.set_reforb(group_data["reforb_init"])
+        self.set_reforb(reforb_init)
         self.correct_orbit()
 
         tfin = _datetime.datetime.fromtimestamp(_time.time())
