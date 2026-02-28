@@ -358,6 +358,8 @@ class ParallelBBAParams(_ParamsBaseClass):
         super().__init__()
 
         self.quad_deltakl = 0.02  # [1/m]
+        self.jacobian_xyerr = 1e-6  # [m]
+        self.jacobian_dkl = 1e-4  # [1/m]
 
         self.wait_correctors = 0.3  # [s]
         self.wait_quadrupole = 0.3  # [s]
@@ -733,260 +735,55 @@ class DoParallelBBA(_BaseClass):
         quadindices = self._get_quads_indices_in_model(self.data["quadnames"])
         bpmindices = self._get_bpms_indices_in_model(self.data["bpmnames"])
 
-        m_mat, t_mat = _pyacc.tracking.find_m66(model, indices="open")
-
         n_bpms = len(bpmindices)
         n_quads = len(quadindices)
 
         mat = _np.zeros((n_bpms*2, n_quads*2))
 
-        list_of_dr = []
-        list_of_mq = []
-        list_of_mdk = []
-        list_of_mhat = []
+        def _get_orbit(indices=bpmindices):
+            r = _pyacc.tracking.find_orbit6(model, indices=indices)
+            return _np.hstack((r[0, :], r[2, :]))
 
-        for col, q in enumerate(quadindices):
-            rq_mat = t_mat[q].copy()  # shape: (6, 6)
-            rb_mat = t_mat[bpmindices]  # shape: (Nbpms, 6, 6)
-
-            length = model[q].length
-            if self.data["quadnames"][col].dev == 'QS':
-                _, m_dk = self._get_quad_m_and_dm(ks=model[q].Ks, l=length)
+        def _add_strength(quad, dev, dstrength):
+            if dev == "QS":
+                quad.KsL += dstrength
             else:
-                _, m_dk = self._get_quad_m_and_dm(k=model[q].K, l=length)
-            zero = _np.zeros_like(m_mat, dtype=float)
-            zero[:4, :4] = m_dk
-            m_dk = zero
+                quad.KL += dstrength
 
-            # one tune matrix at the start of quad, Mq = Rq * M0 * Rq^-1:
-            mq_mat = _np.linalg.solve(rq_mat.T, (rq_mat @ m_mat).T).T
+        xyerr = self.params.jacobian_xyerr  # 1e-6
+        dkl = self.params.jacobian_dkl  # 1e-4
+        for i, _ in enumerate(self.data["bpmnames"]):
+            qidx = quadindices[i]
+            qname = self.data["quadnames"][i]
+            quad = model[qidx]
 
-            # one tune matrix without the quad M = Mhat * Mq
-            m_hat = _np.linalg.solve(t_mat[q+1].T, (rq_mat @ m_mat).T).T
+            # for x
+            _pyacc.lattice.add_error_misalignment_x(model, [qidx], [xyerr])
+            rx, _ = _get_orbit([qidx])
+            _add_strength(quad, qname.dev, dkl/2)
+            orbxp = _get_orbit()
+            _add_strength(quad, qname.dev, -dkl)
+            orbxn = _get_orbit()
+            _add_strength(quad, qname.dev, dkl/2)
+            _pyacc.lattice.add_error_misalignment_x(model, [qidx], [-xyerr])
 
-            # closed orbit condition at the start of quad:
-            identity = _np.eye(mq_mat.shape[0], dtype=float)
-            dr = _np.linalg.solve(identity - mq_mat, (m_hat @ m_dk))
+            # for y
+            _pyacc.lattice.add_error_misalignment_y(model, [qidx], [xyerr])
+            _, ry = _get_orbit([qidx])
+            _add_strength(quad, qname.dev, dkl/2)
+            orbyp = _get_orbit()
+            _add_strength(quad, qname.dev, -dkl)
+            orbyn = _get_orbit()
+            _add_strength(quad, qname.dev, dkl/2)
+            _pyacc.lattice.add_error_misalignment_y(model, [qidx], [-xyerr])
 
-            list_of_dr.append(dr)
-            list_of_mq.append(mq_mat)
-            list_of_mdk.append(m_dk)
-            list_of_mhat.append(m_hat)
+            dorbx = (orbxp - orbxn)
+            dorby = (orbyp - orbyn)
 
-            small = _np.array(bpmindices) < q
-            large = _np.logical_not(small)
+            mat[:, i] = dorbx / dkl / (rx - xyerr)
+            mat[:, i+n_quads] = dorby / dkl / (ry - xyerr)
 
-            # transfer matrix from the start of quad to BPM, Rq->b:
-            # first, calculate Rb * Rq^-1
-            rqbl_mat = _np.linalg.solve(rq_mat.T, rb_mat.transpose((0, 2, 1)))
-            rqbl_mat = rqbl_mat.transpose((0, 2, 1))
-
-            # if bpm is before the quad, Rq->b = Rb * Rq^-1 * Mq
-            rqbs_mat = (rqbl_mat[small] @ mq_mat) @ dr
-
-            # if bpm is after corrector, Rq->b = Rb * Rq^-1
-            rqbl_mat = rqbl_mat[large] @ dr
-
-            respxx = _np.zeros(n_bpms)
-            respyx = _np.zeros(n_bpms)
-            respxy = _np.zeros(n_bpms)
-            respyy = _np.zeros(n_bpms)
-
-            respxx[large] = rqbl_mat[:, 0, 0]
-            respyx[large] = rqbl_mat[:, 2, 0]
-            respxy[large] = rqbl_mat[:, 0, 2]
-            respyy[large] = rqbl_mat[:, 2, 2]
-
-            respxx[small] = rqbs_mat[:, 0, 0]
-            respyx[small] = rqbs_mat[:, 2, 0]
-            respxy[small] = rqbs_mat[:, 0, 2]
-            respyy[small] = rqbs_mat[:, 2, 2]
-
-            mat[:, col] = _np.hstack([respxx, respyx])
-            mat[:, col+n_quads] = _np.hstack([respxy, respyy])
-
-        return mat, list_of_dr, list_of_mq, list_of_mdk, list_of_mhat
-
-    def _get_quad_m_and_dm(self, k=None, ks=None, l=0.0):
-        """."""
-        if (
-            (k is None and ks is None)
-            or (k is not None and ks is not None)
-            or (l < 0)
-        ):
-            raise ValueError("invalid args")
-
-        ktype = "normal" if k is not None else "skew"
-        ksign = _np.sign(k) if k is not None else _np.sign(ks)
-        k = _np.abs(k) if k is not None else _np.abs(ks)
-
-        sqrtk = _np.sqrt(k)
-
-        C = _np.cos(sqrtk * l)
-        Ch = _np.cosh(sqrtk * l)
-        S = _np.sin(sqrtk * l)
-        Sh = _np.sinh(sqrtk * l)
-
-        Cp = _np.cos(sqrtk * l) + _np.cosh(sqrtk * l)
-        Cm = _np.cos(sqrtk * l) - _np.cosh(sqrtk * l)
-        Sp = _np.sin(sqrtk * l) + _np.sinh(sqrtk * l)
-        Sm = _np.sin(sqrtk * l) - _np.sinh(sqrtk * l)
-
-        if k < 1e-14:
-            mat = _np.array([
-                [1, l, 0, 0],
-                [0, 1, 0, 0],
-                [0, 0, 1, l],
-                [0, 0, 0, 1],
-            ])
-            if ktype == "normal":
-                dmat = _np.array([
-                    [-(l**2) / 2, -(l**3) / 6, 0, 0],
-                    [-l, -(l**2) / 2, 0, 0],
-                    [0, 0, l**2 / 2, l**3 / 6],
-                    [0, 0, l, l**2 / 2],
-                ])
-
-            else:
-                dmat = _np.array([
-                    [0, 0, -(l**2) / 2, -(l**3) / 6],
-                    [0, 0, -l, -(l**2) / 2],
-                    [-(l**2) / 2, -(l**3) / 6, 0, 0],
-                    [-l, -(l**2) / 2, 0, 0],
-                ])
-
-            if ksign < 0:
-                dmat *= -1
-
-            return mat, dmat
-
-        #  quadd normal+
-        if ktype == "normal" and ksign > 0:
-            mat = _np.array([
-                [C, S / sqrtk, 0, 0],
-                [-sqrtk * S, C, 0, 0],
-                [0, 0, Ch, Sh / sqrtk],
-                [0, 0, sqrtk * Sh, Ch],
-            ])
-
-            dmat = _np.array([
-                [
-                    -l * mat[0, 1] / 2,
-                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
-                    0,
-                    0,
-                ],
-                [-(l * mat[0, 0] + mat[0, 1]) / 2, -l * mat[0, 1] / 2, 0, 0],
-                [
-                    0,
-                    0,
-                    l * mat[2, 3] / 2,
-                    (l * mat[2, 2] - mat[2, 3]) / (2 * k),
-                ],
-                [0, 0, (l * mat[2, 2] + mat[2, 3]) / 2, l * mat[2, 3] / 2],
-            ])
-
-        #  quadd normal-
-        elif ktype == "normal" and ksign < 0:
-            mat = _np.array([
-                [Ch, Sh / sqrtk, 0, 0],
-                [sqrtk * Sh, Ch, 0, 0],
-                [0, 0, C, S / sqrtk],
-                [0, 0, -sqrtk * S, C],
-            ])
-
-            dmat = _np.array([
-                [
-                    l * mat[0, 1] / 2,
-                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
-                    0,
-                    0,
-                ],
-                [(l * mat[0, 0] + mat[0, 1]) / 2, l * mat[0, 1] / 2, 0, 0],
-                [
-                    0,
-                    0,
-                    -l * mat[2, 3] / 2,
-                    (l * mat[2, 2] - mat[2, 3]) / (2 * k),
-                ],
-                [0, 0, -(l * mat[2, 2] + mat[2, 3]) / 2, -l * mat[2, 3] / 2],
-            ])
-
-        #  quadd skew+
-        elif ktype == "skew" and ksign > 0:
-            mat = _np.array([
-                [Cp / 2, Sp / (2 * sqrtk), Cm / 2, Sm / (2 * sqrtk)],
-                [-sqrtk * Sm / 2, Cp / 2, -sqrtk * Sp / 2, Cm / 2],
-                [Cm / 2, Sm / (2 * sqrtk), Cp / 2, Sp / (2 * sqrtk)],
-                [-sqrtk * Sp / 2, Cm / 2, -sqrtk * Sm / 2, Cp / 2],
-            ])
-
-            dmat = _np.array([
-                [
-                    -l * mat[0, 3] / 2,
-                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
-                    -l * mat[0, 1] / 2,
-                    (l * mat[0, 2] - mat[0, 3]) / (2 * k),
-                ],
-                [
-                    -(l * mat[0, 2] + mat[0, 3]) / 2,
-                    -l * mat[0, 3] / 2,
-                    -(l * mat[0, 0] + mat[0, 1]) / 2,
-                    -l * mat[0, 1] / 2,
-                ],
-                [
-                    -l * mat[0, 1] / 2,
-                    (l * mat[0, 2] - mat[0, 3]) / (2 * k),
-                    -l * mat[0, 3] / 2,
-                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
-                ],
-                [
-                    -(l * mat[0, 0] + mat[0, 1]) / 2,
-                    -l * mat[0, 1] / 2,
-                    -(l * mat[0, 2] + mat[0, 3]) / 2,
-                    -l * mat[0, 3] / 2,
-                ],
-            ])
-
-        #  quadd skew-
-        elif ktype == "skew" and ksign < 0:
-            mat = _np.array([
-                [Cp / 2, Sp / (2 * sqrtk), -Cm / 2, -Sm / (2 * sqrtk)],
-                [-sqrtk * Sm / 2, Cp / 2, sqrtk * Sp / 2, -Cm / 2],
-                [-Cm / 2, -Sm / (2 * sqrtk), Cp / 2, Sp / (2 * sqrtk)],
-                [sqrtk * Sp / 2, -Cm / 2, -sqrtk * Sm / 2, Cp / 2],
-            ])
-
-            dmat = _np.array([
-                [
-                    l * mat[0, 3] / 2,
-                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
-                    l * mat[0, 1] / 2,
-                    (2 * k ** (3 / 2) * l * mat[0, 2] + k * Sm)
-                    / (4 * k ** (5 / 2)),
-                ],
-                [
-                    (l * mat[0, 2] + mat[0, 3]) / 2,
-                    l * mat[0, 3] / 2,
-                    (l * mat[0, 0] + mat[0, 1]) / 2,
-                    l * mat[0, 1] / 2,
-                ],
-                [
-                    l * mat[0, 1] / 2,
-                    (2 * k ** (3 / 2) * l * mat[0, 2] + k * Sm)
-                    / (4 * k ** (5 / 2)),
-                    l * mat[0, 3] / 2,
-                    (l * mat[0, 0] - mat[0, 1]) / (2 * k),
-                ],
-                [
-                    (l * mat[0, 0] + mat[0, 1]) / 2,
-                    l * mat[0, 1] / 2,
-                    (l * mat[0, 2] + mat[0, 3]) / 2,
-                    l * mat[0, 3] / 2,
-                ],
-            ])
-
-        return mat, dmat
+        return mat
 
     def get_projection(self, group_id):
         """."""
