@@ -41,13 +41,6 @@ class BumpParams(_ParamsBaseClass):
 
         self.sleep_time = 0.5  # [s]
 
-        clt = _ConfigDBClient(config_type='si_orbit')
-        ref_orb = clt.get_config_value('ref_orb')
-        refx = _np.array(ref_orb['x'])
-        refy = _np.array(ref_orb['y'])
-        self.reforbx = refx
-        self.reforby = refy
-
     def __str__(self):
         """."""
         dtmp = '{0:20s} = {1:9d}\n'.format
@@ -119,8 +112,6 @@ class Bump(_BaseClass):
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
             self.devices['fofb'] = HLFOFB(HLFOFB.DEVICES.SI)
             self.devices['currinfo'] = CurrInfoSI()
-            self.get_sofb_bpm_enbl()
-            self.get_fofb_bpm_enbl()
 
     @staticmethod
     def do_measurement():
@@ -133,11 +124,22 @@ class Bump(_BaseClass):
         print('Not a measurement!')
         return {}
 
+    def get_initial_state(self):
+        """Get initial state of the SOFB and FOFB."""
+        clt = _ConfigDBClient(config_type='si_orbit')
+        ref_orb = clt.get_config_value('ref_orb')
+        refx = _np.array(ref_orb['x'])
+        refy = _np.array(ref_orb['y'])
+        self.reforbx = refx
+        self.reforby = refy
+        self.get_sofb_bpm_enbl()
+        self.get_fofb_bpm_enbl()
+
     def _is_beam_alive(self):
         if self.devices['currinfo'].storedbeam:
             return True
         print('Beam is dead!')
-        self.restore_sofb_reforb()
+        self.restore_initial_state()
 
     @staticmethod
     def subsec_2_sectype_nr(subsec):
@@ -203,12 +205,12 @@ class Bump(_BaseClass):
             enbly[idcs_out[n_bpms_out * 2 :] - 160] = False
         return enblx, enbly
 
-    def restore_sofb_reforb(self):
+    def restore_initial_state(self):
         """."""
         sofb = self.devices['sofb']
         fofb = self.devices['fofb']
-        sofb.refx = self.params.reforbx
-        sofb.refy = self.params.reforby
+        sofb.refx = self.reforbx
+        sofb.refy = self.reforby
         sofb.bpmxenbl = self._bpmxenbl
         sofb.bpmyenbl = self._bpmyenbl
         if self.params.closed_loops:
@@ -302,8 +304,8 @@ class Bump(_BaseClass):
     def implement_bump(self, agx=0, agy=0, psx=0, psy=0, subsec=None):
         """."""
         sofb = self.devices['sofb']
-        refx0 = self.params.reforbx
-        refy0 = self.params.reforby
+        refx0 = self.reforbx
+        refy0 = self.reforby
         subsec = subsec or self.params.subsec
         n_bpms_out = self.params.n_bpms_out
         minsingval = self.params.minsingval
@@ -403,5 +405,5 @@ class Bump(_BaseClass):
 
         # return to initial reference orbit
         print('Returning to ref_orb...')
-        self.restore_sofb_reforb()
+        self.restore_initial_state()
         print('Finished!')
