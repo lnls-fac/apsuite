@@ -134,6 +134,14 @@ class Bump(_BaseClass):
         self.reforby = refy
         self.get_sofb_bpm_enbl()
         self.get_fofb_bpm_enbl()
+        self._initial_state = {}
+        self._initial_state['refx'] = refx
+        self._initial_state['refy'] = refy
+        self._initial_state['bpmxenbl'] = self._bpmxenbl
+        self._initial_state['bpmyenbl'] = self._bpmyenbl
+        self._initial_state['fofb_bpmxenbl'] = self._fofb_bpmxenbl
+        self._initial_state['fofb_bpmyenbl'] = self._fofb_bpmyenbl
+        self.data['initial_state'] = self._initial_state
 
     def _is_beam_alive(self):
         if self.devices['currinfo'].storedbeam:
@@ -217,15 +225,12 @@ class Bump(_BaseClass):
             fofb.bpmxenbl = self._fofb_bpmxenbl
             fofb.bpmyenbl = self._fofb_bpmyenbl
 
-    def remove_bpms(self, section_type, section_nr, n_bpms_out):
-        """Remove BPMs from correction system.
+    def remove_bpms(self):
+        """Remove BPMs from correction system."""
+        subsec = self.params.subsec
+        n_bpms_out = self.params.n_bpms_out
+        section_type, section_nr = self.subsec_2_sectype_nr(subsec)
 
-        Args:
-            section_type (str): Section type. Ex: "C1", "C2"
-            section_nr (int): Number of section
-            n_bpms_out (int): Number of BPMs to remove from each
-             side of the bump.
-        """
         sofb = self.devices['sofb']
         idcs_out = self.bumptools.get_closest_bpms_indices(
             section_type=section_type,
@@ -285,14 +290,11 @@ class Bump(_BaseClass):
         sofb.refx = orbx
         sofb.refy = orby
 
-    def _check_rms_conditions(
-        self, rms_residue, bump_residue, refx, refy, idcs_bpm
-    ):
+    def _check_rms_conditions(self, rms_residue, bump_residue):
         sofb = self.devices['sofb']
         bump_max_residue = self.params.bump_max_residue
         sofb.cmd_reset()
         sofb.wait_buffer()
-        rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
         print(
             f'    orb_rms = {rms_residue:.3f} um, '
             f'    bump_rms = {bump_residue:.3f} um, '
@@ -346,26 +348,20 @@ class Bump(_BaseClass):
                     _np.abs(fofb.kickch_acc),
                     _np.abs(fofb.kickcv_acc),
                 ))
-                self._check_rms_conditions(
-                    rms_residue, bump_residue, refx, refy, idcs_bpm
-                )
+                rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
+                self._check_rms_conditions(rms_residue, bump_residue)
                 print(f'    kick fofb = {kick:.3f} urad, ')
         else:
             while rms_residue > bump_residue:
                 _ = sofb.correct_orbit_manually(
                     nr_iters=nr_iters, residue=residue
                 )
-                self._check_rms_conditions(
-                    rms_residue, bump_residue, refx, refy, idcs_bpm
-                )
+                rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
+                self._check_rms_conditions(rms_residue, bump_residue)
         print('Done!')
 
     def do_scan(self):
         """Start bumps scan."""
-        subsec = self.params.subsec
-        n_bpms_out = self.params.n_bpms_out
-        section_type, section_nr = self.subsec_2_sectype_nr(subsec)
-        self.remove_bpms(section_type, section_nr, n_bpms_out)
         prms = self.params
         if prms.do_angular_bumps:
             x_span, y_span = prms.pts_agx, prms.pts_agy
@@ -398,12 +394,9 @@ class Bump(_BaseClass):
             data[-1]['bump'] = (x, y)
             data[-1]['orbx'] = self.devices['sofb'].orbx
             data[-1]['orby'] = self.devices['sofb'].orby
-            self.data = data
+            self.data['bumps_data'] = data
             if self._stopevt.is_set():
                 print('Stopping...')
                 break
 
-        # return to initial reference orbit
-        print('Returning to ref_orb...')
-        self.restore_initial_state()
         print('Finished!')
