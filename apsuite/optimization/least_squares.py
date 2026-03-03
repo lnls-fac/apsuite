@@ -56,7 +56,7 @@ class LeastSquaresOptimize(Optimize):
 
     def calc_chi2(self, residual):
         """."""
-        chi2 = _np.mean(residual**2)
+        chi2 = _np.sum(residual**2)
         self.history_chi2.append(chi2)
         return chi2
 
