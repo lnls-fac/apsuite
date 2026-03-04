@@ -20,6 +20,10 @@ class MeasureSpinDepolScanParams(ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
+        self.bbb_amp_gain = 38.  # [dB], threshold value for amp nonlinearities
+        # Note: amplifier gain values above 38 dB results in nonlinearities in
+        # the BBB output, revealed by the appearance of higher harmonics in the
+        # spectrum of the output signal
         self.freq_start = 400.  # [kHz]
         self.freq_stop = 500.  # [kHz]
         self.freq_step = 1.  # [kHz]
@@ -33,6 +37,7 @@ class MeasureSpinDepolScanParams(ParamsBaseClass):
         # stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
 
         stg = ''
+        stg += ftmp('bbb_amp_gain', self.bbb_amp_gain, '[dB]')
         stg += ftmp('freq_start', self.freq_start, '[kHz]')
         stg += ftmp('freq_stop', self.freq_stop, '[kHz]')
         stg += ftmp('freq_step', self.freq_step, '[kHz]')
@@ -94,6 +99,7 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
     def do_measurement(self):
         """."""
         self._freq_initial = self.devices['bbbv'].drive1.frequency
+        self._gain_initial = self.devices['bbbv'].pwr_amp.gain
 
         self.data = {
             'timestamps': [],
@@ -118,10 +124,12 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
             dtype=float,
         )
 
+        self.devices['bbbv'].pwr_amp.gain = self.params.bbb_amp_gain
+
         try:
             for i, freq in enumerate(freq_span):
                 if self._stopevt.is_set():
-                    print('Stopped by user. Restoring initial DRIVE freq.')
+                    print('Stopped by user. Restoring BBB initial state.')
                     break
                 self.devices['bbbv'].drive1.frequency = freq
                 print(
@@ -133,6 +141,7 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
             print('Scan finished.')
         finally:
             self.devices['bbbv'].drive1.frequency = self._freq_initial
+            self.devices['bbbv'].pwr_amp.gain = self._gain_initial
 
         for k, v in self.data.items():
             self.data[k] = _np.array(v)
