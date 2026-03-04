@@ -62,10 +62,10 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
         self.devices['gamma_counters'] = None
         self.devices['blm_counters'] = None
 
-        self.pvs['bbbv_freq_sp'] = self.devices['bbbv'].pv_object(
+        self.pvs['bbbv_freq_sp'] = self.devices['bbbv'].drive1.pv_object(
             'SI-Glob:DI-BbBProc-V:DRIVE1_FREQ'
         )
-        self.pvs['bbbv_freq_rb'] = self.devices['bbbv'].pv_object(
+        self.pvs['bbbv_freq_rb'] = self.devices['bbbv'].drive1.pv_object(
             'SI-Glob:DI-BbBProc-V:DRIVE1_FREQ_ACT_STRING'
         )
 
