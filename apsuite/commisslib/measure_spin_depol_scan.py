@@ -3,7 +3,6 @@
 import time as _time
 
 import mathphys.constants as _const
-import matplotlib.pyplot as _mplt
 import numpy as _np
 from siriuspy.devices import CurrInfoSI, RFGen, Tune
 from siriuspy.devices.bbb import BunchbyBunch
@@ -20,24 +19,28 @@ class MeasureSpinDepolScanParams(ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
-        self.bbb_amp_gain = 38.  # [dB], threshold value for amp nonlinearities
+        self.bbb_amp_gain = (
+            38.0  # [dB], threshold value for amp nonlinearities
+        )
         # Note: amplifier gain values above 38 dB results in nonlinearities in
         # the BBB output, revealed by the appearance of higher harmonics in the
         # spectrum of the output signal
-        self.freq_start = 400.  # [kHz]
-        self.freq_stop = 500.  # [kHz]
-        self.freq_step = 1.  # [kHz]
-        self.time_base_update_time = 1.  # [s]
-        self.excitation_time = 1.  # [s]
+        self.bbb_drive_pattern = '2:1'  # not sure this format works
+        self.freq_start = 400.0  # [kHz]
+        self.freq_stop = 500.0  # [kHz]
+        self.freq_step = 1.0  # [kHz]
+        self.time_base_update_time = 1.0  # [s]
+        self.excitation_time = 1.0  # [s]
 
     def __str__(self):
         """."""
         ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
+        stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
         # dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
-        # stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
 
         stg = ''
         stg += ftmp('bbb_amp_gain', self.bbb_amp_gain, '[dB]')
+        stg += stmp('bbb_drive_pattern', self.bbb_drive_pattern, '')
         stg += ftmp('freq_start', self.freq_start, '[kHz]')
         stg += ftmp('freq_stop', self.freq_stop, '[kHz]')
         stg += ftmp('freq_step', self.freq_step, '[kHz]')
@@ -100,6 +103,7 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
         """."""
         self._freq_initial = self.devices['bbbv'].drive1.frequency
         self._gain_initial = self.devices['bbbv'].pwr_amp.gain
+        self._patt_intial = self.devices['bbbv'].drive1.mask_pattern
 
         self.data = {
             'timestamps': [],
@@ -118,13 +122,13 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
         stop = self.params.freq_stop
         step = self.params.freq_step
         freq_span = _np.arange(
-            start=start,
-            stop=stop+step,
-            step=step,
-            dtype=float,
+            start=start, stop=stop + step, step=step, dtype=float
         )
 
         self.devices['bbbv'].pwr_amp.gain = self.params.bbb_amp_gain
+        self.devices[
+            'bbbv'
+        ].drive1.mask_pattern = self.params.bbb_drive_pattern
 
         try:
             for i, freq in enumerate(freq_span):
@@ -133,8 +137,8 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
                     break
                 self.devices['bbbv'].drive1.frequency = freq
                 print(
-                    f'Driving freq. {freq:.3f} kHz' +
-                    f' ({i + 1})/{freq_span.size:03d})'
+                    f'Driving freq. {freq:.3f} kHz'
+                    + f' ({i + 1})/{freq_span.size:03d})'
                 )
                 _time.sleep(self.params.excitation_time)
                 self.get_data()
@@ -142,6 +146,7 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
         finally:
             self.devices['bbbv'].drive1.frequency = self._freq_initial
             self.devices['bbbv'].pwr_amp.gain = self._gain_initial
+            self.devices['bbbv'].drive1.mask_pattern = self._patt_intial
 
         for k, v in self.data.items():
             self.data[k] = _np.array(v)
