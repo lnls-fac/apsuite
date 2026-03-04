@@ -139,16 +139,35 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
 
 
 class SpinDepolUtils:
-    """".""""
+    """."""
+
     @staticmethod
     def calc_spin_tune_from_energy(energy):
-        gamma = energy / E_electron
+        """Calculate the spin tune and its fractional parts from beam energy.
+
+        Args:
+            energy (float): Beam energy in [GeV]
+
+        Returns:
+            tuple of floats (spin_tune, spin_tune_frac, 1-spin_tune_frac)
+            containing the spin tune value, its fractional part and the
+            its complementary fractional part.
+        """
+        gamma = (energy * 1e9) / E_electron
         spin_tune = A_ELECTRON * gamma
         spin_tune_frac = spin_tune - int(spin_tune)
-        return spin_tune, spin_tune_frac, 1-spin_tune_frac
+        return spin_tune, spin_tune_frac, 1 - spin_tune_frac
 
     @staticmethod
     def calc_energy_from_spin_tune(spin_tune):
+        """Calculate the beam energy from the spin tune value.
+
+        Args:
+            spin_tune (float): _description_
+
+        Returns:
+            float: Beam energy in [GeV]
+        """
         gamma = spin_tune / A_ELECTRON
         energy = gamma * E_electron
-        return energy
+        return energy / 1e9
