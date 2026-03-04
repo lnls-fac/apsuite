@@ -69,6 +69,7 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self.devices['gamma_counters'] = None
         self.devices['blm_counters'] = None
+        # TODO: add also tune from BBB and SRAM peaks, CAX beamsizes, etc
 
         self.pvs['bbbv_freq_sp'] = self.devices['bbbv'].drive1.pv_object(
             'SI-Glob:DI-BbBProc-V:DRIVE1_FREQ'
@@ -79,7 +80,6 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
 
     def get_data(self):
         """."""
-
         self.data['timestamps'].append(_time.time())
         self.data['lifetime'].append(self.devices['currinfo'].lifetime)
         self.data['stored_current'].append(self.devices['currinfo'].current)
