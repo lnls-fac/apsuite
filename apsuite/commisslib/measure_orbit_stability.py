@@ -262,7 +262,9 @@ class OrbitAnalysis(_AcqBPMsSignals):
         coef = _np.polynomial.polynomial.polyfit(eta2use, orbxy.T, deg=1)
         denergy = coef[1]
 
-        energy_spec, freq = self.calc_spectrum(denergy, fs=self.sampling_freq)
+        energy_spec, freq = self.calc_normalized_dft(
+            denergy, fs=self.sampling_freq
+        )
         intpsd = self.calc_integrated_spectrum(energy_spec, inverse=inverse)
 
         self.analysis['measured_dispersion'] = (
@@ -310,8 +312,12 @@ class OrbitAnalysis(_AcqBPMsSignals):
             central_freq=central_freq,
             window=window,
         )
-        orbx_spec, freqx = self.calc_spectrum(orbx_fil, fs=self.sampling_freq)
-        orby_spec, freqy = self.calc_spectrum(orby_fil, fs=self.sampling_freq)
+        orbx_spec, freqx = self.calc_normalized_dft(
+            orbx_fil, fs=self.sampling_freq
+        )
+        orby_spec, freqy = self.calc_normalized_dft(
+            orby_fil, fs=self.sampling_freq
+        )
         ipsdx = self.calc_integrated_spectrum(orbx_spec, inverse=inverse)
         ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
         self.analysis['orbx_filtered'] = orbx_fil
@@ -345,8 +351,7 @@ class OrbitAnalysis(_AcqBPMsSignals):
 
     def calc_integrated_spectrum(self, spec, inverse=False):
         """."""
-        spec_abs = _np.abs(spec)
-        spec2 = spec_abs * spec_abs
+        spec2 = spec * spec.conj()
         if inverse:
             intpsd = _np.sqrt(2 * _np.cumsum(spec2[::-1], axis=0))[::-1]
         else:
@@ -558,12 +563,16 @@ class OrbitAnalysis(_AcqBPMsSignals):
             freqx = self.analysis['orbx_freq']
             orbx_spec = self.analysis['orbx_spectrum']
         else:
-            orbx_spec, freqx = self.calc_spectrum(orbx, fs=self.sampling_freq)
+            orbx_spec, freqx = self.calc_normalized_dft(
+                orbx, fs=self.sampling_freq
+            )
         if orby is None:
             freqy = self.analysis['orby_freq']
             orby_spec = self.analysis['orby_spectrum']
         else:
-            orby_spec, freqy = self.calc_spectrum(orby, fs=self.sampling_freq)
+            orby_spec, freqy = self.calc_normalized_dft(
+                orby, fs=self.sampling_freq
+            )
 
         if fig is None or axs is None:
             fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
@@ -602,13 +611,17 @@ class OrbitAnalysis(_AcqBPMsSignals):
             ipsdx = self.analysis['orbx_ipsd']
             freqx = self.analysis['orbx_freq']
         else:
-            orbx_spec, freqx = self.calc_spectrum(orbx, fs=self.sampling_freq)
+            orbx_spec, freqx = self.calc_normalized_dft(
+                orbx, fs=self.sampling_freq
+            )
             ipsdx = self.calc_integrated_spectrum(orbx_spec, inverse=inverse)
         if orby is None:
             ipsdy = self.analysis['orby_ipsd']
             freqy = self.analysis['orby_freq']
         else:
-            orby_spec, freqy = self.calc_spectrum(orby, fs=self.sampling_freq)
+            orby_spec, freqy = self.calc_normalized_dft(
+                orby, fs=self.sampling_freq
+            )
             ipsdy = self.calc_integrated_spectrum(orby_spec, inverse=inverse)
         if fig is None or axs is None:
             fig, axs = _plt.subplots(2, 1, figsize=(12, 8))
@@ -768,7 +781,7 @@ class OrbitAnalysis(_AcqBPMsSignals):
             energy_spec = self.analysis['energy_spectrum']
             freq = self.analysis['energy_freq']
         else:
-            energy_spec, freq = self.calc_spectrum(
+            energy_spec, freq = self.calc_normalized_dft(
                 denergy, fs=self.sampling_freq
             )
 
