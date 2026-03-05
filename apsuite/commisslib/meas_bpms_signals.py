@@ -399,7 +399,7 @@ class AcqBPMsSignals(_BaseClass):
         return _sp_sig.convolve(orb, fil[:, None], mode='same')
 
     @staticmethod
-    def calc_spectrum(data, fs=1.0, axis=0):
+    def calc_normalized_dft(data, fs=1.0, axis=0):
         """Calculate the real DFT of data using scipy.fft.rfft.
 
         Args:
