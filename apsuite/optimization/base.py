@@ -20,7 +20,7 @@ class OptimizeParams(_Params):
 
     _TMPD = '{:30s}: {:10d} {:s}\n'.format
     _TMPF = '{:30s}: {:10.3f} {:s}\n'.format
-    _TMPS = '{:30s}: {:10s} {:s}\n'.format
+    _TMPS = '{:30s}: {:>10s} {:s}\n'.format
 
     BoundaryPolicy = _get_namedtuple('BoundaryPolicy', ('ToBoundary', 'ToNaN'))
 
