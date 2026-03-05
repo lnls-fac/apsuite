@@ -89,6 +89,34 @@ class NOECOParams(LeastSquaresParams):
         self.use_ver_disp = False
         self.use_chroms = False
 
+    def __str__(self):
+        """."""
+        stg = super().__str__()
+        stg += '\n'
+        stg += '\nNOECO Params\n'
+        stg += '\n'
+        stg += self._TMPE('denergy_oeorm_calc', self.denergy_oeorm_calc, '')
+        stg += self._TMPF('tunex', self.tunex, '')
+        stg += self._TMPF('tuney', self.tuney, '')
+        stg += self._TMPF('chromx', self.chromx, '')
+        stg += self._TMPF('chromy', self.chromy, '')
+        stg += self._TMPS('fit_sexts', str(self.fit_sexts), '')
+        stg += self._TMPS('fit_gain_bpms', str(self.fit_gain_bpms), '')
+        stg += self._TMPS('fit_coup_bpms', str(self.fit_coup_bpms), '')
+        stg += self._TMPS('fit_gain_corr', str(self.fit_gain_corr), '')
+        stg += self._TMPS('use_diag_blocks', str(self.use_diag_blocks), '')
+        stg += self._TMPS(
+            'use_offdiag_blocks', str(self.use_offdiag_blocks), ''
+        )
+        stg += self._TMPS('use_hor_disp', str(self.use_hor_disp), '')
+        stg += self._TMPS('use_ver_disp', str(self.use_ver_disp), '')
+        stg += self._TMPS('use_chroms', str(self.use_chroms), '')
+        stg += '{:30s}: [{:.3e}, {:.3e}] {:s}\n'.format(
+            'chrom_weights', self.chrom_weights[0], self.chrom_weights[1], ''
+        )
+        stg += self._TMPF('disp_weight', self.disp_weight, '')
+        return stg
+
     @property
     def nr_sexts(self):
         """."""
