@@ -8,6 +8,7 @@ from apsuite.optimization.base import Optimize, OptimizeParams
 
 class LeastSquaresParams(OptimizeParams):
     """."""
+    _TMPE = '{:30s}: {:10.3e} {:s}\n'.format
 
     def __init__(self):
         """."""
@@ -26,6 +27,27 @@ class LeastSquaresParams(OptimizeParams):
         self.jacobian_update_rate = 0
         self.verbose = True
         self.errorbars = None
+
+    def __str__(self):
+        """."""
+        stg = super().__str__()
+        stg += '\n'
+        stg += '\nLeastSquaresParams:\n'
+        stg += '\n'
+        stg += self._TMPE('abs_tol_convergence', self.abs_tol_convergence, '')
+        stg += self._TMPE('rel_tol_convergence', self.rel_tol_convergence, '')
+        stg += self._TMPE('rcond', self.rcond, '')
+        stg += self._TMPF('damping_constant', self.damping_constant, '')
+        stg += self._TMPF('damping_factor', self.damping_factor, '')
+        stg += self._TMPE(
+            'max_damping_constant', self.max_damping_constant, ''
+        )
+        stg += self._TMPF('ridge_constant', self.ridge_constant, '')
+        stg += self._TMPD(
+            'jacobian_update_rate', self.jacobian_update_rate, ''
+        )
+        stg += self._TMPS('verbose', str(self.verbose), '')
+        return stg
 
 
 class LeastSquaresOptimize(Optimize):
