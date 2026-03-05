@@ -324,10 +324,11 @@ class NOECOFit(LeastSquaresOptimize):
     def _initialization(self):
         if self._model is None:
             print('Cannot start optimization without machine model.')
+            print('Set model to `model` property or call `create_model()`.')
             return False
 
         if self._oeorm_goal is None:
-            print('Cannot start optimization without oeorm_goal')
+            print('Cannot start optimization without `oeorm_goal`')
             return False
 
         if not len(self.params.initial_position):
@@ -337,6 +338,19 @@ class NOECOFit(LeastSquaresOptimize):
                 print('No parameters to fit!')
                 return False
             self.params.initial_position = pos
+
+        if not self.params.are_positions_consistent():
+            print(
+                'Initial position and positions limits are not consistent  '
+                + 'or posistions limits have not been specified by user.'
+            )
+            print('Using default limits for all parameters: (-inf, inf).')
+            self.params.limit_lower = _np.full_like(
+                self.params.initial_position, -_np.inf
+            )
+            self.params.limit_upper = _np.full_like(
+                self.params.initial_position, _np.inf
+            )
         return True
 
     def _get_errorbars(self, bpms_noise):
