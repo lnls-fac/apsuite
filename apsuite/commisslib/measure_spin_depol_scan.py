@@ -1,8 +1,7 @@
 """."""
 
-import math as _math
 import time as _time
-from threading import Event as _Event, Thread as _Thread
+from threading import Thread as _Thread
 
 import mathphys.constants as _const
 import numpy as _np
@@ -13,14 +12,16 @@ from siriuspy.devices import (
     FamGammaMonitors,
     RFGen,
     Tune,
-    TuneCorr,
+    TuneCorr
 )
 
 from ..utils import ParamsBaseClass, ThreadedMeasBaseClass
 
 
-class SpinDepolUtils:
+class _BaseMeasureSpinDepol(ThreadedMeasBaseClass):
     """."""
+
+    _PARAMS_CLASS = ParamsBaseClass
 
     ELECTRON_A = 1.15965218059e-3  # anomalous magnetic moment of the electron
     ELECTRON_E = _const.electron_rest_energy / _const.elementary_charge  # [eV]
@@ -55,6 +56,57 @@ class SpinDepolUtils:
         gamma = spin_tune / cls.ELECTRON_A
         energy = gamma * cls.ELECTRON_E
         return energy / 1e9
+
+    def __init__(self, isonline=True):
+        """."""
+        super().__init__(
+            params=self._PARAMS_CLASS(),
+            target=self.do_measurement,
+            isonline=isonline,
+        )
+        if self.isonline:
+            self.create_devices()
+
+    def create_devices(self):
+        """."""
+        self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
+        self.devices['bbbh'] = BunchbyBunch(BunchbyBunch.DEVICES.H)
+        self.devices['currinfo'] = CurrInfoSI()
+        self.devices['rfgen'] = RFGen(props2init=['Frequency-Mon'])
+        self.devices['tune'] = Tune(Tune.DEVICES.SI)
+        self.devices['tunecorr'] = TuneCorr(TuneCorr.DEVICES.SI)
+        self.devices['gamma_monitors'] = FamGammaMonitors()
+        self.devices['blms'] = FamBLMs()
+        # TODO: add also CAX beamsizes, etc
+
+    def get_data(self):
+        """."""
+        data = {}
+        bbbv = self.devices['bbbv']
+        bbbh = self.devices['bbbh']
+        data['timestamp'] = _time.time()
+        data['lifetime'] = self.devices['currinfo'].lifetime
+        data['stored_current'] = self.devices['currinfo'].current
+        data['bbbv_freq_sp'] = bbbv.drive1['FREQ']
+        data['bbbv_freq_rb'] = bbbv.drive1.frequency
+        data['bbbv_tune'] = bbbv.single_bunch.spec_marker1_tune
+        data['bbbh_tune'] = bbbh.single_bunch.spec_marker1_tune
+        data['bbbv_sram_mag'] = bbbv.sram.spec_marker1_mag
+        data['bbbh_sram_mag'] = bbbh.sram.spec_marker1_mag
+        data['bbbv_sram_tune'] = bbbv.sram.spec_marker1_tune
+        data['bbbh_sram_tune'] = bbbh.sram.spec_marker1_tune
+        data['rf_freq'] = self.devices['rfgen'].frequency
+        data['tunex'] = self.devices['tune'].tunex
+        data['tuney'] = self.devices['tune'].tuney
+        data['tunecorr_delta_tunex'] = self.devices['tunecorr'].delta_tunex
+        data['tunecorr_delta_tuney'] = self.devices['tunecorr'].delta_tuney
+        data['gamma_counts'] = self.devices['gamma_monitors'].counts
+        data['blm_counts'] = self.devices['blms'].counts
+        return data
+
+    def do_measurement(self):
+        """."""
+        pass
 
 
 class MeasureSpinDepolScanParams(ParamsBaseClass):
@@ -93,52 +145,10 @@ class MeasureSpinDepolScanParams(ParamsBaseClass):
         return stg
 
 
-class MeasureSpinDepolScan(ThreadedMeasBaseClass):
+class MeasureSpinDepolScan(_BaseMeasureSpinDepol):
     """."""
 
-    def __init__(self, isonline=True):
-        super().__init__(
-            params=MeasureSpinDepolScanParams(),
-            target=self.do_measurement,
-            isonline=isonline,
-        )
-        self.depol_utils = SpinDepolUtils()
-        if self.isonline:
-            self.create_devices()
-
-    def create_devices(self):
-        """."""
-        self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
-        self.devices['bbbh'] = BunchbyBunch(BunchbyBunch.DEVICES.H)
-        self.devices['currinfo'] = CurrInfoSI()
-        self.devices['rfgen'] = RFGen(props2init=['Frequency-Mon'])
-        self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        self.devices['gamma_monitors'] = FamGammaMonitors()
-        self.devices['blms'] = FamBLMs()
-        # TODO: add also CAX beamsizes, etc
-
-    def get_data(self):
-        """."""
-        data = {}
-        bbbv = self.devices['bbbv']
-        bbbh = self.devices['bbbh']
-        data['timestamp'] = _time.time()
-        data['lifetime'] = self.devices['currinfo'].lifetime
-        data['stored_current'] = self.devices['currinfo'].current
-        data['bbbv_freq_sp'] = bbbv.drive1['FREQ']
-        data['bbbv_freq_rb'] = bbbv.drive1.frequency
-        data['bbbv_tune'] = bbbv.single_bunch.spec_marker1_tune
-        data['bbbh_tune'] = bbbh.single_bunch.spec_marker1_tune
-        data['bbbv_sram_mag'] = bbbv.sram.spec_marker1_mag
-        data['bbbh_sram_mag'] = bbbh.sram.spec_marker1_mag
-        data['bbbv_sram_tune'] = bbbv.sram.spec_marker1_tune
-        data['bbbh_sram_tune'] = bbbh.sram.spec_marker1_tune
-        data['rf_freq'] = self.devices['rfgen'].frequency
-        data['tunex'] = self.devices['tune'].tunex
-        data['tuney'] = self.devices['tune'].tuney
-        data['gamma_counts'] = self.devices['gamma_monitors'].counts
-        data['blm_counts'] = self.devices['blms'].counts
-        return data
+    _PARAMS_CLASS = MeasureSpinDepolScanParams
 
     def do_measurement(self):
         """."""
@@ -191,163 +201,97 @@ class MeasureSpinDepolScan(ThreadedMeasBaseClass):
 class MeasureTuneScanParams(ParamsBaseClass):
     """."""
 
-    TUNEY_INT = 49.0
-    TUNEX_INT = 16.0
-
     def __init__(self):
+        """."""
         super().__init__()
-        self.wait_time = 1 # [s]
-        self.tuney_start = 0.22
-        self.tuney_stop = 0.35
+        self.wait_time_change_tune = 60  # [s]
+        self.wait_time_acq_data = 1.0  # [s]
+        self.delta_tuney = 0.35 - 0.22
         self.tuney_step = 0.0075
-        self.tuney_tol = 0.0001
 
-        self.tunex_start = 0.16
-        self.tunex_stop = 0.16
+        self.delta_tunex = 0.16 - 0.16
         self.tunex_step = 0.0
-        self.tunex_tol = 0.0001
 
     def __str__(self):
         """."""
         ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
 
         stg = ''
-        stg += ftmp('wait_time', self.wait_time, '[s]')
-        stg += ftmp('tuney_start', self.tuney_start, '')
-        stg += ftmp('tuney_stop', self.tuney_stop, '')
+        stg += ftmp('wait_time_change_tune', self.wait_time_change_tune, '[s]')
+        stg += ftmp('wait_time_acq_data', self.wait_time_acq_data, '[s]')
+        stg += ftmp('delta_tuney', self.delta_tuney, '')
         stg += ftmp('tuney_step', self.tuney_step, '')
-        stg += ftmp('tunex_start', self.tunex_start, '')
-        stg += ftmp('tunex_stop', self.tunex_stop, '')
+        stg += ftmp('delta_tunex', self.delta_tunex, '')
         stg += ftmp('tunex_step', self.tunex_step, '')
         return stg
 
 
-class MeasureTuneScan(ThreadedMeasBaseClass):
+class MeasureTuneScan(_BaseMeasureSpinDepol):
     """."""
 
-    def __init__(self, isonline=True):
-        super().__init__(
-            params=MeasureTuneScanParams,
-            target=self.do_measurement,
-            isonline=isonline,
-        )
-        if self.isonline:
-            self.create_devices()
-
-    def create_devices(self):
-        """."""
-        self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
-        self.devices['bbbh'] = BunchbyBunch(BunchbyBunch.DEVICES.H)
-        self.devices['currinfo'] = CurrInfoSI()
-        self.devices['rfgen'] = RFGen(props2init=['Frequency-Mon'])
-        self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        self.devices['tunecorr'] = TuneCorr(TuneCorr.DEVICES.SI)
-        self.devices['gamma_monitors'] = FamGammaMonitors()
-        self.devices['blms'] = FamBLMs()
-
-    def scan_tunes(self):
-        """."""
-        tune_dev = self.devices['tune']
-        tunecorr_dev = self.devices['tunecorr']
-        tunecorr_dev.cmd_update_reference()
-
-        tunesx = _np.arange(
-            self.params.tunex_start,
-            self.params.tunex_stop + self.params.tunex_step,
-            self.params.tunex_step,
-            dtype=float,
-        )
-        tunesx += self.params.TUNEX_INT
-
-        tunesy = _np.arange(
-            self.params.tuney_start,
-            self.params.tuney_stop + self.params.tuney_step,
-            self.params.tuney_step,
-            dtype=float,
-        )
-        tunesy += self.params.TUNEY_INT
-
-        for i, (tunex, tuney) in enumerate(zip(tunesx, tunesy)):
-            if self._stopevt.is_set():
-                print('Scan stopped by the user. Exiting.')
-                # restore initial tunes and other params
-                break
-            tunex_meas, tuney_meas = tune_dev.tunex, tune_dev.tuney
-
-            cond = _math.isclose(
-                tunex_meas, tunex, abs_tol=self.params.tunex_tol
-            ) and _math.isclose(
-                tuney_meas, tuney, abs_tol=self.params.tuney_tol
-            )
-
-            while not cond:
-                print('Applying delta tune')
-                deltax = tunex_meas - tunex
-                deltay = tuney_meas - tuney
-                tunecorr_dev.delta_tunex = deltax
-                tunecorr_dev.delta_tuney = deltay
-                tunecorr_dev.cmd_apply_delta()
-
-                tunex_meas, tuney_meas = tune_dev.tunex, tune_dev.tuney
-                cond = _math.isclose(
-                    tunex_meas, tunex, abs_tol=self.params.tunex_tol
-                ) and _math.isclose(
-                    tuney_meas, tuney, abs_tol=self.params.tuney_tol
-                )
-            else:
-                print('Tunes corrected!')
-                print(f'\t(nux, nuy) = ({tune_dev.tunex, tune_dev.tuney}')
-                # update BbB masks tune param
-                # update tune proc freq offset
-        else:
-            # restore initial tunes and other params
-            return
-
-
-
-    def get_data(self):
-        """."""
-        while not (self._stop_evet.is_set() or self._finished.is_set()):
-            data = self.data
-            bbbv = self.devices['bbbv']
-            bbbh = self.devices['bbbh']
-            data['timestamp'].append(_time.time())
-            data['lifetime'].append(self.devices['currinfo'].lifetime)
-            data['stored_current'].append(self.devices['currinfo'].current)
-            data['bbbv_tune'].append(bbbv.single_bunch.spec_marker1_tune)
-            data['bbbh_tune'].append(bbbh.single_bunch.spec_marker1_tune)
-            data['bbbv_sram_mag'].append(bbbv.sram.spec_marker1_mag)
-            data['bbbh_sram_mag'].append(bbbh.sram.spec_marker1_mag)
-            data['bbbv_sram_tune'].append(bbbv.sram.spec_marker1_tune)
-            data['bbbh_sram_tune'].append(bbbh.sram.spec_marker1_tune)
-            data['rf_freq'].append(self.devices['rfgen'].frequency)
-            data['tunex'].append(self.devices['tune'].tunex)
-            data['tuney'].append(self.devices['tune'].tuney)
-            data['gamma_counts'].append(self.devices['gamma_monitors'].counts)
-            data['blm_counts'].append(self.devices['blms'].counts)
-            _time.sleep(self.params.wait_time)
-        else:
-            print('Acquisitions finished!')
+    _PARAMS_CLASS = MeasureTuneScanParams
 
     def do_measurement(self):
         """."""
-        self.data = {
-            'timestamp': [],
-            'lifetime': [],
-            'stored_current': [],
-            'bbbv_tune': [],
-            'bbbh_tune': [],
-            'bbbv_sram_mag': [],
-            'bbbh_sram_mag': [],
-            'bbbv_sram_tune': [],
-            'bbbh_sram_tune': [],
-            'rf_freq': [],
-            'tunex': [],
-            'tuney': [],
-            'gamma_counts': [],
-            'blm_counts': [],
-        }
-        acquisition_thread = _Thread(target=self.get_data, daemon=True)
-
+        self.data = {}
+        acquisition_thread = _Thread(target=self._get_data_thread, daemon=True)
         acquisition_thread.start()
-        self.scan_tunes()
+
+        tunecorr_dev = self.devices['tunecorr']
+        tunecorr_dev.cmd_update_reference()
+
+        dtunesx = _np.arange(
+            start=0,
+            stop=self.params.delta_tunex + self.params.tunex_step,
+            step=self.params.tunex_step,
+            dtype=float,
+        )
+
+        dtunesy = _np.arange(
+            start=0,
+            stop=self.params.delta_tuney + self.params.tuney_step,
+            step=self.params.tuney_step,
+            dtype=float,
+        )
+
+        try:
+            for i, (dtunex, dtuney) in enumerate(zip(dtunesx, dtunesy)):
+                print(
+                    f' {i + 1:03d}/{len(dtunesx):03d} -> '
+                    + f'dtunex, dtuney: {dtunex:.3f}, {dtuney:.3f}'
+                )
+                if self._stopevt.is_set():
+                    print('Scan stopped by the user. Exiting.')
+                    break
+
+                tunecorr_dev.delta_tunex = dtunex
+                tunecorr_dev.delta_tuney = dtuney
+                tunecorr_dev.cmd_apply_delta()
+                _time.sleep(self.params.wait_time_change_tune)
+        except Exception as e:
+            print(f'Error during tune scan: {e}')
+
+        print('Returning tune to initial value.')
+        dtunex = tunecorr_dev.delta_tunex
+        dtuney = tunecorr_dev.delta_tuney
+        dtune = max(dtunex, dtuney)
+        nriters = int(dtune / 0.03)
+        for i in range(1, nriters + 1):
+            print(f' Returning tune: iteration {i:03d}/{nriters:03d}')
+            frac = (nriters - i) / nriters
+            tunecorr_dev.delta_tunex = dtunex * frac
+            tunecorr_dev.delta_tuney = dtuney * frac
+            tunecorr_dev.cmd_apply_delta()
+            _time.sleep(1)
+        print('Tune scan completed.')
+
+    def _get_data_thread(self):
+        """."""
+        while not (self._stop_evet.is_set() or self._finished.is_set()):
+            data = self.get_data()
+            for k, v in data.items():
+                if k not in self.data:
+                    self.data[k] = []
+                self.data[k].append(v)
+            _time.sleep(self.params.wait_time_acq_data)
+        print('Acquisition thread finished.')
