@@ -8,6 +8,7 @@ from apsuite.optimization.base import Optimize, OptimizeParams
 
 class LeastSquaresParams(OptimizeParams):
     """."""
+
     _TMPE = '{:30s}: {:10.3e} {:s}\n'.format
 
     def __init__(self):
@@ -22,7 +23,7 @@ class LeastSquaresParams(OptimizeParams):
         self.damping_constant = 1.0
         self.damping_factor = 10.0
         self.max_damping_constant = 1e10
-        self.ridge_constant = 0.0
+        self.tikhonov_reg_constants = 0.0
         self.jacobian = None
         self.jacobian_update_rate = 0
         self.verbose = True
@@ -42,7 +43,9 @@ class LeastSquaresParams(OptimizeParams):
         stg += self._TMPE(
             'max_damping_constant', self.max_damping_constant, ''
         )
-        stg += self._TMPF('ridge_constant', self.ridge_constant, '')
+        # stg += self._TMPF(
+        #     'tikhonov_reg_constants', self.tikhonov_reg_constants, ''
+        # )
         stg += self._TMPD(
             'jacobian_update_rate', self.jacobian_update_rate, ''
         )
@@ -80,6 +83,12 @@ class LeastSquaresOptimize(Optimize):
         """."""
         chi2 = _np.sum(residual**2)
         self.history_chi2.append(chi2)
+        return chi2
+
+    def calc_chi2_tikhonov(self, residual, vtmat, tikhonov, delta_pos):
+        """."""
+        chi2 = self.calc_chi2(residual)
+        chi2 += _np.linalg.norm(vtmat @ (tikhonov * delta_pos))**2
         return chi2
 
     def calc_residual(self, pos, merit_figure_goal=None):
@@ -135,34 +144,55 @@ class LeastSquaresOptimize(Optimize):
         damping_factor = self.params.damping_factor
         damping_max = self.params.max_damping_constant
 
-        ridge = self.params.ridge_constant
+        tikhonov = _np.asarray(self.params.tikhonov_reg_constants)
         jacobian_update_rate = self.params.jacobian_update_rate
         jacobian = self.jacobian
 
         pos = self.params.initial_position.copy()
+        self.normal_eq_matrix = []
 
         res = self._objective_func(pos)
         chi2 = self.calc_chi2(res)
-        M = self.calc_jacobian(pos) if jacobian is None else jacobian
-        MTM = M.T @ M
-        ridge_reg = ridge * _np.eye(MTM.shape[0])
-
         print_(f'initial chi²: {chi2:.6g}')
+
+        if jacobian is None:
+            jacobian = self.calc_jacobian(pos)
+            self.jacobian = jacobian
+        U, S, Vt = _np.linalg.svd(jacobian, full_matrices=False)
+
+        if tikhonov.ndim == 0:
+            tikhonov = _np.full(S.size, tikhonov)
+        elif tikhonov.ndim == 1:
+            if tikhonov.size != S.size:
+                raise ValueError('tikhonov_reg_constants size mismatch')
 
         for it in range(niter):
             print_(f'iteration {it:03d}')
 
             if jacobian_update_rate and it:
                 if not it % jacobian_update_rate:
-                    M = self.calc_jacobian(pos)
-                    MTM = M.T @ M
-
-            lm_reg = _np.diag(damping * _np.diag(MTM))
-            matrix = MTM + ridge_reg + lm_reg
+                    jacobian = self.calc_jacobian(pos)
+                    self.jacobian = jacobian
+                    U, S, Vt = _np.linalg.svd(jacobian, full_matrices=False)
 
             res = self.objfuncs_evaluated[-1]
-            delta = _np.linalg.pinv(matrix, rcond=rcond) @ (M.T @ res)
-            # TODO: chi2 for Ridge
+
+            matrix = jacobian.T @ jacobian
+            matrix += damping * _np.diag(_np.diag(matrix))
+            if _np.any(tikhonov):
+                matrix += _np.diag(tikhonov**2)
+            self.normal_eq_matrix.append(matrix)
+
+            if rcond is not None:
+                mask = S < rcond * S[0]  # not sure mask should compare S
+            else:
+                mask = _np.zeros_like(S, dtype=bool)
+
+            den = S**2 * (1 + damping) + tikhonov**2
+            S_inv = S / den
+            S_inv[mask] = 0
+
+            delta = (Vt.T  @ (S_inv * (U.T @ res)))
 
             if _np.any(_np.isnan(delta)):
                 print_('\tInvalid step direction. Aborting.')
@@ -175,7 +205,12 @@ class LeastSquaresOptimize(Optimize):
                 res_trial = self._objective_func(pos_trial)
                 if _np.any(_np.isnan(res_trial)):
                     raise ValueError
-                chi2_trial = self.calc_chi2(res_trial)
+                if _np.any(tikhonov):
+                    chi2_trial = self.calc_chi2_tikhonov(
+                        res_trial, Vt.T, tikhonov, delta
+                    )
+                else:
+                    chi2_trial = self.calc_chi2(res_trial)
                 success = chi2_trial < chi2_old
             except Exception:
                 success = False
