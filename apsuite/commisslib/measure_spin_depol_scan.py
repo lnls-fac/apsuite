@@ -108,6 +108,18 @@ class _BaseMeasureSpinDepol(ThreadedMeasBaseClass):
         """."""
         pass
 
+    def _update_data_dict(self, data_dict):
+        """Update self.data with the values in the provided dictionary.
+
+        Args:
+            data_dict (dict): Dictionary containing parameter names and their
+                corresponding values.
+        """
+        for k, v in data_dict.items():
+            if k not in self.data:
+                self.data[k] = []
+            self.data[k].append(v)
+
 
 class MeasureSpinDepolScanParams(ParamsBaseClass):
     """."""
@@ -167,7 +179,7 @@ class MeasureSpinDepolScan(_BaseMeasureSpinDepol):
             start=start, stop=stop + step, step=step, dtype=float
         )
         harm_freq = self.params.freq_harmonic
-        harm_freq *= bbbv.info.revolution_freq_mon / 1e3
+        harm_freq *= bbbv.info.revolution_freq_nom / 1e3
 
         bbbv.pwr_amp.gain = self.params.bbb_amp_gain
         bbbv.drive1.mask_pattern = self.params.bbb_drive_pattern
@@ -183,10 +195,7 @@ class MeasureSpinDepolScan(_BaseMeasureSpinDepol):
                 _time.sleep(self.params.excitation_time)
 
                 data = self.get_data()
-                for k, v in data.items():
-                    if k not in self.data:
-                        self.data[k] = []
-                    self.data[k].append(v)
+                self._update_data_dict(data)
 
             print('Scan finished.')
         finally:
@@ -204,13 +213,13 @@ class MeasureTuneScanParams(ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
-        self.wait_time_change_tune = 60  # [s]
+        self.wait_time_change_tune = 40  # [s]
         self.wait_time_acq_data = 1.0  # [s]
-        self.delta_tuney = 0.35 - 0.22
-        self.tuney_step = 0.0075
-
-        self.delta_tunex = 0.16 - 0.16
-        self.tunex_step = 0.0
+        self.nr_steps = 20
+        self.tunex_start = 0.16
+        self.tunex_stop = 0.16
+        self.tuney_start = 0.22
+        self.tuney_stop = 0.35
 
     def __str__(self):
         """."""
@@ -219,11 +228,59 @@ class MeasureTuneScanParams(ParamsBaseClass):
         stg = ''
         stg += ftmp('wait_time_change_tune', self.wait_time_change_tune, '[s]')
         stg += ftmp('wait_time_acq_data', self.wait_time_acq_data, '[s]')
-        stg += ftmp('delta_tuney', self.delta_tuney, '')
-        stg += ftmp('tuney_step', self.tuney_step, '')
-        stg += ftmp('delta_tunex', self.delta_tunex, '')
-        stg += ftmp('tunex_step', self.tunex_step, '')
+        stg += ftmp('nr_steps', self.nr_steps, '')
+        stg += ftmp('tunex_start', self.tunex_start, '')
+        stg += ftmp('tunex_stop', self.tunex_stop, '')
+        stg += ftmp('tunex_step', self.tunex_step, '(calculated)')
+        stg += ftmp('tuney_start', self.tuney_start, '')
+        stg += ftmp('tuney_stop', self.tuney_stop, '')
+        stg += ftmp('tuney_step', self.tuney_step, '(calculated)')
+        stg += f'total scan time (approx.) = {self.total_scan_time:.1f} s\n'
         return stg
+
+    @property
+    def tunex_step(self):
+        """."""
+        return (self.tunex_stop - self.tunex_start) / self.nr_steps
+
+    @property
+    def tuney_step(self):
+        """."""
+        return (self.tuney_stop - self.tuney_start) / self.nr_steps
+
+    @property
+    def tunex_grid(self):
+        """."""
+        return self._calc_grid(
+            start=self.tunex_start,
+            stop=self.tunex_stop,
+            nr_steps=self.nr_steps,
+        )
+
+    @property
+    def tuney_grid(self):
+        """."""
+        return self._calc_grid(
+            start=self.tuney_start,
+            stop=self.tuney_stop,
+            nr_steps=self.nr_steps,
+        )
+
+    @property
+    def total_scan_time(self):
+        """."""
+        nr_points = 2 * self.nr_steps + 1
+        return nr_points * self.wait_time_change_tune
+
+    @staticmethod
+    def _calc_grid(start, stop, nr_steps):
+        """."""
+        grid = _np.linspace(
+            start=start, stop=stop, num=nr_steps + 1, dtype=float
+        )
+        # add the grid in reverse order, excluding the last point:
+        grid = _np.r_[grid, grid[-2::-1]]
+        return grid
 
 
 class MeasureTuneScan(_BaseMeasureSpinDepol):
@@ -234,64 +291,112 @@ class MeasureTuneScan(_BaseMeasureSpinDepol):
     def do_measurement(self):
         """."""
         self.data = {}
+
+        print('Starting acquisition thread.')
         acquisition_thread = _Thread(target=self._get_data_thread, daemon=True)
         acquisition_thread.start()
 
+        bbbh = self.devices['bbbh']
+        bbbv = self.devices['bbbv']
+        tune_mon = self.devices['tune']
+
+        gtunesx = self.params.tunex_grid
+        gtunesy = self.params.tuney_grid
+
+        # mechanism to compensate for magnet hysteresis. Not ideal, but
+        # should help to keep the tune close to the target value:
+        errx = erry = 0
+        for i, (gtx, gty) in enumerate(zip(gtunesx, gtunesy)):  # noqa: B905
+            freqx = gtx * bbbh.info.revolution_freq_nom
+            freqy = gty * bbbv.info.revolution_freq_nom
+
+            print(
+                f' {i + 1:03d}/{len(gtunesx):03d} -> '
+                + f'nux, nuy (freqx, freqy): {gtx:6.4f}, {gty:6.4f} '
+                + f'({freqx:6.1f} kHz, {freqy:6.1f} kHz)'
+            )
+            if self._stopevt.is_set():
+                print('Scan stopped by the user. Exiting.')
+                break
+
+            dtunex, dtuney = self._change_tune(gtx, gty, errx=errx, erry=erry)
+
+            _time.sleep(self.params.wait_time_change_tune)
+
+            # Calculate the error in this iteration to try to compensate in
+            # next iteration. This is needed to try to mitigate the effect
+            # of magnet hysteresis, which can cause the tune to deviate
+            # from the target value, specially when changing the tune in
+            # large steps.
+            errx = (gtx - tune_mon.tunex) / dtunex if dtunex != 0 else 0
+            erry = (gty - tune_mon.tuney) / dtuney if dtuney != 0 else 0
+            print(f'    error: {errx:.2f}, {erry:.2f}')
+            # limit the error correction factor to avoid overcompensation:
+            errx = min(max(errx, -0.2), 0.2)
+            erry = min(max(erry, -0.2), 0.2)
+
+        print('Scan finished! Waiting for acquisition thread to finish.')
+        self._stopevt.set()
+        acquisition_thread.join()
+        print('Done!')
+
+    def change_tune(self, tunex, tuney, errx=0.0, erry=0.0):
+        """Change the tune to the specified values.
+
+            An error compensation can be applied, if requested.
+
+        Args:
+            tunex (float): Target horizontal tune value.
+            tuney (float): Target vertical tune value.
+            errx (float, optional): Relative error compensation factor for
+                horizontal tune. Defaults to 0.0.
+            erry (float, optional): Relative error compensation factor for
+                vertical tune. Defaults to 0.0.
+
+        Returns:
+            tunex, tuney: A tuple containing the change in horizontal tune
+                variation (dtunex) and vertical tune variation (dtuney)
+                applied to achieve the target tune values.
+
+        """
+        bbbh = self.devices['bbbh']
+        bbbv = self.devices['bbbv']
+        tune_mon = self.devices['tune']
         tunecorr_dev = self.devices['tunecorr']
+
+        freqx = tunex * bbbh.info.revolution_freq_nom
+        freqy = tuney * bbbv.info.revolution_freq_nom
+
+        dtunex = tunex - tune_mon.tunex
+        dtuney = tuney - tune_mon.tuney
+        # compensate error from previous iteration:
+        dtunex *= 1 + errx
+        dtuney *= 1 + erry
+
+        tune_mon.center_frequencyx = freqx
+        tune_mon.center_frequencyy = freqy
+
+        bbbh.drive0.frequency = freqx
+        bbbv.drive0.frequency = freqy
+
+        bbbh.coeffs.edit_freq = tunex * bbbh.feedback.downsample
+        bbbv.coeffs.edit_freq = tuney * bbbv.feedback.downsample
+        bbbh.coeffs.cmd_edit_apply()
+        bbbv.coeffs.cmd_edit_apply()
+
         tunecorr_dev.cmd_update_reference()
-
-        dtunesx = _np.arange(
-            start=0,
-            stop=self.params.delta_tunex + self.params.tunex_step,
-            step=self.params.tunex_step,
-            dtype=float,
-        )
-
-        dtunesy = _np.arange(
-            start=0,
-            stop=self.params.delta_tuney + self.params.tuney_step,
-            step=self.params.tuney_step,
-            dtype=float,
-        )
-
-        try:
-            for i, (dtunex, dtuney) in enumerate(zip(dtunesx, dtunesy)):
-                print(
-                    f' {i + 1:03d}/{len(dtunesx):03d} -> '
-                    + f'dtunex, dtuney: {dtunex:.3f}, {dtuney:.3f}'
-                )
-                if self._stopevt.is_set():
-                    print('Scan stopped by the user. Exiting.')
-                    break
-
-                tunecorr_dev.delta_tunex = dtunex
-                tunecorr_dev.delta_tuney = dtuney
-                tunecorr_dev.cmd_apply_delta()
-                _time.sleep(self.params.wait_time_change_tune)
-        except Exception as e:
-            print(f'Error during tune scan: {e}')
-
-        print('Returning tune to initial value.')
-        dtunex = tunecorr_dev.delta_tunex
-        dtuney = tunecorr_dev.delta_tuney
-        dtune = max(dtunex, dtuney)
-        nriters = int(dtune / 0.03)
-        for i in range(1, nriters + 1):
-            print(f' Returning tune: iteration {i:03d}/{nriters:03d}')
-            frac = (nriters - i) / nriters
-            tunecorr_dev.delta_tunex = dtunex * frac
-            tunecorr_dev.delta_tuney = dtuney * frac
-            tunecorr_dev.cmd_apply_delta()
-            _time.sleep(1)
-        print('Tune scan completed.')
+        tunecorr_dev.delta_tunex = dtunex
+        tunecorr_dev.delta_tuney = dtuney
+        tunecorr_dev.cmd_apply_delta()
+        return dtunex, dtuney
 
     def _get_data_thread(self):
         """."""
         while not (self._stop_evet.is_set() or self._finished.is_set()):
             data = self.get_data()
-            for k, v in data.items():
-                if k not in self.data:
-                    self.data[k] = []
-                self.data[k].append(v)
+            self._update_data_dict(data)
             _time.sleep(self.params.wait_time_acq_data)
         print('Acquisition thread finished.')
+
+        for k, v in self.data.items():
+            self.data[k] = _np.array(v)
