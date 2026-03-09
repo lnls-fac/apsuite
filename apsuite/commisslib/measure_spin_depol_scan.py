@@ -5,9 +5,11 @@ from threading import Thread as _Thread
 
 import mathphys.constants as _const
 import numpy as _np
+import scipy.signal as _scysig
 from siriuspy.devices import (
     BunchbyBunch,
     CurrInfoSI,
+    DVFImgProc,
     FamBLMs,
     FamGammaMonitors,
     RFGen,
@@ -72,12 +74,14 @@ class _BaseMeasureSpinDepol(ThreadedMeasBaseClass):
         self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
         self.devices['bbbh'] = BunchbyBunch(BunchbyBunch.DEVICES.H)
         self.devices['currinfo'] = CurrInfoSI()
-        self.devices['rfgen'] = RFGen(props2init=['Frequency-Mon'])
+        self.devices['rfgen'] = RFGen(
+            props2init=['GeneralFreq-SP', 'GeneralFreq-RB']
+        )
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
         self.devices['tunecorr'] = TuneCorr(TuneCorr.DEVICES.SI)
         self.devices['gamma_monitors'] = FamGammaMonitors()
         self.devices['blms'] = FamBLMs()
-        # TODO: add also CAX beamsizes, etc
+        self.devices['cax'] = DVFImgProc(DVFImgProc.DEVICES.CAX_DVF2)
 
     def get_data(self):
         """."""
@@ -91,10 +95,26 @@ class _BaseMeasureSpinDepol(ThreadedMeasBaseClass):
         data['bbbv_freq_rb'] = bbbv.drive1.frequency
         data['bbbv_tune'] = bbbv.single_bunch.spec_marker1_tune
         data['bbbh_tune'] = bbbh.single_bunch.spec_marker1_tune
-        data['bbbv_sram_mag'] = bbbv.sram.spec_marker1_mag
-        data['bbbh_sram_mag'] = bbbh.sram.spec_marker1_mag
+
+        data['bbbv_sram_mk1_freq'] = bbbv.sram.spec_marker1_freq
+        data['bbbv_sram_mk1_mag'] = bbbv.sram.spec_marker1_mag
+        data['bbbv_sram_mk2_freq'] = bbbv.sram.spec_marker2_freq
+        data['bbbv_sram_mk2_mag'] = bbbv.sram.spec_marker2_mag
+        freqs, peaks = self._get_bbb_peaks('v')
+        data['bbbv_sram_peaks'] = peaks
+        data['bbbv_sram_peaksfreq'] = freqs
+
+        data['bbbh_sram_mk1_freq'] = bbbh.sram.spec_marker1_freq
+        data['bbbh_sram_mk1_mag'] = bbbh.sram.spec_marker1_mag
+        data['bbbh_sram_mk2_freq'] = bbbh.sram.spec_marker2_freq
+        data['bbbh_sram_mk2_mag'] = bbbh.sram.spec_marker2_mag
+        freqs, peaks = self._get_bbb_peaks('h')
+        data['bbbh_sram_peaks'] = peaks
+        data['bbbh_sram_peaksfreq'] = freqs
+
         data['bbbv_sram_tune'] = bbbv.sram.spec_marker1_tune
         data['bbbh_sram_tune'] = bbbh.sram.spec_marker1_tune
+
         data['rf_freq'] = self.devices['rfgen'].frequency
         data['tunex'] = self.devices['tune'].tunex
         data['tuney'] = self.devices['tune'].tuney
@@ -102,11 +122,24 @@ class _BaseMeasureSpinDepol(ThreadedMeasBaseClass):
         data['tunecorr_delta_tuney'] = self.devices['tunecorr'].delta_tuney
         data['gamma_counts'] = self.devices['gamma_monitors'].counts
         data['blm_counts'] = self.devices['blms'].counts
+        data['cax_sigma1'] = self.devices['cax'].fit_sigma1
+        data['cax_sigma2'] = self.devices['cax'].fit_sigma2
+        data['cax_angle'] = self.devices['cax'].fit_angle
+
         return data
 
     def do_measurement(self):
         """."""
         pass
+
+    def _get_bbb_peaks(self, plane):
+        bbb = self.devices['bbb' + plane]
+        mag = bbb.sram.spec_mag
+        freq = bbb.sram.spec_freq
+        idx = (freq > 5).nonzero()[0][0]
+        idcs, propts = _scysig.find_peaks(mag[idx:], height=-25.5)
+        idcs += idx
+        return freq[idcs], mag[idcs]
 
     def _update_data_dict(self, data_dict):
         """Update self.data with the values in the provided dictionary.
@@ -123,6 +156,8 @@ class _BaseMeasureSpinDepol(ThreadedMeasBaseClass):
 
 class MeasureSpinDepolScanParams(ParamsBaseClass):
     """."""
+    REV_FREQ_NOM = 578.3178240740742  # [kHz] from BbB system
+    SPIN_TUNE_INT = 6  # Integer part of the spin tune
 
     def __init__(self):
         """."""
@@ -154,7 +189,60 @@ class MeasureSpinDepolScanParams(ParamsBaseClass):
         stg += ftmp('freq_stop', self.freq_stop, '[kHz]')
         stg += ftmp('freq_step', self.freq_step, '[kHz]')
         stg += ftmp('excitation_time', self.excitation_time, '[s]')
+        stg += ftmp('tune_start', self.tune_start, '(calculated)')
+        stg += ftmp('tune_stop', self.tune_stop, '(calculated)')
+        stg += ftmp('tune_step', self.tune_step, '(calculated)')
+        stg += ftmp('energy_start', self.energy_start, '[GeV] (calculated)')
+        stg += ftmp('energy_stop', self.energy_stop, '[GeV] (calculated)')
+        stg += ftmp('energy_step', self.energy_step, '[GeV] (calculated)')
+
         return stg
+
+    @property
+    def freq_span(self):
+        """."""
+        return _np.arange(
+            start=self.freq_start,
+            stop=self.freq_stop + self.freq_step,
+            step=self.freq_step,
+            dtype=float
+        )
+
+    @property
+    def tune_start(self):
+        """."""
+        return self.freq_start / self.REV_FREQ_NOM
+
+    @property
+    def tune_stop(self):
+        """."""
+        return self.freq_stop / self.REV_FREQ_NOM
+
+    @property
+    def tune_step(self):
+        """."""
+        return self.freq_step / self.REV_FREQ_NOM
+
+    @property
+    def energy_start(self):
+        """."""
+        return _BaseMeasureSpinDepol.calc_energy_from_spin_tune(
+            self.SPIN_TUNE_INT + self.tune_start
+        )
+
+    @property
+    def energy_stop(self):
+        """."""
+        return _BaseMeasureSpinDepol.calc_energy_from_spin_tune(
+            self.SPIN_TUNE_INT + self.tune_stop
+        )
+
+    @property
+    def energy_step(self):
+        """."""
+        return _BaseMeasureSpinDepol.calc_energy_from_spin_tune(
+            self.tune_step
+        )
 
 
 class MeasureSpinDepolScan(_BaseMeasureSpinDepol):
@@ -172,12 +260,8 @@ class MeasureSpinDepolScan(_BaseMeasureSpinDepol):
 
         self.data = {}
 
-        start = self.params.freq_start
-        stop = self.params.freq_stop
-        step = self.params.freq_step
-        freq_span = _np.arange(
-            start=start, stop=stop + step, step=step, dtype=float
-        )
+        freq_span = self.params.freq_span
+
         harm_freq = self.params.freq_harmonic
         harm_freq *= bbbv.info.revolution_freq_nom / 1e3
 
@@ -307,8 +391,8 @@ class MeasureTuneScan(_BaseMeasureSpinDepol):
         # should help to keep the tune close to the target value:
         errx = erry = 0
         for i, (gtx, gty) in enumerate(zip(gtunesx, gtunesy)):  # noqa: B905
-            freqx = gtx * bbbh.info.revolution_freq_nom
-            freqy = gty * bbbv.info.revolution_freq_nom
+            freqx = gtx * bbbh.info.revolution_freq_nom / 1e3
+            freqy = gty * bbbv.info.revolution_freq_nom / 1e3
 
             print(
                 f' {i + 1:03d}/{len(gtunesx):03d} -> '
@@ -319,18 +403,23 @@ class MeasureTuneScan(_BaseMeasureSpinDepol):
                 print('Scan stopped by the user. Exiting.')
                 break
 
-            dtunex, dtuney = self._change_tune(gtx, gty, errx=errx, erry=erry)
+            dtunex, dtuney = self.change_tune(gtx, gty, errx=errx, erry=erry)
 
-            _time.sleep(self.params.wait_time_change_tune)
+            for _ in range(int(self.params.wait_time_change_tune)):
+                if self._stopevt.is_set():
+                    break
+                _time.sleep(1)
 
             # Calculate the error in this iteration to try to compensate in
             # next iteration. This is needed to try to mitigate the effect
             # of magnet hysteresis, which can cause the tune to deviate
             # from the target value, specially when changing the tune in
             # large steps.
-            errx = (gtx - tune_mon.tunex) / dtunex if dtunex != 0 else 0
-            erry = (gty - tune_mon.tuney) / dtuney if dtuney != 0 else 0
-            print(f'    error: {errx:.2f}, {erry:.2f}')
+            errxn = (gtx - tune_mon.tunex) / dtunex if dtunex != 0 else 0
+            erryn = (gty - tune_mon.tuney) / dtuney if dtuney != 0 else 0
+            print(f'    error: {errxn:.2f}, {erryn:.2f}')
+            errx += errxn * 0.5
+            erry += erryn * 0.5
             # limit the error correction factor to avoid overcompensation:
             errx = min(max(errx, -0.2), 0.2)
             erry = min(max(erry, -0.2), 0.2)
@@ -364,8 +453,8 @@ class MeasureTuneScan(_BaseMeasureSpinDepol):
         tune_mon = self.devices['tune']
         tunecorr_dev = self.devices['tunecorr']
 
-        freqx = tunex * bbbh.info.revolution_freq_nom
-        freqy = tuney * bbbv.info.revolution_freq_nom
+        freqx = tunex * bbbh.info.revolution_freq_nom / 1e3
+        freqy = tuney * bbbv.info.revolution_freq_nom / 1e3
 
         dtunex = tunex - tune_mon.tunex
         dtuney = tuney - tune_mon.tuney
@@ -392,7 +481,7 @@ class MeasureTuneScan(_BaseMeasureSpinDepol):
 
     def _get_data_thread(self):
         """."""
-        while not (self._stop_evet.is_set() or self._finished.is_set()):
+        while not (self._stopevt.is_set() or self._finished.is_set()):
             data = self.get_data()
             self._update_data_dict(data)
             _time.sleep(self.params.wait_time_acq_data)
