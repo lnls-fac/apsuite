@@ -219,10 +219,10 @@ class LeastSquaresOptimize(Optimize):
                 pos = pos_trial
                 res = res_trial
                 chi2 = chi2_trial
-                damping /= damping_factor
+                damping /= damping_factor if damping_factor else 1
                 print_(f'\tchi²: {chi2:.6g} (accepted)')
             else:
-                damping *= damping_factor
+                damping *= damping_factor if damping_factor else 1
                 print_('\tchi² increased. Step rejected.')
 
             if damping > damping_max:
