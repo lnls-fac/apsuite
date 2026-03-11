@@ -60,12 +60,15 @@ class InjCharacterizationParams(ParamsBaseClass):
 
     def __init__(
         self,
+        meas_type='acquire',
         knobs_pvnames=KNOBS_PVNAMES,
         observables_pvnames=OBSERVABLES_PVNAMES,
         knobs_nudges=KNOBS_NUDGES,
         smoke_test=True,
     ):
+        """."""
         super().__init__()
+        self.meas_type = meas_type
         self.bo_screen = Screen.DEVICES.BO_1  # TODO: screen enum
         # self.bo_screen = Screen.DEVICES.BO_2
         # self.bo_screen = Screen.DEVICES.BO_3
@@ -107,11 +110,11 @@ class InjCharacterizationMeas(ThreadedMeasBaseClass):
         val = self.params.knobs_nudges[knob_pvname]
         return val
 
-    def set_delta_knob_and_get_data(self, knob_pvname, positive=True):
+    def set_delta_knob_and_get_data(self, knob_pvname, tag):
         """."""
         delta = self.get_delta_knob(knob_pvname)
 
-        if not positive:
+        if tag.tolower() != 'pos':
             delta = -delta
 
         pv = self.pvs[knob_pvname]
@@ -120,7 +123,7 @@ class InjCharacterizationMeas(ThreadedMeasBaseClass):
         if not self.params.smoke_test:
             pv.value = val0 + delta
             time.sleep(1)
-        self.inject_and_get_data(knob_pvname, positive=positive)
+        self.inject_and_get_data(knob_pvname, tag=tag)
         if not self.params.smoke_test:
             pv.value = val0
         time.sleep(3)
@@ -148,7 +151,7 @@ class InjCharacterizationMeas(ThreadedMeasBaseClass):
         data['t'], data['w'] = scope.wfm_get_data()
         return data
 
-    def inject_and_get_data(self, knob_pvname=None, positive=True):
+    def inject_and_get_data(self, knob_pvname=None, tag='baseline'):
         """."""
         if not self.params.smoke_test:
             print('Turning on injection...')
@@ -157,53 +160,58 @@ class InjCharacterizationMeas(ThreadedMeasBaseClass):
             print('Smoke test: skipping injection.')
         data = self.data
         dt = data.setdefault(knob_pvname, {})
-
-        key = 'pos' if positive else 'neg'
-
-        dt[key] = {
-            'timestamp': time.time(),
-            'bo_screen': self.get_screen_data(),
-            'tb_ict2_scope': self.get_scope_data(),
-        }
-        for pvname in self.params.pvnames:
-            dt[key][pvname] = self.pvs[pvname].value
-
-    def measure_baseline(self, knob_pvname, tag='baseline'):
-        """."""
-        if not self.params.smoke_test:
-            print('Turning on injection...')
-            self.devices['evg'].cmd_turn_on_injection()
-        else:
-            print('Smoke test: skipping injection.')
-
-        data = self.data
-        dt = data.setdefault(knob_pvname, {})
+        # key = 'pos' if positive else 'neg'
 
         dt[tag] = {
             'timestamp': time.time(),
             'bo_screen': self.get_screen_data(),
             'tb_ict2_scope': self.get_scope_data(),
         }
-
         for pvname in self.params.pvnames:
             dt[tag][pvname] = self.pvs[pvname].value
 
     def do_measurement(self):
         """."""
+        if self.params.meas_type == 'nudge':
+            self.do_measurement_nudges()
+        else:
+            self.do_measurement_acquire()
+
+    def do_measurement_nudges(self):
+        """."""
         for knob_pvname in self.params.knobs_pvnames:
             print(f'Measuring {knob_pvname}')
-            self.measure_baseline(knob_pvname, tag='baseline')
+            self.inject_and_get_data(knob_pvname=knob_pvname, tag='baseline')
             if self._stopevt.is_set():
                 print('Measurement stopped!')
                 break
-            self.set_delta_knob_and_get_data(knob_pvname, positive=True)
+            self.set_delta_knob_and_get_data(knob_pvname, tag='pos')
             if self._stopevt.is_set():
                 print('Measurement stopped!')
                 break
-            self.set_delta_knob_and_get_data(knob_pvname, positive=False)
+            self.set_delta_knob_and_get_data(knob_pvname, tag='neg')
             if self._stopevt.is_set():
                 print('Measurement stopped!')
                 break
             print(f'Finished {knob_pvname}.\n')
             print('#####################################################')
             print('\n')
+
+    def do_measurement_acquire(self, dtime):
+        """."""
+        if not self.params.smoke_test:
+            print('Turning on injection...')
+            self.devices['evg'].cmd_turn_on_injection()
+        else:
+            print('Smoke test: skipping injection.')
+        dt = list()
+        while not self._stopevt.is_set():
+            dic = dict()
+            dic['timestamp'] = time.time()
+            dic['bo_screen'] = self.get_screen_data()
+            dic['tb_ict2_scope'] = self.get_scope_data()
+            for pvname in self.params.pvnames:
+                dic[pvname] = self.pvs[pvname].value
+            dt.append(dic)
+            time.sleep(dtime)
+        return dt
