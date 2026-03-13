@@ -9,209 +9,236 @@ transition.
 
 """
 
-import time
+import time as _time
 
-from siriuspy.devices import EVG, Screen
-from siriuspy.epics import PV
-from siriuspy.oscilloscope import Keysight, ScopeSignals
+from mathphys.functions import get_namedtuple as _get_namedtuple
+from siriuspy.devices import (
+    CurrInfoAS,
+    EGBias,
+    EVG,
+    InjCtrl,
+    LILLRF,
+    PosAng,
+    PowerSupply,
+    PowerSupplyPU,
+    RFGen,
+    Screen,
+    Trigger
+)
+from siriuspy.epics import PV as _PV
 
 from apsuite.utils import ParamsBaseClass, ThreadedMeasBaseClass
 
-KNOBS_PVNAMES = [
-    'BO-01D:PU-InjKckr:Voltage-SP',
-    'TB-04:PU-InjSept:Voltage-SP',
-    'TB-04:PS-CH-1:Current-SP',
-    'TB-04:PS-CV-1:Current-SP',
-    'TB-04:PS-CV-2:Current-SP',
-    'AS-Glob:AP-InjCtrl:MultBunBiasVolt-SP',
-    # 'LA-RF:LLRF:BUN1:SET_AMP',  # SHB Amp
-    # 'LA-RF:LLRF:KLY1:SET_AMP',  # Kly1 Amp
-    'LA-RF:LLRF:KLY2:SET_AMP',  # KLY2 Amp
-    # 'LA-RF:LLRF:KLY1:SET_PHASE',  # Kly1 Phase
-    # 'LA-RF:LLRF:BUN1:SET_PHASE',  # SHB Amp
-    # 'LA-RF:LLRF:KLY2:SET_PHASE',  # KLY2 Phase
-]
 
-OBSERVABLES_PVNAMES = [
-    'TB-04:VA-PT100-ED1:Temp-Mon',  # Temp. Câmaras de vácuo do Septa da TB
-    'TB-04:VA-PT100-ED2:Temp-Mon',  # Temp. Câmaras de vácuo do Septa da TB
-    'TB-04:PU-InjSept-BG:Temp-Mon',  # Temp. do corpo do Septa
-    'TB-04:PU-InjSept-ED:Temp-Mon',  # Temp. do corpo do Septa
-]
-
-KNOBS_NUDGES = {
-    'BO-01D:PU-InjKckr:Voltage-SP': 0.5,  # [V]
-    'TB-04:PU-InjSept:Voltage-SP': 0.5,  # [V]
-    'TB-04:PS-CH-1:Current-SP': 0.25,  # [A]
-    'TB-04:PS-CV-1:Current-SP': 0.25,  # [A]
-    'TB-04:PS-CV-2:Current-SP': 0.25,  # [A]
-    'AS-Glob:AP-InjCtrl:MultBunBiasVolt-SP': 1,  # [V]
-    # 'LA-RF:LLRF:BUN1:SET_AMP': 0.5,  # [%]
-    # 'LA-RF:LLRF:KLY1:SET_AMP': 1,  # [%]
-    'LA-RF:LLRF:KLY2:SET_AMP': 0.5,  # [%]
-    # 'LA-RF:LLRF:BUN1:SET_PHASE': 1,  # [deg]
-    # 'LA-RF:LLRF:KLY1:SET_PHASE': 1,  # [deg]
-    # 'LA-RF:LLRF:KLY2:SET_PHASE': 1,  # [deg]s
-}
-
-
-class InjCharacterizationParams(ParamsBaseClass):
+class SeptCharacterizationParams(ParamsBaseClass):
     """."""
 
-    def __init__(
-        self,
-        meas_type='acquire',
-        knobs_pvnames=KNOBS_PVNAMES,
-        observables_pvnames=OBSERVABLES_PVNAMES,
-        knobs_nudges=KNOBS_NUDGES,
-        smoke_test=True,
-    ):
+    AcqType = _get_namedtuple('AcqType', ['Asynchronous', 'Synchronous'])
+    ScreenOptions = _get_namedtuple('ScreenOptions', ['BO_1', 'BO_2', 'BO_3'])
+
+    def __init__(self):
         """."""
         super().__init__()
-        self.meas_type = meas_type
-        self.bo_screen = Screen.DEVICES.BO_1  # TODO: screen enum
-        # self.bo_screen = Screen.DEVICES.BO_2
-        # self.bo_screen = Screen.DEVICES.BO_3
-        self.knobs_pvnames = knobs_pvnames
-        self.observables_pvnames = observables_pvnames
-        self.knobs_nudges = knobs_nudges
-        self.pvnames = self.knobs_pvnames + self.observables_pvnames
-        self.smoke_test = smoke_test
+        self._acq_type = self.AcqType.Asynchronous
+        self._which_screen = self.ScreenOptions.BO_1
+        self.acq_interval = 1.0
+
+    @property
+    def acq_type_str(self):
+        """."""
+        return self.AcqType._fields[self._acq_type]
+
+    @property
+    def acq_type(self):
+        """."""
+        return self._acq_type
+
+    @acq_type.setter
+    def acq_type(self, value):
+        """."""
+        if isinstance(value, str):
+            value = self.AcqType._fields.index(value)
+        else:
+            value = int(value)
+        self._acq_type = value
+
+    @property
+    def which_screen_str(self):
+        """."""
+        return self.ScreenOptions._fields[self._which_screen]
+
+    @property
+    def which_screen(self):
+        """."""
+        return self._which_screen
+
+    @which_screen.setter
+    def which_screen(self, value):
+        """."""
+        if isinstance(value, str):
+            value = self.ScreenOptions._fields.index(value)
+        else:
+            value = int(value)
+        self._which_screen = value
+
+    def __str__(self):
+        """."""
+        stg = super().__str__()
+        stg += f'\nacq_type: {self.acq_type} ({self.acq_type_str})'
+        stg += f'\nwhich_screen: {self.which_screen} ({self.which_screen_str})'
+        stg += f'\nacq_interval: {self.acq_interval} [s] (used with sync acq.)'
+        return stg
 
 
-class InjCharacterizationMeas(ThreadedMeasBaseClass):
+class SeptCharacterization(ThreadedMeasBaseClass):
     """."""
 
-    def __init__(self, params=None, isonline=True):
+    def __init__(self, isonline=True):
         """."""
         super().__init__(
-            params=params or InjCharacterizationParams(),
+            params=self._PARAMS_CLASS(),
             target=self.do_measurement,
             isonline=isonline,
         )
-        self.scopes = dict()  # scopes not in devices
-        # because they fail the "connected" and related checks
         if self.isonline:
             self.create_devices()
 
     def create_devices(self):
         """."""
-        self.devices['evg'] = EVG()
-        self.devices['bo_screen'] = Screen(self.params.bo_screen)
-        self.scopes['tb_ict2_scope'] = Keysight(
-            scopesignal=ScopeSignals.TB_ICT2
+        self.devices['scrn_bo_1'] = Screen(Screen.DEVICES.BO_1)
+        self.devices['scrn_bo_2'] = Screen(Screen.DEVICES.BO_2)
+        self.devices['scrn_bo_3'] = Screen(Screen.DEVICES.BO_3)
+
+        self.devices['currinfo'] = CurrInfoAS()
+
+        self.devices['rfgen'] = RFGen(
+            props2init=['GeneralFreq-SP', 'GeneralFreq-RB']
         )
+        self.devices['evg'] = EVG()
+        self.devices['injctrl'] = InjCtrl()
+        self.devices['egun_bias'] = EGBias()
 
-        for pvname in self.params.pvnames:
-            self.pvs[pvname] = PV(pvname)
+        self.devices['li_llrf'] = LILLRF()
 
-    def get_delta_knob(self, knob_pvname):
+        self.devices['trig_sept'] = Trigger('TB-04:TI-InjSept')
+        self.devices['trig_scrn'] = Trigger('AS-Fam:TI-Scrn-TBBO')
+
+        self.devices['posang'] = PosAng(PosAng.DEVICES.TB)
+
+        self.devices['pwrsply_kckr'] = PowerSupplyPU('BO-01D:PU-InjKckr')
+        self.devices['pwrsply_sept'] = PowerSupplyPU('TB-04:PU-InjSept')
+        self.devices['pwrsply_tb_ch1'] = PowerSupply('TB-04:PS-CH-1')
+        self.devices['pwrsply_tb_ch2'] = PowerSupply('TB-04:PS-CH-2')
+        self.devices['pwrsply_tb_cv1'] = PowerSupply('TB-04:PS-CV-1')
+        self.devices['pwrsply_tb_cv2'] = PowerSupply('TB-04:PS-CV-2')
+
+        self.pvs['temp_tb_cham_1'] = _PV('TB-04:VA-PT100-ED1:Temp-Mon')
+        self.pvs['temp_tb_cham_2'] = _PV('TB-04:VA-PT100-ED2:Temp-Mon')
+        self.pvs['temp_tb_sept_bg'] = _PV('TB-04:PU-InjSept-BG:Temp-Mon')
+        self.pvs['temp_tb_sept_ed'] = _PV('TB-04:PU-InjSept-ED:Temp-Mon')
+
+    def get_data(self):
         """."""
-        val = self.params.knobs_nudges[knob_pvname]
-        return val
+        data = {}
+        data['timestamp'] = _time.time()
 
-    def set_delta_knob_and_get_data(self, knob_pvname, tag):
-        """."""
-        delta = self.get_delta_knob(knob_pvname)
+        scrn = self.devices[f'scrn_{self.params.which_screen_str.lower()}']
+        data['scrn_enabled'] = scrn.enabled
+        data['scrn_position'] = scrn.screen_position
+        data['scrn_gain'] = scrn.gain
+        data['scrn_exposure_time'] = scrn.exposure_time
+        data['scrn_image_raw'] = scrn.image
+        data['scrn_centerx'] = scrn.centerx
+        data['scrn_centery'] = scrn.centery
+        data['scrn_sigmax'] = scrn.sigmax
+        data['scrn_sigmay'] = scrn.sigmay
+        data['scrn_theta'] = scrn.angle
+        data['scrn_scalex'] = scrn.scale_factor_x
+        data['scrn_scaley'] = scrn.scale_factor_y
 
-        if tag.tolower() != 'pos':
-            delta = -delta
+        currinfo = self.devices['currinfo']
+        data['currinfo_li_charge1'] = currinfo.li.charge_ict1
+        data['currinfo_li_charge2'] = currinfo.li.charge_ict2
+        data['currinfo_tb_charge1'] = currinfo.tb.charge_ict1
+        data['currinfo_tb_charge2'] = currinfo.tb.charge_ict2
 
-        pv = self.pvs[knob_pvname]
-        val0 = pv.value
-        print(f'Setting {knob_pvname} from {val0} to {val0 + delta}.')
-        if not self.params.smoke_test:
-            pv.value = val0 + delta
-            time.sleep(1)
-        self.inject_and_get_data(knob_pvname, tag=tag)
-        if not self.params.smoke_test:
-            pv.value = val0
-        time.sleep(3)
-        print(f'Restored {knob_pvname} to {val0}.\n')
+        data['rf_freq'] = self.devices['rfgen'].frequency
+        data['evg_injcount'] = self.devices['evg'].injection_count
+        data['injctrl_injmode_str'] = self.devices['injctrl'].injmode_str
+        data['egun_bias_voltage'] = self.devices['egun_bias'].voltage
 
-    def get_screen_data(self):
-        """."""
-        screen = self.devices['bo_screen']
-        data = dict()
-        data['devname'] = screen.devname
-        data['image_raw'] = screen.image
-        data['centerx'] = screen.centerx
-        data['centery'] = screen.centery
-        data['sigmax'] = screen.sigmax
-        data['sigmay'] = screen.sigmay
-        data['theta'] = screen.angle
-        data['scalex'] = screen.scale_factor_x
-        data['scaley'] = screen.scale_factor_y
+        lillrf = self.devices['li_llrf']
+        data['lillrf_shb_phase'] = lillrf.dev_shb.phase
+        data['lillrf_shb_amplitude'] = lillrf.dev_shb.amplitude
+        data['lillrf_kly1_phase'] = lillrf.dev_klystron1.phase
+        data['lillrf_kly1_amplitude'] = lillrf.dev_klystron1.amplitude
+        data['lillrf_kly2_phase'] = lillrf.dev_klystron2.phase
+        data['lillrf_kly2_amplitude'] = lillrf.dev_klystron2.amplitude
+
+        data['trig_sept_state'] = self.devices['trig_sept'].state
+        data['trig_sept_delay_raw'] = self.devices['trig_sept'].delay_raw
+        data['trig_sept_source_str'] = self.devices['trig_sept'].source_str
+        data['trig_kckr_state'] = self.devices['trig_kckr'].state
+        data['trig_kckr_delay_raw'] = self.devices['trig_kckr'].delay_raw
+        data['trig_kckr_source_str'] = self.devices['trig_kckr'].source_str
+
+        data['posang_delta_posx'] = self.devices['posang'].delta_posx
+        data['posang_delta_angx'] = self.devices['posang'].delta_angx
+        data['posang_delta_posy'] = self.devices['posang'].delta_posy
+        data['posang_delta_angy'] = self.devices['posang'].delta_angy
+
+        data['pwrsply_kckr_voltage'] = self.devices['pwrsply_kckr'].voltage
+        data['pwrsply_kckr_pwrstate'] = self.devices['pwrsply_kckr'].pwrstate
+        data['pwrsply_kckr_pulsestate'] = self.devices['pwrsply_kckr'].pulse
+        data['pwrsply_sept_voltage'] = self.devices['pwrsply_sept'].voltage
+        data['pwrsply_sept_pwrstate'] = self.devices['pwrsply_sept'].pwrstate
+        data['pwrsply_sept_pulsestate'] = self.devices['pwrsply_sept'].pulse
+
+        data['pwrsply_tb_ch1_current'] = self.devices['pwrsply_tb_ch1'].current
+        data['pwrsply_tb_ch2_current'] = self.devices['pwrsply_tb_ch2'].current
+        data['pwrsply_tb_cv1_current'] = self.devices['pwrsply_tb_cv1'].current
+        data['pwrsply_tb_cv2_current'] = self.devices['pwrsply_tb_cv2'].current
+
+        data['temp_tb_cham_1'] = self.pvs['temp_tb_cham_1'].value
+        data['temp_tb_cham_2'] = self.pvs['temp_tb_cham_2'].value
+        data['temp_tb_sept_bg'] = self.pvs['temp_tb_sept_bg'].value
+        data['temp_tb_sept_ed'] = self.pvs['temp_tb_sept_ed'].value
         return data
-
-    def get_scope_data(self):
-        """."""
-        scope = self.scopes['tb_ict2_scope']
-        data = dict()
-        data['t'], data['w'] = scope.wfm_get_data()
-        return data
-
-    def inject_and_get_data(self, knob_pvname=None, tag='baseline'):
-        """."""
-        if not self.params.smoke_test:
-            print('Turning on injection...')
-            self.devices['evg'].cmd_turn_on_injection()
-        else:
-            print('Smoke test: skipping injection.')
-        data = self.data
-        dt = data.setdefault(knob_pvname, {})
-        # key = 'pos' if positive else 'neg'
-
-        dt[tag] = {
-            'timestamp': time.time(),
-            'bo_screen': self.get_screen_data(),
-            'tb_ict2_scope': self.get_scope_data(),
-        }
-        for pvname in self.params.pvnames:
-            dt[tag][pvname] = self.pvs[pvname].value
 
     def do_measurement(self):
         """."""
-        if self.params.meas_type == 'nudge':
-            self.do_measurement_nudges()
-        else:
-            self.do_measurement_acquire()
+        scrn = self.devices[f'scrn_{self.params.which_screen_str.lower()}']
+        if not scrn.enabled:
+            raise RuntimeError(
+                'Selected screen is not enabled. '
+                + 'Please enable it or select another one.'
+            )
+        elif scrn.screen_position != scrn.ScrnPosition.Fluorescent:
+            raise RuntimeError(
+                'Selected screen is not in the fluorescent position. '
+                + 'Please move it to the correct position.'
+            )
 
-    def do_measurement_nudges(self):
-        """."""
-        for knob_pvname in self.params.knobs_pvnames:
-            print(f'Measuring {knob_pvname}')
-            self.inject_and_get_data(knob_pvname=knob_pvname, tag='baseline')
-            if self._stopevt.is_set():
-                print('Measurement stopped!')
-                break
-            self.set_delta_knob_and_get_data(knob_pvname, tag='pos')
-            if self._stopevt.is_set():
-                print('Measurement stopped!')
-                break
-            self.set_delta_knob_and_get_data(knob_pvname, tag='neg')
-            if self._stopevt.is_set():
-                print('Measurement stopped!')
-                break
-            print(f'Finished {knob_pvname}.\n')
-            print('#####################################################')
-            print('\n')
-
-    def do_measurement_acquire(self, dtime):
-        """."""
-        if not self.params.smoke_test:
-            print('Turning on injection...')
-            self.devices['evg'].cmd_turn_on_injection()
+        self.data = {}
+        if self.params.acq_type == self.params.AcqType.Asynchronous:
+            scrn.pv_object('ImgData-Mon').add_callback(self._get_data_cb)
         else:
-            print('Smoke test: skipping injection.')
-        dt = list()
-        while not self._stopevt.is_set():
-            dic = dict()
-            dic['timestamp'] = time.time()
-            dic['bo_screen'] = self.get_screen_data()
-            dic['tb_ict2_scope'] = self.get_scope_data()
-            for pvname in self.params.pvnames:
-                dic[pvname] = self.pvs[pvname].value
-            dt.append(dic)
-            time.sleep(dtime)
-        return dt
+            while not self._stopevt.is_set():
+                self._update_data_dict(self.get_data())
+
+    def _get_data_cb(self, **kwargs):
+        """."""
+        _ = kwargs  # not used
+        self._update_data_dict(self.get_data())
+
+    def _update_data_dict(self, data_dict):
+        """Update self.data with the values in the provided dictionary.
+
+        Args:
+            data_dict (dict): Dictionary containing parameter names and their
+                corresponding values.
+        """
+        for k, v in data_dict.items():
+            if k not in self.data:
+                self.data[k] = []
+            self.data[k].append(v)
