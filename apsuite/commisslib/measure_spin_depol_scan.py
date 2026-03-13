@@ -25,6 +25,7 @@ class _BaseMeasureSpinDepol(ThreadedMeasBaseClass):
 
     _PARAMS_CLASS = ParamsBaseClass
 
+    # TODO: move this const to mathphy repo
     ELECTRON_A = 1.15965218059e-3  # anomalous magnetic moment of the electron
     ELECTRON_E = _const.electron_rest_energy / _const.elementary_charge  # [eV]
 
