@@ -88,7 +88,7 @@ class LeastSquaresOptimize(Optimize):
     def calc_chi2_tikhonov(self, residual, vtmat, tikhonov, delta_pos):
         """."""
         chi2 = self.calc_chi2(residual)
-        chi2 += _np.linalg.norm(vtmat @ (tikhonov * delta_pos))**2
+        chi2 += _np.linalg.norm(vtmat @ (tikhonov * delta_pos)) ** 2
         return chi2
 
     def calc_residual(self, pos, merit_figure_goal=None):
@@ -162,9 +162,23 @@ class LeastSquaresOptimize(Optimize):
 
         if tikhonov.ndim == 0:
             tikhonov = _np.full(S.size, tikhonov)
+
         elif tikhonov.ndim == 1:
-            if tikhonov.size != S.size:
-                raise ValueError('tikhonov_reg_constants size mismatch')
+            if tikhonov.size > S.size:
+                print_(
+                    'Warning: more than necessary tikhonov_reg_constants ' +
+                    'were specified. Clipping the null-space associated ' +
+                    'coefficients.'
+                )
+            elif tikhonov.size < S.size:
+                print_(
+                    'Warning: less than necessary tikhonov_reg_constants ' +
+                    'were specified. Padding zeros to  the last singular ' +
+                    'modes. They will will be unconstrained.'
+                )
+            tikhonov = _np.zeros(S.size)[: min(S.size, tikhonov.size)] = (
+                tikhonov[: S.size]
+            )
 
         for it in range(niter):
             print_(f'iteration {it:03d}')
@@ -192,7 +206,7 @@ class LeastSquaresOptimize(Optimize):
             S_inv = S / den
             S_inv[mask] = 0
 
-            delta = (Vt.T  @ (S_inv * (U.T @ res)))
+            delta = Vt.T @ (S_inv * (U.T @ res))
 
             if _np.any(_np.isnan(delta)):
                 print_('\tInvalid step direction. Aborting.')
