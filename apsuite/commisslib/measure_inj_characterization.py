@@ -22,10 +22,11 @@ from siriuspy.devices import (
     PowerSupply,
     PowerSupplyPU,
     RFGen,
+    SOFB,
     Screen,
     Trigger
 )
-from siriuspy.epics import PV as _PV
+from siriuspy.epics import PV as _PV, CAThread as _Thread
 
 from apsuite.utils import ParamsBaseClass, ThreadedMeasBaseClass
 
@@ -34,7 +35,10 @@ class SeptCharacterizationParams(ParamsBaseClass):
     """."""
 
     AcqType = _get_namedtuple('AcqType', ['Asynchronous', 'Synchronous'])
-    ScreenOptions = _get_namedtuple('ScreenOptions', ['BO_1', 'BO_2', 'BO_3'])
+    ScreenOptions = _get_namedtuple(
+        'ScreenOptions',
+        ['TB_4', 'TB_5', 'TB_6', 'BO_1', 'BO_2', 'BO_3', 'none'],
+    )
 
     def __init__(self):
         """."""
@@ -42,6 +46,7 @@ class SeptCharacterizationParams(ParamsBaseClass):
         self._acq_type = self.AcqType.Asynchronous
         self._which_screen = self.ScreenOptions.BO_1
         self.acq_interval = 1.0
+        self.asyn_wait_after_screen = 0.1
 
     @property
     def acq_type_str(self):
@@ -83,10 +88,11 @@ class SeptCharacterizationParams(ParamsBaseClass):
 
     def __str__(self):
         """."""
-        stg = super().__str__()
+        stg = ''
         stg += f'\nacq_type: {self.acq_type} ({self.acq_type_str})'
         stg += f'\nwhich_screen: {self.which_screen} ({self.which_screen_str})'
         stg += f'\nacq_interval: {self.acq_interval} [s] (used with sync acq.)'
+        stg += f'\nasyn_wait_after_screen: {self.asyn_wait_after_screen} [s]'
         return stg
 
 
@@ -96,15 +102,20 @@ class SeptCharacterization(ThreadedMeasBaseClass):
     def __init__(self, isonline=True):
         """."""
         super().__init__(
-            params=self._PARAMS_CLASS(),
+            params=SeptCharacterizationParams(),
             target=self.do_measurement,
             isonline=isonline,
         )
         if self.isonline:
             self.create_devices()
 
+        self._thread_cb = None
+
     def create_devices(self):
         """."""
+        self.devices['scrn_tb_4'] = Screen(Screen.DEVICES.TB_4)
+        self.devices['scrn_tb_5'] = Screen(Screen.DEVICES.TB_5)
+        self.devices['scrn_tb_6'] = Screen(Screen.DEVICES.TB_6)
         self.devices['scrn_bo_1'] = Screen(Screen.DEVICES.BO_1)
         self.devices['scrn_bo_2'] = Screen(Screen.DEVICES.BO_2)
         self.devices['scrn_bo_3'] = Screen(Screen.DEVICES.BO_3)
@@ -120,8 +131,14 @@ class SeptCharacterization(ThreadedMeasBaseClass):
 
         self.devices['li_llrf'] = LILLRF()
 
+        self.devices['sofb_tb'] = SOFB(SOFB.DEVICES.TB)
+        self.devices['sofb_bo'] = SOFB(SOFB.DEVICES.BO)
+
+        self.devices['trig_kckr'] = Trigger('BO-01D:TI-InjKckr')
         self.devices['trig_sept'] = Trigger('TB-04:TI-InjSept')
         self.devices['trig_scrn'] = Trigger('AS-Fam:TI-Scrn-TBBO')
+        self.devices['trig_sofb_tb'] = Trigger('TB-Fam:TI-BPM')
+        self.devices['trig_sofb_bo'] = Trigger('BO-Fam:TI-BPM')
 
         self.devices['posang'] = PosAng(PosAng.DEVICES.TB)
 
@@ -142,19 +159,28 @@ class SeptCharacterization(ThreadedMeasBaseClass):
         data = {}
         data['timestamp'] = _time.time()
 
-        scrn = self.devices[f'scrn_{self.params.which_screen_str.lower()}']
-        data['scrn_enabled'] = scrn.enabled
-        data['scrn_position'] = scrn.screen_position
-        data['scrn_gain'] = scrn.gain
-        data['scrn_exposure_time'] = scrn.exposure_time
-        data['scrn_image_raw'] = scrn.image
-        data['scrn_centerx'] = scrn.centerx
-        data['scrn_centery'] = scrn.centery
-        data['scrn_sigmax'] = scrn.sigmax
-        data['scrn_sigmay'] = scrn.sigmay
-        data['scrn_theta'] = scrn.angle
-        data['scrn_scalex'] = scrn.scale_factor_x
-        data['scrn_scaley'] = scrn.scale_factor_y
+        if self.params.which_screen == self.params.ScreenOptions.none:
+            data['sofb_bo_trajx'] = self.devices['sofb_bo'].mt_trajx
+            data['sofb_bo_trajy'] = self.devices['sofb_bo'].mt_trajy
+            data['sofb_bo_sum'] = self.devices['sofb_bo'].mt_sum
+        else:
+            scrn = self.devices[f'scrn_{self.params.which_screen_str.lower()}']
+            data['scrn_enabled'] = scrn.enabled
+            data['scrn_position'] = scrn.screen_position
+            data['scrn_gain'] = scrn.gain
+            data['scrn_exposure_time'] = scrn.exposure_time
+            data['scrn_image_raw'] = scrn.image
+            data['scrn_centerx'] = scrn.centerx
+            data['scrn_centery'] = scrn.centery
+            data['scrn_sigmax'] = scrn.sigmax
+            data['scrn_sigmay'] = scrn.sigmay
+            data['scrn_theta'] = scrn.angle
+            data['scrn_scalex'] = scrn.scale_factor_x
+            data['scrn_scaley'] = scrn.scale_factor_y
+
+        data['sofb_tb_trajx'] = self.devices['sofb_tb'].sp_trajx
+        data['sofb_tb_trajy'] = self.devices['sofb_tb'].sp_trajy
+        data['sofb_tb_sum'] = self.devices['sofb_tb'].sp_sum
 
         currinfo = self.devices['currinfo']
         data['currinfo_li_charge1'] = currinfo.li.charge_ict1
@@ -175,12 +201,21 @@ class SeptCharacterization(ThreadedMeasBaseClass):
         data['lillrf_kly2_phase'] = lillrf.dev_klystron2.phase
         data['lillrf_kly2_amplitude'] = lillrf.dev_klystron2.amplitude
 
-        data['trig_sept_state'] = self.devices['trig_sept'].state
-        data['trig_sept_delay_raw'] = self.devices['trig_sept'].delay_raw
-        data['trig_sept_source_str'] = self.devices['trig_sept'].source_str
         data['trig_kckr_state'] = self.devices['trig_kckr'].state
         data['trig_kckr_delay_raw'] = self.devices['trig_kckr'].delay_raw
         data['trig_kckr_source_str'] = self.devices['trig_kckr'].source_str
+        data['trig_sept_state'] = self.devices['trig_sept'].state
+        data['trig_sept_delay_raw'] = self.devices['trig_sept'].delay_raw
+        data['trig_sept_source_str'] = self.devices['trig_sept'].source_str
+        data['trig_scrn_state'] = self.devices['trig_scrn'].state
+        data['trig_scrn_delay_raw'] = self.devices['trig_scrn'].delay_raw
+        data['trig_scrn_source_str'] = self.devices['trig_scrn'].source_str
+        data['trig_sofb_tb_state'] = self.devices['trig_sofb_tb'].state
+        data['trig_sofb_tb_delay_raw'] = self.devices['trig_sofb_tb'].delay_raw
+        data['trig_sofb_tb_source_str'] = self.devices['trig_sofb_tb'].source_str
+        data['trig_sofb_bo_state'] = self.devices['trig_sofb_bo'].state
+        data['trig_sofb_bo_delay_raw'] = self.devices['trig_sofb_bo'].delay_raw
+        data['trig_sofb_bo_source_str'] = self.devices['trig_sofb_bo'].source_str
 
         data['posang_delta_posx'] = self.devices['posang'].delta_posx
         data['posang_delta_angx'] = self.devices['posang'].delta_angx
@@ -207,28 +242,54 @@ class SeptCharacterization(ThreadedMeasBaseClass):
 
     def do_measurement(self):
         """."""
-        scrn = self.devices[f'scrn_{self.params.which_screen_str.lower()}']
-        if not scrn.enabled:
-            raise RuntimeError(
-                'Selected screen is not enabled. '
-                + 'Please enable it or select another one.'
-            )
-        elif scrn.screen_position != scrn.ScrnPosition.Fluorescent:
-            raise RuntimeError(
-                'Selected screen is not in the fluorescent position. '
-                + 'Please move it to the correct position.'
-            )
+        if self.params.which_screen == self.params.ScreenOptions.none:
+            pvo = self.devices['sofb_bo'].pv_object('MTurnOrbX-Mon')
+        else:
+            scrn = self.devices[f'scrn_{self.params.which_screen_str.lower()}']
+            if not scrn.enabled:
+                raise RuntimeError(
+                    'Selected screen is not enabled. '
+                    + 'Please enable it or select another one.'
+                )
+            elif scrn.screen_position != scrn.ScrnPosition.Fluorescent:
+                raise RuntimeError(
+                    'Selected screen is not in the fluorescent position. '
+                    + 'Please move it to the correct position.'
+                )
+            pvo = scrn.screen.pv_object('ImgData-Mon')
 
+        print('Starting measurement!')
         self.data = {}
         if self.params.acq_type == self.params.AcqType.Asynchronous:
-            scrn.pv_object('ImgData-Mon').add_callback(self._get_data_cb)
-        else:
-            while not self._stopevt.is_set():
-                self._update_data_dict(self.get_data())
+            pvo.auto_monitor = True
+            pvo.add_callback(self._launch_thread_cb)
 
-    def _get_data_cb(self, **kwargs):
+        while not self._stopevt.is_set():
+            if self.params.acq_type == self.params.AcqType.Synchronous:
+                self._get_data_cb()
+                _time.sleep(self.params.acq_interval)
+            else:
+                _time.sleep(0.5)
+
+        if self.params.acq_type == self.params.AcqType.Asynchronous:
+            pvo.auto_monitor = False
+            pvo.clear_callbacks()
+
+        print('Done!')
+
+    def _launch_thread_cb(self, **kwargs):
         """."""
         _ = kwargs  # not used
+        if self._thread_cb is None or not self._thread_cb.is_alive():
+            self._thread_cb = _Thread(target=self._get_data_cb, daemon=True)
+            self._thread_cb.start()
+        else:
+            print('Acquistion thread is taking longer than expected')
+
+    def _get_data_cb(self):
+        """."""
+        if self.params.acq_type == self.params.AcqType.Asynchronous:
+            _time.sleep(self.params.asyn_wait_after_screen)
         self._update_data_dict(self.get_data())
 
     def _update_data_dict(self, data_dict):
