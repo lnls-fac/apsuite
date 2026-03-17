@@ -305,10 +305,20 @@ class MeasureTuneScanParams(ParamsBaseClass):
         self.tunex_stop = 0.16
         self.tuney_start = 0.22
         self.tuney_stop = 0.35
+        self.change_tunex_error = 0.0
+        self.change_tuney_error = 0.0
+        self.bbbv_set0_gain = 0.7
+        self.bbbv_set0_phase = -120
+        self.bbbv_set1_gain = 0.1
+        self.bbbv_set1_phase = 60
+        self.bbbh_set0_gain = 0.6
+        self.bbbh_set0_phase = 150
+        self.bbbh_set1_gain = 0.6
+        self.bbbh_set1_phase = 150
 
     def __str__(self):
         """."""
-        ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
+        ftmp = '{0:24s} = {1:9.4f}  {2:s}\n'.format
 
         stg = ''
         stg += ftmp('wait_time_change_tune', self.wait_time_change_tune, '[s]')
@@ -320,6 +330,16 @@ class MeasureTuneScanParams(ParamsBaseClass):
         stg += ftmp('tuney_start', self.tuney_start, '')
         stg += ftmp('tuney_stop', self.tuney_stop, '')
         stg += ftmp('tuney_step', self.tuney_step, '(calculated)')
+        stg += ftmp('change_tunex_error', self.change_tunex_error, '')
+        stg += ftmp('change_tuney_error', self.change_tuney_error, '')
+        stg += ftmp('bbbv_set0_gain', self.bbbv_set0_gain, '')
+        stg += ftmp('bbbv_set0_phase', self.bbbv_set0_phase, '[deg]')
+        stg += ftmp('bbbv_set1_gain', self.bbbv_set1_gain, '')
+        stg += ftmp('bbbv_set1_phase', self.bbbv_set1_phase, '[deg]')
+        stg += ftmp('bbbh_set0_gain', self.bbbh_set0_gain, '')
+        stg += ftmp('bbbh_set0_phase', self.bbbh_set0_phase, '[deg]')
+        stg += ftmp('bbbh_set1_gain', self.bbbh_set1_gain, '')
+        stg += ftmp('bbbh_set1_phase', self.bbbh_set1_phase, '[deg]')
         stg += f'total scan time (approx.) = {self.total_scan_time:.1f} s\n'
         return stg
 
@@ -355,7 +375,7 @@ class MeasureTuneScanParams(ParamsBaseClass):
     def total_scan_time(self):
         """."""
         nr_points = 2 * self.nr_steps + 1
-        return nr_points * self.wait_time_change_tune
+        return nr_points * self.wait_time_change_tune * 2
 
     @staticmethod
     def _calc_grid(start, stop, nr_steps):
@@ -384,17 +404,22 @@ class MeasureTuneScan(_BaseMeasureSpinDepol):
         bbbh = self.devices['bbbh']
         bbbv = self.devices['bbbv']
         tune_mon = self.devices['tune']
+        currinfo = self.devices['currinfo']
 
         gtunesx = self.params.tunex_grid
         gtunesy = self.params.tuney_grid
 
         # mechanism to compensate for magnet hysteresis. Not ideal, but
         # should help to keep the tune close to the target value:
-        errx = erry = 0
+        errx = self.params.change_tunex_error
+        erry = self.params.change_tuney_error
         for i, (gtx, gty) in enumerate(zip(gtunesx, gtunesy)):  # noqa: B905
             freqx = gtx * bbbh.info.revolution_freq_nom / 1e3
             freqy = gty * bbbv.info.revolution_freq_nom / 1e3
 
+            bbbh.feedback.coeff_set = 1
+            bbbv.feedback.coeff_set = 1
+            currinfo['BuffRst-Cmd'] = 1
             print(
                 f' {i + 1:03d}/{len(gtunesx):03d} -> '
                 + f'nux, nuy (freqx, freqy): {gtx:6.4f}, {gty:6.4f} '
@@ -411,19 +436,31 @@ class MeasureTuneScan(_BaseMeasureSpinDepol):
                     break
                 _time.sleep(1)
 
+            bbbh.feedback.coeff_set = 0
+            bbbv.feedback.coeff_set = 0
+            currinfo['BuffRst-Cmd'] = 1
+
+            for _ in range(int(self.params.wait_time_change_tune)):
+                if self._stopevt.is_set():
+                    break
+                _time.sleep(1)
+
             # Calculate the error in this iteration to try to compensate in
             # next iteration. This is needed to try to mitigate the effect
             # of magnet hysteresis, which can cause the tune to deviate
             # from the target value, specially when changing the tune in
             # large steps.
-            errxn = (gtx - tune_mon.tunex) / dtunex if dtunex != 0 else 0
-            erryn = (gty - tune_mon.tuney) / dtuney if dtuney != 0 else 0
-            print(f'    error: {errxn:.2f}, {erryn:.2f}')
-            errx += errxn * 0.5
-            erry += erryn * 0.5
+            exn = (gtx - tune_mon.tunex) / dtunex if dtunex != 0 else 0
+            eyn = (gty - tune_mon.tuney) / dtuney if dtuney != 0 else 0
+            errx += exn * 0.5
+            erry += eyn * 0.5
             # limit the error correction factor to avoid overcompensation:
             errx = min(max(errx, -0.2), 0.2)
             erry = min(max(erry, -0.2), 0.2)
+            print(
+                f'    error (now): {errx:.2f}, {erry:.2f} '
+                + f'({exn:.2f}, {eyn:.2f})'
+            )
 
         print('Scan finished! Waiting for acquisition thread to finish.')
         self._stopevt.set()
@@ -469,8 +506,25 @@ class MeasureTuneScan(_BaseMeasureSpinDepol):
         bbbh.drive0.frequency = freqx
         bbbv.drive0.frequency = freqy
 
+        bbbh.coeffs.edit_choose_set = 0
+        bbbv.coeffs.edit_choose_set = 0
         bbbh.coeffs.edit_freq = tunex * bbbh.feedback.downsample
         bbbv.coeffs.edit_freq = tuney * bbbv.feedback.downsample
+        bbbh.coeffs.edit_gain = self.params.bbbh_set0_gain
+        bbbh.coeffs.edit_phase = self.params.bbbh_set0_phase
+        bbbv.coeffs.edit_gain = self.params.bbbv_set0_gain
+        bbbv.coeffs.edit_phase = self.params.bbbv_set0_phase
+        bbbh.coeffs.cmd_edit_apply()
+        bbbv.coeffs.cmd_edit_apply()
+
+        bbbh.coeffs.edit_choose_set = 1
+        bbbv.coeffs.edit_choose_set = 1
+        bbbh.coeffs.edit_freq = tunex * bbbh.feedback.downsample
+        bbbv.coeffs.edit_freq = tuney * bbbv.feedback.downsample
+        bbbh.coeffs.edit_gain = self.params.bbbh_set1_gain
+        bbbh.coeffs.edit_phase = self.params.bbbh_set1_phase
+        bbbv.coeffs.edit_gain = self.params.bbbv_set1_gain
+        bbbv.coeffs.edit_phase = self.params.bbbv_set1_phase
         bbbh.coeffs.cmd_edit_apply()
         bbbv.coeffs.cmd_edit_apply()
 
