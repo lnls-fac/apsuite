@@ -813,16 +813,14 @@ class GenerateMachines:
                 step_dict['orbit'] = orbf
                 step_dict['corr_kicks'] = kicks_
                 step_data['step_' + str(step + 1)] = step_dict
-                sx_tot_stren = _pyaccel.lattice.get_attribute(
+                sx_stren_now = _pyaccel.lattice.get_attribute(
                     mod, 'SL', sx_idx
                 )
-                sx_error_stren = sx_tot_stren - (step) * sx_stren / nr_steps
                 _pyaccel.lattice.set_attribute(
                     mod,
                     'SL',
                     sx_idx,
-                    (step + 1) * sx_stren / nr_steps + 1 * sx_error_stren,
-                )
+                    sx_stren / nr_steps + sx_stren_now)
 
             if corr_sucess:
                 # Perform one orbit correction after turning ON sextupoles
@@ -867,15 +865,14 @@ class GenerateMachines:
             step_dict['orbit'] = orbf
             step_dict['corr_kicks'] = kicks
             step_data['step_' + str(step + 1)] = step_dict
-
-            sx_tot_stren = _pyaccel.lattice.get_attribute(mod, 'SL', sx_idx)
-            sx_error_stren = sx_tot_stren - (step) * sx_stren / nr_steps
+            sx_stren_now = _pyaccel.lattice.get_attribute(
+                    mod, 'SL', sx_idx
+                )
             _pyaccel.lattice.set_attribute(
                 mod,
                 'SL',
                 sx_idx,
-                (step + 1) * sx_stren / nr_steps + 1 * sx_error_stren,
-            )
+                sx_stren / nr_steps + sx_stren_now)
 
         # Perform one orbit correction after turning ON sextupoles
         orbf, kicks, corr_stts = self._correct_orbit_once(orb0, mach)
