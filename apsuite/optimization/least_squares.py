@@ -85,10 +85,10 @@ class LeastSquaresOptimize(Optimize):
         self.history_chi2.append(chi2)
         return chi2
 
-    def calc_chi2_tikhonov(self, residual, vtmat, tikhonov, delta_pos):
+    def calc_chi2_tikhonov(self, residual, tikhonov, delta_pos):
         """."""
         chi2 = self.calc_chi2(residual)
-        chi2 += _np.linalg.norm(vtmat @ (tikhonov * delta_pos)) ** 2
+        chi2 += _np.linalg.norm(tikhonov * delta_pos) ** 2
         return chi2
 
     def calc_residual(self, pos, merit_figure_goal=None):
@@ -149,7 +149,7 @@ class LeastSquaresOptimize(Optimize):
         jacobian = self.jacobian
 
         pos = self.params.initial_position.copy()
-        self.normal_eq_matrix = []
+        self.normal_matrices = []  # Save history of normal mats
 
         res = self._objective_func(pos)
         chi2 = self.calc_chi2(res)
@@ -161,24 +161,23 @@ class LeastSquaresOptimize(Optimize):
         U, S, Vt = _np.linalg.svd(jacobian, full_matrices=False)
 
         if tikhonov.ndim == 0:
-            tikhonov = _np.full(S.size, tikhonov)
+            tikhonov = _np.full(jacobian.shape[1], tikhonov)
 
         elif tikhonov.ndim == 1:
-            if tikhonov.size > S.size:
+            if tikhonov.size > jacobian.shape[1]:
                 print_(
-                    'Warning: more than necessary tikhonov_reg_constants ' +
-                    'were specified. Clipping the null-space associated ' +
-                    'coefficients.'
+                    'Warning: more than necessary tikhonov_reg_constants '
+                    + 'were specified. Ignoring the exceeding constants.'
                 )
-            elif tikhonov.size < S.size:
+                tikhonov = tikhonov[: jacobian.shape[1]]
+            elif tikhonov.size < jacobian.shape[1]:
                 print_(
-                    'Warning: less than necessary tikhonov_reg_constants ' +
-                    'were specified. Padding zeros to  the last singular ' +
-                    'modes. They will will be unconstrained.'
+                    'Warning: less than necessary tikhonov_reg_constants '
+                    + 'were specified. Padding zeros to match dimensions.'
                 )
-            tikhonov = _np.zeros(S.size)[: min(S.size, tikhonov.size)] = (
-                tikhonov[: S.size]
-            )
+            tikhonov_ = _np.zeros(jacobian.shape[1])
+            tikhonov_[: tikhonov.size] = tikhonov
+            tikhonov = tikhonov_
 
         for it in range(niter):
             print_(f'iteration {it:03d}')
@@ -187,32 +186,34 @@ class LeastSquaresOptimize(Optimize):
                 if not it % jacobian_update_rate:
                     jacobian = self.calc_jacobian(pos)
                     self.jacobian = jacobian
-                    U, S, Vt = _np.linalg.svd(jacobian, full_matrices=False)
 
             res = self.objfuncs_evaluated[-1]
 
-            matrix = jacobian.T @ jacobian
-            matrix += damping * _np.diag(_np.diag(matrix))
+            matrix = jacobian.T @ jacobian  # Gauss-Newton
+            matrix += damping * _np.diag(_np.diag(matrix))  # Levenberg-Macq.
+
             if _np.any(tikhonov):
-                matrix += _np.diag(tikhonov**2)
-            self.normal_eq_matrix.append(matrix)
+                matrix += _np.diag(tikhonov**2)  # Tikhonov regularization
+
+            self.normal_matrices.append(matrix)  # Save history of normal mats
+
+            U, S, Vt = _np.linalg.svd(matrix, full_matrices=False)
 
             if rcond is not None:
-                mask = S < rcond * S[0]  # not sure mask should compare S
+                mask = S < rcond * S[0]
             else:
                 mask = _np.zeros_like(S, dtype=bool)
 
-            den = S**2 * (1 + damping) + tikhonov**2
-            S_inv = S / den
+            S_inv = 1 / S
             S_inv[mask] = 0
 
-            delta = Vt.T @ (S_inv * (U.T @ res))
+            delta = -Vt.T @ (S_inv * (U.T @ (jacobian.T @ res)))
 
             if _np.any(_np.isnan(delta)):
                 print_('\tInvalid step direction. Aborting.')
                 break
 
-            pos_trial = pos - delta
+            pos_trial = pos + delta
             chi2_old = chi2
 
             try:
@@ -221,7 +222,7 @@ class LeastSquaresOptimize(Optimize):
                     raise ValueError
                 if _np.any(tikhonov):
                     chi2_trial = self.calc_chi2_tikhonov(
-                        res_trial, Vt.T, tikhonov, delta
+                        res_trial, tikhonov, delta
                     )
                 else:
                     chi2_trial = self.calc_chi2(res_trial)
@@ -244,5 +245,5 @@ class LeastSquaresOptimize(Optimize):
                 break
 
             if _math.isclose(chi2, chi2_old, rel_tol=rtol, abs_tol=atol):
-                print_('\tConvergence tolerance reached.')
+                print_('\tConvergence tolerance reached. Exiting')
                 break
