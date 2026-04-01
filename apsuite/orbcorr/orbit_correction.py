@@ -359,7 +359,7 @@ class OrbitCorr:
             que = _np.max(que, axis=0)
             coef_ch = max(min(_np.min(que), coef_ch), 0)
 
-        if maskch.any():
+        if maskcv.any():
             que = [(-par.maxkickcv - kickcv[maskcv]) / dkickcv[maskcv]]
             que.append((par.maxkickcv - kickcv[maskcv]) / dkickcv[maskcv])
             que = _np.max(que, axis=0)
