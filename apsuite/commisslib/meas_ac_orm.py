@@ -2366,3 +2366,242 @@ class MeasACORM(_ThreadBaseClass):
     def _shift_list(lst, num):
         """."""
         return lst[-num:] + lst[:-num]
+
+    # ----------------- ORM report Class ----------------------------------
+
+
+class ORMReport(FPDF):
+    """Report para análise de ORM (AC vs DC)."""
+    # NOTE: Is this the most appropriate place for this class?
+    # TODO: change labels "ac mat" or "dc mat" in the analysis plots
+    # use "measured mat" and "reference mat" instead
+    # adjust figures sizing
+    TIME_FMT = '%Y-%m-%d %H:%M:%S'
+
+    def _get_cnpem_logo_path(self):
+        import apsuite.loco
+        return Path(apsuite.loco.__file__).parent / 'cnpem_lnls_logo.jpg'
+
+    def __init__(self, meas_orm=None):
+        """."""
+        super().__init__()
+        self.WIDTH = 210
+        self.HEIGHT = 297
+
+        self.meas_orm = meas_orm
+        self.params = None
+        self.data = None
+
+        self._folder = ''
+
+    def header(self):
+        """."""
+        path = str(self._get_cnpem_logo_path())
+        self.image(path, x=10, y=6, w=40, h=15)
+        self.set_font('Arial', 'B', 14)
+        self.cell(0, 6, 'SIRIUS AC ORM Report', 0, 0, 'C')
+        self.set_font('Arial', '', 11)
+        now = datetime.datetime.now()
+        stg = '{:s}'.format(now.strftime(self.TIME_FMT))
+        self.cell(0, 6, stg, 0, 0, 'R')
+        self.ln(10)
+
+    def footer(self):
+        """."""
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.set_text_color(129)
+        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
+    def page_title(self, title, loc_y=None):
+        """."""
+        self.set_font('Arial', '', 12)
+        self.set_fill_color(215)
+        if loc_y is not None:
+            self.set_y(loc_y)
+        self.cell(0, 6, f'{title:s}', 0, 1, 'C', 1)
+        self.ln(2)
+
+    def meas_fingerprint(self):
+        """."""
+        info = self.data['bpms_noise']
+
+        tstamp = datetime.datetime.fromtimestamp(info['timestamp'])
+        tstamp = tstamp.strftime(self.TIME_FMT)
+
+        rows = [
+            ('Measurement Timestamp', tstamp),
+            ('Stored current', f'{info["stored_current"]:.2f} [mA]'),
+            ('RF Frequency', f'{info["rf_frequency"] / 1e6:.6f} [MHz]'),
+            ('Neasyred frac. tune X', f'{info["tunex"]:.4f}'),
+            ('Measured frac. tune y', f'{info["tuney"]:.4f}'),
+            ('Sampling freq.', f'{info["sampling_frequency"]:.2f} [Hz]'),
+            ('Acq rate', str(info['acq_rate'])),
+            ('Switching mode', str(info['switching_mode'])),
+            ('Switching freq.', f'{info["switching_frequency"]:.2f} [Hz]'),
+        ]
+
+        self.set_font('Arial', '', 10)
+
+        w = self.WIDTH / 2.5
+        h = 5
+        x0 = (self.WIDTH - 2 * w) / 2
+
+        for row in rows:
+            self.set_x(x0)
+            for item in row:
+                self.cell(w, h, str(item), border=1, align='C')
+            self.ln(h)
+
+    def config_table(self):
+        """."""
+        p = self.params
+
+        rows = [
+            ('Timeout BPMs [s]', p.timeout_bpms),
+            ('Timeout Correctors [s]', p.timeout_correctors),
+            ('Meas BPM noise', p.meas_bpms_noise),
+            ('Meas RF', p.meas_rf_line),
+            ('Meas magnets', p.meas_magnets),
+            ('CH kick [urad]', p.corrs_ch_kick),
+            ('CV kick [urad]', p.corrs_cv_kick),
+            ('CH freqs', str(p.corrs_ch_freqs)),
+            ('CV freqs', str(p.corrs_cv_freqs)),
+            ('RF mode', str(p._rf_mode)),
+            ('RF step [Hz]', p.rf_step_kick),
+            ('RF phase amp [deg]', p.rf_phase_amp),
+        ]
+
+        self.set_font('Arial', '', 10)
+
+        w = self.WIDTH / 2.5
+        h = 5
+        x0 = (self.WIDTH - 2 * w) / 2
+
+        for row in rows:
+            self.set_x(x0)
+            for item in row:
+                self.cell(w, h, str(item), border=1, align='C')
+            self.ln(h)
+
+    def add_scale_factors(self):
+        """."""
+        w = self.WIDTH - 30
+        x = (self.WIDTH - w) / 3
+
+        self.image(self._folder + 'scale_factors.png', x=x, y=26, w=w)
+
+    def add_correlations(self):
+        """."""
+        w = self.WIDTH - 30
+        x = (self.WIDTH - w) / 3
+
+        self.image(self._folder + 'correlation.png', x=x, y=130, w=w)
+
+    def add_least_correlated(self):
+        """."""
+        w = self.WIDTH - 30
+        x = (self.WIDTH - w) / 2
+
+        self.image(self._folder + 'least_corr_ch.png', x=x, y=26, w=w)
+        self.image(self._folder + 'least_corr_cv.png', x=x, y=155, w=w)
+
+    def add_best_correlated(self):
+        """."""
+        w = self.WIDTH - 30
+        x = (self.WIDTH - w) / 2
+
+        self.image(self._folder + 'best_corr_ch.png', x=x, y=26, w=w)
+        self.image(self._folder + 'best_corr_cv.png', x=x, y=155, w=w)
+
+    def add_rf_column(self):
+        """."""
+        w = self.WIDTH - 30
+        x = (self.WIDTH - w) / 2
+
+        self.image(self._folder + 'rf_column.png', x=x, y=26, w=w)
+
+    def create_report(self, meas_orm, folder=''):
+        """."""
+        # TODO: to supress displaying of figures when running the analysis
+        self.meas_orm = meas_orm
+        self.params = meas_orm.params
+        self.data = meas_orm.data
+        self._folder = folder
+
+        meas_orm.process_data()
+
+        mat_ac = meas_orm.build_respmat()
+        mat_dc = meas_orm.get_ref_respmat()
+
+        fig, ax = meas_orm.plot_scale_conversion_factors()
+        fig.savefig(folder + 'scale_factors.png', dpi=300)
+
+        fig, axs, corr = meas_orm.plot_comparison_correlations(
+            mat_ac=mat_ac, mat_dc=mat_dc
+        )
+        fig.savefig(folder + 'correlation.png', dpi=300)
+
+        corr_h = corr[:, :120]
+        corr_v = corr[:, 120:280]
+
+        idcsh = corr_h[1].argsort()
+        idcsv = corr_v[0].argsort() + 120
+
+        # least correlated
+        fig, _ = meas_orm.plot_comparison_single_corrector(
+            idcsh[-1], mat_ac=mat_ac, mat_dc=mat_dc
+        )
+        fig.savefig(folder + 'least_corr_ch.png', dpi=300)
+
+        fig, _ = meas_orm.plot_comparison_single_corrector(
+            idcsv[-1], mat_ac=mat_ac, mat_dc=mat_dc
+        )
+        fig.savefig(folder + 'least_corr_cv.png', dpi=300)
+
+        # best correlated
+        fig, _ = meas_orm.plot_comparison_single_corrector(
+            idcsh[0], mat_ac=mat_ac, mat_dc=mat_dc
+        )
+        fig.savefig(folder + 'best_corr_ch.png', dpi=300)
+
+        fig, _ = meas_orm.plot_comparison_single_corrector(
+            idcsv[0], mat_ac=mat_ac, mat_dc=mat_dc
+        )
+        fig.savefig(folder + 'best_corr_cv.png', dpi=300)
+
+        # rf
+        fig, _ = meas_orm.plot_comparison_single_corrector(
+            280, mat_ac=mat_ac, mat_dc=mat_dc
+        )
+        fig.savefig(folder + 'rf_column.png', dpi=300)
+
+        self.add_page()
+        self.page_title('Measurement fingerprint')
+        self.meas_fingerprint()
+        self.page_title('Measurement params. & setup', loc_y=80)
+        self.set_y(90)
+        self.config_table()
+
+        self.add_page()
+        self.page_title('Measurement scale factors')
+        self.add_scale_factors()
+
+        self.page_title(
+            'Measurement correlation residue (from unity)', loc_y=122
+        )
+        self.add_correlations()
+
+        self.add_page()
+        self.page_title('Least correlated columns comparison')
+        self.add_least_correlated()
+
+        self.add_page()
+        self.page_title('Most correlated columns comparison')
+        self.add_best_correlated()
+
+        self.add_page()
+        self.page_title('RF Column (dispersion) comparsion')
+        self.add_rf_column()
+
+        self.output(folder + 'orm_report.pdf', 'F')
