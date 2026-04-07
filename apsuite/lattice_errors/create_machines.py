@@ -285,7 +285,6 @@ class GenerateMachines:
 
     def _create_models(self, nr_mach):
         """Create the models in which the errors will be applied."""
-
         accelerators = {
             'SI': _pymodels.si.create_accelerator,
             'BO': _pymodels.bo.create_accelerator,
@@ -769,7 +768,6 @@ class GenerateMachines:
         sx_idx = self.famdata['SN']['index']
         sx_stren = _pyaccel.lattice.get_attribute(mod, 'SL', sx_idx)
         _pyaccel.lattice.set_attribute(mod, 'SL', sx_idx, 0.0)
-
         corr_sucess = False
         init_numsingval = self.original_numsingval
         j = 1
@@ -815,10 +813,14 @@ class GenerateMachines:
                 step_dict['orbit'] = orbf
                 step_dict['corr_kicks'] = kicks_
                 step_data['step_' + str(step + 1)] = step_dict
-
-                _pyaccel.lattice.set_attribute(
-                    mod, 'SL', sx_idx, (step + 1) * sx_stren / nr_steps
+                sx_stren_now = _pyaccel.lattice.get_attribute(
+                    mod, 'SL', sx_idx
                 )
+                _pyaccel.lattice.set_attribute(
+                    mod,
+                    'SL',
+                    sx_idx,
+                    sx_stren / nr_steps + sx_stren_now)
 
             if corr_sucess:
                 # Perform one orbit correction after turning ON sextupoles
@@ -863,10 +865,14 @@ class GenerateMachines:
             step_dict['orbit'] = orbf
             step_dict['corr_kicks'] = kicks
             step_data['step_' + str(step + 1)] = step_dict
-
+            sx_stren_now = _pyaccel.lattice.get_attribute(
+                    mod, 'SL', sx_idx
+                )
             _pyaccel.lattice.set_attribute(
-                mod, 'SL', sx_idx, (step + 1) * sx_stren / nr_steps
-            )
+                mod,
+                'SL',
+                sx_idx,
+                sx_stren / nr_steps + sx_stren_now)
 
         # Perform one orbit correction after turning ON sextupoles
         orbf, kicks, corr_stts = self._correct_orbit_once(orb0, mach)
