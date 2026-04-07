@@ -24,6 +24,7 @@ class LeastSquaresParams(OptimizeParams):
         self.damping_factor = 10.0
         self.max_damping_constant = 1e10
         self.tikhonov_reg_constants = 0.0
+        self.reg_mat = None
         self.jacobian = None
         self.jacobian_update_rate = 0
         self.verbose = True
@@ -145,8 +146,15 @@ class LeastSquaresOptimize(Optimize):
         damping_max = self.params.max_damping_constant
 
         tikhonov = _np.asarray(self.params.tikhonov_reg_constants)
+        reg_mat = self.params.reg_mat
+
         jacobian_update_rate = self.params.jacobian_update_rate
         jacobian = self.jacobian
+
+        if _np.any(tikhonov):
+            self.chi2_tikhonov_history = []
+        if reg_mat is not None:
+            self.chi2_diff_history = []
 
         pos = self.params.initial_position.copy()
         self.normal_matrices = []  # Save history of normal mats
@@ -195,6 +203,9 @@ class LeastSquaresOptimize(Optimize):
             if _np.any(tikhonov):
                 matrix += _np.diag(tikhonov**2)  # Tikhonov regularization
 
+            if reg_mat is not None:
+                matrix += reg_mat.T @ reg_mat  # Difference regularization
+
             self.normal_matrices.append(matrix)  # Save history of normal mats
 
             U, S, Vt = _np.linalg.svd(matrix, full_matrices=False)
@@ -220,12 +231,18 @@ class LeastSquaresOptimize(Optimize):
                 res_trial = self._objective_func(pos_trial)
                 if _np.any(_np.isnan(res_trial)):
                     raise ValueError
+                chi2_trial = self.calc_chi2(res_trial)
+
                 if _np.any(tikhonov):
-                    chi2_trial = self.calc_chi2_tikhonov(
-                        res_trial, tikhonov, delta
-                    )
-                else:
-                    chi2_trial = self.calc_chi2(res_trial)
+                    chi2_tikho = _np.linalg.norm(tikhonov * delta) ** 2
+                    self.chi2_tikhonov_history.append(chi2_tikho)
+                    chi2_trial += chi2_tikho
+
+                if reg_mat is not None:
+                    chi2_diff = _np.linalg.norm(_np.dot(reg_mat, delta)) ** 2
+                    self.chi2_diff_history.append(chi2_diff)
+                    chi2_trial += chi2_diff
+
                 success = chi2_trial < chi2_old
             except Exception:
                 success = False
