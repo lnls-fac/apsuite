@@ -2374,16 +2374,18 @@ class MeasACORM(_ThreadBaseClass):
 
 
 class ORMReport(FPDF):
-    """Report para análise de ORM (AC vs DC)."""
-    # NOTE: Is this the most appropriate place for this class?
+    """."""
+
     # TODO: change labels "ac mat" or "dc mat" in the analysis plots
     # use "measured mat" and "reference mat" instead
     # adjust figures sizing
     TIME_FMT = '%Y-%m-%d %H:%M:%S'
 
     def _get_cnpem_logo_path(self):
-        import apsuite.loco
-        return Path(apsuite.loco.__file__).parent / 'cnpem_lnls_logo.jpg'
+        import apsuite
+        return str(
+            Path(apsuite.__file__).parent / 'resources/cnpem_lnls_logo.jpg'
+        )
 
     def __init__(self, meas_orm=None):
         """."""
@@ -2399,7 +2401,7 @@ class ORMReport(FPDF):
 
     def header(self):
         """."""
-        path = str(self._get_cnpem_logo_path())
+        path = self._get_cnpem_logo_path()
         self.image(path, x=10, y=6, w=40, h=15)
         self.set_font('Arial', 'B', 14)
         self.cell(0, 6, 'SIRIUS AC ORM Report', 0, 0, 'C')
