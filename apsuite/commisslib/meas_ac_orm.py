@@ -716,7 +716,9 @@ class MeasACORM(_ThreadBaseClass):
         cond_ok &= (corr_rf[0] < dthres).all()
         return cond_ok
 
-    def plot_comparison_correlations(self, mat_ac=None, mat_dc=None):
+    def plot_comparison_correlations(
+        self, mat_ac=None, mat_dc=None, show_fig=True
+    ):
         """Plot comparison of measured response matrix with reference respmat.
 
         Two graphics will be made, one comparing the column space of both
@@ -791,11 +793,12 @@ class MeasACORM(_ThreadBaseClass):
         )
 
         fig.tight_layout()
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, (ax, ay), corr
 
     def plot_comparison_single_corrector(
-        self, corr_idx, mat_ac=None, mat_dc=None
+        self, corr_idx, mat_ac=None, mat_dc=None, show_fig=True
     ):
         """Plot single corrector signatures of measured and reference respmat.
 
@@ -838,10 +841,11 @@ class MeasACORM(_ThreadBaseClass):
         ay.set_ylabel('Vertical ' + unit)
         ay.set_xlabel('BPM position')
         fig.tight_layout()
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, (ax, ay)
 
-    def plot_scale_conversion_factors(self):
+    def plot_scale_conversion_factors(self, show_fig=True):
         """Plot single corrector signatures of measured and reference respmat.
 
         Returns:
@@ -863,10 +867,13 @@ class MeasACORM(_ThreadBaseClass):
         ax.set_ylabel('Relative Factor')
         ax.set_xlabel('Correctors Position [m]')
         fig.tight_layout()
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, ax
 
-    def plot_phases_vs_amplitudes(self, title='', corrsidx2highlight=None):
+    def plot_phases_vs_amplitudes(
+        self, title='', corrsidx2highlight=None, show_fig=True
+    ):
         """."""
         fig = _mplt.figure(figsize=(8, 6))
         gs = _mplt.GridSpec(
@@ -929,11 +936,11 @@ class MeasACORM(_ThreadBaseClass):
         avx.set_xlabel(r'Amplitudes [$\mu$m]')
         ahx.set_ylabel(r'Phases [$\pi$]')
         avy.set_ylabel(r'Phases [$\pi$]')
-
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, ((ahx, ahy), (avy, avx))
 
-    def plot_phases_histogram(self, title=''):
+    def plot_phases_histogram(self, title='', show_fig=True):
         """."""
         fig = _mplt.figure(figsize=(8, 6))
         gs = _mplt.GridSpec(
@@ -983,11 +990,11 @@ class MeasACORM(_ThreadBaseClass):
         avy.set_ylabel(r'Counts')
         avx.set_xlabel(r'Phases [$\pi$]')
         avy.set_xlabel(r'Phases [$\pi$]')
-
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, ((ahx, ahy), (avy, avx))
 
-    def plot_bpms_fluctuations(self):
+    def plot_bpms_fluctuations(self, show_fig=True):
         """Plot BPMs flutuations statistics along BPMs and Correctors.
 
         Returns:
@@ -1038,11 +1045,12 @@ class MeasACORM(_ThreadBaseClass):
         ay.set_title('BPMs Variation along BPMs')
 
         fig.tight_layout()
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, (ax, ay)
 
     def plot_orbit_residue_after_fitting(
-        self, bpm_idx=0, excit_idx=0, time_domain=True
+        self, bpm_idx=0, excit_idx=0, time_domain=True, show_fig=True
     ):
         """Plot orbit residue after fitting.
 
@@ -1133,7 +1141,8 @@ class MeasACORM(_ThreadBaseClass):
             ncol=4,
         )
         fig.tight_layout()
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, (ax, ay), orbx, orby, dorbx, dorby
 
     # ------------------ Auxiliary Methods ------------------
@@ -2383,6 +2392,7 @@ class ORMReport(FPDF):
 
     def _get_cnpem_logo_path(self):
         import apsuite
+
         return str(
             Path(apsuite.__file__).parent / 'resources/cnpem_lnls_logo.jpg'
         )
