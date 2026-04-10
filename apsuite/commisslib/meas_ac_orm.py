@@ -2536,26 +2536,34 @@ class ORMReport(FPDF):
 
         self.image(self._folder + 'rf_column.png', x=x, y=26, w=w)
 
-    def create_report(self, meas_orm, folder=''):
+    def create_report(self, meas_orm, folder=None):
         """."""
-        # TODO: to supress displaying of figures when running the analysis
+        # TODO: change methods labels from "mat AC" or "mat DC"
+        # to "measured mat" and "reference mat", or something similar
+        if folder is None:
+            folder = ''
+
         self.meas_orm = meas_orm
         self.params = meas_orm.params
         self.data = meas_orm.data
         self._folder = folder
 
-        meas_orm.process_data()
+        if not meas_orm.analysis:
+            meas_orm.process_data()
 
         mat_ac = meas_orm.build_respmat()
         mat_dc = meas_orm.get_ref_respmat()
 
-        fig, ax = meas_orm.plot_scale_conversion_factors()
+        fig, _ = meas_orm.plot_scale_conversion_factors(show_fig=False)
         fig.savefig(folder + 'scale_factors.png', dpi=300)
+        _mplt.close(fig)  # even if show_fig=False, figs can be displayed
+        # in interactive envs (notebooks specifically)
 
-        fig, axs, corr = meas_orm.plot_comparison_correlations(
-            mat_ac=mat_ac, mat_dc=mat_dc
+        fig, _, corr = meas_orm.plot_comparison_correlations(
+            mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
         )
         fig.savefig(folder + 'correlation.png', dpi=300)
+        _mplt.close(fig)
 
         corr_h = corr[:, :120]
         corr_v = corr[:, 120:280]
@@ -2565,31 +2573,36 @@ class ORMReport(FPDF):
 
         # least correlated
         fig, _ = meas_orm.plot_comparison_single_corrector(
-            idcsh[-1], mat_ac=mat_ac, mat_dc=mat_dc
+            idcsh[-1], mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
         )
         fig.savefig(folder + 'least_corr_ch.png', dpi=300)
+        _mplt.close(fig)
 
         fig, _ = meas_orm.plot_comparison_single_corrector(
-            idcsv[-1], mat_ac=mat_ac, mat_dc=mat_dc
+            idcsv[-1], mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
         )
         fig.savefig(folder + 'least_corr_cv.png', dpi=300)
+        _mplt.close(fig)
 
         # best correlated
         fig, _ = meas_orm.plot_comparison_single_corrector(
-            idcsh[0], mat_ac=mat_ac, mat_dc=mat_dc
+            idcsh[0], mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
         )
         fig.savefig(folder + 'best_corr_ch.png', dpi=300)
+        _mplt.close(fig)
 
         fig, _ = meas_orm.plot_comparison_single_corrector(
-            idcsv[0], mat_ac=mat_ac, mat_dc=mat_dc
+            idcsv[0], mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
         )
         fig.savefig(folder + 'best_corr_cv.png', dpi=300)
+        _mplt.close(fig)
 
         # rf
         fig, _ = meas_orm.plot_comparison_single_corrector(
-            280, mat_ac=mat_ac, mat_dc=mat_dc
+            280, mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
         )
         fig.savefig(folder + 'rf_column.png', dpi=300)
+        _mplt.close(fig)
 
         self.add_page()
         self.page_title('Measurement fingerprint')
