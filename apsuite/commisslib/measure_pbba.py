@@ -606,8 +606,14 @@ class DoParallelBBA(_BaseClass):
         if not self.havebeam:
             return
         sofb = self.devices['sofb']
+        nrpts = sofb.nr_points
+        sofb.nr_points = self.params.sofb_nrpoints
+
         sofb.cmd_reset()
         sofb.wait_buffer(self.params.timeout_wait_orbit)
+
+        sofb.nr_points = nrpts
+
         return _np.hstack([sofb.orbx, sofb.orby])
 
     def correct_orbit(self):
