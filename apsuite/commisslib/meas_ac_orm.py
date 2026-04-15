@@ -673,7 +673,9 @@ class MeasACORM(_ThreadBaseClass):
             return False
         return self._meas_finished_ok
 
-    def check_measurement_quality(self, mat_ac=None, mat_dc=None, dthres=1e-3):
+    def check_measurement_quality(
+        self, mat_meas=None, mat_ref=None, dthres=1e-3
+    ):
         """Check whether last measurement have meaningful results.
 
         This method checks if the experiment has finished properly and
@@ -684,9 +686,9 @@ class MeasACORM(_ThreadBaseClass):
         This method will call process_data if needed.
 
         Args:
-            mat_ac (numpy.array, (320, 281), optional): The measured matrix.
+            mat_meas (numpy.array, (320, 281), optional): The measured matrix.
                 Defaults to None.
-            mat_dc (numpy.array, (320, 281), optional): The reference matrix.
+            mat_ref (numpy.array, (320, 281), optional): The reference matrix.
                 Defaults to None.
             dthres (float, optional): The threshold used for comparison.
                 Defaults to 1e-3.
@@ -701,12 +703,12 @@ class MeasACORM(_ThreadBaseClass):
         if not self.analysis:
             self.process_data()
 
-        if mat_ac is None:
-            mat_ac = self.build_respmat()
-        if mat_dc is None:
-            mat_dc = self.get_ref_respmat()
-        mat1 = mat_ac.reshape(2, -1, mat_ac.shape[-1])
-        mat2 = mat_dc.reshape(2, -1, mat_dc.shape[-1])
+        if mat_meas is None:
+            mat_meas = self.build_respmat()
+        if mat_ref is None:
+            mat_ref = self.get_ref_respmat()
+        mat1 = mat_meas.reshape(2, -1, mat_meas.shape[-1])
+        mat2 = mat_ref.reshape(2, -1, mat_ref.shape[-1])
         corr = 1 - self.calc_correlation(mat1, mat2)
         corr_ch = corr[:, :120]
         corr_cv = corr[:, 120:280]
@@ -717,7 +719,7 @@ class MeasACORM(_ThreadBaseClass):
         return cond_ok
 
     def plot_comparison_correlations(
-        self, mat_ac=None, mat_dc=None, show_fig=True
+        self, mat_meas=None, mat_ref=None, show_fig=True
     ):
         """Plot comparison of measured response matrix with reference respmat.
 
@@ -725,10 +727,12 @@ class MeasACORM(_ThreadBaseClass):
         matrix and another one comparing their Row space.
 
         Args:
-            mat_ac (numpy.array, (320, 281), optional): The measured matrix.
+            mat_meas (numpy.array, (320, 281), optional): The measured matrix.
                 Defaults to None.
-            mat_dc (numpy.array, (320, 281), optional): The reference matrix.
+            mat_ref (numpy.array, (320, 281), optional): The reference matrix.
                 Defaults to None.
+            show_fig (bool): whether to display the matplotlib fig. Defaults
+                to True
 
         Returns:
             matplotlib.Figure: Figure object of the plot.
@@ -737,13 +741,13 @@ class MeasACORM(_ThreadBaseClass):
                 correlations.
 
         """
-        if mat_ac is None:
-            mat_ac = self.build_respmat()
-        if mat_dc is None:
-            mat_dc = self.get_ref_respmat()
+        if mat_meas is None:
+            mat_meas = self.build_respmat()
+        if mat_ref is None:
+            mat_ref = self.get_ref_respmat()
 
-        mat1 = mat_ac.reshape(2, -1, mat_ac.shape[-1])
-        mat2 = mat_dc.reshape(2, -1, mat_dc.shape[-1])
+        mat1 = mat_meas.reshape(2, -1, mat_meas.shape[-1])
+        mat2 = mat_ref.reshape(2, -1, mat_ref.shape[-1])
 
         sofb = self.sofb_data
         fig, (ax, ay) = _mplt.subplots(2, 1, figsize=(8, 6))
@@ -767,8 +771,8 @@ class MeasACORM(_ThreadBaseClass):
         ax.set_xlabel('Correctors Position [m]')
         ax.set_yscale('log')
         ax.set_title(
-            r'$1-\mathrm{Cor}(\mathrm{Col}(M_\mathrm{AC}), '
-            + r'\mathrm{Col}(M_\mathrm{DC}))$'
+            r'$1-\mathrm{Cor}(\mathrm{Col}(M_\mathrm{meas}), '
+            + r'\mathrm{Col}(M_\mathrm{ref}))$'
         )
 
         mat1 = mat1.swapaxes(-2, -1)
@@ -788,8 +792,8 @@ class MeasACORM(_ThreadBaseClass):
         ay.set_xlabel('BPMs Position [m]')
         ay.set_yscale('log')
         ay.set_title(
-            r'$1-\mathrm{Cor}(\mathrm{Row}(M_\mathrm{AC}), '
-            r'\mathrm{Row}(M_\mathrm{DC}))$'
+            r'$1-\mathrm{Cor}(\mathrm{Row}(M_\mathrm{meas}), '
+            r'\mathrm{Row}(M_\mathrm{ref}))$'
         )
 
         fig.tight_layout()
@@ -798,42 +802,44 @@ class MeasACORM(_ThreadBaseClass):
         return fig, (ax, ay), corr
 
     def plot_comparison_single_corrector(
-        self, corr_idx, mat_ac=None, mat_dc=None, show_fig=True
+        self, corr_idx, mat_meas=None, mat_ref=None, show_fig=True
     ):
         """Plot single corrector signatures of measured and reference respmat.
 
         Args:
             corr_idx (int): corrector index [0, 119] for CH, [120, 279] for CV
                 and 280 for RF.
-            mat_ac (numpy.array, (320, 281), optional): The measured matrix.
+            mat_meas (numpy.array, (320, 281), optional): The measured matrix.
                 Defaults to None.
-            mat_dc (numpy.array, (320, 281), optional): The reference matrix.
+            mat_ref (numpy.array, (320, 281), optional): The reference matrix.
                 Defaults to None.
+            show_fig (bool): whether to display the matplotlib fig. Defaults
+                to True
 
         Returns:
             matplotlib.Figure: Figure object of the plot.
             tuple: Tuple with both axes of the figure;
 
         """
-        if mat_ac is None:
-            mat_ac = self.build_respmat()
-        if mat_dc is None:
-            mat_dc = self.get_ref_respmat()
+        if mat_meas is None:
+            mat_meas = self.build_respmat()
+        if mat_ref is None:
+            mat_ref = self.get_ref_respmat()
 
         corr_names = self.sofb_data.ch_names + self.sofb_data.cv_names
         corr_names += ['RF']
-        acm = mat_ac[:, corr_idx].copy()
-        dcm = mat_dc[:, corr_idx].copy()
+        acm = mat_meas[:, corr_idx].copy()
+        dcm = mat_ref[:, corr_idx].copy()
         dif = acm - dcm
         pos = self.sofb_data.bpm_pos
 
         fig, (ax, ay) = _mplt.subplots(2, 1, figsize=(8, 6))
         ax.set_title(f'{corr_names[corr_idx]:s}')
-        ax.plot(pos, acm[:160], label='AC')
-        ax.plot(pos, dcm[:160], label='DC')
+        ax.plot(pos, acm[:160], label='Meas.')
+        ax.plot(pos, dcm[:160], label='Ref.')
         ax.plot(pos, dif[:160], label='Diff.', lw=0.5)
-        ay.plot(pos, acm[160:], label='AC')
-        ay.plot(pos, dcm[160:], label='DC')
+        ay.plot(pos, acm[160:], label='Meas.')
+        ay.plot(pos, dcm[160:], label='Ref.')
         ay.plot(pos, dif[160:], label='Diff.', lw=0.5)
         ax.legend(loc='best')
         unit = '[um/urad]' if corr_idx != 280 else '[um/Hz]'
@@ -848,6 +854,10 @@ class MeasACORM(_ThreadBaseClass):
     def plot_scale_conversion_factors(self, show_fig=True):
         """Plot single corrector signatures of measured and reference respmat.
 
+        Args:
+            show_fig (bool): whether to display the matplotlib fig. Defaults
+                to True
+
         Returns:
             matplotlib.Figure: Figure object of the plot.
             matplotlib.Axes: Axes of the figure;
@@ -860,7 +870,7 @@ class MeasACORM(_ThreadBaseClass):
         cv_p = self.sofb_data.cv_pos
 
         fig, ax = _mplt.subplots(1, 1, figsize=(6, 4))
-        ax.set_title(r'Scale Factors $M_\mathrm{DC} / M_\mathrm{AC}$')
+        ax.set_title(r'Scale Factors $M_\mathrm{ref} / M_\mathrm{meas}$')
         ax.plot(ch_p, ch_f, label='CH')
         ax.plot(cv_p, cv_f, label='CV')
         ax.legend(loc='best')
@@ -2551,8 +2561,8 @@ class ORMReport(FPDF):
         if not meas_orm.analysis:
             meas_orm.process_data()
 
-        mat_ac = meas_orm.build_respmat()
-        mat_dc = meas_orm.get_ref_respmat()
+        mat_meas = meas_orm.build_respmat()
+        mat_ref = meas_orm.get_ref_respmat()
 
         fig, _ = meas_orm.plot_scale_conversion_factors(show_fig=False)
         fig.savefig(folder + 'scale_factors.png', dpi=300)
@@ -2560,7 +2570,7 @@ class ORMReport(FPDF):
         # in interactive envs (notebooks specifically)
 
         fig, _, corr = meas_orm.plot_comparison_correlations(
-            mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
+            mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
         )
         fig.savefig(folder + 'correlation.png', dpi=300)
         _mplt.close(fig)
@@ -2573,33 +2583,33 @@ class ORMReport(FPDF):
 
         # least correlated
         fig, _ = meas_orm.plot_comparison_single_corrector(
-            idcsh[-1], mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
+            idcsh[-1], mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
         )
         fig.savefig(folder + 'least_corr_ch.png', dpi=300)
         _mplt.close(fig)
 
         fig, _ = meas_orm.plot_comparison_single_corrector(
-            idcsv[-1], mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
+            idcsv[-1], mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
         )
         fig.savefig(folder + 'least_corr_cv.png', dpi=300)
         _mplt.close(fig)
 
         # best correlated
         fig, _ = meas_orm.plot_comparison_single_corrector(
-            idcsh[0], mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
+            idcsh[0], mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
         )
         fig.savefig(folder + 'best_corr_ch.png', dpi=300)
         _mplt.close(fig)
 
         fig, _ = meas_orm.plot_comparison_single_corrector(
-            idcsv[0], mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
+            idcsv[0], mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
         )
         fig.savefig(folder + 'best_corr_cv.png', dpi=300)
         _mplt.close(fig)
 
         # rf
         fig, _ = meas_orm.plot_comparison_single_corrector(
-            280, mat_ac=mat_ac, mat_dc=mat_dc, show_fig=False
+            280, mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
         )
         fig.savefig(folder + 'rf_column.png', dpi=300)
         _mplt.close(fig)
