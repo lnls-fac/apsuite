@@ -40,8 +40,7 @@ version = { file = "VERSION" }
 dependencies = { file = "requirements.txt" }
 
 [tool.setuptools.package-data]
-apsuite = ["VERSION"]
-"apsuite.loco" = ['*.jpg', ]
+apsuite = ["VERSION", "resources/*.jpg"]
 
 # --- linter and formatter configurations ---
 [tool.ruff]
