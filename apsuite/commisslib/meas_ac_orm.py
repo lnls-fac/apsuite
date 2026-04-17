@@ -833,7 +833,7 @@ class MeasACORM(_ThreadBaseClass):
         dif = acm - dcm
         pos = self.sofb_data.bpm_pos
 
-        fig, (ax, ay) = _mplt.subplots(2, 1, figsize=(8, 6))
+        fig, (ax, ay) = _mplt.subplots(2, 1, figsize=(8, 5))
         ax.set_title(f'{corr_names[corr_idx]:s}')
         ax.plot(pos, acm[:160], label='Meas.')
         ax.plot(pos, dcm[:160], label='Ref.')
@@ -869,7 +869,7 @@ class MeasACORM(_ThreadBaseClass):
         ch_p = self.sofb_data.ch_pos
         cv_p = self.sofb_data.cv_pos
 
-        fig, ax = _mplt.subplots(1, 1, figsize=(6, 4))
+        fig, ax = _mplt.subplots(1, 1, figsize=(6, 3))
         ax.set_title(r'Scale Factors $M_\mathrm{ref} / M_\mathrm{meas}$')
         ax.plot(ch_p, ch_f, label='CH')
         ax.plot(cv_p, cv_f, label='CV')
@@ -2447,6 +2447,15 @@ class ORMReport(FPDF):
         self.cell(0, 6, f'{title:s}', 0, 1, 'C', 1)
         self.ln(2)
 
+    def page_subtitle(self, title, loc_y=None):
+        """."""
+        self.set_font('Arial', '', 12)
+        self.set_fill_color(255, 255, 255)
+        if loc_y is not None:
+            self.set_y(loc_y)
+        self.cell(0, 6, f'{title:s}', 0, 1, 'C', 1)
+        self.ln(2)
+
     def meas_fingerprint(self):
         """."""
         info = self.data['bpms_noise']
@@ -2527,17 +2536,19 @@ class ORMReport(FPDF):
         """."""
         w = self.WIDTH - 30
         x = (self.WIDTH - w) / 2
-
-        self.image(self._folder + 'least_corr_ch.png', x=x, y=26, w=w)
-        self.image(self._folder + 'least_corr_cv.png', x=x, y=155, w=w)
+        self.page_subtitle('Horizontal corrector column')
+        self.image(self._folder + 'least_corr_ch.png', x=x, y=35, w=w)
+        self.page_subtitle('Vertical corrector column', loc_y=155)
+        self.image(self._folder + 'least_corr_cv.png', x=x, y=160, w=w)
 
     def add_best_correlated(self):
         """."""
         w = self.WIDTH - 30
         x = (self.WIDTH - w) / 2
-
-        self.image(self._folder + 'best_corr_ch.png', x=x, y=26, w=w)
-        self.image(self._folder + 'best_corr_cv.png', x=x, y=155, w=w)
+        self.page_subtitle('Horizontal corrector column')
+        self.image(self._folder + 'best_corr_ch.png', x=x, y=35, w=w)
+        self.page_subtitle('Vertical corrector column', loc_y=155)
+        self.image(self._folder + 'best_corr_cv.png', x=x, y=160, w=w)
 
     def add_rf_column(self):
         """."""
@@ -2548,8 +2559,6 @@ class ORMReport(FPDF):
 
     def create_report(self, meas_orm, folder=None):
         """."""
-        # TODO: change methods labels from "mat AC" or "mat DC"
-        # to "measured mat" and "reference mat", or something similar
         if folder is None:
             folder = ''
 
