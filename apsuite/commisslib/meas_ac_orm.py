@@ -2466,13 +2466,16 @@ class ORMReport(FPDF):
         rows = [
             ('Measurement Timestamp', tstamp),
             ('Stored current', f'{info["stored_current"]:.2f} [mA]'),
-            ('RF Frequency', f'{info["rf_frequency"] / 1e6:.6f} [MHz]'),
-            ('Neasyred frac. tune X', f'{info["tunex"]:.4f}'),
+            ('RF frequency', f'{info["rf_frequency"] / 1e6:.6f} [MHz]'),
+            ('Measured frac. tune X', f'{info["tunex"]:.4f}'),
             ('Measured frac. tune y', f'{info["tuney"]:.4f}'),
-            ('Sampling freq.', f'{info["sampling_frequency"]:.2f} [Hz]'),
-            ('Acq rate', str(info['acq_rate'])),
-            ('Switching mode', str(info['switching_mode'])),
-            ('Switching freq.', f'{info["switching_frequency"]:.2f} [Hz]'),
+            ('BPMs acquisition rate', str(info['acq_rate'])),
+            ('BPMs sampling freq.', f'{info["sampling_frequency"]:.2f} [Hz]'),
+            ('BPMs switching mode', str(info['switching_mode'])),
+            (
+                'BPMs switching freq.',
+                f'{info["switching_frequency"]:.2f} [Hz]',
+            ),
         ]
 
         self.set_font('Arial', '', 10)
@@ -2492,18 +2495,18 @@ class ORMReport(FPDF):
         p = self.params
 
         rows = [
-            ('Timeout BPMs [s]', p.timeout_bpms),
-            ('Timeout Correctors [s]', p.timeout_correctors),
-            ('Meas BPM noise', p.meas_bpms_noise),
-            ('Meas RF', p.meas_rf_line),
-            ('Meas magnets', p.meas_magnets),
-            ('CH kick [urad]', p.corrs_ch_kick),
-            ('CV kick [urad]', p.corrs_cv_kick),
-            ('CH freqs', str(p.corrs_ch_freqs)),
-            ('CV freqs', str(p.corrs_cv_freqs)),
-            ('RF mode', str(p._rf_mode)),
-            ('RF step [Hz]', p.rf_step_kick),
-            ('RF phase amp [deg]', p.rf_phase_amp),
+            ('Timeout BPMs', f'{p.timeout_bpms:d} [s]'),
+            ('Timeout Correctors', f'{p.timeout_correctors:d} [s]'),
+            ('Measure BPM noise', f'{str(p.meas_bpms_noise)}'),
+            ('Measure RF', f'{str(p.meas_rf_line)}'),
+            ('Measure magnets', f'{str(p.meas_magnets)}'),
+            ('CH kick', f'{p.corrs_ch_kick:.2f} [urad]'),
+            ('CV kick', f'{p.corrs_cv_kick:.2f} [urad]'),
+            ('CH freqs', f'{p.corrs_ch_freqs} [Hz]'),
+            ('CV freqs', f'{p.corrs_cv_freqs} [Hz]'),
+            ('RF measurement mode', f'{p.RFModes._fields[p.rf_mode]}'),
+            ('RF step', f'{p.rf_step_kick:.2f} [Hz]'),
+            ('RF phase amp', f'{p.rf_phase_amp:.2f} [deg]'),
         ]
 
         self.set_font('Arial', '', 10)
@@ -2624,11 +2627,11 @@ class ORMReport(FPDF):
         _mplt.close(fig)
 
         self.add_page()
-        self.page_title('Measurement fingerprint')
-        self.meas_fingerprint()
-        self.page_title('Measurement params. & setup', loc_y=80)
-        self.set_y(90)
+        self.page_title('Measurement parameters')
         self.config_table()
+        self.page_title('Measurement data', loc_y=92)
+        self.set_y(100)
+        self.meas_fingerprint()
 
         self.add_page()
         self.page_title('Measurement scale factors')
