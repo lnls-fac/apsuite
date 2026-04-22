@@ -5,7 +5,8 @@ from multiprocessing import Pool as _Pool
 
 import matplotlib.pyplot as _plt
 import numpy as _np
-from mathphys.imgproc import Image2D_Fit as _Image2D_Fit
+from mathphys.imgproc import Image2D_CMom as _Image2D_CMom, \
+    Image2D_Fit as _Image2D_Fit
 from scipy.integrate import trapz as _trapezoid
 from scipy.interpolate import interp1d as _interp1d
 from scipy.ndimage import median_filter as _median_filter
@@ -257,6 +258,11 @@ class MeasTomography(_BaseClass):
             'bins_y',
             'bin_size_x',
             'bin_size_y',
+            'center_x',
+            'center_y',
+            'sigma_x',
+            'sigma_y',
+            'angle',
         ]
 
         # Reshape flat results into nested list [nr_points][nr_repeat]
@@ -290,15 +296,21 @@ class MeasTomography(_BaseClass):
         img = _median_filter(img, size=3)
         img2dfit = _Image2D_Fit(data=img)
         img2dfit.update_roi_with_fwhm(nr_fwhms[0], nr_fwhms[1])
+        angle, sigma1, sigma2 = img2dfit.calc_angle_normal_sigmas()
+        sigmax, sigmay = _Image2D_CMom.calc_rotated_sigma(
+            angle, sigma1, sigma2
+        )
+        sigmax *= scalex
+        sigmay *= scaley
         roix, roiy = img2dfit.roix, img2dfit.roiy
         img_crop = MeasTomography.crop_image(img, roix, roiy)
 
         # Determine positions and center beam in (0, 0)
         posx, posy = MeasTomography.get_positions(img, -scalex, -scaley)
-        x0 = posx[img2dfit.fitx.roi_center]
-        y0 = posy[img2dfit.fity.roi_center]
-        posx = posx - x0
-        posy = posy - y0
+        centerx = posx[img2dfit.fitx.roi_center]
+        centery = posy[img2dfit.fity.roi_center]
+        posx = posx - centerx
+        posy = posy - centery
         posx = posx[slice(*roix)]
         posy = posy[slice(*roiy)]
         gridx, gridy = _np.meshgrid(posx, posy)
@@ -319,6 +331,11 @@ class MeasTomography(_BaseClass):
             bins_y,
             bin_size_x,
             bin_size_y,
+            centerx,
+            centery,
+            sigmax,
+            sigmay,
+            angle,
         )
 
         return results
