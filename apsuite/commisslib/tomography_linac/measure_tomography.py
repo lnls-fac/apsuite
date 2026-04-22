@@ -533,7 +533,7 @@ class MeasTomography(_BaseClass):
         indices = self._resolve_points(points, repeat, nr_p)
 
         # Pagineted plot
-        self._plot_raw_images_paginated(
+        figs_axs = self._plot_raw_images_paginated(
             indices=indices,
             repeat=repeat,
             max_per_fig=max_per_fig,
@@ -541,6 +541,8 @@ class MeasTomography(_BaseClass):
             figsize=figsize,
             suptitle=suptitle,
         )
+
+        return figs_axs
 
     def plot_cropped_images(
         self,
@@ -560,12 +562,10 @@ class MeasTomography(_BaseClass):
         nr_p = len(self.analysis['image_cropped'])
         nr_r = self.params.nr_repeat
 
-        # resolve repeat e pontos válidos
         repeat = self._resolve_repeat(repeat, nr_r)
         indices = self._resolve_points_from_analysis(points, repeat, nr_p)
 
-        # paginação e plot
-        self._plot_cropped_images_paginated(
+        figs_axs = self._plot_cropped_images_paginated(
             indices=indices,
             repeat=repeat,
             max_per_fig=max_per_fig,
@@ -574,11 +574,13 @@ class MeasTomography(_BaseClass):
             suptitle=suptitle,
         )
 
+        return figs_axs
+
     def plot_projections(
         self,
         points=None,
         repeat=None,
-        plane='x',  # 'x' ou 'y' (removido 'both')
+        plane='x',  # 'x' or 'y'
         max_per_fig=9,
         figsize=(12, 8),
         suptitle=None,
@@ -598,7 +600,7 @@ class MeasTomography(_BaseClass):
         repeat = self._resolve_repeat(repeat, nr_r)
         indices = self._resolve_points_from_analysis(points, repeat, nr_p)
 
-        self._plot_projections_paginated(
+        figs_axs = self._plot_projections_paginated(
             indices=indices,
             repeat=repeat,
             plane=plane,
@@ -606,6 +608,8 @@ class MeasTomography(_BaseClass):
             figsize=figsize,
             suptitle=suptitle,
         )
+
+        return figs_axs
 
     def _resolve_repeat(self, repeat, nr_r):
         """Return a valid repeat index."""
@@ -651,11 +655,13 @@ class MeasTomography(_BaseClass):
         start = 0
         fig_idx = 1
 
+        results = []
+
         while start < total:
             end = min(start + max_per_fig, total)
             batch = indices[start:end]
 
-            self._plot_raw_images_page(
+            fig, axs = self._plot_raw_images_page(
                 batch_indices=batch,
                 repeat=repeat,
                 cmap=cmap,
@@ -664,8 +670,12 @@ class MeasTomography(_BaseClass):
                 suptitle=suptitle,
             )
 
+            results.append((fig, axs))
+
             fig_idx += 1
             start = end
+
+        return results
 
     def _plot_raw_images_page(
         self, batch_indices, repeat, cmap, figsize, page_idx, suptitle
@@ -697,7 +707,6 @@ class MeasTomography(_BaseClass):
             ax.set_xticks([])
             ax.set_yticks([])
 
-        # Hide unused axes
         for ax in axs[n_imgs:]:
             ax.axis('off')
 
@@ -709,6 +718,8 @@ class MeasTomography(_BaseClass):
         fig.tight_layout()
         _plt.show()
 
+        return fig, axs
+
     def _plot_cropped_images_paginated(
         self, indices, repeat, max_per_fig, cmap, figsize, suptitle
     ):
@@ -717,11 +728,13 @@ class MeasTomography(_BaseClass):
         start = 0
         fig_idx = 1
 
+        results = []
+
         while start < total:
             end = min(start + max_per_fig, total)
             batch = indices[start:end]
 
-            self._plot_cropped_images_page(
+            fig, axs = self._plot_cropped_images_page(
                 batch_indices=batch,
                 repeat=repeat,
                 cmap=cmap,
@@ -730,8 +743,12 @@ class MeasTomography(_BaseClass):
                 suptitle=suptitle,
             )
 
+            results.append((fig, axs))
+
             fig_idx += 1
             start = end
+
+        return results
 
     def _plot_cropped_images_page(
         self, batch_indices, repeat, cmap, figsize, page_idx, suptitle
@@ -765,7 +782,6 @@ class MeasTomography(_BaseClass):
             )
             ax.set_aspect('equal')
 
-        # Hide unused axes
         for ax in axs[n_imgs:]:
             ax.axis('off')
 
@@ -776,6 +792,8 @@ class MeasTomography(_BaseClass):
         fig.suptitle(title)
         fig.tight_layout()
         _plt.show()
+
+        return fig, axs
 
     def _plot_projections_paginated(
         self, indices, repeat, plane, max_per_fig, figsize, suptitle
@@ -789,11 +807,13 @@ class MeasTomography(_BaseClass):
             indices, repeat, plane
         )
 
+        results = []
+
         while start < total:
             end = min(start + max_per_fig, total)
             batch = indices[start:end]
 
-            self._plot_projections_page(
+            fig, axs = self._plot_projections_page(
                 batch_indices=batch,
                 repeat=repeat,
                 plane=plane,
@@ -803,8 +823,12 @@ class MeasTomography(_BaseClass):
                 global_xlim=(global_xmin, global_xmax),
             )
 
+            results.append((fig, axs))
+
             fig_idx += 1
             start = end
+
+        return results
 
     def _get_global_xlim(self, indices, repeat, plane):
         all_bins = []
@@ -871,3 +895,5 @@ class MeasTomography(_BaseClass):
         fig.suptitle(title)
         fig.tight_layout()
         _plt.show()
+
+        return fig, axs
