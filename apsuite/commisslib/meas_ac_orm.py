@@ -1,9 +1,12 @@
 """Main module."""
 
+import datetime
 import operator as _opr
 import time as _time
 from copy import deepcopy as _dcopy
 from functools import reduce as _red
+from fpdf import FPDF
+from pathlib import Path
 from threading import Thread as _Thread
 
 import matplotlib.pyplot as _mplt
@@ -670,7 +673,9 @@ class MeasACORM(_ThreadBaseClass):
             return False
         return self._meas_finished_ok
 
-    def check_measurement_quality(self, mat_ac=None, mat_dc=None, dthres=1e-3):
+    def check_measurement_quality(
+        self, mat_meas=None, mat_ref=None, dthres=1e-3
+    ):
         """Check whether last measurement have meaningful results.
 
         This method checks if the experiment has finished properly and
@@ -681,9 +686,9 @@ class MeasACORM(_ThreadBaseClass):
         This method will call process_data if needed.
 
         Args:
-            mat_ac (numpy.array, (320, 281), optional): The measured matrix.
+            mat_meas (numpy.array, (320, 281), optional): The measured matrix.
                 Defaults to None.
-            mat_dc (numpy.array, (320, 281), optional): The reference matrix.
+            mat_ref (numpy.array, (320, 281), optional): The reference matrix.
                 Defaults to None.
             dthres (float, optional): The threshold used for comparison.
                 Defaults to 1e-3.
@@ -698,12 +703,12 @@ class MeasACORM(_ThreadBaseClass):
         if not self.analysis:
             self.process_data()
 
-        if mat_ac is None:
-            mat_ac = self.build_respmat()
-        if mat_dc is None:
-            mat_dc = self.get_ref_respmat()
-        mat1 = mat_ac.reshape(2, -1, mat_ac.shape[-1])
-        mat2 = mat_dc.reshape(2, -1, mat_dc.shape[-1])
+        if mat_meas is None:
+            mat_meas = self.build_respmat()
+        if mat_ref is None:
+            mat_ref = self.get_ref_respmat()
+        mat1 = mat_meas.reshape(2, -1, mat_meas.shape[-1])
+        mat2 = mat_ref.reshape(2, -1, mat_ref.shape[-1])
         corr = 1 - self.calc_correlation(mat1, mat2)
         corr_ch = corr[:, :120]
         corr_cv = corr[:, 120:280]
@@ -713,17 +718,21 @@ class MeasACORM(_ThreadBaseClass):
         cond_ok &= (corr_rf[0] < dthres).all()
         return cond_ok
 
-    def plot_comparison_correlations(self, mat_ac=None, mat_dc=None):
+    def plot_comparison_correlations(
+        self, mat_meas=None, mat_ref=None, show_fig=True
+    ):
         """Plot comparison of measured response matrix with reference respmat.
 
         Two graphics will be made, one comparing the column space of both
         matrix and another one comparing their Row space.
 
         Args:
-            mat_ac (numpy.array, (320, 281), optional): The measured matrix.
+            mat_meas (numpy.array, (320, 281), optional): The measured matrix.
                 Defaults to None.
-            mat_dc (numpy.array, (320, 281), optional): The reference matrix.
+            mat_ref (numpy.array, (320, 281), optional): The reference matrix.
                 Defaults to None.
+            show_fig (bool): whether to display the matplotlib fig. Defaults
+                to True
 
         Returns:
             matplotlib.Figure: Figure object of the plot.
@@ -732,13 +741,13 @@ class MeasACORM(_ThreadBaseClass):
                 correlations.
 
         """
-        if mat_ac is None:
-            mat_ac = self.build_respmat()
-        if mat_dc is None:
-            mat_dc = self.get_ref_respmat()
+        if mat_meas is None:
+            mat_meas = self.build_respmat()
+        if mat_ref is None:
+            mat_ref = self.get_ref_respmat()
 
-        mat1 = mat_ac.reshape(2, -1, mat_ac.shape[-1])
-        mat2 = mat_dc.reshape(2, -1, mat_dc.shape[-1])
+        mat1 = mat_meas.reshape(2, -1, mat_meas.shape[-1])
+        mat2 = mat_ref.reshape(2, -1, mat_ref.shape[-1])
 
         sofb = self.sofb_data
         fig, (ax, ay) = _mplt.subplots(2, 1, figsize=(8, 6))
@@ -762,8 +771,8 @@ class MeasACORM(_ThreadBaseClass):
         ax.set_xlabel('Correctors Position [m]')
         ax.set_yscale('log')
         ax.set_title(
-            r'$1-\mathrm{Cor}(\mathrm{Col}(M_\mathrm{AC}), '
-            + r'\mathrm{Col}(M_\mathrm{DC}))$'
+            r'$1-\mathrm{Cor}(\mathrm{Col}(M_\mathrm{meas}), '
+            + r'\mathrm{Col}(M_\mathrm{ref}))$'
         )
 
         mat1 = mat1.swapaxes(-2, -1)
@@ -783,51 +792,54 @@ class MeasACORM(_ThreadBaseClass):
         ay.set_xlabel('BPMs Position [m]')
         ay.set_yscale('log')
         ay.set_title(
-            r'$1-\mathrm{Cor}(\mathrm{Row}(M_\mathrm{AC}), '
-            r'\mathrm{Row}(M_\mathrm{DC}))$'
+            r'$1-\mathrm{Cor}(\mathrm{Row}(M_\mathrm{meas}), '
+            r'\mathrm{Row}(M_\mathrm{ref}))$'
         )
 
         fig.tight_layout()
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, (ax, ay), corr
 
     def plot_comparison_single_corrector(
-        self, corr_idx, mat_ac=None, mat_dc=None
+        self, corr_idx, mat_meas=None, mat_ref=None, show_fig=True
     ):
         """Plot single corrector signatures of measured and reference respmat.
 
         Args:
             corr_idx (int): corrector index [0, 119] for CH, [120, 279] for CV
                 and 280 for RF.
-            mat_ac (numpy.array, (320, 281), optional): The measured matrix.
+            mat_meas (numpy.array, (320, 281), optional): The measured matrix.
                 Defaults to None.
-            mat_dc (numpy.array, (320, 281), optional): The reference matrix.
+            mat_ref (numpy.array, (320, 281), optional): The reference matrix.
                 Defaults to None.
+            show_fig (bool): whether to display the matplotlib fig. Defaults
+                to True
 
         Returns:
             matplotlib.Figure: Figure object of the plot.
             tuple: Tuple with both axes of the figure;
 
         """
-        if mat_ac is None:
-            mat_ac = self.build_respmat()
-        if mat_dc is None:
-            mat_dc = self.get_ref_respmat()
+        if mat_meas is None:
+            mat_meas = self.build_respmat()
+        if mat_ref is None:
+            mat_ref = self.get_ref_respmat()
 
         corr_names = self.sofb_data.ch_names + self.sofb_data.cv_names
         corr_names += ['RF']
-        acm = mat_ac[:, corr_idx].copy()
-        dcm = mat_dc[:, corr_idx].copy()
+        acm = mat_meas[:, corr_idx].copy()
+        dcm = mat_ref[:, corr_idx].copy()
         dif = acm - dcm
         pos = self.sofb_data.bpm_pos
 
-        fig, (ax, ay) = _mplt.subplots(2, 1, figsize=(8, 6))
+        fig, (ax, ay) = _mplt.subplots(2, 1, figsize=(8, 5))
         ax.set_title(f'{corr_names[corr_idx]:s}')
-        ax.plot(pos, acm[:160], label='AC')
-        ax.plot(pos, dcm[:160], label='DC')
+        ax.plot(pos, acm[:160], label='Meas.')
+        ax.plot(pos, dcm[:160], label='Ref.')
         ax.plot(pos, dif[:160], label='Diff.', lw=0.5)
-        ay.plot(pos, acm[160:], label='AC')
-        ay.plot(pos, dcm[160:], label='DC')
+        ay.plot(pos, acm[160:], label='Meas.')
+        ay.plot(pos, dcm[160:], label='Ref.')
         ay.plot(pos, dif[160:], label='Diff.', lw=0.5)
         ax.legend(loc='best')
         unit = '[um/urad]' if corr_idx != 280 else '[um/Hz]'
@@ -835,11 +847,16 @@ class MeasACORM(_ThreadBaseClass):
         ay.set_ylabel('Vertical ' + unit)
         ay.set_xlabel('BPM position')
         fig.tight_layout()
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, (ax, ay)
 
-    def plot_scale_conversion_factors(self):
+    def plot_scale_conversion_factors(self, show_fig=True):
         """Plot single corrector signatures of measured and reference respmat.
+
+        Args:
+            show_fig (bool): whether to display the matplotlib fig. Defaults
+                to True
 
         Returns:
             matplotlib.Figure: Figure object of the plot.
@@ -852,18 +869,21 @@ class MeasACORM(_ThreadBaseClass):
         ch_p = self.sofb_data.ch_pos
         cv_p = self.sofb_data.cv_pos
 
-        fig, ax = _mplt.subplots(1, 1, figsize=(6, 4))
-        ax.set_title(r'Scale Factors $M_\mathrm{DC} / M_\mathrm{AC}$')
+        fig, ax = _mplt.subplots(1, 1, figsize=(6, 3))
+        ax.set_title(r'Scale Factors $M_\mathrm{ref} / M_\mathrm{meas}$')
         ax.plot(ch_p, ch_f, label='CH')
         ax.plot(cv_p, cv_f, label='CV')
         ax.legend(loc='best')
         ax.set_ylabel('Relative Factor')
         ax.set_xlabel('Correctors Position [m]')
         fig.tight_layout()
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, ax
 
-    def plot_phases_vs_amplitudes(self, title='', corrsidx2highlight=None):
+    def plot_phases_vs_amplitudes(
+        self, title='', corrsidx2highlight=None, show_fig=True
+    ):
         """."""
         fig = _mplt.figure(figsize=(8, 6))
         gs = _mplt.GridSpec(
@@ -926,11 +946,11 @@ class MeasACORM(_ThreadBaseClass):
         avx.set_xlabel(r'Amplitudes [$\mu$m]')
         ahx.set_ylabel(r'Phases [$\pi$]')
         avy.set_ylabel(r'Phases [$\pi$]')
-
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, ((ahx, ahy), (avy, avx))
 
-    def plot_phases_histogram(self, title=''):
+    def plot_phases_histogram(self, title='', show_fig=True):
         """."""
         fig = _mplt.figure(figsize=(8, 6))
         gs = _mplt.GridSpec(
@@ -980,11 +1000,11 @@ class MeasACORM(_ThreadBaseClass):
         avy.set_ylabel(r'Counts')
         avx.set_xlabel(r'Phases [$\pi$]')
         avy.set_xlabel(r'Phases [$\pi$]')
-
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, ((ahx, ahy), (avy, avx))
 
-    def plot_bpms_fluctuations(self):
+    def plot_bpms_fluctuations(self, show_fig=True):
         """Plot BPMs flutuations statistics along BPMs and Correctors.
 
         Returns:
@@ -1035,11 +1055,12 @@ class MeasACORM(_ThreadBaseClass):
         ay.set_title('BPMs Variation along BPMs')
 
         fig.tight_layout()
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, (ax, ay)
 
     def plot_orbit_residue_after_fitting(
-        self, bpm_idx=0, excit_idx=0, time_domain=True
+        self, bpm_idx=0, excit_idx=0, time_domain=True, show_fig=True
     ):
         """Plot orbit residue after fitting.
 
@@ -1130,7 +1151,8 @@ class MeasACORM(_ThreadBaseClass):
             ncol=4,
         )
         fig.tight_layout()
-        fig.show()
+        if show_fig:
+            fig.show()
         return fig, (ax, ay), orbx, orby, dorbx, dorby
 
     # ------------------ Auxiliary Methods ------------------
@@ -2366,3 +2388,270 @@ class MeasACORM(_ThreadBaseClass):
     def _shift_list(lst, num):
         """."""
         return lst[-num:] + lst[:-num]
+
+    # ----------------- ORM report Class ----------------------------------
+
+
+class ORMReport(FPDF):
+    """."""
+
+    # TODO: change labels "ac mat" or "dc mat" in the analysis plots
+    # use "measured mat" and "reference mat" instead
+    # adjust figures sizing
+    TIME_FMT = '%Y-%m-%d %H:%M:%S'
+
+    def _get_cnpem_logo_path(self):
+        import apsuite
+
+        return str(
+            Path(apsuite.__file__).parent / 'resources/cnpem_lnls_logo.jpg'
+        )
+
+    def __init__(self, meas_orm=None):
+        """."""
+        super().__init__()
+        self.WIDTH = 210
+        self.HEIGHT = 297
+
+        self.meas_orm = meas_orm
+        self.params = None
+        self.data = None
+
+        self._folder = ''
+
+    def header(self):
+        """."""
+        path = self._get_cnpem_logo_path()
+        self.image(path, x=10, y=6, w=40, h=15)
+        self.set_font('Arial', 'B', 14)
+        self.cell(0, 6, 'SIRIUS AC ORM Report', 0, 0, 'C')
+        self.set_font('Arial', '', 11)
+        now = datetime.datetime.now()
+        stg = '{:s}'.format(now.strftime(self.TIME_FMT))
+        self.cell(0, 6, stg, 0, 0, 'R')
+        self.ln(10)
+
+    def footer(self):
+        """."""
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.set_text_color(129)
+        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
+    def page_title(self, title, loc_y=None):
+        """."""
+        self.set_font('Arial', '', 12)
+        self.set_fill_color(215)
+        if loc_y is not None:
+            self.set_y(loc_y)
+        self.cell(0, 6, f'{title:s}', 0, 1, 'C', 1)
+        self.ln(2)
+
+    def page_subtitle(self, title, loc_y=None):
+        """."""
+        self.set_font('Arial', '', 12)
+        self.set_fill_color(255, 255, 255)
+        if loc_y is not None:
+            self.set_y(loc_y)
+        self.cell(0, 6, f'{title:s}', 0, 1, 'C', 1)
+        self.ln(2)
+
+    def meas_fingerprint(self):
+        """."""
+        info = self.data['bpms_noise']
+
+        tstamp = datetime.datetime.fromtimestamp(info['timestamp'])
+        tstamp = tstamp.strftime(self.TIME_FMT)
+
+        rows = [
+            ('Measurement Timestamp', tstamp),
+            ('Stored current', f'{info["stored_current"]:.2f} [mA]'),
+            ('RF frequency', f'{info["rf_frequency"] / 1e6:.6f} [MHz]'),
+            ('Measured frac. tune X', f'{info["tunex"]:.4f}'),
+            ('Measured frac. tune y', f'{info["tuney"]:.4f}'),
+            ('BPMs acquisition rate', str(info['acq_rate'])),
+            ('BPMs sampling freq.', f'{info["sampling_frequency"]:.2f} [Hz]'),
+            ('BPMs switching mode', str(info['switching_mode'])),
+            (
+                'BPMs switching freq.',
+                f'{info["switching_frequency"]:.2f} [Hz]',
+            ),
+        ]
+
+        self.set_font('Arial', '', 10)
+
+        w = self.WIDTH / 2.5
+        h = 5
+        x0 = (self.WIDTH - 2 * w) / 2
+
+        for row in rows:
+            self.set_x(x0)
+            for item in row:
+                self.cell(w, h, str(item), border=1, align='C')
+            self.ln(h)
+
+    def config_table(self):
+        """."""
+        p = self.params
+
+        rows = [
+            ('Timeout BPMs', f'{p.timeout_bpms:d} [s]'),
+            ('Timeout Correctors', f'{p.timeout_correctors:d} [s]'),
+            ('Measure BPM noise', f'{str(p.meas_bpms_noise)}'),
+            ('Measure RF', f'{str(p.meas_rf_line)}'),
+            ('Measure magnets', f'{str(p.meas_magnets)}'),
+            ('CH kick', f'{p.corrs_ch_kick:.2f} [urad]'),
+            ('CV kick', f'{p.corrs_cv_kick:.2f} [urad]'),
+            ('CH freqs', f'{p.corrs_ch_freqs} [Hz]'),
+            ('CV freqs', f'{p.corrs_cv_freqs} [Hz]'),
+            ('RF measurement mode', f'{p.RFModes._fields[p.rf_mode]}'),
+            ('RF step', f'{p.rf_step_kick:.2f} [Hz]'),
+            ('RF phase amp', f'{p.rf_phase_amp:.2f} [deg]'),
+        ]
+
+        self.set_font('Arial', '', 10)
+
+        w = self.WIDTH / 2.5
+        h = 5
+        x0 = (self.WIDTH - 2 * w) / 2
+
+        for row in rows:
+            self.set_x(x0)
+            for item in row:
+                self.cell(w, h, str(item), border=1, align='C')
+            self.ln(h)
+
+    def add_scale_factors(self):
+        """."""
+        w = self.WIDTH - 30
+        x = (self.WIDTH - w) / 3
+
+        self.image(self._folder + 'scale_factors.png', x=x, y=26, w=w)
+
+    def add_correlations(self):
+        """."""
+        w = self.WIDTH - 30
+        x = (self.WIDTH - w) / 3
+
+        self.image(self._folder + 'correlation.png', x=x, y=130, w=w)
+
+    def add_least_correlated(self):
+        """."""
+        w = self.WIDTH - 30
+        x = (self.WIDTH - w) / 2
+        self.page_subtitle('Horizontal corrector column')
+        self.image(self._folder + 'least_corr_ch.png', x=x, y=35, w=w)
+        self.page_subtitle('Vertical corrector column', loc_y=155)
+        self.image(self._folder + 'least_corr_cv.png', x=x, y=160, w=w)
+
+    def add_best_correlated(self):
+        """."""
+        w = self.WIDTH - 30
+        x = (self.WIDTH - w) / 2
+        self.page_subtitle('Horizontal corrector column')
+        self.image(self._folder + 'best_corr_ch.png', x=x, y=35, w=w)
+        self.page_subtitle('Vertical corrector column', loc_y=155)
+        self.image(self._folder + 'best_corr_cv.png', x=x, y=160, w=w)
+
+    def add_rf_column(self):
+        """."""
+        w = self.WIDTH - 30
+        x = (self.WIDTH - w) / 2
+
+        self.image(self._folder + 'rf_column.png', x=x, y=26, w=w)
+
+    def create_report(self, meas_orm, folder=None):
+        """."""
+        if folder is None:
+            folder = ''
+
+        self.meas_orm = meas_orm
+        self.params = meas_orm.params
+        self.data = meas_orm.data
+        self._folder = folder
+
+        if not meas_orm.analysis:
+            meas_orm.process_data()
+
+        mat_meas = meas_orm.build_respmat()
+        mat_ref = meas_orm.get_ref_respmat()
+
+        fig, _ = meas_orm.plot_scale_conversion_factors(show_fig=False)
+        fig.savefig(folder + 'scale_factors.png', dpi=300)
+        _mplt.close(fig)  # even if show_fig=False, figs can be displayed
+        # in interactive envs (notebooks specifically)
+
+        fig, _, corr = meas_orm.plot_comparison_correlations(
+            mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
+        )
+        fig.savefig(folder + 'correlation.png', dpi=300)
+        _mplt.close(fig)
+
+        corr_h = corr[:, :120]
+        corr_v = corr[:, 120:280]
+
+        idcsh = corr_h[1].argsort()
+        idcsv = corr_v[0].argsort() + 120
+
+        # least correlated
+        fig, _ = meas_orm.plot_comparison_single_corrector(
+            idcsh[-1], mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
+        )
+        fig.savefig(folder + 'least_corr_ch.png', dpi=300)
+        _mplt.close(fig)
+
+        fig, _ = meas_orm.plot_comparison_single_corrector(
+            idcsv[-1], mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
+        )
+        fig.savefig(folder + 'least_corr_cv.png', dpi=300)
+        _mplt.close(fig)
+
+        # best correlated
+        fig, _ = meas_orm.plot_comparison_single_corrector(
+            idcsh[0], mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
+        )
+        fig.savefig(folder + 'best_corr_ch.png', dpi=300)
+        _mplt.close(fig)
+
+        fig, _ = meas_orm.plot_comparison_single_corrector(
+            idcsv[0], mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
+        )
+        fig.savefig(folder + 'best_corr_cv.png', dpi=300)
+        _mplt.close(fig)
+
+        # rf
+        fig, _ = meas_orm.plot_comparison_single_corrector(
+            280, mat_meas=mat_meas, mat_ref=mat_ref, show_fig=False
+        )
+        fig.savefig(folder + 'rf_column.png', dpi=300)
+        _mplt.close(fig)
+
+        self.add_page()
+        self.page_title('Measurement parameters')
+        self.config_table()
+        self.page_title('Measurement data', loc_y=92)
+        self.set_y(100)
+        self.meas_fingerprint()
+
+        self.add_page()
+        self.page_title('Measurement scale factors')
+        self.add_scale_factors()
+
+        self.page_title(
+            'Measurement correlation residue (from unity)', loc_y=122
+        )
+        self.add_correlations()
+
+        self.add_page()
+        self.page_title('Least correlated columns comparison')
+        self.add_least_correlated()
+
+        self.add_page()
+        self.page_title('Most correlated columns comparison')
+        self.add_best_correlated()
+
+        self.add_page()
+        self.page_title('RF Column (dispersion) comparsion')
+        self.add_rf_column()
+
+        self.output(folder + 'orm_report.pdf', 'F')

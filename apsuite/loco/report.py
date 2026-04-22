@@ -6,12 +6,19 @@ from fpdf import FPDF
 
 from apsuite.loco.analysis import LOCOAnalysis
 from apsuite.loco.utils import LOCOUtils
+from pathlib import Path
 
 TIME_FMT = '%Y-%m-%d %H:%M:%S'
 
 
 class LOCOReport(FPDF):
     """."""
+
+    def _get_cnpem_logo_path(self):
+        import apsuite
+        return str(
+            Path(apsuite.__file__).parent / 'resources/cnpem_lnls_logo.jpg'
+        )
 
     def __init__(self, loco_data=None):
         """."""
@@ -28,8 +35,8 @@ class LOCOReport(FPDF):
 
     def header(self):
         """."""
-        path = '/'.join(__file__.split('/')[:-1])
-        self.image(path + '/cnpem_lnls_logo.jpg', x=10, y=6, w=40, h=15)
+        path = self._get_cnpem_logo_path()
+        self.image(path, x=10, y=6, w=40, h=15)
         self.set_font('Arial', 'B', 14)
         self.cell(0, 6, 'SIRIUS LOCO Report', 0, 0, 'C')
         self.set_font('Arial', '', 11)
