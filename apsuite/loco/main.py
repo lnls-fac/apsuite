@@ -479,14 +479,25 @@ class LOCO:
             _LOCOUtils.save_data('6d_KL_sextupoles', jloco_kl_sext)
 
         if self.config.fit_skew_quadrupoles:
-            idx_qs = self.config.respm.fam_data['QS']['index']
-            sub_qs = self.config.respm.fam_data['QS']['subsection']
+            idx_qs_all = self.config.respm.fam_data['QS']['index']
+            idx_qs_all += self.config.respm.fam_data['IDQS']['index']
+            sub_qs_all = self.config.respm.fam_data['QS']['subsection']
+            sub_qs_all += self.config.respm.fam_data['IDQS']['subsection']
             idx_qs = self.config.skew_quad_indices_ksl
-            selidx = []
-            for sel in self.config.skew_quad_indices_ksl:
-                selidx.append(idx_qs.index([sel]))
-            idx_qs = [idx_qs[idx] for idx in selidx]
-            sub_qs = [sub_qs[idx] for idx in selidx]
+
+            idx_flat, sub_flat = [], []
+            for idxs, sub in zip(idx_qs_all, sub_qs_all):
+                if isinstance(idxs, list):
+                    idx_flat.extend(idxs)
+                    sub_flat.extend([sub] * len(idxs))
+                else:
+                    idx_flat.append(idxs)
+                    sub_flat.append(sub)
+
+            sub_qs = []
+            for i in idx_qs:
+                sub_qs.append(sub_flat[idx_flat.index(i[0])])
+
             jloco_ksl_skewquad = self.create_new_jacobian_dict(
                 self._jloco_ksl_skew_quad, idx_qs, sub_qs
             )
