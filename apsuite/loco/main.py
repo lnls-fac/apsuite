@@ -957,6 +957,7 @@ class LOCO:
             self._girders_shift_inival + self._girders_shift_deltas
         )
         self.kldelta_history = self._kldelta_history
+        self.ksldelta_history = self._ksldelta_history
 
     def clear_output_vars(self):
         """."""
