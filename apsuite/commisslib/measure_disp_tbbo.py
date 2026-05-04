@@ -160,7 +160,7 @@ class MeasureDispTBBO(_BaseClass):
         for datum in self.data:
             traj = datum['trajs']
             trajs.extend(traj)
-            kly2_amps.extend([self.data['kly2_amp']] * len(traj))
+            kly2_amps.extend([datum['kly2_amp']] * len(traj))
         trajs = np.array(trajs)
         kly2_amps = np.array(kly2_amps)
         (orb_mean, disp), info = np.polynomial.polynomial.polyfit(
