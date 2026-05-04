@@ -105,16 +105,16 @@ class MeasureDispTBBO(_BaseClass):
             traj0 = self.traj
             evg.cmd_turn_on_injection()
             t0_ = _time.time()
-            print(
-                f'{i:02d}/{self.params.nr_points:02d} -> ' +
-                'reading initial trajectory...')
+            stg = f'    {i:02d}/{self.params.nr_points:02d} -> '
+            stg += 'Getting trajectory...'
+            print(stg , end='\r', flush=True)
             for _ in range(50):
                 if not np.any(np.isclose(traj0, self.traj)):
                     break
                 _time.sleep(self.params.timeout_orb/50)
             else:
-                print('    Timed out waiting traj to update.')
-            print('    Getting trajectory.')
+                stg += ' Timed out waiting traj to update.'
+            print(stg + '  Done!')
             trajs.append(self.traj)
             trajsum.append(self.trajsum)
             timestamp.append(_time.time())
@@ -123,7 +123,7 @@ class MeasureDispTBBO(_BaseClass):
 
     def measure_dispersion(self):
         """."""
-        kly2_amps = np.arange(
+        kly2_amps = np.linspace(
             self.params.kly2_amp_ini,
             self.params.kly2_amp_fin,
             self.params.kly2_amp_npts
@@ -133,20 +133,21 @@ class MeasureDispTBBO(_BaseClass):
 
         origamp = kly2_dev.amplitude
         for i, kly2_amp in enumerate(kly2_amps):
-            print('setting new Klystron2 amplitude...')
             kly2_dev.amplitude = kly2_amp
-            _time.sleep(0.2)
-            print(f"Klystron2 Amp: {kly2_dev.amplitude:.3f}")
+            _time.sleep(0.5)
+            print(
+                f'{i+1:02d}/{self.params.kly2_amp_npts:02d} --> '
+                f'Klystron2 Amp: {kly2_amp:.3f}'
+            )
             _time.sleep(self.params.wait_kly2)
 
-            print('reading new trajectory...')
             self.data.append(self.inject_and_get_data())
 
-        print('restoring Klystron2 amplitude...')
+        print('Restoring Klystron2 amplitude...')
         kly2_dev.amplitude = origamp
         _time.sleep(1)
         print(f"Klystron2 Amp: {kly2_dev.amplitude:.3f}")
-        print('finished!')
+        print('Finished!')
 
     def process_data(self):
         """."""
