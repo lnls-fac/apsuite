@@ -22,7 +22,9 @@ class ParamsDisp(_ParamsBaseClass):
     def __init__(self):
         """."""
         super().__init__()
-        self.delta_kly2_amp = -2
+        self.kly2_amp_ini = 69.7
+        self.kly2_amp_fin = 73.7
+        self.kly2_amp_npts = 5
         self.wait_kly2 = 10
         self.timeout_orb = 10
         self.nr_points = 10
@@ -36,7 +38,9 @@ class ParamsDisp(_ParamsBaseClass):
         ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
         dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
         stmp = '{0:24s} = {1:}  {2:s}\n'.format
-        stg = ftmp('delta_kly2_amp', self.delta_kly2_amp, '')
+        stg = ftmp('kly2_amp_ini', self.kly2_amp_ini, '')
+        stg += ftmp('kly2_amp_fin', self.kly2_amp_fin, '')
+        stg += dtmp('kly2_amp_npts', self.kly2_amp_npts, '')
         stg += ftmp('wait_kly2', self.wait_kly2, '[s]')
         stg += ftmp('timeout_orb', self.timeout_orb, '[s]')
         stg += ftmp('injection_interval', self.injection_interval, '[s]')
@@ -80,14 +84,23 @@ class MeasureDispTBBO(_BaseClass):
             [self.devices['tb_sofb'].trajy, self.devices['bo_sofb'].trajy])
 
     @property
+    def trajsum(self):
+        """."""
+        return np.hstack([
+            self.devices['tb_sofb'].sum, self.devices['bo_sofb'].sum
+        ])
+
+    @property
     def traj(self):
         """."""
         return np.r_[self.trajx, self.trajy]
 
-    def inject_and_get_traj(self):
+    def inject_and_get_data(self):
         """."""
         evg = self.devices['evg']
         trajs = []
+        timestamp = []
+        trajsum = []
         for i in range(self.params.nr_points):
             traj0 = self.traj
             evg.cmd_turn_on_injection()
@@ -103,32 +116,56 @@ class MeasureDispTBBO(_BaseClass):
                 print('    Timed out waiting traj to update.')
             print('    Getting trajectory.')
             trajs.append(self.traj)
+            trajsum.append(self.trajsum)
+            timestamp.append(_time.time())
             _time.sleep(self.params.injection_interval - (_time.time() - t0_))
-        return np.mean(trajs, axis=0)
+        return dict(trajs=trajs, trajsum=trajsum, timestamp=timestamp)
 
     def measure_dispersion(self):
         """."""
-        self.nr_points = self.params.nr_points
-        delta = self.params.delta_kly2_amp
+        kly2_amps = np.arange(
+            self.params.kly2_amp_ini,
+            self.params.kly2_amp_fin,
+            self.params.kly2_amp_npts
+        )
         kly2_dev = self.devices['kly2']
+        self.data = []
 
-        traj0 = self.inject_and_get_traj()
-
-        print('setting new Klystron2 amplitude...')
         origamp = kly2_dev.amplitude
-        kly2_dev.amplitude = origamp + delta
-        _time.sleep(1)
-        print(f"Klystron2 Amp: {kly2_dev.amplitude:.3f}")
-        _time.sleep(self.params.wait_kly2)
-        print('reading new trajectory...')
-        trajp = self.inject_and_get_traj()
+        for i, kly2_amp in enumerate(kly2_amps):
+            print('setting new Klystron2 amplitude...')
+            kly2_dev.amplitude = kly2_amp
+            _time.sleep(0.2)
+            print(f"Klystron2 Amp: {kly2_dev.amplitude:.3f}")
+            _time.sleep(self.params.wait_kly2)
+
+            print('reading new trajectory...')
+            self.data.append(self.inject_and_get_data())
 
         print('restoring Klystron2 amplitude...')
         kly2_dev.amplitude = origamp
         _time.sleep(1)
         print(f"Klystron2 Amp: {kly2_dev.amplitude:.3f}")
         print('finished!')
-        return trajp - traj0
+
+    def process_data(self):
+        """."""
+        if not self.data:
+            raise ValueError(
+                'No data to process. Run measure_dispersion() first.'
+            )
+        trajs = []
+        kly2_amps = []
+        for datum in self.data:
+            traj = datum['trajs']
+            trajs.extend(traj)
+            kly2_amps.extend([self.data['kly2_amp']] * len(traj))
+        trajs = np.array(trajs)
+        kly2_amps = np.array(kly2_amps)
+        (orb_mean, disp), info = np.polynomial.polynomial.polyfit(
+            kly2_amps, trajs, deg=1, full=True
+        )
+        self.analysis = dict(orb_mean=orb_mean, disp=disp, info=info)
 
     @staticmethod
     def calc_model_dispersionTBBO(model, bpms):
