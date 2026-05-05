@@ -192,7 +192,7 @@ class MeasureDispTBBO(_BaseClass):
         print(f'Klystron2 Amp: {kly2_dev.amplitude:.3f}')
         print('Finished!')
 
-    def process_data(self):
+    def process_data(self, fit_order=1, norm_strategy='bo_mean'):
         """."""
         if not self.data:
             raise ValueError(
@@ -205,21 +205,45 @@ class MeasureDispTBBO(_BaseClass):
             kly2_amps.extend(datum['kly2_amp'])
         trajs = np.array(trajs)
         kly2_amps = np.array(kly2_amps)
-        coefs, info = np.polynomial.polynomial.polyfit(
-            kly2_amps, trajs, deg=1, full=True
+        xfit = kly2_amps - kly2_amps.mean()
+        coefs, _ = np.polynomial.polynomial.polyfit(
+            xfit, trajs, deg=fit_order, full=True
         )
 
         disp_model = self.calc_model_dispersion()
-        disp_meas = coefs[1] / coefs[1][:6].std() * disp_model[:6].std()
+        disp_meas = coefs[1:].copy()
+        if norm_strategy.lower().startswith('tb'):
+            disp_meas *= disp_model[:6].std() / coefs[1][:6].std()
+        else:
+            disp_meas *= disp_model[6:56].mean() / coefs[1][6:56].mean()
+
+        ress = [(trajs**2).sum(axis=0)]
+        for i in range(1, fit_order+2):
+            fit = np.polynomial.polynomial.polyval(xfit, coefs[:i])
+            ress.append(((trajs - fit.T)**2).sum(axis=0))
+        ress = np.array(ress)
+        ratio = ress / ress[1][None, :]
 
         self.analysis = dict(
+            fit_x=xfit,
             fit_coefs=coefs,
-            fit_info=info,
+            fit_residue_order=ress,
+            fit_rel_residue=ratio,
             disp_meas=disp_meas,
             disp_model=disp_model,
             trajs=trajs,
             kly2_amps=kly2_amps,
         )
+
+    def get_dispersion_fitting_problems(
+        self, order=1, rel_residue_threshold=0.01
+    ):
+        ratio = self.analysis['fit_rel_residue']
+        idcs = (ratio[order+1] > rel_residue_threshold).nonzero()[0]
+        nbpms = len(self.model_bpms_idx)
+        fit_probs = [(i, 'h') for i in idcs if i < nbpms]
+        fit_probs += [(i - nbpms, 'v') for i in idcs if i >= nbpms]
+        return fit_probs
 
     def calc_model_dispersion(self):
         """."""
@@ -299,13 +323,15 @@ class MeasureDispTBBO(_BaseClass):
             print('# of fitting parameters larger than # of data points!')
         return np.sqrt(np.diag(pcov))
 
-    def plot_dispersion(self, nr_bpms=None):
+    # ---------------- plot methods ----------------
+
+    def plot_dispersion(self, order=1, nr_bpms=None):
         """."""
         if nr_bpms is None:
             nr_bpms = len(self.model_bpms_idx)
 
         disp_model = self.calc_model_dispersion()
-        disp_meas = self.analysis['disp_meas'].copy()
+        disp_meas = self.analysis['disp_meas'][order-1].copy()
 
         fig, axs = plt.subplots(2, 1, figsize=(10, 6))
         axs[0].plot(
@@ -326,16 +352,79 @@ class MeasureDispTBBO(_BaseClass):
         axs[0].set_ylabel(r'$\eta_x$ [m]')
         axs[1].set_ylabel(r'$\eta_y$ [m]')
         axs[1].set_xlabel('BPM idx')
-        axs[0].set_title('Propagated dispersion function TB-BO')
+        axs[0].set_title(
+            'Propagated Dispersion Function TB-BO (order {order})'
+        )
 
         axs[0].legend(fontsize=10)
         axs[1].legend(fontsize=10)
+        axs[0].grid(True, alpha=0.5, ls='--', lw=0.5, color='k')
+        axs[1].grid(True, alpha=0.5, ls='--', lw=0.5, color='k')
 
         fig.tight_layout()
         return fig, axs
 
-    # def plot_fitting_quality(self):
+    def plot_traj_fitting_relative_residue(self, order=1):
+        """."""
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ratio = self.analysis['fit_rel_residue'][order+1]
+        nbpm = len(self.model_bpms_idx)
 
+        ax.plot(ratio[:nbpm], '-o', label='Horizontal')
+        ax.plot(ratio[nbpm:], '-o', label='Vertical')
+
+        ax.legend(
+            loc='lower center',
+            bbox_to_anchor=(0.5, 1),
+            ncol=2,
+            fontsize='small'
+        )
+        ax.set_title('Relative Residue Fit Order N={order} by Order 0.')
+        ax.set_xlabel('BPM Index')
+        ax.set_ylabel(
+            r'Relative residue $\chi^2_{y=P_N(x)}/\chi^2_{y=P_0(x)}$'
+        )
+        ax.grid(True, ls='--', alpha=0.4, color='k', lw=0.5)
+
+        fig.tight_layout()
+        return fig, ax
+
+    def plot_dispersion_fit_at_bpm(self, bpm_idx=0, plane='h'):
+        """."""
+        ish = plane.lower().startswith(('h', 'x'))
+        idx = bpm_idx
+        if not ish:
+            idx += len(self.model_bpms_idx)
+
+        ratio = self.analysis['fit_rel_residue']
+        kly2_amps = self.analysis['kly2_amps']
+        xfit = self.analysis['fit_x']
+        traj_points = self.analysis['trajs'][:, idx]
+        coefs = self.analysis['fit_coefs'][:, idx]
+        traj_fit = np.polynomial.polynomial.polyval(xfit, coefs)
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+
+        stg = f'BPM {bpm_idx:d}, '
+        stg += f"{'Horizontal' if ish else 'Vertical':s} Plane\n"
+        stg += 'coefs = ['
+        stg += ', '.join([f'{r:.2g}'for r in coefs])
+        stg += ']    ratios = ['
+        stg += ', '.join([f'{r:.2g}'for r in ratio[2:, idx]])
+        stg += ']'
+        ax.set_title(stg, fontsize='small')
+
+        ax.plot(kly2_amps, traj_points, "o", label='Data')
+        ax.plot(kly2_amps, traj_fit, label='Fit')
+        ax.legend(loc='best')
+        ax.set_xlabel('Klystron 2 Amplitude [%]')
+        ax.set_ylabel('Trajectory [um]')
+        ax.grid(True, ls='--', alpha=0.4, color='k', lw=0.5)
+
+        fig.tight_layout()
+        return fig, ax
+
+    # --------------- helper methods ---------------
 
     def _err_func(self, grads):
         """."""
