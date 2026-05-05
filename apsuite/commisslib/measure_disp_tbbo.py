@@ -106,9 +106,9 @@ class MeasureDispTBBO(_BaseClass):
             traj0 = self.traj
             evg.cmd_turn_on_injection()
             t0_ = _time.time()
-            stg = f'    {i:02d}/{self.params.nr_points:02d} -> '
+            stg = f'    {i+1:02d}/{self.params.nr_points:02d} -> '
             stg += 'Getting trajectory...'
-            print(stg , end='\r', flush=True)
+            print(stg, end='\r', flush=True)
             for _ in range(50):
                 if not np.any(np.isclose(traj0, self.traj)):
                     break
@@ -120,7 +120,10 @@ class MeasureDispTBBO(_BaseClass):
             trajsum.append(self.trajsum)
             timestamp.append(_time.time())
             kly2_amp.append(self.devices['kly2'].amplitude)
-            _time.sleep(self.params.injection_interval - (_time.time() - t0_))
+            dtim = max(
+                0, self.params.injection_interval - (_time.time() - t0_)
+            )
+            _time.sleep(dtim)
         return dict(
             trajs=trajs,
             trajsum=trajsum,
@@ -274,7 +277,7 @@ class MeasureDispTBBO(_BaseClass):
     @staticmethod
     def plot_dispersion(disp_model, disp_meas, nr_bpms):
         """."""
-        _, axs = plt.subplots(2, 1, figsize=(10, 6))
+        fig, axs = plt.subplots(2, 1, figsize=(10, 6))
         axs[0].plot(
             disp_model[:nr_bpms], '-o', color='tab:blue', label='model')
         axs[0].plot(
@@ -296,5 +299,5 @@ class MeasureDispTBBO(_BaseClass):
         axs[0].legend(fontsize=10)
         axs[1].legend(fontsize=10)
 
-        plt.tight_layout()
-        plt.show()
+        fig.tight_layout()
+        return fig, axs
