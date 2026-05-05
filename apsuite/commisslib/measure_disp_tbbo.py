@@ -63,7 +63,7 @@ class MeasureDispTBBO(_BaseClass):
         super().__init__(ParamsDisp(), isonline=isonline)
         self.isonline = isonline
         self._model = None
-        self._bpms_idx = None
+        self._model_bpms_idx = None
         if self.isonline:
             self.devices = {
                 'bo_sofb': SOFB(SOFB.DEVICES.BO),
@@ -80,7 +80,7 @@ class MeasureDispTBBO(_BaseClass):
             modb = bo.create_accelerator()
             mod.extend(modb)
             self._model = mod
-            self._bpms_idx = np.array(
+            self._model_bpms_idx = np.array(
                 pa.lattice.find_indices(self._model, 'fam_name', 'BPM')
             ).ravel()[1:]
         return self._model
@@ -299,8 +299,11 @@ class MeasureDispTBBO(_BaseClass):
             print('# of fitting parameters larger than # of data points!')
         return np.sqrt(np.diag(pcov))
 
-    def plot_dispersion(self, nr_bpms):
+    def plot_dispersion(self, nr_bpms=None):
         """."""
+        if nr_bpms is None:
+            nr_bpms = len(self.model_bpms_idx)
+
         disp_model = self.calc_model_dispersion()
         disp_meas = self.analysis['disp_meas'].copy()
 
@@ -339,9 +342,6 @@ class MeasureDispTBBO(_BaseClass):
         disp_meas = self.analysis['disp_meas']
         kxl, kyl, ksxl, ksyl = grads
         self.set_septum_gradient(kxl, kyl, ksxl, ksyl)
-        bpm_idx = np.array(
-            pa.lattice.find_indices(self.model, 'fam_name', 'BPM')
-        ).ravel()[1:]
-        disp_model = self.calc_model_dispersion(self.model, bpm_idx)
+        disp_model = self.calc_model_dispersion()
         err_vec = (disp_model - disp_meas) ** 2
         return err_vec
