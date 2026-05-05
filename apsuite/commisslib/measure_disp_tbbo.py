@@ -319,3 +319,5 @@ class MeasureDispTBBO(_BaseClass):
 
         fig.tight_layout()
         return fig, axs
+
+    # def plot_fitting_quality(self):
