@@ -1,4 +1,5 @@
 """."""
+
 import time as _time
 
 import numpy as np
@@ -7,12 +8,15 @@ import numpy.polynomial.polynomial as np_poly
 import pyaccel as pa
 from siriuspy.devices import SOFB, DevLILLRF, EVG
 
-from ..utils import MeasBaseClass as _BaseClass, \
-    ParamsBaseClass as _ParamsBaseClass
+from ..utils import (
+    MeasBaseClass as _BaseClass,
+    ParamsBaseClass as _ParamsBaseClass,
+)
 
 from scipy.optimize import least_squares
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
+
 rcParams.update({'font.size': 16, 'lines.linewidth': 2})
 
 
@@ -46,8 +50,7 @@ class ParamsDisp(_ParamsBaseClass):
         stg += ftmp('injection_interval', self.injection_interval, '[s]')
         stg += dtmp('nr_points', self.nr_points, '')
         coeffs_stg = ', '.join([f'{c:f}' for c in self.kly2_excit_coeffs])
-        stg += stmp(
-            'kly2_excit_coeffs', f'[{coeffs_stg:s}]', '')
+        stg += stmp('kly2_excit_coeffs', f'[{coeffs_stg:s}]', '')
         return stg
 
 
@@ -63,31 +66,38 @@ class MeasureDispTBBO(_BaseClass):
                 'bo_sofb': SOFB(SOFB.DEVICES.BO),
                 'tb_sofb': SOFB(SOFB.DEVICES.TB),
                 'kly2': DevLILLRF(DevLILLRF.DEVICES.LI_KLY2),
-                'evg': EVG()}
+                'evg': EVG(),
+            }
 
     @property
     def energy(self):
         """."""
         return np_poly.polyval(
-            self.params.kly2_excit_coeffs, self.devices['kly2'].amplitude)
+            self.params.kly2_excit_coeffs, self.devices['kly2'].amplitude
+        )
 
     @property
     def trajx(self):
         """."""
-        return np.hstack(
-            [self.devices['tb_sofb'].trajx, self.devices['bo_sofb'].trajx])
+        return np.hstack([
+            self.devices['tb_sofb'].trajx,
+            self.devices['bo_sofb'].trajx,
+        ])
 
     @property
     def trajy(self):
         """."""
-        return np.hstack(
-            [self.devices['tb_sofb'].trajy, self.devices['bo_sofb'].trajy])
+        return np.hstack([
+            self.devices['tb_sofb'].trajy,
+            self.devices['bo_sofb'].trajy,
+        ])
 
     @property
     def trajsum(self):
         """."""
         return np.hstack([
-            self.devices['tb_sofb'].sum, self.devices['bo_sofb'].sum
+            self.devices['tb_sofb'].sum,
+            self.devices['bo_sofb'].sum,
         ])
 
     @property
@@ -106,13 +116,13 @@ class MeasureDispTBBO(_BaseClass):
             traj0 = self.traj
             evg.cmd_turn_on_injection()
             t0_ = _time.time()
-            stg = f'    {i+1:02d}/{self.params.nr_points:02d} -> '
+            stg = f'    {i + 1:02d}/{self.params.nr_points:02d} -> '
             stg += 'Getting trajectory...'
             print(stg, end='\r', flush=True)
             for _ in range(50):
                 if not np.any(np.isclose(traj0, self.traj)):
                     break
-                _time.sleep(self.params.timeout_orb/50)
+                _time.sleep(self.params.timeout_orb / 50)
             else:
                 stg += ' Timed out waiting traj to update.'
             print(stg + '  Done!')
@@ -128,7 +138,7 @@ class MeasureDispTBBO(_BaseClass):
             trajs=trajs,
             trajsum=trajsum,
             timestamp=timestamp,
-            kly2_amp=kly2_amp
+            kly2_amp=kly2_amp,
         )
 
     def measure_dispersion(self):
@@ -136,7 +146,7 @@ class MeasureDispTBBO(_BaseClass):
         kly2_amps = np.linspace(
             self.params.kly2_amp_ini,
             self.params.kly2_amp_fin,
-            self.params.kly2_amp_npts
+            self.params.kly2_amp_npts,
         )
         kly2_dev = self.devices['kly2']
         self.data = []
@@ -146,7 +156,7 @@ class MeasureDispTBBO(_BaseClass):
             kly2_dev.amplitude = kly2_amp
             _time.sleep(0.5)
             print(
-                f'{i+1:02d}/{self.params.kly2_amp_npts:02d} --> '
+                f'{i + 1:02d}/{self.params.kly2_amp_npts:02d} --> '
                 f'Klystron2 Amp: {kly2_amp:.3f}'
             )
             _time.sleep(self.params.wait_kly2)
@@ -156,7 +166,7 @@ class MeasureDispTBBO(_BaseClass):
         print('Restoring Klystron2 amplitude...')
         kly2_dev.amplitude = origamp
         _time.sleep(1)
-        print(f"Klystron2 Amp: {kly2_dev.amplitude:.3f}")
+        print(f'Klystron2 Amp: {kly2_dev.amplitude:.3f}')
         print('Finished!')
 
     def process_data(self):
@@ -180,7 +190,7 @@ class MeasureDispTBBO(_BaseClass):
             disp=disp,
             info=info,
             trajs=trajs,
-            kly2_amps=kly2_amps
+            kly2_amps=kly2_amps,
         )
 
     @staticmethod
@@ -188,8 +198,9 @@ class MeasureDispTBBO(_BaseClass):
         """."""
         dene = 1e-4
         rin = np.array([
-            [0, 0, 0, 0, dene/2, 0],
-            [0, 0, 0, 0, -dene/2, 0]]).T
+            [0, 0, 0, 0, dene / 2, 0],
+            [0, 0, 0, 0, -dene / 2, 0],
+        ]).T
         rout, *_ = pa.tracking.line_pass(model, rin, bpms)
         dispx = (rout[0, 0, :] - rout[0, 1, :]) / dene
         dispy = (rout[2, 0, :] - rout[2, 1, :]) / dene
@@ -201,10 +212,10 @@ class MeasureDispTBBO(_BaseClass):
         ind = pa.lattice.find_indices(model, 'fam_name', 'InjSeptM66')
         nrsegs = len(ind)
         for i in ind:
-            model[i].KxL = kxl/nrsegs
-            model[i].KyL = kyl/nrsegs
-            model[i].KsxL = ksxl/nrsegs
-            model[i].KsyL = ksyl/nrsegs
+            model[i].KxL = kxl / nrsegs
+            model[i].KyL = kyl / nrsegs
+            model[i].KsxL = ksxl / nrsegs
+            model[i].KsyL = ksyl / nrsegs
 
     @staticmethod
     def get_septum_gradient(model):
@@ -223,10 +234,11 @@ class MeasureDispTBBO(_BaseClass):
         """."""
         kxl, kyl, ksxl, ksyl = grads
         MeasureDispTBBO.set_septum_gradient(model, kxl, kyl, ksxl, ksyl)
-        bpm_idx = np.array(pa.lattice.find_indices(
-            model, 'fam_name', 'BPM')).ravel()[1:]
+        bpm_idx = np.array(
+            pa.lattice.find_indices(model, 'fam_name', 'BPM')
+        ).ravel()[1:]
         disp_model = MeasureDispTBBO.calc_model_dispersionTBBO(model, bpm_idx)
-        err_vec = (disp_model - disp_meas)**2
+        err_vec = (disp_model - disp_meas) ** 2
         return err_vec
 
     @staticmethod
@@ -238,11 +250,17 @@ class MeasureDispTBBO(_BaseClass):
         if bounds is None:
             fit_grads = least_squares(
                 fun=MeasureDispTBBO.err_func,
-                x0=x0, args=(model, disp_meas), method='lm')
+                x0=x0,
+                args=(model, disp_meas),
+                method='lm',
+            )
         else:
             fit_grads = least_squares(
-                fun=MeasureDispTBBO.err_func, x0=x0,
-                args=(model, disp_meas), bounds=bounds)
+                fun=MeasureDispTBBO.err_func,
+                x0=x0,
+                args=(model, disp_meas),
+                bounds=bounds,
+            )
         return fit_grads
 
     @staticmethod
@@ -252,13 +270,12 @@ class MeasureDispTBBO(_BaseClass):
         Based on fitting error calculation of scipy.optimization.curve_fit
         do Moore-Penrose inverse discarding zero singular values.
         """
-        _, smat, vhmat = np.linalg.svd(
-            fit_grads['jac'], full_matrices=False)
+        _, smat, vhmat = np.linalg.svd(fit_grads['jac'], full_matrices=False)
         thre = np.finfo(float).eps * max(fit_grads['jac'].shape)
         thre *= smat[0]
         smat = smat[smat > thre]
-        vhmat = vhmat[:smat.size]
-        pcov = np.dot(vhmat.T / (smat*smat), vhmat)
+        vhmat = vhmat[: smat.size]
+        pcov = np.dot(vhmat.T / (smat * smat), vhmat)
 
         # multiply covariance matrix by residue 2-norm
         ysize = len(fit_grads['fun'])
@@ -270,8 +287,7 @@ class MeasureDispTBBO(_BaseClass):
             pcov = pcov * s_sq
         else:
             pcov.fill(np.nan)
-            print(
-                '# of fitting parameters larger than # of data points!')
+            print('# of fitting parameters larger than # of data points!')
         return np.sqrt(np.diag(pcov))
 
     @staticmethod
@@ -279,17 +295,19 @@ class MeasureDispTBBO(_BaseClass):
         """."""
         fig, axs = plt.subplots(2, 1, figsize=(10, 6))
         axs[0].plot(
-            disp_model[:nr_bpms], '-o', color='tab:blue', label='model')
+            disp_model[:nr_bpms], '-o', color='tab:blue', label='model'
+        )
         axs[0].plot(
-            disp_meas[:nr_bpms], 'o--', color='b', alpha=0.75, label='meas')
+            disp_meas[:nr_bpms], 'o--', color='b', alpha=0.75, label='meas'
+        )
 
         axs[1].plot(disp_model[nr_bpms:], '-o', color='tab:red', label='model')
         axs[1].plot(
-            disp_meas[nr_bpms:],
-            'o--', color='C1', alpha=0.75, label='meas')
+            disp_meas[nr_bpms:], 'o--', color='C1', alpha=0.75, label='meas'
+        )
 
-        axs[0].axvline(6-1/2, ls='--', color='k')
-        axs[1].axvline(6-1/2, ls='--', color='k')
+        axs[0].axvline(6 - 1 / 2, ls='--', color='k')
+        axs[1].axvline(6 - 1 / 2, ls='--', color='k')
 
         axs[0].set_ylabel(r'$\eta_x$ [m]')
         axs[1].set_ylabel(r'$\eta_y$ [m]')
