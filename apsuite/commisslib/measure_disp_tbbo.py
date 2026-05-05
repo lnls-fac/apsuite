@@ -101,6 +101,7 @@ class MeasureDispTBBO(_BaseClass):
         trajs = []
         timestamp = []
         trajsum = []
+        kly2_amp = []
         for i in range(self.params.nr_points):
             traj0 = self.traj
             evg.cmd_turn_on_injection()
@@ -118,8 +119,14 @@ class MeasureDispTBBO(_BaseClass):
             trajs.append(self.traj)
             trajsum.append(self.trajsum)
             timestamp.append(_time.time())
+            kly2_amp.append(self.devices['kly2'].amplitude)
             _time.sleep(self.params.injection_interval - (_time.time() - t0_))
-        return dict(trajs=trajs, trajsum=trajsum, timestamp=timestamp)
+        return dict(
+            trajs=trajs,
+            trajsum=trajsum,
+            timestamp=timestamp,
+            kly2_amp=kly2_amp
+        )
 
     def measure_dispersion(self):
         """."""
@@ -158,15 +165,20 @@ class MeasureDispTBBO(_BaseClass):
         trajs = []
         kly2_amps = []
         for datum in self.data:
-            traj = datum['trajs']
-            trajs.extend(traj)
-            kly2_amps.extend([datum['kly2_amp']] * len(traj))
+            trajs.extend(datum['trajs'])
+            kly2_amps.extend(datum['kly2_amp'])
         trajs = np.array(trajs)
         kly2_amps = np.array(kly2_amps)
         (orb_mean, disp), info = np.polynomial.polynomial.polyfit(
             kly2_amps, trajs, deg=1, full=True
         )
-        self.analysis = dict(orb_mean=orb_mean, disp=disp, info=info)
+        self.analysis = dict(
+            orb_mean=orb_mean,
+            disp=disp,
+            info=info,
+            trajs=trajs,
+            kly2_amps=kly2_amps
+        )
 
     @staticmethod
     def calc_model_dispersionTBBO(model, bpms):
