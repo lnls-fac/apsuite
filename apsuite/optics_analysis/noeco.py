@@ -320,8 +320,10 @@ class NOECOFit(LeastSquaresOptimize):
         rad = self._model.radiation_on
         self._model.cavity_on = False
         self._model.radiation_on = False
-        self._tunecorr.correct_parameters(tunes, model=self._model)
-        self._chromcorr.correct_parameters(chroms, model=self._model)
+        if tunes is not False:
+            self._tunecorr.correct_parameters(tunes, model=self._model)
+        if chroms is not False:
+            self._chromcorr.correct_parameters(chroms, model=self._model)
         self._model.cavity_on = cav
         self._model.radiation_on = rad
 
