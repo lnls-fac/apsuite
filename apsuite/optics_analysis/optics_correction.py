@@ -1,26 +1,33 @@
 """."""
 
 from copy import deepcopy as _dcopy
-from mathphys.functions import get_namedtuple as _get_namedtuple
-import numpy as np
 
+import numpy as np
 import pyaccel
+from mathphys.functions import get_namedtuple as _get_namedtuple
 from pymodels import bo, si
 
 
-class OpticsCorr():
+class OpticsCorr:
     """."""
 
     METHODS = _get_namedtuple('Methods', ['Additional', 'Proportional'])
     CORR_STATUS = _get_namedtuple('CorrStatus', ['Fail', 'Sucess'])
     CORR_METHODS = _get_namedtuple('CorrMethods', ['LOCO'])
 
-    def __init__(self, model, acc, dim='4d', knobs_list=None,
-                 method=None, correction_method=None):
+    def __init__(
+        self,
+        model,
+        acc,
+        use6dtrack=False,
+        knobs_list=None,
+        method=None,
+        correction_method=None,
+    ):
         """."""
         self.model = model
         self.acc = acc
-        self.dim = dim
+        self.use6dtrack = use6dtrack
         self._corr_method = OpticsCorr.CORR_METHODS.LOCO
         self._method = OpticsCorr.METHODS.Proportional
         self.jacobian_matrix = []
@@ -70,7 +77,8 @@ class OpticsCorr():
             return
         if isinstance(value, str):
             self._corr_method = int(
-                value not in OpticsCorr.CORR_METHODS._fields[0])
+                value not in OpticsCorr.CORR_METHODS._fields[0]
+            )
         elif int(value) in OpticsCorr.CORR_METHODS:
             self._corr_method = int(value)
 
@@ -98,11 +106,11 @@ class OpticsCorr():
 
         modcopy = model[:]
         for idx, nmag in enumerate(self.knobs_idx):
-            dlt = delta/len(nmag)
+            dlt = delta / len(nmag)
             for seg in nmag:
                 modcopy[seg].KL += dlt
             res = self._get_optics_vector(modcopy)
-            self.jacobian_matrix[:, idx] = (res-res0)/delta
+            self.jacobian_matrix[:, idx] = (res - res0) / delta
             for seg in nmag:
                 modcopy[seg].KL -= dlt
         return self.jacobian_matrix
@@ -118,8 +126,8 @@ class OpticsCorr():
         betay_bpm = twi.betay[self.bpm_idx]
         betay_cv = twi.betay[self.cv_idx]
         etax_bpm = twi.etax[self.bpm_idx]
-        tunex = twi.mux[-1]/2/np.pi
-        tuney = twi.muy[-1]/2/np.pi
+        tunex = twi.mux[-1] / 2 / np.pi
+        tuney = twi.muy[-1] / 2 / np.pi
 
         vec_bx = np.hstack((betax_bpm, betax_ch))
         vec_by = np.hstack((betay_bpm, betay_cv))
@@ -155,11 +163,11 @@ class OpticsCorr():
         if deltas_kl is None:
             raise Exception('Missing Delta KL values')
         for idx_mag, mag in enumerate(knobsidx):
-            delta = deltas_kl[idx_mag]/len(mag)
+            delta = deltas_kl[idx_mag] / len(mag)
             for seg in mag:
                 stren = model[seg].KL
                 if self.method == OpticsCorr.METHODS.Proportional:
-                    stren *= (1 + delta)
+                    stren *= 1 + delta
                 else:
                     stren += delta
                 model[seg].KL = stren
@@ -167,13 +175,17 @@ class OpticsCorr():
     @staticmethod
     def get_figm(res):
         """Calculate figure of merit from residue vector."""
-        return np.sqrt(np.sum(res*res)/res.size)
+        return np.sqrt(np.sum(res * res) / res.size)
 
-    def optics_corr_loco(self,
-                         model=None,
-                         goal_model=None,
-                         jacobian_matrix=None,
-                         nsv=None, nr_max=10, tol=1e-6):
+    def optics_corr_loco(
+        self,
+        model=None,
+        goal_model=None,
+        jacobian_matrix=None,
+        nsv=None,
+        nr_max=10,
+        tol=1e-6,
+    ):
         """Optics correction LOCO-like.
 
         Calculates the pseudo-inverse of optics correction matrix via SVD
@@ -192,7 +204,7 @@ class OpticsCorr():
             jmat *= nominal_stren.ravel()
 
         umat, smat, vmat = np.linalg.svd(jmat, full_matrices=False)
-        ismat = 1/smat
+        ismat = 1 / smat
         ismat[np.isnan(ismat)] = 0
         ismat[np.isinf(ismat)] = 0
         if nsv is not None:
@@ -220,11 +232,15 @@ class OpticsCorr():
             return OpticsCorr.CORR_STATUS.Fail
         return OpticsCorr.CORR_STATUS.Sucess
 
-    def optics_correction(self,
-                          model=None,
-                          goal_model=None,
-                          jacobian_matrix=None,
-                          nsv=None, nr_max=10, tol=1e-6):
+    def optics_correction(
+        self,
+        model=None,
+        goal_model=None,
+        jacobian_matrix=None,
+        nsv=None,
+        nr_max=10,
+        tol=1e-6,
+    ):
         """Optics correction method selection.
 
         Methods available:
@@ -234,9 +250,13 @@ class OpticsCorr():
             model = self.model
         if self.corr_method == OpticsCorr.CORR_METHODS.LOCO:
             result = self.optics_corr_loco(
-                model=model, goal_model=goal_model,
-                jacobian_matrix=jacobian_matrix, nsv=nsv, nr_max=nr_max,
-                tol=tol)
+                model=model,
+                goal_model=goal_model,
+                jacobian_matrix=jacobian_matrix,
+                nsv=nsv,
+                nr_max=nr_max,
+                tol=tol,
+            )
         else:
             raise Exception('Chosen method is not implemented!')
         return result

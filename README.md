@@ -2,5 +2,3 @@
 
 # apsuite
 Accelerator Physics suite
-
-For installation instructions, read INSTALL.

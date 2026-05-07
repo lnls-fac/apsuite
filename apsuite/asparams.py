@@ -32,14 +32,14 @@ BO_BEAM_SPEED_LOW = _BEAMPARAMS_LOW[1]  # [m/s]
 BO_BEAM_BETA_LOW = _BEAMPARAMS_LOW[2]
 BO_BEAM_GAMMA_LOW = _BEAMPARAMS_LOW[3]
 
-del(_BEAM_ENERGY_HIGH, _BEAM_ENERGY_LOW)
-del(_BEAMPARAMS_HIGH, _BEAMPARAMS_LOW)
+del (_BEAM_ENERGY_HIGH, _BEAM_ENERGY_LOW)
+del (_BEAMPARAMS_HIGH, _BEAMPARAMS_LOW)
 
 # --- RF GENERAL ---
 
-RF_FREQ = 499663824.380981  # [Hz] -- compatible with SI nominal model length
+# RF_FREQ = 499663824.380981  # [Hz] -- compatible with SI nominal model length
 # RF_FREQ = 499666862 - 150  # [Hz] -- compatible with BO nominal model @ 3 Gev
-# RF_FREQ = 499666862        # [Hz] -- in use 2022-04-10
+RF_FREQ = 499668000        # [Hz] -- close to operation value in 2025-09-30
 
 # --- SI LATTICE ---
 

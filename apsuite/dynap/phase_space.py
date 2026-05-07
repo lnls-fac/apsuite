@@ -116,9 +116,9 @@ class PhaseSpace(_BaseClass):
 
         self.data['x_in'] = x_in
         self.data['x_rout'] = out[0]
-        self.data['x_lost_turn'] = out[2]
-        self.data['x_lost_element'] = out[3]
-        self.data['x_lost_plane'] = out[4]
+        self.data['x_lost_turn'] = out[1].lost_turn
+        self.data['x_lost_element'] = out[1].lost_element
+        self.data['x_lost_plane'] = out[1].lost_plane
 
         rin = _np.tile(orb, (y_in.size, 1)).T
         rin[2, :] += y_in
@@ -131,9 +131,9 @@ class PhaseSpace(_BaseClass):
 
         self.data['y_in'] = y_in
         self.data['y_rout'] = out[0]
-        self.data['y_lost_turn'] = out[2]
-        self.data['y_lost_element'] = out[3]
-        self.data['y_lost_plane'] = out[4]
+        self.data['y_lost_turn'] = out[1].lost_turn
+        self.data['y_lost_element'] = out[1].lost_element
+        self.data['y_lost_plane'] = out[1].lost_plane
 
         rin = _np.full((6, de_in.size), _np.nan)
         rin[4] = de_in
@@ -153,7 +153,7 @@ class PhaseSpace(_BaseClass):
                 orb[3] += self.params.yl_off
                 de_in[i] = orb[4]
                 rin[:, i] = orb
-            except _pytrack.TrackingException:
+            except _pytrack.TrackingError:
                 pass
 
         out = _pytrack.ring_pass(
@@ -162,9 +162,9 @@ class PhaseSpace(_BaseClass):
 
         self.data['de_in'] = de_in
         self.data['de_rout'] = out[0]
-        self.data['de_lost_turn'] = out[2]
-        self.data['de_lost_element'] = out[3]
-        self.data['de_lost_plane'] = out[4]
+        self.data['de_lost_turn'] = out[1].lost_turn
+        self.data['de_lost_element'] = out[1].lost_element
+        self.data['de_lost_plane'] = out[1].lost_plane
 
     def process_data(self):
         """."""
@@ -175,9 +175,9 @@ class PhaseSpace(_BaseClass):
     def calc_frequencies(self, plane='x'):
         """."""
         rout = self.data[plane + '_rout']
-        lost_plane = self.data[plane + '_lost_plane']
+        lost_turn = self.data[plane + '_lost_turn']
 
-        fxx, fyy = super()._calc_frequencies(rout, lost_plane)
+        fxx, fyy = super()._calc_frequencies(rout, lost_turn)
         if fxx is None:
             return
         self.x_freq[plane] = fxx
