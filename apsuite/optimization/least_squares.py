@@ -211,7 +211,12 @@ class LeastSquaresOptimize(Optimize):
             U, S, Vt = _np.linalg.svd(matrix, full_matrices=False)
 
             if rcond is not None:
-                mask = S < rcond * S[0]
+                if isinstance(rcond, int) and rcond < 0:
+                    # remove |rcond| smallest singular values
+                    mask = _np.zeros_like(S, dtype=bool)
+                    mask[rcond:] = True
+                else:
+                    mask = S < rcond * S[0]
             else:
                 mask = _np.zeros_like(S, dtype=bool)
 
