@@ -218,9 +218,9 @@ class MeasureDispTBBO(_BaseClass):
             disp_meas *= disp_model[6:56].mean() / coefs[1][6:56].mean()
 
         ress = [(trajs**2).sum(axis=0)]
-        for i in range(1, fit_order+2):
+        for i in range(1, fit_order + 2):
             fit = np.polynomial.polynomial.polyval(xfit, coefs[:i])
-            ress.append(((trajs - fit.T)**2).sum(axis=0))
+            ress.append(((trajs - fit.T) ** 2).sum(axis=0))
         ress = np.array(ress)
         ratio = ress / ress[1][None, :]
 
@@ -239,7 +239,7 @@ class MeasureDispTBBO(_BaseClass):
         self, order=1, rel_residue_threshold=0.01
     ):
         ratio = self.analysis['fit_rel_residue']
-        idcs = (ratio[order+1] > rel_residue_threshold).nonzero()[0]
+        idcs = (ratio[order + 1] > rel_residue_threshold).nonzero()[0]
         nbpms = len(self.model_bpms_idx)
         fit_probs = [(i, 'h') for i in idcs if i < nbpms]
         fit_probs += [(i - nbpms, 'v') for i in idcs if i >= nbpms]
@@ -252,9 +252,7 @@ class MeasureDispTBBO(_BaseClass):
             [0, 0, 0, 0, dene / 2, 0],
             [0, 0, 0, 0, -dene / 2, 0],
         ]).T
-        rout, *_ = pa.tracking.line_pass(
-            self.model, rin, self._model_bpms_idx
-        )
+        rout, *_ = pa.tracking.line_pass(self.model, rin, self._model_bpms_idx)
         dispx = (rout[0, 0, :] - rout[0, 1, :]) / dene
         dispy = (rout[2, 0, :] - rout[2, 1, :]) / dene
         return np.hstack([dispx, dispy])
@@ -331,7 +329,7 @@ class MeasureDispTBBO(_BaseClass):
             nr_bpms = len(self.model_bpms_idx)
 
         disp_model = self.calc_model_dispersion()
-        disp_meas = self.analysis['disp_meas'][order-1].copy()
+        disp_meas = self.analysis['disp_meas'][order - 1].copy()
 
         fig, axs = plt.subplots(2, 1, figsize=(10, 6))
         axs[0].plot(
@@ -353,7 +351,7 @@ class MeasureDispTBBO(_BaseClass):
         axs[1].set_ylabel(r'$\eta_y$ [m]')
         axs[1].set_xlabel('BPM idx')
         axs[0].set_title(
-            'Propagated Dispersion Function TB-BO (order {order})'
+            f'Propagated Dispersion Function TB-BO (order {order})'
         )
 
         axs[0].legend(fontsize=10)
@@ -367,25 +365,20 @@ class MeasureDispTBBO(_BaseClass):
     def plot_traj_fitting_relative_residue(self, order=1):
         """."""
         fig, ax = plt.subplots(figsize=(10, 5))
-        ratio = self.analysis['fit_rel_residue'][order+1]
+        ratio = self.analysis['fit_rel_residue'][order + 1]
         nbpm = len(self.model_bpms_idx)
 
         ax.plot(ratio[:nbpm], '-o', label='Horizontal')
         ax.plot(ratio[nbpm:], '-o', label='Vertical')
 
-        ax.legend(
-            loc='lower center',
-            bbox_to_anchor=(0.5, 1),
-            ncol=2,
-            fontsize='small'
-        )
-        ax.set_title('Relative Residue Fit Order N={order} by Order 0.')
+        ax.legend(loc='best', ncol=2, fontsize='small')
+        ax.set_title(f'Relative Residue Fit Order N={order} by Order 0.')
         ax.set_xlabel('BPM Index')
         ax.set_ylabel(
             r'Relative residue $\chi^2_{y=P_N(x)}/\chi^2_{y=P_0(x)}$'
         )
         ax.grid(True, ls='--', alpha=0.4, color='k', lw=0.5)
-
+        ax.set_ylim(None, 1.15)
         fig.tight_layout()
         return fig, ax
 
@@ -406,15 +399,15 @@ class MeasureDispTBBO(_BaseClass):
         fig, ax = plt.subplots(figsize=(8, 5))
 
         stg = f'BPM {bpm_idx:d}, '
-        stg += f"{'Horizontal' if ish else 'Vertical':s} Plane\n"
+        stg += f'{"Horizontal" if ish else "Vertical":s} Plane\n'
         stg += 'coefs = ['
-        stg += ', '.join([f'{r:.2g}'for r in coefs])
+        stg += ', '.join([f'{r:.2g}' for r in coefs])
         stg += ']    ratios = ['
-        stg += ', '.join([f'{r:.2g}'for r in ratio[2:, idx]])
+        stg += ', '.join([f'{r:.2g}' for r in ratio[2:, idx]])
         stg += ']'
         ax.set_title(stg, fontsize='small')
 
-        ax.plot(kly2_amps, traj_points, "o", label='Data')
+        ax.plot(kly2_amps, traj_points, 'o', label='Data')
         ax.plot(kly2_amps, traj_fit, label='Fit')
         ax.legend(loc='best')
         ax.set_xlabel('Klystron 2 Amplitude [%]')
@@ -428,7 +421,7 @@ class MeasureDispTBBO(_BaseClass):
 
     def _err_func(self, grads):
         """."""
-        disp_meas = self.analysis['disp_meas']
+        disp_meas = self.analysis['disp_meas'][0]
         kxl, kyl, ksxl, ksyl = grads
         self.set_septum_gradient(kxl, kyl, ksxl, ksyl)
         disp_model = self.calc_model_dispersion()
