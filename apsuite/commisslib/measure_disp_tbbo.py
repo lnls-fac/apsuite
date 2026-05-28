@@ -210,12 +210,15 @@ class MeasureDispTBBO(_BaseClass):
             xfit, trajs, deg=fit_order, full=True
         )
 
-        disp_model = self.calc_model_dispersion()
-        disp_meas = coefs[1:].copy()
+        disp_model = self.calc_model_dispersion(order=fit_order)
         if norm_strategy.lower().startswith('tb'):
-            disp_meas *= disp_model[:6].std() / coefs[1][:6].std()
+            scale = disp_model[0, :6].std() / coefs[1][:6].std() * 1e6
         else:
-            disp_meas *= disp_model[6:56].mean() / coefs[1][6:56].mean()
+            scale = disp_model[0, 6:56].mean() / coefs[1][6:56].mean() * 1e6
+
+        disp_meas = []
+        for i, disp in enumerate(coefs[1:]):
+            disp_meas.append(disp * scale ** (i + 1) * 1e-6)
 
         ress = [(trajs**2).sum(axis=0)]
         for i in range(1, fit_order + 2):
@@ -233,6 +236,7 @@ class MeasureDispTBBO(_BaseClass):
             disp_model=disp_model,
             trajs=trajs,
             kly2_amps=kly2_amps,
+            disp_scale=scale,
         )
 
     def get_dispersion_fitting_problems(
@@ -245,17 +249,20 @@ class MeasureDispTBBO(_BaseClass):
         fit_probs += [(i - nbpms, 'v') for i in idcs if i >= nbpms]
         return fit_probs
 
-    def calc_model_dispersion(self):
+    def calc_model_dispersion(self, order=1):
         """."""
-        dene = 1e-4
-        rin = np.array([
-            [0, 0, 0, 0, dene / 2, 0],
-            [0, 0, 0, 0, -dene / 2, 0],
-        ]).T
+        delta_e = 1e-5
+        deltas_e = np.linspace(-1, 1, 10) * delta_e
+
+        rin = np.zeros((6, len(deltas_e)))
+        rin[4] = deltas_e
         rout, *_ = pa.tracking.line_pass(self.model, rin, self._model_bpms_idx)
-        dispx = (rout[0, 0, :] - rout[0, 1, :]) / dene
-        dispy = (rout[2, 0, :] - rout[2, 1, :]) / dene
-        return np.hstack([dispx, dispy])
+        trajs = np.concatenate([rout[0], rout[2]], axis=1)
+
+        disp_model, _ = np.polynomial.polynomial.polyfit(
+            deltas_e, trajs, deg=order, full=True
+        )
+        return disp_model[1:]
 
     def set_septum_gradient(self, kxl, kyl, ksxl, ksyl):
         """."""
@@ -328,7 +335,7 @@ class MeasureDispTBBO(_BaseClass):
         if nr_bpms is None:
             nr_bpms = len(self.model_bpms_idx)
 
-        disp_model = self.calc_model_dispersion()
+        disp_model = self.analysis['disp_model'][order - 1].copy()
         disp_meas = self.analysis['disp_meas'][order - 1].copy()
 
         fig, axs = plt.subplots(2, 1, figsize=(10, 6))
