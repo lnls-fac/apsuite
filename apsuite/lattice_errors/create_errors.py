@@ -1,7 +1,7 @@
-import numpy as _np
 import time as _time
 
-from mathphys.functions import save as _save, load as _load
+import numpy as _np
+from mathphys.functions import load as _load, save as _save
 
 
 class ConfigErrors:
@@ -324,8 +324,8 @@ class DipolesErrors(MultipolesErrors):
         self.sigma_yaw = 0  # [mrad]
         self.sigma_excit = 0.05  # [%]
         self.sigma_kdip = 0.10  # [%]
-        self.sigma_multipoles_n = _np.ones(4)*1.5e-4
-        self.sigma_multipoles_s = _np.ones(4)*0.5e-4
+        self.sigma_multipoles_n = _np.ones(4) * 1.5e-4
+        self.sigma_multipoles_s = _np.ones(4) * 0.5e-4
         self.normal_multipoles_order = [3, 4, 5, 6]
         self.skew_multipoles_order = [3, 4, 5, 6]
         self.create_multipoles_dict()
@@ -353,18 +353,27 @@ class QuadsErrors(MultipolesErrors):
     def _set_default_quad_config(self):
         """Create a default configuration for quadrupole errors."""
         self.fam_names = [
-            'Q1', 'Q2', 'Q3', 'Q4',
-            'QFA', 'QDA',
-            'QFB', 'QDB1', 'QDB2',
-            'QFP', 'QDP1', 'QDP2']
+            'Q1',
+            'Q2',
+            'Q3',
+            'Q4',
+            'QFA',
+            'QDA',
+            'QFB',
+            'QDB1',
+            'QDB2',
+            'QFP',
+            'QDP1',
+            'QDP2',
+        ]
         self.sigma_x = 40  # [um]
         self.sigma_y = 40  # [um]
         self.sigma_roll = 0.30  # [mrad]
         self.sigma_pitch = 0  # [mrad]
         self.sigma_yaw = 0  # [mrad]
         self.sigma_excit = 0.05  # [%]
-        self.sigma_multipoles_n = _np.ones(4)*1.5e-4
-        self.sigma_multipoles_s = _np.ones(4)*0.5e-4
+        self.sigma_multipoles_n = _np.ones(4) * 1.5e-4
+        self.sigma_multipoles_s = _np.ones(4) * 0.5e-4
         self.normal_multipoles_order = [3, 4, 5, 6]
         self.skew_multipoles_order = [3, 4, 5, 6]
         self.create_multipoles_dict()
@@ -397,8 +406,8 @@ class QuadsSkewErrors(MultipolesErrors):
         self.sigma_pitch = 0  # [mrad]
         self.sigma_yaw = 0  # [mrad]
         self.sigma_excit = 0.05  # [%]
-        self.sigma_multipoles_n = _np.ones(4)*1.5e-4
-        self.sigma_multipoles_s = _np.ones(4)*0.5e-4
+        self.sigma_multipoles_n = _np.ones(4) * 1.5e-4
+        self.sigma_multipoles_s = _np.ones(4) * 0.5e-4
         self.normal_multipoles_order = [3, 4, 5, 6]
         self.skew_multipoles_order = [3, 4, 5, 6]
         self.create_multipoles_dict()
@@ -425,17 +434,36 @@ class SextsErrors(MultipolesErrors):
     def _set_default_sext_config(self):
         """Create a default configuration for sextupole errors."""
         self.fam_names = [
-            'SFA0', 'SDA0', 'SFA1', 'SDA1', 'SFA2', 'SDA2', 'SDA3',
-            'SFB0', 'SDB0', 'SFB1', 'SDB1', 'SFB2', 'SDB2', 'SDB3',
-            'SDP0', 'SFP0', 'SFP1', 'SDP1', 'SFP2', 'SDP2', 'SDP3']
+            'SFA0',
+            'SDA0',
+            'SFA1',
+            'SDA1',
+            'SFA2',
+            'SDA2',
+            'SDA3',
+            'SFB0',
+            'SDB0',
+            'SFB1',
+            'SDB1',
+            'SFB2',
+            'SDB2',
+            'SDB3',
+            'SDP0',
+            'SFP0',
+            'SFP1',
+            'SDP1',
+            'SFP2',
+            'SDP2',
+            'SDP3',
+        ]
         self.sigma_x = 40  # [um]
         self.sigma_y = 40  # [um]
         self.sigma_roll = 0.17  # [mrad]
         self.sigma_pitch = 0  # [mrad]
         self.sigma_yaw = 0  # [mrad]
         self.sigma_excit = 0.05  # [%]
-        self.sigma_multipoles_n = _np.ones(4)*1.5e-4
-        self.sigma_multipoles_s = _np.ones(4)*0.5e-4
+        self.sigma_multipoles_n = _np.ones(4) * 1.5e-4
+        self.sigma_multipoles_s = _np.ones(4) * 0.5e-4
         self.normal_multipoles_order = [4, 5, 6, 7]
         self.skew_multipoles_order = [4, 5, 6, 7]
         self.create_multipoles_dict()
@@ -503,7 +531,7 @@ class BPMErrors(ConfigErrors):
         self.sigmas_dict = sigmas_dict
 
 
-class GenerateErrors():
+class GenerateErrors:
     """Class to generate errors."""
 
     def __init__(self):
@@ -600,8 +628,7 @@ class GenerateErrors():
             filename (string, optional): Filename. Defaults to None.
         """
         if filename is None:
-            filename = str(self.nr_mach) + '_errors_seed_' + str(
-                self.seed)
+            filename = str(self.nr_mach) + '_errors_seed_' + str(self.seed)
         _save(self.fam_errors_dict, filename, overwrite=True)
 
     def load_error_file(self, filename):
@@ -659,25 +686,29 @@ class GenerateErrors():
         """
         confs = [(c, f) for c in self.error_configs for f in c.fam_names]
         for config, fam_name in confs:
-            idcs = _np.array(
-                self.famdata[fam_name]['index'], dtype="object")
+            idcs = _np.array(self.famdata[fam_name]['index'], dtype='object')
             err_types = {'index': idcs}
             for e_type, sigma in config.sigmas_dict.items():
                 if e_type != 'multipoles':
                     err_types[e_type] = self._generate_normal_dist(
-                        sigma=sigma, dim=(self.nr_mach, len(idcs)))
+                        sigma=sigma, dim=(self.nr_mach, len(idcs))
+                    )
                     continue
                 mpole_dict_n = dict()
                 mpole_dict_s = dict()
                 for order, mp_value in sigma['normal'].items():
                     mpole_dict_n[order] = self._generate_normal_dist(
-                        sigma=mp_value, dim=(self.nr_mach, len(idcs)))
+                        sigma=mp_value, dim=(self.nr_mach, len(idcs))
+                    )
                 for order, mp_value in sigma['skew'].items():
                     mpole_dict_s[order] = self._generate_normal_dist(
-                        sigma=mp_value, dim=(self.nr_mach, len(idcs)))
+                        sigma=mp_value, dim=(self.nr_mach, len(idcs))
+                    )
                 err_types[e_type] = {
-                    'normal': mpole_dict_n, 'skew': mpole_dict_s,
-                    'r0': sigma['r0']}
+                    'normal': mpole_dict_n,
+                    'skew': mpole_dict_s,
+                    'r0': sigma['r0'],
+                }
             self.fam_errors_dict[fam_name] = err_types
         if save_errors:
             self._save_error_file()

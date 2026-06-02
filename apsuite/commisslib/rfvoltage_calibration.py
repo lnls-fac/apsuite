@@ -21,9 +21,9 @@ class RFCalibrationParams(_ParamsBaseClass):
         self.final_voltage = [1.0, 1.0]  # [MV]
         self.voltage_nrpoints = 15
         self.voltage_incrate = self.VoltIncRates.vel_0p5
-        self.cbmode2drive = 200
+        self.cbmode2drive = 432
         # TODO: UPDATE WITH NEW CONVERSION
-        self.conv_physics2hardware = 506/1.75  # [mV/MV]
+        self.conv_physics2hardware = [105/1.1767, 125/1.1161]  # [mV/MV]
         self.restore_initial_state = True
 
     def __str__(self):
@@ -41,8 +41,9 @@ class RFCalibrationParams(_ParamsBaseClass):
             if isinstance(self.voltage_incrate, int) else self.voltage_incrate
         stg += stmp(
             'voltage_incrate', incrate_str, '[mV/s]')
-        stg += ftmp(
-            'conv_physics2hardware', self.conv_physics2hardware, '[mV/MV]')
+        stg += stmp(
+            'conv_physics2hardware',
+            str(self.conv_physics2hardware), '[mV/MV]')
         stg += dtmp(
             'restore_initial_state', self.restore_initial_state)
         return stg
@@ -69,7 +70,7 @@ class RFCalibration(_ThreadedMeasBaseClass):
         cavs = self.devices['rfcavs']
         nrpts = prms.voltage_nrpoints
         voltage_span = _np.zeros((nrpts, len(cavs)))
-        for idx, _ in cavs:
+        for idx, _ in enumerate(cavs):
             voltage_span[:, idx] = _np.linspace(
                 prms.initial_voltage[idx],
                 prms.final_voltage[idx],
@@ -99,21 +100,21 @@ class RFCalibration(_ThreadedMeasBaseClass):
         llrfs = [cav.dev_llrf for cav in self.devices['rfcavs']]
         bbbl = self.devices['bbbl']
 
-        amp0s = [llrf.voltage for llrf in llrfs]
+        amp0s = [llrf.voltage_sp for llrf in llrfs]
         prms = self.params
 
-        rfamp_span = self.calc_voltage_span()
-        rfamp_span *= prms.conv_physics2hardware
-
-        data['voltage_sp'] = rfamp_span/prms.conv_physics2hardware
+        rfvolt_span = self.calc_voltage_span()
+        conv = _np.array(prms.conv_physics2hardware)
+        rfamp_span = rfvolt_span * conv[None, :]
         data['amplitude_sp'] = rfamp_span
+        data['voltage_sp'] = rfvolt_span
 
         inc_rate0s = [llrf.voltage_incrate for llrf in llrfs]
         for llrf in llrfs:
             llrf.voltage_incrate = prms.voltage_incrate
         timeout = prms.voltage_timeout
 
-        # set first value of voltage
+        # set first scan value of voltage
         if not self.set_voltage_and_track_tune(rfamp_span[0], timeout=timeout):
             print('Voltage timeout.')
 

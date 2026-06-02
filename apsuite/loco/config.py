@@ -1,11 +1,10 @@
 """."""
 
-from mathphys.functions import get_namedtuple as _get_namedtuple
 from copy import deepcopy as _dcopy
 
 import numpy as _np
-
 import pyaccel as _pyaccel
+from mathphys.functions import get_namedtuple as _get_namedtuple
 
 from ..orbcorr import OrbRespmat as _OrbRespmat
 from .utils import LOCOUtils as _LOCOUtils
@@ -24,12 +23,11 @@ class LOCOConfig:
 
     FAMNAME_RF = 'SRFCav'
 
-    INVERSION = _get_namedtuple(
-        'Methods', ['Normal', 'Transpose'])
+    INVERSION = _get_namedtuple('Methods', ['Normal', 'Transpose'])
     MINIMIZATION = _get_namedtuple(
-        'Methods', ['GaussNewton', 'LevenbergMarquardt'])
-    SVD = _get_namedtuple(
-        'Methods', ['Selection', 'Threshold'])
+        'Methods', ['GaussNewton', 'LevenbergMarquardt']
+    )
+    SVD = _get_namedtuple('Methods', ['Selection', 'Threshold'])
 
     def __init__(self, **kwargs):
         """."""
@@ -37,7 +35,7 @@ class LOCOConfig:
         self._minimization = LOCOConfig.MINIMIZATION.GaussNewton
         self._svd_method = LOCOConfig.SVD.Selection
         self.model = None
-        self.dim = None
+        self.use6dtrack = None
         self.respm = None
         self.goalmat = None
         self.measured_dispersion = None
@@ -116,7 +114,7 @@ class LOCOConfig:
         dtmp = '{0:35s}: {1:3d}  {2:s}\n'.format
         etmp = '{0:35s}: {1:e}  {2:s}\n'.format
 
-        stg = stmp('Tracking dimension', self.dim, '')
+        stg = stmp('Use 6d tracking', self.use6dtrack, '')
         stg += stmp('Include dispersion', self.use_dispersion, '')
         stg += stmp('Include diagonal', self.use_diagonal, '')
         stg += stmp('Include off-diagonal', self.use_offdiagonal, '')
@@ -125,9 +123,14 @@ class LOCOConfig:
         stg += stmp('Fixed lambda LM', self.fixed_lambda, '')
         stg += stmp('Jacobian manipulation', self.inv_method_str, '')
         stg += stmp(
-            'Constraint delta KL total', self.constraint_deltakl_total, '')
+            'Constraint delta KL total', self.constraint_deltakl_total, ''
+        )
         stg += stmp(
-            'Constraint delta KL step', self.constraint_deltakl_step, '')
+            'Constraint delta KL step', self.constraint_deltakl_step, ''
+        )
+        stg += etmp(
+            'Constraint delta KL normalization', self.deltakl_normalization, ''
+        )
         stg += stmp('Singular values method', self.svd_method_str, '')
 
         if self.svd_method == LOCOConfig.SVD.Selection:
@@ -142,14 +145,16 @@ class LOCOConfig:
         stg += etmp('Tolerance overfit', self.tolerance_overfit, '')
 
         stg += ftmp(
-            'H. kicks used to measure',
-            self.delta_kickx_meas*1e6, '[urad]')
+            'H. kicks used to measure', self.delta_kickx_meas * 1e6, '[urad]'
+        )
         stg += ftmp(
-            'V. kicks used to measure',
-            self.delta_kicky_meas*1e6, '[urad]')
+            'V. kicks used to measure', self.delta_kicky_meas * 1e6, '[urad]'
+        )
         stg += ftmp(
             'RF freq. variation used to measure',
-            self.delta_frequency_meas, '[Hz]')
+            self.delta_frequency_meas,
+            '[Hz]',
+        )
 
         stg += stmp('Dipoles normal gradients', self.fit_dipoles, '')
         stg += stmp('Quadrupoles normal gradients', self.fit_quadrupoles, '')
@@ -161,13 +166,15 @@ class LOCOConfig:
 
         stg += stmp('Dipoles skew gradients', self.fit_dipoles_coupling, '')
         stg += stmp(
-            'Quadrupoles skew gradients', self.fit_quadrupoles_coupling, '')
+            'Quadrupoles skew gradients', self.fit_quadrupoles_coupling, ''
+        )
         stg += stmp(
-            'Sextupoles skew gradients', self.fit_sextupoles_coupling, '')
+            'Sextupoles skew gradients', self.fit_sextupoles_coupling, ''
+        )
         stg += stmp(
-            'Skew quadrupoles skew gradients', self.fit_skew_quadrupoles, '')
-        stg += stmp(
-            'Girders longitudinal shifts', self.fit_girder_shift, '')
+            'Skew quadrupoles skew gradients', self.fit_skew_quadrupoles, ''
+        )
+        stg += stmp('Girders longitudinal shifts', self.fit_girder_shift, '')
 
         stg += stmp('BPM gains', self.fit_gain_bpm, '')
         stg += stmp('Corrector gains', self.fit_gain_corr, '')
@@ -245,7 +252,8 @@ class LOCOConfig:
             return
         if isinstance(value, str):
             self._minimization = int(
-                value in LOCOConfig.MINIMIZATION._fields[1])
+                value in LOCOConfig.MINIMIZATION._fields[1]
+            )
         elif int(value) in LOCOConfig.MINIMIZATION:
             self._minimization = int(value)
 
@@ -275,10 +283,11 @@ class LOCOConfig:
 
     def update(self):
         """."""
-        self.update_model(self.model, self.dim)
+        self.update_model(self.model, self.use6dtrack)
         self.update_matrix(self.use_dispersion)
         self.update_goalmat(
-            self.goalmat, self.use_dispersion, self.use_offdiagonal)
+            self.goalmat, self.use_dispersion, self.use_offdiagonal
+        )
         self.update_gain()
         self.update_quad_knobs(self.use_quad_families)
         self.update_sext_knobs(self.use_sext_families)
@@ -289,18 +298,20 @@ class LOCOConfig:
         self.update_svd(self.svd_method, self.svd_sel, self.svd_thre)
         self.nr_fit_parameters = self.get_nr_fit_parameters()
 
-    def update_model(self, model, dim):
+    def update_model(self, model, use6dtrack):
         """."""
-        self.dim = dim
+        self.use6dtrack = use6dtrack
         self.model = _dcopy(model)
-        self.model.cavity_on = dim == '6d'
+        self.model.cavity_on = use6dtrack
         self.model.radiation_on = False
-        self.respm = _OrbRespmat(model=self.model, acc=self.acc, dim=self.dim)
+        self.respm = _OrbRespmat(
+            model=self.model, acc=self.acc, use6dtrack=self.use6dtrack
+        )
         self._create_indices()
 
     def update_svd(
-            self, svd_method, svd_sel=None, svd_thre=None,
-            flat_print=False):
+        self, svd_method, svd_sel=None, svd_thre=None, flat_print=False
+    ):
         """."""
         self.svd_sel = svd_sel
         self.svd_thre = svd_thre
@@ -309,7 +320,9 @@ class LOCOConfig:
                 if flat_print:
                     print(
                         'svd_selection: {:d} values will be used.'.format(
-                            self.svd_sel))
+                            self.svd_sel
+                        )
+                    )
             else:
                 if flat_print:
                     print('svd_selection: all values will be used.')
@@ -329,7 +342,8 @@ class LOCOConfig:
         self.use_offdiagonal = use_offdiagonal
         if not use_offdiagonal:
             self.goalmat = _LOCOUtils.remove_offdiagonal(
-                goalmat, self.nr_bpm, self.nr_ch, self.nr_cv)
+                goalmat, self.nr_bpm, self.nr_ch, self.nr_cv
+            )
         else:
             self.goalmat = _dcopy(goalmat)
 
@@ -341,19 +355,20 @@ class LOCOConfig:
     def update_matrix(self, use_dispersion):
         """."""
         self.matrix = _LOCOUtils.respm_calc(
-            self.model, self.respm, use_dispersion)
+            self.model, self.respm, use_dispersion
+        )
 
-    def update_gain(self,
-                    gain_bpm=None, gain_corr=None,
-                    roll_bpm=None, roll_corr=None):
+    def update_gain(
+        self, gain_bpm=None, gain_corr=None, roll_bpm=None, roll_corr=None
+    ):
         """."""
         # bpm
         if gain_bpm is None:
             if self.gain_bpm is None:
-                self.gain_bpm = _np.ones(2*self.nr_bpm)
+                self.gain_bpm = _np.ones(2 * self.nr_bpm)
         else:
             if isinstance(gain_bpm, (int, float)):
-                self.gain_bpm = _np.ones(2*self.nr_bpm) * gain_bpm
+                self.gain_bpm = _np.ones(2 * self.nr_bpm) * gain_bpm
             else:
                 print('setting initial bpm gain...')
                 self.gain_bpm = gain_bpm
@@ -389,7 +404,8 @@ class LOCOConfig:
             matrix=self.matrix,
             gain_bpm=self.gain_bpm,
             roll_bpm=self.roll_bpm,
-            gain_corr=self.gain_corr)
+            gain_corr=self.gain_corr,
+        )
         self.vector = self.matrix.ravel()
 
     def update_weight(self):
@@ -397,9 +413,9 @@ class LOCOConfig:
         # bpm
         bpmw = self.weight_bpm
         if bpmw is None:
-            bpmw = _np.ones((2*self.nr_bpm, self.nr_corr + 1))
+            bpmw = _np.ones((2 * self.nr_bpm, self.nr_corr + 1))
         elif isinstance(bpmw, (int, float)):
-            weight_bpm = _np.ones((2*self.nr_bpm, self.nr_corr + 1))
+            weight_bpm = _np.ones((2 * self.nr_bpm, self.nr_corr + 1))
             weight_bpm *= bpmw / 2 / self.nr_bpm
             bpmw = weight_bpm
         elif isinstance(bpmw, _np.ndarray) and bpmw.ndim == 1:
@@ -428,11 +444,12 @@ class LOCOConfig:
         if self.weight_deltakl is None:
             self.weight_deltakl = _np.ones(nknb)
         elif isinstance(self.weight_deltakl, (int, float)):
-            self.weight_deltakl = _np.ones(nknb)*self.weight_deltakl
+            self.weight_deltakl = _np.ones(nknb) * self.weight_deltakl
 
         if self.deltakl_normalization is None:
-            self.deltakl_normalization = LOCOConfig.\
-                DEFAULT_DELTAK_NORMALIZATION
+            self.deltakl_normalization = (
+                LOCOConfig.DEFAULT_DELTAK_NORMALIZATION
+            )
 
         if self.weight_dispx is None:
             self.weight_dispx = 1
@@ -509,8 +526,7 @@ class LOCOConfig:
                 for fam_name in self.skew_quadrupoles_to_fit:
                     fam = self.respm.fam_data
                     self.skew_quad_indices_ksl += fam[fam_name]['index']
-                idx_all = _np.array(
-                    self.respm.fam_data['QS']['index']).ravel()
+                idx_all = _np.array(self.respm.fam_data['QS']['index']).ravel()
                 idx_sub = _np.array(self.skew_quad_indices_ksl).ravel()
                 self.skew_quad_indices_ksl = list(set(idx_sub) & set(idx_all))
                 self.skew_quad_indices_ksl.sort()
@@ -561,7 +577,8 @@ class LOCOConfig:
     def update_girder_knobs(self):
         """."""
         self.gir_indices = _pyaccel.lattice.find_indices(
-            self.model, 'fam_name', 'girder')
+            self.model, 'fam_name', 'girder'
+        )
         self.gir_indices = _np.reshape(self.gir_indices, (-1, 2))
 
     def get_nr_fit_parameters(self):
@@ -580,7 +597,7 @@ class LOCOConfig:
         if self.fit_dipoles_coupling:
             idx += len(self.dip_indices_ksl)
         if self.fit_gain_bpm:
-            idx += 2*self.nr_bpm
+            idx += 2 * self.nr_bpm
         if self.fit_roll_bpm:
             idx += self.nr_bpm
         if self.fit_gain_corr:
@@ -602,8 +619,9 @@ class LOCOConfig:
                 self.update_model(model, dim)
             elif key == 'dim':
                 pass
-            elif key == 'svd_method' and ('svd_sel' in kwargs or
-                                          'svd_thre' in kwargs):
+            elif key == 'svd_method' and (
+                'svd_sel' in kwargs or 'svd_thre' in kwargs
+            ):
                 svd_method = kwargs['svd_method']
                 svd_sel = kwargs['svd_sel'] if 'svd_sel' in kwargs else None
                 svd_thre = kwargs['svd_thre'] if 'svd_thre' in kwargs else None
@@ -613,9 +631,11 @@ class LOCOConfig:
     def _create_indices(self):
         """."""
         self.idx_cav = _pyaccel.lattice.find_indices(
-            self.model, 'fam_name', self.FAMNAME_RF)[0]
+            self.model, 'fam_name', self.FAMNAME_RF
+        )[0]
         self.idx_bpm = _pyaccel.lattice.find_indices(
-            self.model, 'fam_name', 'BPM')
+            self.model, 'fam_name', 'BPM'
+        )
 
 
 class LOCOConfigSI(LOCOConfig):
@@ -644,28 +664,68 @@ class LOCOConfigSI(LOCOConfig):
     @property
     def famname_dipset(self):
         """."""
-        return [
-            'B1', 'B2', 'BC']
+        return ['B1', 'B2', 'BC']
 
     @property
     def famname_quadset(self):
         """."""
-        return ['QFA', 'QDA', 'QDB2', 'QFB', 'QDB1', 'QDP2', 'QFP', 'QDP1',
-                'Q1', 'Q2', 'Q3', 'Q4']
+        return [
+            'QFA',
+            'QDA',
+            'QDB2',
+            'QFB',
+            'QDB1',
+            'QDP2',
+            'QFP',
+            'QDP1',
+            'Q1',
+            'Q2',
+            'Q3',
+            'Q4',
+        ]
 
     @property
     def famname_sextset(self):
         """."""
-        return ['SDA0', 'SDB0', 'SDP0', 'SDA1', 'SDB1', 'SDP1',
-                'SDA2', 'SDB2', 'SDP2', 'SDA3', 'SDB3', 'SDP3',
-                'SFA0', 'SFB0', 'SFP0', 'SFA1', 'SFB1', 'SFP1',
-                'SFA2', 'SFB2', 'SFP2']
+        return [
+            'SDA0',
+            'SDB0',
+            'SDP0',
+            'SDA1',
+            'SDB1',
+            'SDP1',
+            'SDA2',
+            'SDB2',
+            'SDP2',
+            'SDA3',
+            'SDB3',
+            'SDP3',
+            'SFA0',
+            'SFB0',
+            'SFP0',
+            'SFA1',
+            'SFB1',
+            'SFP1',
+            'SFA2',
+            'SFB2',
+            'SFP2',
+        ]
 
     @property
     def famname_skewquadset(self):
         """."""
-        return ['SFA0', 'SDB0', 'SDP0', 'SDA2', 'SDB2',
-                'FC2', 'SDP2', 'SDA3', 'SDB3', 'SDP3']
+        return [
+            'SFA0',
+            'SDB0',
+            'SDP0',
+            'SDA2',
+            'SDB2',
+            'FC2',
+            'SDP2',
+            'SDA3',
+            'SDB3',
+            'SDP3',
+        ]
 
 
 class LOCOConfigBO(LOCOConfig):
