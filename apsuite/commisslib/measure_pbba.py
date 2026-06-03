@@ -450,7 +450,7 @@ class ParallelBBAParams(_ParamsBaseClass):
         ]
         return groups
 
-    def get_default_dkl(self, ngroups=4, groups=None):
+    def get_default_dkl(self, ngroups=8, groups=None):
         """."""
         groups = self.get_default_groups(ngroups) if groups is None else groups
         dkl = [_np.ones(len(g)) * self.quad_deltakl for g in groups]
@@ -516,6 +516,14 @@ class DoParallelBBA(_BaseClass):
         """."""
         haveb = self.devices['currinfosi']
         return haveb.connected and haveb.storedbeam
+
+    @property
+    def measuredbpms(self):
+        """."""
+        mesured = []
+        for group in self.data['measure']:
+            mesured.extend(group['bpms'])
+        return sorted(mesured)
 
     # #### pbba groups and deltas #####
     @property
