@@ -1059,10 +1059,13 @@ class DoParallelBBA(_BaseClass):
             nr_iters = 0
         else:  # proceed to IOS correction
             print('    Correcting IOS:')
-            nr_iters = self.params.corr_nr_iters
+            nr_iters = self.params.corr_max_nr_iters
 
         ios_iter, dkicks_iter = [], []
         sts = self.STATUS.Fail
+        converged = False
+        increased = False
+        _func = lambda a, b: (_np.std(a) - _np.std(b)) / _np.std(a)
         for i in range(nr_iters):
             print('        {:02d}/{:02d} --> '.format(i + 1, nr_iters), end='')
             if self._stopevt.is_set():
@@ -1089,13 +1092,34 @@ class DoParallelBBA(_BaseClass):
                 break
             ios_iter.append(ios)  # save ios (all bpms)
             ios = ios[enblbpm]  # use only enabled bpms for correction
+
+            # check convergence
+            if (i > 0):
+                dios_p = _func(ios_iter[-2][enblbpm], ios)
+                if dios_p < 0.0:
+                    prev_dkicks = dkicks_iter[-1]
+                    self.set_delta_kicks(prev_dkicks)
+                    print('Done.', end=' ')
+                    converged = False
+                    increased = True
+                    break
+                init_ios = ios_iter[0][enblbpm]
+                dios_i = _func(ios_iter[0][enblbpm], ios)
+                if dios_i < self.params.ios_conv_threshold:
+                    print('Done.', end=' ')
+                    converged = True
+                    break
+
             dkicks = list(-1 * _np.dot(inv_jac, ios))
             dkicks_iter.append(dkicks)
             self.set_delta_kicks(dkicks)
-            print('Done')
+            print('Done.', end=' ')
 
-        # final ios
-        if sts:
+        if sts and converged:
+            print(f'IOS converged ({i:d} iterations).')
+        elif sts and not converged and increased:
+            print(f'IOS increased ({i:d} iterations).')
+        elif sts and not converged and not increased:
             ios, sts = self.meas_ios(group_id, group_data['strengths_init'])
             if not sts:
                 self._restore_init_conditions(
@@ -1105,6 +1129,21 @@ class DoParallelBBA(_BaseClass):
                 )
             else:
                 ios_iter.append(ios)
+                ios = ios[enblbpm]
+                dios_i = _func(ios_iter[0][enblbpm], ios)
+                dios_p = _func(ios_iter[-2][enblbpm], ios)
+                if dios_i < self.params.ios_conv_threshold:
+                    print(
+                        f'Max iterations reached ({i+1:d}), but IOS converged.'
+                    )
+                elif dios_p < 0.0:
+                    print(
+                        f'Max iterations reached ({i+1:d}), and IOS increased.'
+                    )
+                else:
+                    print(
+                        f'Max iterations reached ({i+1:d}).'
+                    )
 
         group_data['kicks_end'] = self.get_kicks()
         group_data['ios_iter'] = ios_iter
