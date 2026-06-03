@@ -1043,9 +1043,8 @@ class DoParallelBBA(_BaseClass):
             'strengths_init': self.get_quad_strengths(group_id),
             'orbit_init': self.get_orbit(),
             'kicks_init': self.get_kicks(),
-            'enbllistbpm': enblbpm.copy(),
-            'timestamps': [],
-        }
+            'enbllistbpm': enblbpm.copy()
+            }
 
         self._log_print('    Cycling:')
         msg, sts = self._do_cycling(
@@ -1107,7 +1106,6 @@ class DoParallelBBA(_BaseClass):
                     converged = False
                     increased = True
                     break
-                init_ios = ios_iter[0][enblbpm]
                 dios_i = _func(ios_iter[0][enblbpm], ios)
                 if dios_i < self.params.ios_conv_threshold:
                     self._log_print('Done.', end=' ')
@@ -1232,7 +1230,7 @@ class DoParallelBBA(_BaseClass):
                 abs_tol=0.05*self.params.quad_deltakl,
                 timeout=self.params.wait_quadrupole
             ):
-                print(
+                self._log_print(
                     f'    {qname}: Could not be restored to initial strength'
                 )
 
