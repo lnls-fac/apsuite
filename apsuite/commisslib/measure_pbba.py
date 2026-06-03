@@ -363,8 +363,8 @@ class ParallelBBAParams(_ParamsBaseClass):
         self.wait_quadrupole = 0.3  # [s]
         self.timeout_wait_orbit = 3  # [s]
 
-        self.corr_nr_iters = 6
-        self.inv_jac_rcond = 1e-5
+        self.corr_max_nr_iters = 8
+        self.ios_conv_threshold = 0.1
 
         self.sofb_nrpoints = 20
         self.sofb_maxcorriter = 5
@@ -379,8 +379,8 @@ class ParallelBBAParams(_ParamsBaseClass):
         stg += f'wait_correctors    = {self.wait_correctors:.3f}\n'
         stg += f'wait_quadrupole    = {self.wait_quadrupole:.3f}\n'
         stg += f'timeout_wait_orbit = {self.timeout_wait_orbit:.3f}\n'
-        stg += f'corr_nr_iters      = {self.corr_nr_iters:.3f}\n'
-        stg += f'inv_jac_rcond      = {self.inv_jac_rcond:.3e}\n'
+        stg += f'corr_nr_iters      = {self.corr_max_nr_iters:.3f}\n'
+        stg += f'ios_conv_threshold = {self.ios_conv_threshold:.2e}\n'
         stg += f'sofb_nrpoints      = {self.sofb_nrpoints:.3f}\n'
         stg += f'sofb_maxcorriter   = {self.sofb_maxcorriter:.3f}\n'
         stg += f'sofb_maxorberr     = {self.sofb_maxorberr:.3f}\n'
@@ -1027,7 +1027,7 @@ class DoParallelBBA(_BaseClass):
 
         enblbpm = self.enbllistbpm  # cut jacobian with only enabled bpms
         jac = (self.data['jacobians'][group_id])[enblbpm, :]
-        inv_jac = _np.linalg.pinv(jac, self.params.inv_jac_rcond)
+        inv_jac = self._calc_inverse_jacobian(jac, group_id)
 
         group_data = {
             'bpms': self.data['groups2dopbba'][group_id],
@@ -1116,6 +1116,15 @@ class DoParallelBBA(_BaseClass):
         else:
             print(msg + 'Fail! Elapsed time: {:s}'.format(dtime))
         return sts
+
+    def _calc_inverse_jacobian(self, jacobian, group_id):
+        """."""
+        u, s, vt = _np.linalg.svd(jacobian, full_matrices=False)
+        nr_svals = 2 * len(self.groups2dopbba[group_id])
+        i_s = _np.zeros_like(s)
+        i_s[:nr_svals] = 1.0 / s[:nr_svals]
+
+        return vt.T @ _np.diag(i_s) @ u.T
 
     def _do_cycling(self, group_id, init_strengths):
         delta_strengths = self.data['delta_kl'][group_id]
