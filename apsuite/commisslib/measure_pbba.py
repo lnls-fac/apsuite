@@ -476,6 +476,7 @@ class DoParallelBBA(_BaseClass):
         self.data['delta_kl'] = self.params.get_default_dkl(
             groups=self.data['groups2dopbba']
         )
+        self.data['log'] = list()
         self.data['jacobians'] = list()
         self._model = None
         self._fam_data = None
@@ -573,7 +574,7 @@ class DoParallelBBA(_BaseClass):
     def model(self):
         """."""
         if self._model is None:
-            print('\n     Undefined model... setting a default one')
+            self._log_print('\n     Undefined model... setting a default one')
             self._model = _si.create_accelerator()
             self._model.cavity_on = True
             self._model.radiation_on = 1
@@ -759,7 +760,7 @@ class DoParallelBBA(_BaseClass):
                 max_delta_kl = min(hilim - stren, stren - lolim)
                 msg = f"WARN: {quadname} KL = {stren:.2g}, dKL = {abs(dkl):.2g}. "
                 msg += f"Limits: ({lolim:.2g}, {hilim:.2g}). Max. dKL = {max_delta_kl*2:.2g}."
-                print(msg)
+                self._log_print(msg)
                 ok = False
         return ok
 
@@ -986,7 +987,7 @@ class DoParallelBBA(_BaseClass):
 
     def _do_pbba(self):
         tini = _datetime.datetime.fromtimestamp(_time.time())
-        print(
+        self._log_print(
             'Starting measurement at {:s}'.format(
                 tini.strftime('%Y-%m-%d %Hh%Mm%Ss')
             )
@@ -994,7 +995,7 @@ class DoParallelBBA(_BaseClass):
 
         groups = self.data['groups2dopbba']
         if not all([self.check_isvalid_dkl(g) for g, _ in enumerate(groups)]):
-            print('Adjust quad strength or change dKL first.')
+            self._log_print('Adjust quad strength or change dKL first.')
             return
 
         self.data['jacobians'] = self.calc_ios_jacobians()
@@ -1002,36 +1003,36 @@ class DoParallelBBA(_BaseClass):
 
         sofb = self.devices['sofb']
         if sofb.autocorrsts:
-            print('\nSOFB feedback is enabled. Please desable it first.')
+            self._log_print('\nSOFB feedback is enabled. Please desable it first.')
             return
 
         for gid, _ in enumerate(groups):
             if self._stopevt.is_set():
-                print('\nStopped!')
+                self._log_print('\nStopped!')
                 break
             if not self.havebeam:
-                print('\nBeam was Lost')
+                self._log_print('\nBeam was Lost')
                 break
-            print('\nCorrecting Orbit... ', end='')
+            self._log_print('\nCorrecting Orbit... ', end='')
             self.correct_orbit()
-            print('Ok!')
+            self._log_print('Ok!')
             if not self._dopbba_single_group(gid):
                 break
 
-        print('\nCorrecting Orbit... ', end='')
+        self._log_print('\nCorrecting Orbit... ', end='')
         self.correct_orbit()
-        print('Ok!')
+        self._log_print('Ok!')
 
         tfin = _datetime.datetime.fromtimestamp(_time.time())
         dtime = str(tfin - tini)
         dtime = dtime.split('.')[0]
-        print('\nFinished! Elapsed time {:s}'.format(dtime))
+        self._log_print('\nFinished! Elapsed time {:s}'.format(dtime))
 
     def _dopbba_single_group(self, group_id):
         """."""
         tini = _datetime.datetime.fromtimestamp(_time.time())
         strtini = tini.strftime('%Hh%Mm%Ss')
-        print(f'{strtini:s}: Doing PBBA for Group {group_id:d}')
+        self._log_print(f'{strtini:s}: Doing PBBA for Group {group_id:d}')
 
         enblbpm = self.enbllistbpm  # cut jacobian with only enabled bpms
         jac = (self.data['jacobians'][group_id])[enblbpm, :]
@@ -1043,9 +1044,10 @@ class DoParallelBBA(_BaseClass):
             'orbit_init': self.get_orbit(),
             'kicks_init': self.get_kicks(),
             'enbllistbpm': enblbpm.copy(),
+            'timestamps': [],
         }
 
-        print('    Cycling:')
+        self._log_print('    Cycling:')
         msg, sts = self._do_cycling(
             group_id,
             group_data['strengths_init'],
@@ -1058,7 +1060,7 @@ class DoParallelBBA(_BaseClass):
             )
             nr_iters = 0
         else:  # proceed to IOS correction
-            print('    Correcting IOS:')
+            self._log_print('    Correcting IOS:')
             nr_iters = self.params.corr_max_nr_iters
 
         ios_iter, dkicks_iter = [], []
@@ -1067,7 +1069,9 @@ class DoParallelBBA(_BaseClass):
         increased = False
         _func = lambda a, b: (_np.std(a) - _np.std(b)) / _np.std(a)
         for i in range(nr_iters):
-            print('        {:02d}/{:02d} --> '.format(i + 1, nr_iters), end='')
+            self._log_print(
+                '        {:02d}/{:02d} --> '.format(i + 1, nr_iters), end=''
+            )
             if self._stopevt.is_set():
                 self._restore_init_conditions(
                     group_id,
@@ -1099,21 +1103,21 @@ class DoParallelBBA(_BaseClass):
                 if dios_p < 0.0:
                     prev_dkicks = dkicks_iter[-1]
                     self.set_delta_kicks(prev_dkicks)
-                    print('Done.', end=' ')
+                    self._log_print('Done.', end=' ')
                     converged = False
                     increased = True
                     break
                 init_ios = ios_iter[0][enblbpm]
                 dios_i = _func(ios_iter[0][enblbpm], ios)
                 if dios_i < self.params.ios_conv_threshold:
-                    print('Done.', end=' ')
+                    self._log_print('Done.', end=' ')
                     converged = True
                     break
 
             dkicks = list(-1 * _np.dot(inv_jac, ios))
             dkicks_iter.append(dkicks)
             self.set_delta_kicks(dkicks)
-            print('Done.', end=' ')
+            self._log_print('Done.', end=' ')
 
         if sts and converged:
             print(f'IOS converged ({i:d} iterations).')
@@ -1133,15 +1137,15 @@ class DoParallelBBA(_BaseClass):
                 dios_i = _func(ios_iter[0][enblbpm], ios)
                 dios_p = _func(ios_iter[-2][enblbpm], ios)
                 if dios_i < self.params.ios_conv_threshold:
-                    print(
+                    self._log_print(
                         f'Max iterations reached ({i+1:d}), but IOS converged.'
                     )
                 elif dios_p < 0.0:
-                    print(
+                    self._log_print(
                         f'Max iterations reached ({i+1:d}), and IOS increased.'
                     )
                 else:
-                    print(
+                    self._log_print(
                         f'Max iterations reached ({i+1:d}).'
                     )
 
@@ -1159,9 +1163,9 @@ class DoParallelBBA(_BaseClass):
         dtime = dtime.split('.')[0]
         msg = '    Finished. Status: '
         if sts:
-            print(msg + 'OK! Elapsed time: {:s}'.format(dtime))
+            self._log_print(msg + 'OK! Elapsed time: {:s}'.format(dtime))
         else:
-            print(msg + 'Fail! Elapsed time: {:s}'.format(dtime))
+            self._log_print(msg + 'Fail! Elapsed time: {:s}'.format(dtime))
         return sts
 
     def _calc_inverse_jacobian(self, jacobian, group_id):
@@ -1177,7 +1181,9 @@ class DoParallelBBA(_BaseClass):
         delta_strengths = self.data['delta_kl'][group_id]
         nr_cycles = self.params.cycling_nr_steps
         for i in range(nr_cycles):
-            print('        {:02d}/{:02d} --> '.format(i+1, nr_cycles), end='')
+            self._log_print(
+                '        {:02d}/{:02d} --> '.format(i+1, nr_cycles), end=''
+            )
             if self._stopevt.is_set():
                 return "Event stopped! ", DoParallelBBA.STATUS.Fail
             if not self.havebeam:
@@ -1197,7 +1203,7 @@ class DoParallelBBA(_BaseClass):
                 init_strengths
             ):
                 return "Fail! ", DoParallelBBA.STATUS.Fail
-            print('Ok')
+            self._log_print('Ok')
         return "", DoParallelBBA.STATUS.Success
 
     def _restore_init_conditions(self,
@@ -1208,7 +1214,7 @@ class DoParallelBBA(_BaseClass):
             extra_info_before_message=""
         ):
         """."""
-        print(extra_info_before_message+message)
+        self._log_print(extra_info_before_message+message)
 
         self.set_quad_strengths(group_id, init_strengths, ignore_timeout=True)
 
@@ -1232,3 +1238,8 @@ class DoParallelBBA(_BaseClass):
 
         if correct_orbit:
             self.correct_orbit()
+
+    def _log_print(self, msg):
+        """."""
+        self.data['log'].append((_time.time(), msg))
+        print(msg)
