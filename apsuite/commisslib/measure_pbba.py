@@ -357,7 +357,7 @@ class ParallelBBAParams(_ParamsBaseClass):
         """."""
         super().__init__()
 
-        self.quad_deltakl = 0.02  # [1/m]
+        self.quad_deltakl = 0.01  # [1/m]
 
         self.wait_correctors = 0.3  # [s]
         self.wait_quadrupole = 0.3  # [s]
@@ -388,7 +388,7 @@ class ParallelBBAParams(_ParamsBaseClass):
         return stg
 
     @staticmethod
-    def get_default_groups(ngroups=4):
+    def get_default_groups(ngroups=8):
         """."""
         if ngroups == 2:
             group_class = [
