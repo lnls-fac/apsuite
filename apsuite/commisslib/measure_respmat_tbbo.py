@@ -1,5 +1,6 @@
 """."""
 
+import time as _time
 import numpy as np
 
 import pyaccel
@@ -7,18 +8,27 @@ from siriuspy.namesys import SiriusPVName as _PVName
 from siriuspy.devices import SOFB
 
 from ..optimization import SimulAnneal
-from ..utils import ThreadedMeasBaseClass as _BaseClass, \
-    ParamsBaseClass as _ParamsBaseClass
+from ..utils import (
+    ThreadedMeasBaseClass as _BaseClass,
+    ParamsBaseClass as _ParamsBaseClass,
+)
 
 
 class Params(_ParamsBaseClass):
     """."""
 
     def __init__(self):
-        """."""
         super().__init__()
-        self.deltas = {
-            'CH': 0.3e-3, 'CV': 0.15e-3, 'InjSept': 0.3e-3, 'InjKckr': 0.3e-3}
+
+        self.kick_range = {
+            "CH": [-0.3e-3, 0.3e-3],
+            "CV": [-0.15e-3, 0.15e-3],
+            "InjSept": [-0.3e-3, 0.3e-3],
+            "InjKckr": [-0.3e-3, 0.3e-3],
+        }
+
+        self.num_kick_points = 5
+
         self.wait_time = 2
         self.timeout_orb = 10
         self.num_points = 10
@@ -31,9 +41,9 @@ class MeasureRespMatTBBO(_BaseClass):
         """."""
         super().__init__(params=Params(), target=self._measure_matrix_thread)
         self.devices = {
-            'bo_sofb': SOFB(SOFB.DEVICES.BO),
-            'tb_sofb': SOFB(SOFB.DEVICES.TB),
-            }
+            "bo_sofb": SOFB(SOFB.DEVICES.BO),
+            "tb_sofb": SOFB(SOFB.DEVICES.TB),
+        }
         self._all_corrs = all_corrs
         self._matrix = dict()
         self._corrs_to_measure = []
@@ -42,25 +52,27 @@ class MeasureRespMatTBBO(_BaseClass):
     def trajx(self):
         """."""
         return np.hstack(
-            [self.devices['tb_sofb'].trajx, self.devices['bo_sofb'].trajx])
+            [self.devices["tb_sofb"].trajx, self.devices["bo_sofb"].trajx]
+        )
 
     @property
     def trajy(self):
         """."""
         return np.hstack(
-            [self.devices['tb_sofb'].trajy, self.devices['bo_sofb'].trajy])
+            [self.devices["tb_sofb"].trajy, self.devices["bo_sofb"].trajy]
+        )
 
     def wait(self, timeout=10):
         """."""
-        self.devices['tb_sofb'].wait_buffer(timeout=timeout)
-        self.devices['bo_sofb'].wait_buffer(timeout=timeout)
+        self.devices["tb_sofb"].wait_buffer(timeout=timeout)
+        self.devices["bo_sofb"].wait_buffer(timeout=timeout)
 
     def reset(self, wait=0):
         """."""
         if self._stopevt.wait(wait):
             return False
-        self.devices['tb_sofb'].cmd_reset()
-        self.devices['bo_sofb'].cmd_reset()
+        self.devices["tb_sofb"].cmd_reset()
+        self.devices["bo_sofb"].cmd_reset()
         if self._stopevt.wait(1):
             return False
         return True
@@ -68,10 +80,12 @@ class MeasureRespMatTBBO(_BaseClass):
     @property
     def corr_names(self):
         """."""
-        corrs = sorted([
-            c for c in self._all_corrs if not c.dev.startswith('CV')])
-        corrs.extend(sorted([
-            c for c in self._all_corrs if c.dev.startswith('CV')]))
+        corrs = sorted(
+            [c for c in self._all_corrs if not c.dev.startswith("CV")]
+        )
+        corrs.extend(
+            sorted([c for c in self._all_corrs if c.dev.startswith("CV")])
+        )
         return corrs
 
     @property
@@ -87,120 +101,219 @@ class MeasureRespMatTBBO(_BaseClass):
         self._corrs_to_measure = sorted([_PVName(n) for n in value])
 
     @property
-    def matrix(self):
-        """."""
-        mat = np.zeros([len(self._all_corrs), 2*self.trajx.size], dtype=float)
-        for i, cor in enumerate(self.corr_names):
-            line = self._matrix.get(cor)
-            if line is not None:
-                mat[i, :] = line
-        return mat
-
-    @property
     def nr_points(self):
         """."""
         return min(
-            self.devices['tb_sofb'].nr_points,
-            self.devices['bo_sofb'].nr_points)
+            self.devices["tb_sofb"].nr_points,
+            self.devices["bo_sofb"].nr_points,
+        )
 
     @nr_points.setter
     def nr_points(self, value):
-        self.devices['tb_sofb'].nr_points = int(value)
-        self.devices['bo_sofb'].nr_points = int(value)
+        self.devices["tb_sofb"].nr_points = int(value)
+        self.devices["bo_sofb"].nr_points = int(value)
+
+    def _get_traj(self):
+        if not self.reset(self.params.wait_time):
+            return None
+
+        self.wait(self.params.timeout_orb)
+
+        return np.hstack([self.trajx, self.trajy])
 
     def _measure_matrix_thread(self):
         self.nr_points = self.params.num_points
         corrs = self.corrs_to_measure
-        print('Starting...')
-        for i, cor in enumerate(corrs):
-            print('{0:2d}|{1:2d}: {2:20s}'.format(i, len(corrs), cor), end='')
-            orb = []
-            delta = self.params.deltas[cor.dev]
+
+        self.data = []
+        print("Starting...")
+        stopped = False
+
+        for idx_cor, cor in enumerate(corrs):
+
+            print(f"{idx_cor:02d}|{len(corrs):02d}: {str(cor):20s}")
+
             origkick = self._all_corrs[cor].strength
-            print('orig ', end='')
-            if not self.reset(self.params.wait_time):
-                break
-            self.wait(self.params.timeout_orb)
-            orb.append(-np.hstack([self.trajx, self.trajy]))
+            kick_min, kick_max = self.params.kick_range[cor.dev]
 
-            sig = -2*int(origkick > 0) + 1
-            print('pos' if sig > 0 else 'neg')
-            self._all_corrs[cor].strength = origkick + sig*delta
-            if not self.reset(self.params.wait_time):
-                break
-            self.wait(self.params.timeout_orb)
-            orb.append(np.hstack([self.trajx, self.trajy]))
+            delta_strengths = np.linspace(
+                kick_min, kick_max, self.params.num_kick_points
+            )
 
-            self._all_corrs[cor].strength = origkick
-            if self._stopevt.is_set():
-                print('Stopped!')
+            datum = {
+                "corr": cor,
+                "orig_strength": origkick,
+                "delta_strengths": [],
+                "trajs": [],
+                "timestamp": [],
+            }
+
+            try:
+                for idx_kick, delta in enumerate(delta_strengths):
+                    kick = origkick + delta
+                    print(
+                        f"    "
+                        f"{idx_kick+1:02d}/{len(delta_strengths):02d} "
+                        f"-> delta_kick = {delta:+.3e}"
+                    )
+
+                    self._all_corrs[cor].strength = kick
+                    traj = self._get_orbit()
+
+                    if traj is None:
+                        stopped = True
+                        break
+
+                    datum["delta_strengths"].append(delta)
+                    datum["trajs"].append(traj)
+                    datum["timestamp"].append(_time.time())
+
+                    if self._stopevt.is_set():
+                        stopped = True
+                        break
+
+            finally:
+                # Always restore original corrector strength
+                self._all_corrs[cor].strength = origkick
+
+            self.data.append(datum)
+
+            if stopped:
+                print("Stopped!")
                 break
-            else:
-                self._matrix[cor] = np.array(orb).sum(axis=0)/(sig*delta)
+
         else:
-            print('Finished!')
+            print("Finished!")
+
+    def process_data(self, fit_order=1):
+        """."""
+        if not self.data:
+            raise ValueError("No data to process. Run measure first.")
+
+        fit_results = []
+        nr_bpms = len(self.data[0]["trajs"][0])
+
+        respmat_meas = np.zeros((len(self.data), nr_bpms), dtype=float)
+
+        for i, datum in enumerate(self.data):
+
+            xfit = np.array(datum["delta_strengths"])
+            trajs = np.array(datum["trajs"])
+
+            coefs, _ = np.polynomial.polynomial.polyfit(
+                xfit, trajs, deg=fit_order, full=True
+            )
+
+            ress = [(trajs**2).sum(axis=0)]
+
+            for order in range(1, fit_order + 2):
+                fit = np.polynomial.polynomial.polyval(xfit, coefs[:order])
+                ress.append(((trajs - fit.T) ** 2).sum(axis=0))
+
+            ress = np.array(ress)
+            ratio = ress / ress[1][None, :]
+
+            fit_results.append(
+                {
+                    "corr": datum["corr"],
+                    "orig_strength": datum["orig_strength"],
+                    "fit_x": xfit,
+                    "fit_coefs": coefs,
+                    "fit_residue_order": ress,
+                    "fit_rel_residue": ratio,
+                    "trajs": trajs,
+                }
+            )
+
+            respmat_meas[i] = coefs[1]
+
+        self.analysis = {
+            "fit_order": fit_order,
+            "fit_results": fit_results,
+            "respmat_meas": respmat_meas,
+        }
 
 
 def calc_model_respmatTBBO(
-        tb_mod, model, corr_names, elems, meth='middle', ishor=True):
+    tb_mod, model, corr_names, elems, meth="middle", ishor=True
+):
     """."""
-    bpms = np.array(pyaccel.lattice.find_indices(model, 'fam_name', 'BPM'))[1:]
+    bpms = np.array(pyaccel.lattice.find_indices(model, "fam_name", "BPM"))[1:]
     _, cumulmat = pyaccel.tracking.find_m44(
-        model, indices='open', fixed_point=[0, 0, 0, 0])
+        model, indices="open", fixed_point=[0, 0, 0, 0]
+    )
 
-    matrix = np.zeros((len(corr_names), 2*bpms.size))
+    matrix = np.zeros((len(corr_names), 2 * bpms.size))
     for idx, corr in enumerate(corr_names):
         elem = elems[corr]
         indcs = np.array(elem.model_indices)
-        if corr.sec == 'BO':
-            print('Booster ', corr)
+        if corr.sec == "BO":
+            print("Booster ", corr)
             indcs += len(tb_mod)
         cortype = elem.magnet_type
         kxl = kyl = ksxl = ksyl = 0
-        if corr.dev == 'InjSept':
+        if corr.dev == "InjSept":
             # kxl = tb_mod[indcs[0][1]].KxL
             # kyl = tb_mod[indcs[0][1]].KyL
             # ksxl = tb_mod[indcs[0][1]].KsxL
             # ksyl = tb_mod[indcs[0][1]].KsyL
             midx = pyaccel.lattice.find_indices(
-                tb_mod, 'fam_name', 'InjSeptM66')
+                tb_mod, "fam_name", "InjSeptM66"
+            )
             for m in midx:
                 kxl += tb_mod[m].KxL
                 kyl += tb_mod[m].KyL
                 ksxl += tb_mod[m].KsxL
                 ksyl += tb_mod[m].KsyL
-        if not ishor and corr.dev in {'InjSept', 'InjKckr'}:
-            cortype = 'vertical'
+        if not ishor and corr.dev in {"InjSept", "InjKckr"}:
+            cortype = "vertical"
         matrix[idx, :] = _get_respmat_line(
-            cumulmat, indcs, bpms, length=elem.model_length,
-            kxl=kxl, kyl=kyl, ksxl=ksxl, ksyl=ksyl,
-            cortype=cortype, meth=meth)
+            cumulmat,
+            indcs,
+            bpms,
+            length=elem.model_length,
+            kxl=kxl,
+            kyl=kyl,
+            ksxl=ksxl,
+            ksyl=ksyl,
+            cortype=cortype,
+            meth=meth,
+        )
     return matrix
 
 
 def _get_respmat_line(
-        cumul_mat, indcs, bpms, length, kxl=0, kyl=0, ksxl=0, ksyl=0,
-        cortype='vertical', meth='middle'):
+    cumul_mat,
+    indcs,
+    bpms,
+    length,
+    kxl=0,
+    kyl=0,
+    ksxl=0,
+    ksyl=0,
+    cortype="vertical",
+    meth="middle",
+):
 
-    idx = 3 if cortype.startswith('vertical') else 1
+    idx = 3 if cortype.startswith("vertical") else 1
     cor = indcs[0]
-    if meth.lower().startswith('end'):
-        cor = indcs[-1]+1
-    elif meth.lower().startswith('mid'):
+    if meth.lower().startswith("end"):
+        cor = indcs[-1] + 1
+    elif meth.lower().startswith("mid"):
         # create a symplectic integrator of second order
         # for the last half of the element:
         drift = np.eye(4, dtype=float)
-        drift[0, 1] = length/2 / 2
-        drift[2, 3] = length/2 / 2
+        drift[0, 1] = length / 2 / 2
+        drift[2, 3] = length / 2 / 2
         quad = np.eye(4, dtype=float)
-        quad[1, 0] = -kxl/2
-        quad[3, 2] = -kyl/2
-        quad[1, 2] = -ksxl/2
-        quad[3, 0] = -ksyl/2
+        quad[1, 0] = -kxl / 2
+        quad[3, 2] = -kyl / 2
+        quad[1, 2] = -ksxl / 2
+        quad[3, 0] = -ksyl / 2
         half_cor = np.dot(np.dot(drift, quad), drift)
 
     m0c = cumul_mat[cor]
-    if meth.lower().startswith('mid'):
+    if meth.lower().startswith("mid"):
         m0c = np.linalg.solve(half_cor, m0c)
     mat = np.linalg.solve(m0c.T, cumul_mat[bpms].transpose((0, 2, 1)))
     mat = mat.transpose(0, 2, 1)
@@ -216,8 +329,17 @@ def _get_respmat_line(
 class FindSeptQuad(SimulAnneal):
     """."""
 
-    def __init__(self, tb_model, bo_model, corr_names, elems,
-                 respmat, nturns=5, save=False, in_sept=True):
+    def __init__(
+        self,
+        tb_model,
+        bo_model,
+        corr_names,
+        elems,
+        respmat,
+        nturns=5,
+        save=False,
+        in_sept=True,
+    ):
         """."""
         super().__init__(save=save)
         self.tb_model = tb_model
@@ -236,13 +358,15 @@ class FindSeptQuad(SimulAnneal):
         """."""
         if self.in_sept:
             sept_idx = pyaccel.lattice.find_indices(
-                self.tb_model, 'fam_name', 'InjSept')
+                self.tb_model, "fam_name", "InjSept"
+            )
         else:
-            sept_idx = self.elems['TB-04:MA-CV-2'].model_indices
+            sept_idx = self.elems["TB-04:MA-CV-2"].model_indices
         k, ks = self._position
-        pyaccel.lattice.set_attribute(self.tb_model, 'K', sept_idx, k)
-        pyaccel.lattice.set_attribute(self.tb_model, 'Ks', sept_idx, ks)
+        pyaccel.lattice.set_attribute(self.tb_model, "K", sept_idx, k)
+        pyaccel.lattice.set_attribute(self.tb_model, "Ks", sept_idx, ks)
         respmat = calc_model_respmatTBBO(
-            self.tb_model, self.bo_model, self.corr_names, self.elems)
+            self.tb_model, self.bo_model, self.corr_names, self.elems
+        )
         respmat -= self.respmat
-        return np.sqrt(np.mean(respmat*respmat))
+        return np.sqrt(np.mean(respmat * respmat))
