@@ -107,43 +107,84 @@ class MeasureRespMatTBBO(_BaseClass):
     def nr_points(self):
         """."""
         return min(
-            self.devices['tb_sofb'].nr_points,
-            self.devices['bo_sofb'].nr_points)
+            self.devices["tb_sofb"].nr_points,
+            self.devices["bo_sofb"].nr_points,
+        )
 
     @nr_points.setter
     def nr_points(self, value):
-        self.devices['tb_sofb'].nr_points = int(value)
-        self.devices['bo_sofb'].nr_points = int(value)
+        self.devices["tb_sofb"].nr_points = int(value)
+        self.devices["bo_sofb"].nr_points = int(value)
+
+    def _get_traj(self):
+        if not self.reset(self.params.wait_time):
+            return None
+
+        self.wait(self.params.timeout_orb)
+
+        return np.hstack([self.trajx, self.trajy])
 
     def _measure_matrix_thread(self):
         self.nr_points = self.params.num_points
         corrs = self.corrs_to_measure
-        print('Starting...')
-        for i, cor in enumerate(corrs):
-            print('{0:2d}|{1:2d}: {2:20s}'.format(i, len(corrs), cor), end='')
-            orb = []
-            delta = self.params.deltas[cor.dev]
+
+        self.data = []
+        print("Starting...")
+        stopped = False
+
+        for idx_cor, cor in enumerate(corrs):
+
+            print(f"{idx_cor:02d}|{len(corrs):02d}: {str(cor):20s}")
+
             origkick = self._all_corrs[cor].strength
-            print('orig ', end='')
-            if not self.reset(self.params.wait_time):
-                break
-            self.wait(self.params.timeout_orb)
-            orb.append(-np.hstack([self.trajx, self.trajy]))
+            kick_min, kick_max = self.params.kick_range[cor.dev]
 
-            sig = -2*int(origkick > 0) + 1
-            print('pos' if sig > 0 else 'neg')
-            self._all_corrs[cor].strength = origkick + sig*delta
-            if not self.reset(self.params.wait_time):
-                break
-            self.wait(self.params.timeout_orb)
-            orb.append(np.hstack([self.trajx, self.trajy]))
+            delta_strengths = np.linspace(
+                kick_min, kick_max, self.params.num_kick_points
+            )
 
-            self._all_corrs[cor].strength = origkick
-            if self._stopevt.is_set():
-                print('Stopped!')
+            datum = {
+                "corr": cor,
+                "orig_strength": origkick,
+                "delta_strengths": [],
+                "trajs": [],
+                "timestamp": [],
+            }
+
+            try:
+                for idx_kick, delta in enumerate(delta_strengths):
+                    kick = origkick + delta
+                    print(
+                        f"    "
+                        f"{idx_kick+1:02d}/{len(delta_strengths):02d} "
+                        f"-> delta_kick = {delta:+.3e}"
+                    )
+
+                    self._all_corrs[cor].strength = kick
+                    traj = self._get_orbit()
+
+                    if traj is None:
+                        stopped = True
+                        break
+
+                    datum["delta_strengths"].append(delta)
+                    datum["trajs"].append(traj)
+                    datum["timestamp"].append(_time.time())
+
+                    if self._stopevt.is_set():
+                        stopped = True
+                        break
+
+            finally:
+                # Always restore original corrector strength
+                self._all_corrs[cor].strength = origkick
+
+            self.data.append(datum)
+
+            if stopped:
+                print("Stopped!")
                 break
-            else:
-                self._matrix[cor] = np.array(orb).sum(axis=0)/(sig*delta)
+
         else:
             print('Finished!')
 
