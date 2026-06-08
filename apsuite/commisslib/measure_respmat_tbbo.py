@@ -241,7 +241,7 @@ class MeasureRespMatTBBO(_BaseClass):
 
         for i, datum in enumerate(self.data):
 
-            xfit = np.array(datum["delta_strength"])
+            xfit = np.array(datum["corr_strn"])
             traj_xy = np.array(datum["traj_xy"])
 
             coefs, _ = np.polynomial.polynomial.polyfit(
