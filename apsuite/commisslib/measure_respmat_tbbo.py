@@ -94,16 +94,6 @@ class MeasureRespMatTBBO(_BaseClass):
         self._corrs_to_measure = sorted([_PVName(n) for n in value])
 
     @property
-    def matrix(self):
-        """."""
-        mat = np.zeros([len(self._all_corrs), 2*self.trajx.size], dtype=float)
-        for i, cor in enumerate(self.corr_names):
-            line = self._matrix.get(cor)
-            if line is not None:
-                mat[i, :] = line
-        return mat
-
-    @property
     def nr_points(self):
         """."""
         return min(
@@ -186,7 +176,55 @@ class MeasureRespMatTBBO(_BaseClass):
                 break
 
         else:
-            print('Finished!')
+            print("Finished!")
+
+    def process_data(self, fit_order=1):
+        """."""
+        if not self.data:
+            raise ValueError("No data to process. Run measure first.")
+
+        fit_results = []
+        nr_bpms = len(self.data[0]["trajs"][0])
+
+        respmat_meas = np.zeros((len(self.data), nr_bpms), dtype=float)
+
+        for i, datum in enumerate(self.data):
+
+            xfit = np.array(datum["delta_strengths"])
+            trajs = np.array(datum["trajs"])
+
+            coefs, _ = np.polynomial.polynomial.polyfit(
+                xfit, trajs, deg=fit_order, full=True
+            )
+
+            ress = [(trajs**2).sum(axis=0)]
+
+            for order in range(1, fit_order + 2):
+                fit = np.polynomial.polynomial.polyval(xfit, coefs[:order])
+                ress.append(((trajs - fit.T) ** 2).sum(axis=0))
+
+            ress = np.array(ress)
+            ratio = ress / ress[1][None, :]
+
+            fit_results.append(
+                {
+                    "corr": datum["corr"],
+                    "orig_strength": datum["orig_strength"],
+                    "fit_x": xfit,
+                    "fit_coefs": coefs,
+                    "fit_residue_order": ress,
+                    "fit_rel_residue": ratio,
+                    "trajs": trajs,
+                }
+            )
+
+            respmat_meas[i] = coefs[1]
+
+        self.analysis = {
+            "fit_order": fit_order,
+            "fit_results": fit_results,
+            "respmat_meas": respmat_meas,
+        }
 
 
 def calc_model_respmatTBBO(
