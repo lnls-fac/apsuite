@@ -15,10 +15,17 @@ class Params(_ParamsBaseClass):
     """."""
 
     def __init__(self):
-        """."""
         super().__init__()
-        self.deltas = {
-            'CH': 0.3e-3, 'CV': 0.15e-3, 'InjSept': 0.3e-3, 'InjKckr': 0.3e-3}
+
+        self.kick_range = {
+            "CH": [-0.3e-3, 0.3e-3],
+            "CV": [-0.15e-3, 0.15e-3],
+            "InjSept": [-0.3e-3, 0.3e-3],
+            "InjKckr": [-0.3e-3, 0.3e-3],
+        }
+
+        self.num_kick_points = 5
+
         self.wait_time = 2
         self.timeout_orb = 10
         self.num_points = 10
