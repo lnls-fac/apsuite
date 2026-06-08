@@ -5,7 +5,9 @@ import numpy as np
 
 import pyaccel
 from siriuspy.namesys import SiriusPVName as _PVName
-from siriuspy.devices import SOFB
+from siriuspy.devices import PowerSupply as _PowerSupply
+from siriuspy.devices import EVG as _EVG
+from siriuspy.devices import SOFB as _SOFB
 
 from ..optimization import SimulAnneal
 from ..utils import (
@@ -18,35 +20,49 @@ class Params(_ParamsBaseClass):
     """."""
 
     def __init__(self):
+        """."""
         super().__init__()
-
-        self.kick_range = {
-            "CH": [-0.3e-3, 0.3e-3],
-            "CV": [-0.15e-3, 0.15e-3],
-            "InjSept": [-0.3e-3, 0.3e-3],
-            "InjKckr": [-0.3e-3, 0.3e-3],
+        self.corr_nrpts = 5
+        self.corr_range = {
+            "CH": [-4, 4],  # [urad]
+            "CV": [-4, 4],  # [urad]
+            "InjSept": [-1, 1],  # [mrad]
+            "InjKckr": [-0.3, 0.3],  # [mrad]
         }
+        self.corr_wait = 0.5  # [s]
+        self.injection_interval = 3  # [s]
+        # self.wait_time = 2  # [s]
 
-        self.num_kick_points = 5
+        self.timeout_orb = 10  # [s]
+        self.nr_points = 10
 
-        self.wait_time = 2
-        self.timeout_orb = 10
-        self.num_points = 10
+    def __str__(self):
+        """."""
+        ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
+        dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
+        ttmp = '{0:24s} = {1}\n'.format
+        stg = dtmp('corr_nrpts', self.corr_nrpts, '')
+        stg += ttmp('corr_range', self.corr_range, '')
+        stg += ftmp('corr_wait', self.corr_wait, '[s]')
+        stg += ftmp('injection_interval', self.injection_interval, '[s]')
+        stg += ftmp('timeout_orb', self.timeout_orb, '[s]')
+        stg += dtmp('nr_points', self.nr_points, '')
+        return stg
 
 
 class MeasureRespMatTBBO(_BaseClass):
     """."""
 
-    def __init__(self, all_corrs):
+    def __init__(self, corr_names, isonline=True):
         """."""
-        super().__init__(params=Params(), target=self._measure_matrix_thread)
-        self.devices = {
-            "bo_sofb": SOFB(SOFB.DEVICES.BO),
-            "tb_sofb": SOFB(SOFB.DEVICES.TB),
-        }
-        self._all_corrs = all_corrs
+        super().__init__(params=Params(), target=self.measure_respmat)
+        self.isonline = isonline
+        self.devices = dict()
+        self._corr_names = [_PVName(corr) for corr in corr_names]
         self._matrix = dict()
         self._corrs_to_measure = []
+        if isonline:
+            self._create_devices()
 
     @property
     def trajx(self):
@@ -62,166 +78,194 @@ class MeasureRespMatTBBO(_BaseClass):
             [self.devices["tb_sofb"].trajy, self.devices["bo_sofb"].trajy]
         )
 
-    def wait(self, timeout=10):
+    @property
+    def trajs(self):
         """."""
-        self.devices["tb_sofb"].wait_buffer(timeout=timeout)
-        self.devices["bo_sofb"].wait_buffer(timeout=timeout)
+        return np.hstack(
+            [self.devices["tb_sofb"].sum, self.devices["bo_sofb"].sum]
+        )
 
-    def reset(self, wait=0):
+    @property
+    def traj(self):
         """."""
-        if self._stopevt.wait(wait):
-            return False
-        self.devices["tb_sofb"].cmd_reset()
-        self.devices["bo_sofb"].cmd_reset()
-        if self._stopevt.wait(1):
-            return False
-        return True
+        traj_xy = np.hstack([self.trajx, self.trajy])
+        return traj_xy
+
+    def wait_new_traj(self, traj_xy_0=None, timeout_orb=None):
+        """."""
+        timeout_orb = timeout_orb or self.params.timeout_orb
+        if traj_xy_0 is None:
+            traj_xy_0 = self.traj
+        for _ in range(50):
+            traj_xy = self.traj
+            if not np.any(np.isclose(traj_xy_0, traj_xy)):
+                return True
+            _time.sleep(timeout_orb / 50)
+        return False
+
+    def inject_and_get_data(self, corr_name):
+        """."""
+        evg = self.devices['evg']
+        corr_strn0 = self.devices[corr_name].strength
+        traj_xy = list()
+        traj_sum = list()
+        timestamp = list()
+        corr_strn = list()
+        for i in range(self.params.nr_points):
+            traj_xy_0 = self.traj
+            evg.cmd_turn_on_injection()
+            # traj_xy_new, traj_sum_new = self.get_new_traj(traj_xy_0)
+
+            t0_ = _time.time()
+            stg = f'    {i + 1:02d}/{self.params.nr_points:02d} -> '
+            stg += 'Getting trajectory...'
+            print(stg, end='\r', flush=True)
+            if not self.wait_new_traj(traj_xy_0):
+                stg += ' timed out waiting traj to update.'
+            print(stg + '  done!')
+
+            traj_xy_new = self.traj
+            traj_sum_new = self.trajs
+            timestamp.append(_time.time())
+            traj_xy.append(traj_xy_new)
+            traj_sum.append(traj_sum_new)
+            corr_strn.append(corr_strn0)
+            dtim = max(
+                0, self.params.injection_interval - (_time.time() - t0_)
+            )
+            if i < self.params.nr_points - 1:
+                _time.sleep(dtim)
+        return dict(
+            traj_xy=traj_xy,
+            traj_sum=traj_sum,
+            timestamp=timestamp,
+            corr_strn=corr_strn,
+        )
 
     @property
     def corr_names(self):
         """."""
-        corrs = sorted(
-            [c for c in self._all_corrs if not c.dev.startswith("CV")]
-        )
-        corrs.extend(
-            sorted([c for c in self._all_corrs if c.dev.startswith("CV")])
-        )
-        return corrs
+        return self._corr_names[:]
+        # corrs = sorted(
+        #     [c for c in self._corr_names if not c.dev.startswith("CV")]
+        # )
+        # corrs.extend(
+        #     sorted([c for c in self._corr_names if c.dev.startswith("CV")])
+        # )
+        # return corrs
 
     @property
     def corrs_to_measure(self):
         """."""
         if not self._corrs_to_measure:
-            return sorted(self._all_corrs.keys() - self._matrix.keys())
-        return self._corrs_to_measure
+            return self._corr_names[:]
+        else:
+            return self._corrs_to_measure
+        # if not self._corrs_to_measure:
+        #     return sorted(self._corr_names.keys() - self._matrix.keys())
+        # return self._corrs_to_measure
 
     @corrs_to_measure.setter
     def corrs_to_measure(self, value):
         """."""
-        self._corrs_to_measure = sorted([_PVName(n) for n in value])
+        for corr_name in self._corr_names:
+            if corr_name in value:
+                self._corrs_to_measure.append(corr_name)
 
-    @property
-    def nr_points(self):
+    def measure_respmat_corr(self, corr_name):
         """."""
-        return min(
-            self.devices["tb_sofb"].nr_points,
-            self.devices["bo_sofb"].nr_points,
-        )
+        nrpts = self.params.corr_nrpts
+        kick_min, kick_max = self.params.corr_range[corr_name.dev]
+        delta_strength = np.linspace(kick_min, kick_max, nrpts)
 
-    @nr_points.setter
-    def nr_points(self, value):
-        self.devices["tb_sofb"].nr_points = int(value)
-        self.devices["bo_sofb"].nr_points = int(value)
+        corr_dev = self.devices[corr_name]
+        orig_strn = corr_dev.strength
 
-    def _get_traj(self):
-        if not self.reset(self.params.wait_time):
-            return None
+        stopped = False
+        data = []
+        try:
+            for i, delta_strn in enumerate(delta_strength):
+                print(
+                    f'  {corr_name} {i + 1:02d}/{nrpts:02d} --> '
+                    f'delta_strength: {delta_strn:.3f}'
+                )
+                new_strn = orig_strn + delta_strn
+                self._set_device_corrector(corr_name, new_strn)
+                _time.sleep(self.params.corr_wait)
 
-        self.wait(self.params.timeout_orb)
+                orb_data = self.inject_and_get_data(corr_name)
+                data.append(orb_data)
 
-        return np.hstack([self.trajx, self.trajy])
+                if self._stopevt.is_set():
+                    stopped = True
+                    break
+        finally:
+            print(f'  restoring {corr_name} strength...')
+            self._set_device_corrector(corr_name, orig_strn)
+            # _time.sleep(1)
+            print(f'  {corr_name} strength: {corr_dev.strength:.3f}')
+            if stopped:
+                print(f'  {corr_name} interrupted!')
+            else:
+                print(f'  {corr_name} finished!')
+        return stopped, data
 
-    def _measure_matrix_thread(self):
-        self.nr_points = self.params.num_points
+    def measure_respmat(self):
+        """."""
+        self.nr_points = self.params.nr_points
         corrs = self.corrs_to_measure
 
-        self.data = []
+        self.data = dict()
         print("Starting...")
-        stopped = False
 
-        for idx_cor, cor in enumerate(corrs):
-
-            print(f"{idx_cor:02d}|{len(corrs):02d}: {str(cor):20s}")
-
-            origkick = self._all_corrs[cor].strength
-            kick_min, kick_max = self.params.kick_range[cor.dev]
-
-            delta_strengths = np.linspace(
-                kick_min, kick_max, self.params.num_kick_points
-            )
-
-            datum = {
-                "corr": cor,
-                "orig_strength": origkick,
-                "delta_strengths": [],
-                "trajs": [],
-                "timestamp": [],
-            }
-
-            try:
-                for idx_kick, delta in enumerate(delta_strengths):
-                    kick = origkick + delta
-                    print(
-                        f"    "
-                        f"{idx_kick+1:02d}/{len(delta_strengths):02d} "
-                        f"-> delta_kick = {delta:+.3e}"
-                    )
-
-                    self._all_corrs[cor].strength = kick
-                    traj = self._get_orbit()
-
-                    if traj is None:
-                        stopped = True
-                        break
-
-                    datum["delta_strengths"].append(delta)
-                    datum["trajs"].append(traj)
-                    datum["timestamp"].append(_time.time())
-
-                    if self._stopevt.is_set():
-                        stopped = True
-                        break
-
-            finally:
-                # Always restore original corrector strength
-                self._all_corrs[cor].strength = origkick
-
-            self.data.append(datum)
-
-            if stopped:
-                print("Stopped!")
+        for idx, corr_name in enumerate(corrs):
+            print(f'Varrying {corr_name:<20s} ({idx+1:02d}/{len(corrs):02d})')
+            stopped, data = self.measure_respmat_corr(corr_name)
+            if not stopped:
+                self.data[corr_name] = data
+            else:
                 break
 
-        else:
-            print("Finished!")
+        print("Finished.")
 
-    def process_data(self, fit_order=1):
+    def process_data_corr(self, corr_name, fit_order=1):
         """."""
-        if not self.data:
+        data = self.data[corr_name]
+        if not data:
             raise ValueError("No data to process. Run measure first.")
 
         fit_results = []
-        nr_bpms = len(self.data[0]["trajs"][0])
+        nr_bpms = len(data[0]["traj_xy"][0])
 
         respmat_meas = np.zeros((len(self.data), nr_bpms), dtype=float)
 
         for i, datum in enumerate(self.data):
 
-            xfit = np.array(datum["delta_strengths"])
-            trajs = np.array(datum["trajs"])
+            xfit = np.array(datum["delta_strength"])
+            traj_xy = np.array(datum["traj_xy"])
 
             coefs, _ = np.polynomial.polynomial.polyfit(
-                xfit, trajs, deg=fit_order, full=True
+                xfit, traj_xy, deg=fit_order, full=True
             )
 
-            ress = [(trajs**2).sum(axis=0)]
+            ress = [(traj_xy**2).sum(axis=0)]
 
             for order in range(1, fit_order + 2):
                 fit = np.polynomial.polynomial.polyval(xfit, coefs[:order])
-                ress.append(((trajs - fit.T) ** 2).sum(axis=0))
+                ress.append(((traj_xy - fit.T) ** 2).sum(axis=0))
 
             ress = np.array(ress)
             ratio = ress / ress[1][None, :]
 
             fit_results.append(
                 {
-                    "corr": datum["corr"],
+                    "corr": datum["corr_name"],
                     "orig_strength": datum["orig_strength"],
                     "fit_x": xfit,
                     "fit_coefs": coefs,
                     "fit_residue_order": ress,
                     "fit_rel_residue": ratio,
-                    "trajs": trajs,
+                    "traj_xy": traj_xy,
                 }
             )
 
@@ -232,6 +276,20 @@ class MeasureRespMatTBBO(_BaseClass):
             "fit_results": fit_results,
             "respmat_meas": respmat_meas,
         }
+
+    def _create_devices(self):
+        """."""
+        self.devices = dict(
+            evg=_EVG(),
+            tb_sofb=_SOFB(_SOFB.DEVICES.TB),
+            bo_sofb=_SOFB(_SOFB.DEVICES.BO),
+        )
+        for corr_name in self._corr_names:
+            self.devices[corr_name] = _PowerSupply(corr_name)
+
+    def _set_device_corrector(self, devname, value):
+        # self.devices[devname].strength = value
+        pass
 
 
 def calc_model_respmatTBBO(
