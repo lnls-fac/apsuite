@@ -1,10 +1,10 @@
 """."""
 import time as _time
 import logging as _log
-
+from threading import Event
 import numpy as _np
 
-from siriuspy.epics import PV
+from siriuspy.epics import PV, CAThread as _Thread
 from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoBO, EVG, \
     EGTriggerPS, LILLRF, InjCtrl, PosAng, DCCT, Trigger, ASLLRF, SOFB
 
@@ -230,6 +230,9 @@ class OptimizeInjBOParams(_RCDSParams):
         self.use_median = False
         self.wait_between_injections = 3  # [s]
         self.correct_tb_traj = True
+        self.inject = False
+
+        self.pos0 = None
 
     def __str__(self):
         """."""
@@ -282,6 +285,13 @@ class OptimizeInjBO(_RCDS):
         if self.isonline:
             self._create_devices()
 
+        self.news = Event()
+        self._curr150mev_pv = self.devices['currinfo'].pv_object(
+            'Current150MeV-Mon'
+        )
+        self._curr150mev_pv.auto_monitor = True
+        self._thread_update = None
+
     def prepare_evg(self):
         """Prepare EVG for optimization."""
         evg = self.devices['evg']
@@ -301,31 +311,44 @@ class OptimizeInjBO(_RCDS):
             _time.sleep(2)
         else:
             self.data['positions'].append(pos0)
+        self.news.clear()
 
         injcurrs = list()
+        obj = None
         for i in range(self.params.nrpulses):
-            injcurrs.append(self.inject_beam_and_get_current())
+            inj = self.inject_beam_and_get_current()
+            if inj is None:
+                break
+            injcurrs.append(inj)
             _time.sleep(self.params.wait_between_injections)
-        injcurrs = _np.array(injcurrs)
-        self.data['currents'].append(injcurrs)
+        else:
+            injcurrs = _np.array(injcurrs)
+            self.data['currents'].append(injcurrs)
+            func = _np.median if self.params.use_median else _np.mean
+            obj = - func(injcurrs)
 
         if pos is not None and not apply:
             self.set_position_to_machine(pos0)
 
-        func = _np.median if self.params.use_median else _np.mean
-        return -func(injcurrs)
+        return obj
 
-    def inject_beam_and_get_current(self, get_injeff=True):
+    def inject_beam_and_get_current(self):
         """Inject beam and get injected current, if desired."""
         idx = self.params.curr_wfm_index
-        inj0 = self.devices['dcct'].current_fast[idx]
         # inj0 = self.devices['dcct'].current_fast.std()
         # inj0 = self.devices['sofb_bo'].mt_sum
+        if not self.params.inject:
+            while not self.news.wait(15):
+                _log.warning('Timed out waiting for injection.')
+                if self._stopevt.is_set():
+                    _log.warning('Stopped by user. Exiting')
+                    return
+            self.news.clear()
+            return self.devices['dcct'].current_fast[idx]
+
+        inj0 = self.devices['dcct'].current_fast[idx]
         self.devices['evg'].cmd_turn_on_injection(wait_rb=True)
         self.devices['evg'].wait_injection_finish()
-        if not get_injeff:
-            return
-
         for _ in range(50):
             inj = self.devices['dcct'].current_fast[idx]
             # inj = self.devices['dcct'].current_fast[idx].std()
@@ -339,8 +362,10 @@ class OptimizeInjBO(_RCDS):
 
     def measure_objective_function_noise(self, nr_evals, pos=None):
         """."""
+        self._curr150mev_pv.add_callback(self._curr150mev_update)
+
         if pos is None:
-            pos = self.params.initial_position
+            pos = self.get_current_position()
         obj = []
         for i in range(nr_evals):
             obj.append(self.objective_function(pos))
@@ -349,6 +374,8 @@ class OptimizeInjBO(_RCDS):
         self.params.noise_level = noise_level
         self.data['measured_objfuncs_for_noise'] = obj
         self.data['measured_noise_level'] = noise_level
+
+        self._curr150mev_pv.clear_callbacks()
         return noise_level, obj
 
     def get_current_position(self):
@@ -618,11 +645,11 @@ class OptimizeInjBO(_RCDS):
             else:
                 raise ValueError('Wrong specification of knob.')
 
-            self.wait_set_pos(pos, timeout=10)
-            if self.params.correct_tb_traj:
-                sofb = self.devices['sofb_tb']
-                sofb.cmd_calccorr()
-                sofb.cmd_applycorr_all()
+        self.wait_set_pos(pos, timeout=10)
+        if self.params.correct_tb_traj:
+            sofb = self.devices['sofb_tb']
+            sofb.cmd_calccorr()
+            sofb.cmd_applycorr_all()
 
     def _create_devices(self):
         # knobs devices
@@ -656,7 +683,7 @@ class OptimizeInjBO(_RCDS):
         # # LI quads
         # self.devices['li_qf1'] = PowerSupply('LI-Fam:PS-QF1')
         # self.devices['li_qf2'] = PowerSupply('LI-Fam:PS-QF2')
-        # self.devices['li_qf3'] = PowerSupply('LI-01:PS-QF3')
+        self.devices['li_qf3'] = PowerSupply('LI-01:PS-QF3')
         # self.devices['li_qd1'] = PowerSupply('LI-01:PS-QD1')
         # self.devices['li_qd2'] = PowerSupply('LI-01:PS-QD2')
         # TB quads
@@ -684,17 +711,26 @@ class OptimizeInjBO(_RCDS):
         # # BO LLRF
         # self.devices['bo_llrf'] = ASLLRF(ASLLRF.DEVICES.BO)
         # other rlevant devices
-        self.devices['ejekckr'] = PowerSupplyPU(
-            PowerSupplyPU.DEVICES.BO_EJE_KCKR)
+        # self.devices['ejekckr'] = PowerSupplyPU(
+        # PowerSupplyPU.DEVICES.BO_EJE_KCKR)
         self.devices['currinfo'] = CurrInfoBO()
         self.devices['dcct'] = DCCT(DCCT.DEVICES.BO)
         self.devices['evg'] = EVG()
-        self.devices['ejekckr_trig'] = Trigger("BO-48D:TI-EjeKckr")
+        # self.devices['ejekckr_trig'] = Trigger("BO-48D:TI-EjeKckr")
         self.devices['egun_trigps'] = EGTriggerPS()
-        self.devices['injctrl'] = InjCtrl()
-        self.devices['sofb_bo'] = SOFB(SOFB.DEVICES.BO)
+        self.devices['injctrl'] = InjCtrl(props2init=None)
+        # self.devices['sofb_bo'] = SOFB(SOFB.DEVICES.BO)
         if self.params.correct_tb_traj:
             self.devices['sofb_tb'] = SOFB(SOFB.DEVICES.TB)
+
+    def _curr150mev_update(self, pvname, value, **kwargs):
+        self._thread_update = _Thread(target=self._update_flag, daemon=True)
+        self._thread_update.start()
+
+    def _update_flag(self):
+        _time.sleep(0.05)
+        if not self.devices['currinfo'].current3gev:
+            self.news.set()
 
     def _initialization(self):
         """."""
@@ -703,10 +739,20 @@ class OptimizeInjBO(_RCDS):
         self.data['timestamp'] = _time.time()
         self.data['positions'] = []
         self.data['currents'] = []
-        self.prepare_evg()
+        if self.params.inject:
+            self.prepare_evg()
+        self._curr150mev_pv.add_callback(self._curr150mev_update)
+        self.pos0 = self.get_current_position()
         return True
 
-    def wait_set_pos(self, pos, timeout=10):
+    def _finalization(self):
+        self._curr150mev_pv.clear_callbacks()
+        self.news.clear()
+        _log.info('Reseting machine initial position')
+        self.set_position_to_machine(self.pos0)
+        return super()._finalization()
+
+    def wait_set_pos(self, pos, timeout=20):
         """Wait positions RB reach the desired SP vals.
 
         Wait current RB values reach `pos` within a `tol` precision up to
