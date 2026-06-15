@@ -37,7 +37,7 @@ class BumpParams(_ParamsBaseClass):
         self.orbcorr_residue = 5  # [um]
 
         self.closed_loops = False
-        self.timeout_fofb_ramp = 15
+        self.timeout_fofb_ramp = 15.0  # [s]
 
         self.sleep_time = 0.5  # [s]
 
@@ -46,7 +46,7 @@ class BumpParams(_ParamsBaseClass):
         dtmp = '{0:20s} = {1:9d}\n'.format
         ftmp = '{0:20s} = {1:9.4f}  {2:s}\n'.format
         stmp = '{0:20s} = {1:9.2f} - {2:9.2f} {3:s} with {4:1.0f} pts\n'.format
-        stg = 'subsec = {} \n'.format(self.subsec)
+        stg = '{0:20s} = {1:>9s}\n'.format('subsec', self.subsec)
         stg += dtmp('do_angular_bumps', self.do_angular_bumps)
 
         stg += dtmp('n_bpms_out', self.n_bpms_out, '')
@@ -61,8 +61,8 @@ class BumpParams(_ParamsBaseClass):
         stg += ftmp('orbcorr_residue', self.orbcorr_residue, '[um]')
 
         stg += dtmp('closed_loops', self.closed_loops)
-        stg += dtmp('timeout_fofb_ramp', self.timeout_fofb_ramp, '')
-        stg += dtmp('sleep_time', self.sleep_time, '')
+        stg += ftmp('timeout_fofb_ramp', self.timeout_fofb_ramp, '')
+        stg += ftmp('sleep_time', self.sleep_time, '')
 
         stg += stmp(
             'pts_psx',
@@ -103,11 +103,13 @@ class Bump(_BaseClass):
         _BaseClass.__init__(
             self,
             params=params if params is not None else BumpParams(),
-            target=self._do_scan,
+            target=self.do_scan,
             isonline=isonline,
         )
         self.data = dict()
         self.bumptools = SiCalcBumps()
+        self.reforbx = None
+        self.reforby = None
         if self.isonline:
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
             self.devices['fofb'] = HLFOFB(HLFOFB.DEVICES.SI)
@@ -137,10 +139,10 @@ class Bump(_BaseClass):
         self._initial_state = {}
         self._initial_state['refx'] = refx
         self._initial_state['refy'] = refy
-        self._initial_state['bpmxenbl'] = self._bpmxenbl
-        self._initial_state['bpmyenbl'] = self._bpmyenbl
-        self._initial_state['fofb_bpmxenbl'] = self._fofb_bpmxenbl
-        self._initial_state['fofb_bpmyenbl'] = self._fofb_bpmyenbl
+        self._initial_state['bpmxenbl'] = self._bpmxenbl.copy()
+        self._initial_state['bpmyenbl'] = self._bpmyenbl.copy()
+        self._initial_state['fofb_bpmxenbl'] = self._fofb_bpmxenbl.copy()
+        self._initial_state['fofb_bpmyenbl'] = self._fofb_bpmyenbl.copy()
         self.data['initial_state'] = self._initial_state
 
     def _is_beam_alive(self):
@@ -161,6 +163,7 @@ class Bump(_BaseClass):
 
         Returns:
             str, int: section type and section number
+
         """
         section_nr = int(subsec[:2])
         if not 1 <= section_nr <= 20:
@@ -210,7 +213,7 @@ class Bump(_BaseClass):
     def _generate_bpm_enbl(self, n_bpms_out, enblx, enbly, idcs_out):
         if n_bpms_out != 0:
             enblx[idcs_out[: n_bpms_out * 2]] = False
-            enbly[idcs_out[n_bpms_out * 2 :] - 160] = False
+            enbly[idcs_out[n_bpms_out * 2:] - 160] = False
         return enblx, enbly
 
     def restore_initial_state(self):
@@ -225,23 +228,23 @@ class Bump(_BaseClass):
             fofb.bpmxenbl = self._fofb_bpmxenbl
             fofb.bpmyenbl = self._fofb_bpmyenbl
 
-    def remove_bpms(self):
+    def remove_bpms(self, indcs_out=None):
         """Remove BPMs from correction system."""
-        subsec = self.params.subsec
         n_bpms_out = self.params.n_bpms_out
-        section_type, section_nr = self.subsec_2_sectype_nr(subsec)
-
-        sofb = self.devices['sofb']
-        idcs_out = self.bumptools.get_closest_bpms_indices(
-            section_type=section_type,
-            sidx=section_nr - 1,
-            n_bpms_out=n_bpms_out,
-        )
+        if indcs_out is None:
+            subsec = self.params.subsec
+            section_type, section_nr = self.subsec_2_sectype_nr(subsec)
+            idcs_out = self.bumptools.get_closest_bpms_indices(
+                section_type=section_type,
+                sidx=section_nr - 1,
+                n_bpms_out=n_bpms_out,
+            )
         enblx = self._bpmxenbl
         enbly = self._bpmyenbl
         enblx, enbly = self._generate_bpm_enbl(
             n_bpms_out, enblx, enbly, idcs_out
         )
+        sofb = self.devices['sofb']
         sofb.bpmxenbl = enblx
         sofb.bpmyenbl = enbly
 
@@ -281,6 +284,7 @@ class Bump(_BaseClass):
         Args:
             orbx (1d numpy array): Horizontal orbit
             orby (1d numpy array): Vertical orbit
+
         """
         if self.params.closed_loops:
             fofb = self.devices['fofb']
