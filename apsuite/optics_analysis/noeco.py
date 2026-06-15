@@ -267,7 +267,7 @@ class NOECOFit(LeastSquaresOptimize):
     @property
     def merit_figure_goal(self):
         """."""
-        figgoal = self.oeorm_goal.ravel()[self.params.oeorm_mask.ravel()]
+        figgoal = self.oeorm_goal[self.params.oeorm_mask]
         if self.params.use_chroms:
             chroms = (self.params.chrom_weights * self.chroms_goal).ravel()
             figgoal = _np.concatenate((figgoal, chroms))
@@ -390,46 +390,56 @@ class NOECOFit(LeastSquaresOptimize):
             errorbar[i * m : (i + 1) * m] = _np.repeat(sigma, m)
         return errorbar[self.params.oeorm_mask.ravel()]
 
-    def get_strengths(self):
+    def get_strengths(self, model=None):
         """."""
+        if model is None:
+            model = self.model
+        famdata = self.famdata
         strengths = list()
         for fam in self.params.sextfams2fit:
-            idc = _pa.lattice.flatten(self.famdata[fam]['index'])[0]
-            strengths.append(self.model[idc].SL)
+            idc = _pa.lattice.flatten(famdata[fam]['index'])[0]
+            strengths.append(model[idc].SL)
         return _np.array(strengths)
 
-    def set_strengths(self, strengths):
+    def set_strengths(self, strengths, model=None):
         """."""
+        if model is None:
+            model = self.model
+        famdata = self.famdata
         for stren, fam in zip(strengths, self.params.sextfams2fit):
-            idcs = _pa.lattice.flatten(self.famdata[fam]['index'])
-            _pa.lattice.set_attribute(self.model, 'SL', idcs, stren)
+            idcs = _pa.lattice.flatten(famdata[fam]['index'])
+            _pa.lattice.set_attribute(model, 'SL', idcs, stren)
 
     def get_oeorm(
         self,
         model=None,
         strengths=None,
-        delta=1e-2,
+        delta=None,
         normalize_rf=True,
         ravel=False,
     ):
         """."""
-        if model is None:
-            model = self.model
+        if model is not None:
+            orbmat = OrbRespmat(model=model[:], acc='SI', use6dtrack=True)
+            model = orbmat.model
+        else:
+            orbmat = self._orbmat
+            model = self._orbmat.model
+        if delta is None:
+            delta = self.params.denergy_oeorm_calc
 
         if strengths is not None:
-            strengths0 = self.get_strengths()
-            self.set_strengths(strengths)
+            strengths0 = self.get_strengths(model)
+            self.set_strengths(strengths, model)
 
         rf_freq0 = _get_rf_frequency(model)
         self._set_delta_energy_offset(energy_offset=delta, model=model)
-        # TODO: model not being used here!
-        mat_pos = self._orbmat.get_respm(add_rfline=True)
+        mat_pos = orbmat.get_respm(add_rfline=True)
 
         self._set_rf_frequency(frequency=rf_freq0, model=model)
 
         self._set_delta_energy_offset(energy_offset=-delta, model=model)
-        # TODO: model not being used here!
-        mat_neg = self._orbmat.get_respm(add_rfline=True)
+        mat_neg = orbmat.get_respm(add_rfline=True)
 
         self._set_rf_frequency(frequency=rf_freq0, model=model)
 
@@ -442,7 +452,7 @@ class NOECOFit(LeastSquaresOptimize):
             oeorm = _np.ravel(oeorm)
 
         if strengths is not None:
-            self.set_strengths(strengths0)
+            self.set_strengths(strengths0, model)
 
         return oeorm
 
@@ -502,6 +512,7 @@ class NOECOFit(LeastSquaresOptimize):
             pos = self.get_initial_pos()
         strengths, *_ = self.parse_params_from_pos(pos)
         merit_fig = self.get_oeorm(
+            model=self.model,
             strengths=strengths,
             delta=self.params.denergy_oeorm_calc,
             normalize_rf=True,
@@ -510,7 +521,7 @@ class NOECOFit(LeastSquaresOptimize):
 
         if self.params.disp_weight:
             merit_fig[:, -1] *= self.params.disp_weight
-        merit_fig = merit_fig[self.params.oeorm_mask].ravel()
+        merit_fig = merit_fig[self.params.oeorm_mask]
 
         if self.params.use_chroms:
             chroms = self.get_chroms(strengths)
@@ -521,27 +532,28 @@ class NOECOFit(LeastSquaresOptimize):
 
     def calc_residual(self, pos=None, merit_figure_goal=None):
         """."""
-        if pos is None:
-            pos = self.get_initial_pos()
+        # if pos is None:
+            # pos = self.get_initial_pos()
+        # broken logic when coupling & gains are included.
+        # workaround added for fits sextupoles only
+        # if merit_figure_goal is None:
+            # merit_figure_goal = self.oeorm_goal
+            # merit_figure_goal = self.merit_figure_goal
 
-        if merit_figure_goal is None:
-            merit_figure_goal = self.oeorm_goal
+        # if merit_figure_goal.ndim == 1:
+        #     merit_figure_goal = self.reshape_merit_fig(merit_figure_goal)
 
-        if merit_figure_goal.ndim == 1:
-            merit_figure_goal = self.reshape_merit_fig(merit_figure_goal)
+        # merit_figure_goal = self.apply_gains(merit_figure_goal, pos)
 
-        merit_figure_goal = self.apply_gains(merit_figure_goal, pos)
+        # if self.params.disp_weight:
+        #     merit_figure_goal[:, -1] *= self.params.disp_weight
 
-        if self.params.disp_weight:
-            merit_figure_goal[:, -1] *= self.params.disp_weight
-
-        merit_figure_goal = merit_figure_goal[self.params.oeorm_mask].ravel()
-
-        if self.params.use_chroms:
-            merit_figure_goal = _np.concatenate((
-                merit_figure_goal,
-                (self.params.chrom_weights * self.chroms_goal).ravel(),
-            ))
+        # merit_figure_goal = merit_figure_goal[self.params.oeorm_mask].ravel()
+        # if self.params.use_chroms:
+        #     merit_figure_goal = _np.concatenate((
+        #         merit_figure_goal,
+        #         (self.params.chrom_weights * self.chroms_goal).ravel(),
+        #     ))
 
         return super().calc_residual(pos, merit_figure_goal)
 
