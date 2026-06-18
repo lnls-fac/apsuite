@@ -327,6 +327,7 @@ class LOCOReport(FPDF):
 
     def create_report(self, fname_setup, fname_fit, folder=None):
         """."""
+        report_name = fname_fit.replace('_loco_fitting_data', '')
         if folder is not None:
             fname_fit = folder + fname_fit
         else:
@@ -397,4 +398,4 @@ class LOCOReport(FPDF):
         self.add_skewquadfit_ang_gains()
         self.add_tune_emit_and_optics()
 
-        self.output(folder + 'report.pdf', 'F')
+        self.output(folder + report_name + '_loco_report.pdf', 'F')
