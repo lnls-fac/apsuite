@@ -2560,7 +2560,7 @@ class ORMReport(FPDF):
 
         self.image(self._folder + 'rf_column.png', x=x, y=26, w=w)
 
-    def create_report(self, meas_orm, folder=None):
+    def create_report(self, meas_orm, folder=None, orm_name=None):
         """."""
         if folder is None:
             folder = ''
@@ -2653,5 +2653,6 @@ class ORMReport(FPDF):
         self.add_page()
         self.page_title('RF Column (dispersion) comparsion')
         self.add_rf_column()
+        report_name = orm_name + '_' if orm_name is not None else ''
 
-        self.output(folder + 'orm_report.pdf', 'F')
+        self.output(folder + report_name + 'ac_orm_report.pdf', 'F')
