@@ -325,13 +325,15 @@ class LOCOReport(FPDF):
             )
             self.ln(tab_h)
 
-    def create_report(self, fname_setup, fname_fit, folder=None):
+    def create_report(
+        self, fname_setup, fname_fit, folder=None, fname_report=None
+    ):
         """."""
-        report_name = fname_fit.replace('_loco_fitting_data', '')
-        if folder is not None:
-            fname_fit = folder + fname_fit
-        else:
-            folder = ''
+        folder = (folder or '').strip('/')
+        if folder:
+            folder += '/'
+        fname_fit = folder + fname_fit
+
         loco_anly = LOCOAnalysis(fname_setup=fname_setup, fname_fit=fname_fit)
 
         loco_anly.get_setup()
@@ -398,4 +400,8 @@ class LOCOReport(FPDF):
         self.add_skewquadfit_ang_gains()
         self.add_tune_emit_and_optics()
 
-        self.output(folder + report_name + '_loco_report.pdf', 'F')
+        fname_report = (
+            fname_report if fname_report is not None else 'loco_report.pdf'
+        )
+
+        self.output(folder + fname_report, 'F')
