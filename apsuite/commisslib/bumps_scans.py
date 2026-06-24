@@ -214,7 +214,7 @@ class Bump(_BaseClass):
     def _generate_bpm_enbl(self, n_bpms_out, enblx, enbly, idcs_out):
         if n_bpms_out != 0:
             enblx[idcs_out[: n_bpms_out * 2]] = False
-            enbly[idcs_out[n_bpms_out * 2:] - 160] = False
+            enbly[idcs_out[n_bpms_out * 2 :] - 160] = False
         return enblx, enbly
 
     def restore_initial_state(self):
