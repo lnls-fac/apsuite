@@ -29,17 +29,22 @@ class BumpParams(_ParamsBaseClass):
         self.minsingval = 0.2
         self.bump_residue = 3  # [um]
         self.bump_max_residue = 10  # [um]
-        self.fofb_max_kick = 4  # [urad]
+        self.fofb_min_kick = 2  # [urad]
 
         self.buffer_sloworb = 20
         self.wait_meas = 2  # [s]
         self.orbcorr_nr_iters = 5
         self.orbcorr_residue = 5  # [um]
+        self.nr_orbit_verification_closed_loop = 5  # [um]
 
         self.closed_loops = False
         self.timeout_fofb_ramp = 15.0  # [s]
 
         self.sleep_time = 0.5  # [s]
+
+        self.meas_func = None
+        self.args = None
+        self.kwargs = None
 
     def __str__(self):
         """."""
@@ -53,7 +58,7 @@ class BumpParams(_ParamsBaseClass):
         stg += ftmp('minsingval', self.minsingval, '')
         stg += ftmp('bump_residue', self.bump_residue, '[um]')
         stg += ftmp('bump_max_residue', self.bump_max_residue, '[um]')
-        stg += ftmp('fofb_max_kick', self.fofb_max_kick, '[urad]')
+        stg += ftmp('fofb_min_kick', self.fofb_min_kick, '[urad]')
 
         stg += dtmp('buffer_sloworb', self.buffer_sloworb, '')
         stg += ftmp('wait_meas', self.wait_meas, '[s]')
@@ -108,23 +113,19 @@ class Bump(_BaseClass):
         )
         self.data = dict()
         self.bumptools = SiCalcBumps()
-        self.reforbx = None
-        self.reforby = None
+        self.meas_func = self.params.meas_func
+        self.args = self.params.args
+        self.kwargs = self.params.kwargs
         if self.isonline:
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
             self.devices['fofb'] = HLFOFB(HLFOFB.DEVICES.SI)
             self.devices['currinfo'] = CurrInfoSI()
 
-    @staticmethod
-    def do_measurement():
-        """Measurement function.
-
-        Change this function by an external
-        function that does the measurement
-        you want to perform at each bump point.
-        """
-        print('Not a measurement!')
-        return {}
+    def do_measurement(self):
+        """Measurement function."""
+        if self.meas_func is None:
+            print('Not a measurement....')
+        return self.meas_func(*self.args, **self.kwargs)
 
     def get_initial_state(self):
         """Get initial state of the SOFB and FOFB."""
@@ -303,7 +304,6 @@ class Bump(_BaseClass):
             f'    orb_rms = {rms_residue:.3f} um, '
             f'    bump_rms = {bump_residue:.3f} um, '
         )
-        bump_residue *= 1.2
         if bump_residue > bump_max_residue:
             raise ValueError('Could not correct orbit.')
 
@@ -318,7 +318,10 @@ class Bump(_BaseClass):
         nr_iters = self.params.orbcorr_nr_iters
         residue = self.params.orbcorr_residue
         bump_residue = self.params.bump_residue
-        fofb_max_kick = self.params.fofb_max_kick
+        fofb_min_kick = self.params.fofb_min_kick
+        nr_orbit_verification_closed_loop = (
+            self.params.nr_orbit_verification_closed_loop
+        )
 
         refx, refy = sofb.si_calculate_bumps(
             refx0,
@@ -342,18 +345,20 @@ class Bump(_BaseClass):
 
         # Verify orbit correction
         rms_residue = bump_residue + 1
-        kick = fofb_max_kick - 1
+        kick = fofb_min_kick - 1
         if self.params.closed_loops:
             fofb = self.devices['fofb']
         print('Waiting orbit...')
         if self.params.closed_loops:
-            while rms_residue > bump_residue and kick > fofb_max_kick:
+            while rms_residue > bump_residue and kick > fofb_min_kick:
                 kick = _np.max((
                     _np.abs(fofb.kickch_acc),
                     _np.abs(fofb.kickcv_acc),
                 ))
-                rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
-                self._check_rms_conditions(rms_residue, bump_residue)
+                for _ in _np.arange(nr_orbit_verification_closed_loop):
+                    rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
+                    self._check_rms_conditions(rms_residue, bump_residue)
+                bump_residue *= 1.2
                 print(f'    kick fofb = {kick:.3f} urad, ')
         else:
             while rms_residue > bump_residue:
@@ -362,6 +367,7 @@ class Bump(_BaseClass):
                 )
                 rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
                 self._check_rms_conditions(rms_residue, bump_residue)
+                bump_residue *= 1.2
         print('Done!')
 
     def do_scan(self):
