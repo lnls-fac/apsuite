@@ -229,23 +229,23 @@ class Bump(_BaseClass):
             fofb.bpmxenbl = self._fofb_bpmxenbl
             fofb.bpmyenbl = self._fofb_bpmyenbl
 
-    def remove_bpms(self, indcs_out=None):
+    def remove_bpms(self):
         """Remove BPMs from correction system."""
+        subsec = self.params.subsec
         n_bpms_out = self.params.n_bpms_out
-        if indcs_out is None:
-            subsec = self.params.subsec
-            section_type, section_nr = self.subsec_2_sectype_nr(subsec)
-            idcs_out = self.bumptools.get_closest_bpms_indices(
-                section_type=section_type,
-                sidx=section_nr - 1,
-                n_bpms_out=n_bpms_out,
-            )
+        section_type, section_nr = self.subsec_2_sectype_nr(subsec)
+
+        sofb = self.devices['sofb']
+        idcs_out = self.bumptools.get_closest_bpms_indices(
+            section_type=section_type,
+            sidx=section_nr - 1,
+            n_bpms_out=n_bpms_out,
+        )
         enblx = self._bpmxenbl
         enbly = self._bpmyenbl
         enblx, enbly = self._generate_bpm_enbl(
             n_bpms_out, enblx, enbly, idcs_out
         )
-        sofb = self.devices['sofb']
         sofb.bpmxenbl = enblx
         sofb.bpmyenbl = enbly
 
