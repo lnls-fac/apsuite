@@ -148,12 +148,14 @@ class SiCalcBumps:
 
     @staticmethod
     def _get_matrix_ss_section(leng):
-        return _np.array([
-            [1, -leng / 2, 0, 0],
-            [1, leng / 2, 0, 0],
-            [0, 0, 1, -leng / 2],
-            [0, 0, 1, leng / 2],
-        ])
+        return _np.array(
+            [
+                [1, -leng / 2, 0, 0],
+                [1, leng / 2, 0, 0],
+                [0, 0, 1, -leng / 2],
+                [0, 0, 1, leng / 2],
+            ]
+        )
 
     def _get_sec_bpm_indices(self, section_type=None):
         if section_type is None:
@@ -231,7 +233,7 @@ class SiCalcBumps:
             idcs_ignore.append(idlist[bpm2_sec_index + 8 * sidx + (i + 1)])
         idcs_ignore = _np.array(idcs_ignore)
         idcs_ignore = _np.tile(idcs_ignore, 2)
-        idcs_ignore[n_bpms_out * 2:] += 160
+        idcs_ignore[n_bpms_out * 2 :] += 160
         return idcs_ignore
 
     def get_btwbpm_corrs_indices(self, section_type=None, sidx=None):
@@ -706,7 +708,10 @@ class SiCalcBumps:
             ax.plot(1e6 * xres, '-o', label='Resultant bump')
             ax.set_ylabel('Pos [um] / angle [urad]')
             ax.set_xlabel('Bump vector index')
-            ax.set_ylim(_np.min(1e6 * xres) * 0.9, _np.max(1e6 * xres) * 1.1)
+            ax.set_ylim(
+                _np.min(1e6 * _np.concatenate((xres, vec))) * 0.9,
+                _np.max(1e6 * _np.concatenate((xres, vec))) * 1.1,
+            )
             ax.legend()
 
             ay.plot(kicks)
