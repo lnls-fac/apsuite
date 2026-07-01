@@ -418,7 +418,9 @@ class SiCalcBumps:
         if self.model is None:
             mod = si.create_accelerator()
             mod.cavity_on = True
-        elif self.model.cavity_on is False:
+        else:
+            mod = self.model
+        if mod.cavity_on is False:
             raise ValueError('Model cavity must be turned on!')
         orbcorr = OrbitCorr(mod, 'SI', use6dtrack=True)
         orbcorr.params.enblrf = True
