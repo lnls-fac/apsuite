@@ -2562,7 +2562,7 @@ class ORMReport(FPDF):
 
     def create_report(self, meas_orm, folder=None, fname_report=None):
         """."""
-        folder = (folder or '').strip('/')
+        folder = (folder or '').rstrip('/')
         if folder:
             folder += '/'
 
