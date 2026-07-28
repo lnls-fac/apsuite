@@ -279,8 +279,10 @@ class AcqBPMsSignals(_BaseClass):
         data["trig_delay_raw"] = self.devices["trigbpm"].delay_raw
         data["switching_mode"] = bpm0.switching_mode_str
         data["switching_frequency"] = fbpms.get_switching_frequency(rf_freq)
-        data["tunex_enable"] = tune.enablex
-        data["tuney_enable"] = tune.enabley
+        data["tunex_acq_enable"] = tune.acquisition_enabledx
+        data["tuney_acq_enable"] = tune.acquisition_enabledy
+        data["tunex_exc_enable"] = tune.excitation_enabledx
+        data["tuney_exc_enable"] = tune.excitation_enabledy
         return data
 
     @staticmethod
