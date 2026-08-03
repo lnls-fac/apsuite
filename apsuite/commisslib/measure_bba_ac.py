@@ -937,6 +937,46 @@ class DoACBBA(_BaseClass):
             return self.STATUS.Fail
         return self.STATUS.Success
 
+    def get_quad_strength_limits(self, quadname, margin=0.0005):
+        """."""
+        if quadname not in self.data["quadnames"]:
+            raise ValueError(f"Invalid quadrupole: {quadname}.")
+        quad = self.devices[quadname]
+        pv = quad.pv_object("KL-SP")
+        upp = pv.upper_disp_limit
+        low = pv.lower_disp_limit
+        # Limits are interchanged in some quads:
+        lolim = min(upp, low) + margin
+        hilim = max(upp, low) - margin
+        return _np.array([lolim, hilim], dtype=float)
+
+    def check_isvalid_delta_kl(
+        self, quadname, init_strength=None, delta_kl=None
+    ):
+        """."""
+        if delta_kl is None:
+            delta_kl = self.params.quad_delta_kl
+        dkl = delta_kl
+
+        lolim, hilim = self.get_quad_strength_limits(quadname)
+
+        if init_strength is None:
+            init_strength = self.get_quad_strength(quadname)
+        kl = init_strength
+
+        low = min(kl + dkl / 2, kl - dkl / 2)
+        upp = max(kl + dkl / 2, kl - dkl / 2)
+
+        if upp > hilim or low < lolim:
+            max_delta_kl = min(hilim - kl, kl - lolim)
+            msg = f"WARN: {quadname} KL = {kl:.2g}, dKL = {abs(dkl):.2g}. "
+            msg += f"Limits: ({lolim:.2g}, {hilim:.2g}). "
+            msg += f"Max. dKL = {max_delta_kl * 2:.2g}."
+            self._log_print(msg)
+            return False, max_delta_kl
+
+        return True, delta_kl
+
     def correct_orbit(self):
         """."""
         if not self.havebeam:
