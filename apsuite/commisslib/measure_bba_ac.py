@@ -83,15 +83,19 @@ class ACBBAParams(_ParamsBaseClass):
 
     def __str__(self):
         """."""
-        ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
-        dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
-        stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
+        ftmp = "{0:24s} = {1:9.3f}  {2:s}\n".format
+        dtmp = "{0:24s} = {1:9d}  {2:s}\n".format
+        stmp = "{0:24s} = {1:9s}  {2:s}\n".format
 
-        stg = ''
+        stg = ""
         stg += "AC-BBA Parameters:\n"
         stg += ftmp("timeout_bpms", self.timeout_bpms, "[s]")
         stg += ftmp("timeout_correctors", self.timeout_correctors, "[s]")
-        stg += stmp("quad_modulation_mode", self.quad_modulation_mode, "")
+        stg += stmp(
+            "quad_modulation_mode",
+            self.QUAD_MODULATION_MODE._fields[self.quad_modulation_mode],
+            "",
+        )
         stg += ftmp("quad_delta_kl", self.quad_delta_kl, "[1/m]")
         stg += ftmp("wait_quadrupole", self.wait_quadrupole, "[s]")
         stg += ftmp("cv_freq", self.cv_freq, "[Hz]")
