@@ -150,12 +150,12 @@ class DoACBBA(_BaseClass):
 
         self._bpms2dobba = self.data["bpmnames"]
         self.sofb_data = None
-        self.configdb = None
+        self.configdb_orm = None
         self._orm = None
 
         if self.isonline:
             self.sofb_data = _SOFBFactory.create("SI")
-            self.configdb = _ConfigDBClient(config_type="si_bbadata")
+            self.configdb_orm = _ConfigDBClient(config_type="si_orbcorr_respm")
             self._create_devices()
 
         self.data["log"] = [(_time.time(), "Started.")]
@@ -279,7 +279,7 @@ class DoACBBA(_BaseClass):
     def _setup_orm(self):
         """Get the orbit response matrix from configdb server."""
         name = self.params.orm_name
-        self._orm = _np.array(self.configdb.get_config_value(name))
+        self._orm = _np.array(self.configdb_orm.get_config_value(name))
 
     def _do_acbba(self):
         """."""
