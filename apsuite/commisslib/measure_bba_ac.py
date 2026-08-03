@@ -83,8 +83,34 @@ class ACBBAParams(_ParamsBaseClass):
 
     def __str__(self):
         """."""
-        st = "BBA-AC measurement parameters."
-        return st
+        ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
+        dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
+        stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
+
+        stg = ''
+        stg += "AC-BBA Parameters:\n"
+        stg += ftmp("timeout_bpms", self.timeout_bpms, "[s]")
+        stg += ftmp("timeout_correctors", self.timeout_correctors, "[s]")
+        stg += stmp("quad_modulation_mode", self.quad_modulation_mode, "")
+        stg += ftmp("quad_delta_kl", self.quad_delta_kl, "[1/m]")
+        stg += ftmp("wait_quadrupole", self.wait_quadrupole, "[s]")
+        stg += ftmp("cv_freq", self.cv_freq, "[Hz]")
+        stg += ftmp("ch_freq", self.ch_freq, "[Hz]")
+        stg += ftmp("qn_freq", self.qn_freq, "[Hz]")
+        stg += ftmp("qs_freq", self.qs_freq, "[Hz]")
+        stg += ftmp("excit_time", self.excit_time, "[s]")
+        stg += ftmp("corrs_delay", self.corrs_delay, "[s]")
+        stg += ftmp("ch_kick", self.ch_kick, "[urad]")
+        stg += ftmp("cv_kick", self.cv_kick, "[urad]")
+        stg += ftmp("dorbx", self.dorbx, "[um]")
+        stg += ftmp("dorby", self.dorby, "[um]")
+        stg += dtmp("use_qs_excitation", int(self.use_qs_excitation), "")
+        stg += dtmp("use_qn_excitation", int(self.use_qn_excitation), "")
+        stg += dtmp("measure_bpms_noise", int(self.measure_bpms_noise), "")
+        stg += stmp("acq_rate", self.acq_rate, "")
+        stg += stmp("orm_name", self.orm_name, "")
+
+        return stg
 
 
 class DoACBBA(_BaseClass):
