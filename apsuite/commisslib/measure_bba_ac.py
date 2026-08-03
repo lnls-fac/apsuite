@@ -53,7 +53,7 @@ class ACBBAParams(_ParamsBaseClass):
         self.timeout_correctors = 20  # [s]
 
         self.quad_modulation_mode = ACBBAParams.QUAD_MODULATION_MODE.DC
-        self.quad_delta_kl = 0.02  # [1/m]
+        self.quad_delta_kl = 0.01  # [1/m]
         self.wait_quadrupole = 0.3  # [s]
 
         self.cv_freq = 17.0  # [Hz]
@@ -432,7 +432,7 @@ class DoACBBA(_BaseClass):
             msg = f'Changing quadrupole "{quadname}" strength... '
             self._log(msg, tab=tab + 1, end="")
             sts = self.set_quad_strength(
-                quadname, stren_ini + delta_kl / 2, tab=tab + 1
+                quadname, stren_ini + delta_kl, tab=tab + 1
             )
             if sts == self.STATUS.Fail:
                 self.set_quad_strength(
@@ -452,7 +452,7 @@ class DoACBBA(_BaseClass):
             msg = f'Changing quadrupole "{quadname}" strength... '
             self._log(msg, tab=tab + 1, end="")
             sts = self.set_quad_strength(
-                quadname, stren_ini - delta_kl / 2, tab=tab + 1
+                quadname, stren_ini - delta_kl, tab=tab + 1
             )
             if sts == self.STATUS.Fail:
                 self.set_quad_strength(
@@ -989,8 +989,8 @@ class DoACBBA(_BaseClass):
             init_strength = self.get_quad_strength(quadname)
         kl = init_strength
 
-        low = min(kl + dkl / 2, kl - dkl / 2)
-        upp = max(kl + dkl / 2, kl - dkl / 2)
+        low = min(kl + dkl, kl - dkl)
+        upp = max(kl + dkl, kl - dkl)
 
         if upp > hilim or low < lolim:
             max_delta_kl = min(hilim - kl, kl - lolim)
