@@ -42,8 +42,8 @@ from apsuite.commisslib.measure_bba import BBAParams as _BBAParams
 class ACBBAParams(_ParamsBaseClass):
     """Parameters for AC-BBA."""
 
-    BPMNAMES = _BBAParams.BPMNAMES[:2]
-    QUADNAMES = _BBAParams.QUADNAMES[:2]
+    BPMNAMES = _BBAParams.BPMNAMES
+    QUADNAMES = _BBAParams.QUADNAMES
     QUAD_MODULATION_MODE = _get_namedtuple("QuadModulationMode", ["AC", "DC"])
 
     def __init__(self):
@@ -997,7 +997,7 @@ class DoACBBA(_BaseClass):
             msg = f"WARN: {quadname} KL = {kl:.2g}, dKL = {abs(dkl):.2g}. "
             msg += f"Limits: ({lolim:.2g}, {hilim:.2g}). "
             msg += f"Max. dKL = {max_delta_kl * 2:.2g}."
-            self._log_print(msg)
+            self._log(msg)
             return False, max_delta_kl
 
         return True, delta_kl
