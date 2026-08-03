@@ -104,7 +104,7 @@ class DoACBBA(_BaseClass):
         "evt_delay_raw",
     )
 
-    def __init__(self, isonline=True, func=None, LLTime=_LLTime):
+    def __init__(self, isonline=True):
         """."""
         self.params = ACBBAParams()
         super().__init__(
@@ -127,11 +127,6 @@ class DoACBBA(_BaseClass):
             self.sofb_data = _SOFBFactory.create("SI")
             self.configdb = _ConfigDBClient(config_type="si_bbadata")
             self._create_devices()
-        else:
-            if func is not None:
-                func(self)
-            if LLTime is not None:
-                self._LLTime = LLTime
 
         self.data["log"] = [(_time.time(), "Started.")]
 
