@@ -1,12 +1,12 @@
 """."""
 import time as _time
 import logging as _log
-
+from threading import Event
 import numpy as _np
 
-from siriuspy.epics import PV
+from siriuspy.epics import PV, CAThread as _Thread
 from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoBO, EVG, \
-    EGTriggerPS, LILLRF, InjCtrl, PosAng, DCCT, Trigger, ASLLRF
+    EGTriggerPS, LILLRF, InjCtrl, PosAng, DCCT, Trigger, ASLLRF, SOFB
 
 from ..optimization.rcds import RCDS as _RCDS, RCDSParams as _RCDSParams
 
@@ -48,16 +48,27 @@ class OptimizeInjBOParams(_RCDSParams):
         'li_qd1',
         'li_qd2',
 
+        'tb_qf1',
+        'tb_qd1',
         'tb_qf2a',
-        'tb_qf2b',
         'tb_qd2a',
+        'tb_qf2b',
         'tb_qd2b',
+        'tb_qf3',
+        'tb_qd3',
+        'tb_qf4',
+        'tb_qd4',
 
         'posx',
         'angx',
         'posy',
         'angy',
         'kckr',
+
+        "tb_ch1",
+        "tb_injsept",
+        "tb_cv1",
+        "tb_cv2",
 
         'shb_amp',
         'kly1_amp',
@@ -103,10 +114,16 @@ class OptimizeInjBOParams(_RCDSParams):
         +5.0,    # 'li_qd1',
         +5.0,    # 'li_qd2',
 
-        9.5,     # 'tb_qf2a',
-        6.0,     # 'tb_qf2b',
-        8.5,     # 'tb_qd2a',
-        5.5,     # 'tb_qd2b',
+        +10.0,   # tb_qf1 cur [A]
+        +10.0,   # tb_qd1 cur [A]
+        +10.0,   # tb_qf2a cur [A]
+        +10.0,   # tb_qd2a cur [A]
+        +10.0,   # tb_qf2b cur [A]
+        +10.0,   # tb_qd2b cur [A]
+        +10.0,   # tb_qf3 cur [A]
+        +10.0,   # tb_qd3 cur [A]
+        +10.0,   # tb_qf4 cur [A]
+        +10.0,   # tb_qd4  cur [A]
 
         +2.0,    # 'posx',
         +1.0,    # 'angx',
@@ -114,12 +131,17 @@ class OptimizeInjBOParams(_RCDSParams):
         +1.0,    # 'angy',
         -19.0,   # 'kckr',
 
+        +10.0,   # tb_ch1
+        0.0,     # tb_injsept
+        +10.0,   # tb_cv1
+        +10.0,   # tb_cv2
+
         40,      # 'shb_amp',
         91,      # 'kly1_amp',
         76,      # 'kly2_amp',
         180,     # 'shb_phs',
-        180,     # 'kly1_phs',
-        180,     # 'kly2_phs',
+        -150,    # 'kly1_phs',
+        0,       # 'kly2_phs',
 
         80,      # 'borf_amp',
         160,     # 'borf_phs',
@@ -158,10 +180,16 @@ class OptimizeInjBOParams(_RCDSParams):
         -5.0,  # 'li_qd1',
         -5.0,  # 'li_qd2',
 
-        5.0,   # 'tb_qf2a',
-        2.0,   # 'tb_qf2b',
-        4.0,   # 'tb_qd2a',
-        1.5,   # 'tb_qd2b',
+        -10.0,   # tb_qf1 cur [A]
+        -10.0,   # tb_qd1 cur [A]
+        -10.0,   # tb_qf2a cur [A]
+        -10.0,   # tb_qd2a cur [A]
+        -10.0,   # tb_qf2b cur [A]
+        -10.0,   # tb_qd2b cur [A]
+        -10.0,   # tb_qf3 cur [A]
+        -10.0,   # tb_qd3 cur [A]
+        -10.0,   # tb_qf4 cur [A]
+        -10.0,   # tb_qd4  cur [A]
 
         -2.0,   # 'posx',
         -1.0,   # 'angx',
@@ -169,12 +197,17 @@ class OptimizeInjBOParams(_RCDSParams):
         -1.0,   # 'angy',
         -25.0,  # 'kckr',
 
+        -10.0,    # tb_ch1
+        -776.69,  # tb_injsept
+        -10.0,    # tb_cv1
+        -10.0,    # tb_cv2
+
         20,    # 'shb_amp',
         85,    # 'kly1_amp',
         70,    # 'kly2_amp',
-        -180,  # 'shb_phs',
+        160,   # 'shb_phs',
         -180,  # 'kly1_phs',
-        -180,  # 'kly2_phs',
+        -20,   # 'kly2_phs',
 
         30,    # 'borf_amp',
         90,    # 'borf_phs',
@@ -196,6 +229,10 @@ class OptimizeInjBOParams(_RCDSParams):
         self.nrpulses = 5
         self.use_median = False
         self.wait_between_injections = 3  # [s]
+        self.correct_tb_traj = True
+        self.inject = False
+
+        self.pos0 = None
 
     def __str__(self):
         """."""
@@ -248,6 +285,13 @@ class OptimizeInjBO(_RCDS):
         if self.isonline:
             self._create_devices()
 
+        self.news = Event()
+        self._curr150mev_pv = self.devices['currinfo'].pv_object(
+            'Current150MeV-Mon'
+        )
+        self._curr150mev_pv.auto_monitor = True
+        self._thread_update = None
+
     def prepare_evg(self):
         """Prepare EVG for optimization."""
         evg = self.devices['evg']
@@ -257,7 +301,7 @@ class OptimizeInjBO(_RCDS):
         evg.cmd_update_events()
         _time.sleep(1)
 
-    def objective_function(self, pos=None, apply=False):
+    def objective_function(self, pos=None, apply=True):
         """."""
         pos0 = self.get_current_position()
 
@@ -267,31 +311,48 @@ class OptimizeInjBO(_RCDS):
             _time.sleep(2)
         else:
             self.data['positions'].append(pos0)
+        self.news.clear()
 
         injcurrs = list()
+        obj = None
         for i in range(self.params.nrpulses):
-            injcurrs.append(self.inject_beam_and_get_current())
+            inj = self.inject_beam_and_get_current()
+            if inj is None:
+                break
+            injcurrs.append(inj)
             _time.sleep(self.params.wait_between_injections)
-        injcurrs = _np.array(injcurrs)
-        self.data['currents'].append(injcurrs)
+        else:
+            injcurrs = _np.array(injcurrs)
+            self.data['currents'].append(injcurrs)
+            func = _np.median if self.params.use_median else _np.mean
+            obj = - func(injcurrs)
 
         if pos is not None and not apply:
             self.set_position_to_machine(pos0)
 
-        func = _np.median if self.params.use_median else _np.mean
-        return -func(injcurrs)
+        return obj
 
-    def inject_beam_and_get_current(self, get_injeff=True):
+    def inject_beam_and_get_current(self):
         """Inject beam and get injected current, if desired."""
         idx = self.params.curr_wfm_index
+        # inj0 = self.devices['dcct'].current_fast.std()
+        # inj0 = self.devices['sofb_bo'].mt_sum
+        if not self.params.inject:
+            while not self.news.wait(15):
+                _log.warning('Timed out waiting for injection.')
+                if self._stopevt.is_set():
+                    _log.warning('Stopped by user. Exiting')
+                    return
+            self.news.clear()
+            return self.devices['dcct'].current_fast[idx]
+
         inj0 = self.devices['dcct'].current_fast[idx]
         self.devices['evg'].cmd_turn_on_injection(wait_rb=True)
         self.devices['evg'].wait_injection_finish()
-        if not get_injeff:
-            return
-
         for _ in range(50):
             inj = self.devices['dcct'].current_fast[idx]
+            # inj = self.devices['dcct'].current_fast[idx].std()
+            # inj = self.devices['sofb_bo'].mt_sum
             if inj0 != inj:
                 break
             _time.sleep(0.1)
@@ -301,8 +362,10 @@ class OptimizeInjBO(_RCDS):
 
     def measure_objective_function_noise(self, nr_evals, pos=None):
         """."""
+        self._curr150mev_pv.add_callback(self._curr150mev_update)
+
         if pos is None:
-            pos = self.params.initial_position
+            pos = self.get_current_position()
         obj = []
         for i in range(nr_evals):
             obj.append(self.objective_function(pos))
@@ -311,6 +374,8 @@ class OptimizeInjBO(_RCDS):
         self.params.noise_level = noise_level
         self.data['measured_objfuncs_for_noise'] = obj
         self.data['measured_noise_level'] = noise_level
+
+        self._curr150mev_pv.clear_callbacks()
         return noise_level, obj
 
     def get_current_position(self):
@@ -386,14 +451,26 @@ class OptimizeInjBO(_RCDS):
             elif fun('li_qd2'):
                 pos.append(self.devices['li_qd2'].current)
 
+            elif fun('tb_qf1'):
+                pos.append(self.devices['tb_qf1'].current)
+            elif fun('tb_qd1'):
+                pos.append(self.devices['tb_qd1'].current)
             elif fun('tb_qf2a'):
                 pos.append(self.devices['tb_qf2a'].current)
-            elif fun('tb_qf2b'):
-                pos.append(self.devices['tb_qf2b'].current)
             elif fun('tb_qd2a'):
                 pos.append(self.devices['tb_qd2a'].current)
+            elif fun('tb_qf2b'):
+                pos.append(self.devices['tb_qf2b'].current)
             elif fun('tb_qd2b'):
                 pos.append(self.devices['tb_qd2b'].current)
+            elif fun('tb_qf3'):
+                pos.append(self.devices['tb_qf3'].current)
+            elif fun('tb_qd3'):
+                pos.append(self.devices['tb_qd3'].current)
+            elif fun('tb_qf4'):
+                pos.append(self.devices['tb_qf4'].current)
+            elif fun('tb_qd4'):
+                pos.append(self.devices['tb_qd4'].current)
 
             elif fun('posx'):
                 pos.append(self.devices['pos_ang'].delta_posx)
@@ -405,6 +482,15 @@ class OptimizeInjBO(_RCDS):
                 pos.append(self.devices['pos_ang'].delta_angy)
             elif fun('kckr'):
                 pos.append(self.devices['injkckr'].strength)
+
+            elif fun('tb_ch1'):
+                pos.append(self.devices['tb_ch1'].current)
+            elif fun('tb_injsept'):
+                pos.append(self.devices['tb_injsept'].strength)
+            elif fun('tb_cv1'):
+                pos.append(self.devices['tb_cv1'].current)
+            elif fun('tb_cv2'):
+                pos.append(self.devices['tb_cv2'].current)
 
             elif fun('shb_amp'):
                 pos.append(self.devices['li_llrf'].dev_shb.amplitude)
@@ -498,14 +584,26 @@ class OptimizeInjBO(_RCDS):
             elif fun('li_qd2'):
                 self.devices['li_qd2'].current = p
 
+            elif fun('tb_qf1'):
+                self.devices['tb_qf1'].current = p
+            elif fun('tb_qd1'):
+                self.devices['tb_qd1'].current = p
             elif fun('tb_qf2a'):
                 self.devices['tb_qf2a'].current = p
-            elif fun('tb_qf2b'):
-                self.devices['tb_qf2b'].current = p
             elif fun('tb_qd2a'):
                 self.devices['tb_qd2a'].current = p
+            elif fun('tb_qf2b'):
+                self.devices['tb_qf2b'].current = p
             elif fun('tb_qd2b'):
                 self.devices['tb_qd2b'].current = p
+            elif fun('tb_qf3'):
+                self.devices['tb_qf3'].current = p
+            elif fun('tb_qd3'):
+                self.devices['tb_qd3'].current = p
+            elif fun('tb_qf4'):
+                self.devices['tb_qf4'].current = p
+            elif fun('tb_qd4'):
+                self.devices['tb_qd4'].current = p
 
             elif fun('posx'):
                 self.devices['pos_ang'].delta_posx = p
@@ -517,6 +615,15 @@ class OptimizeInjBO(_RCDS):
                 self.devices['pos_ang'].delta_angy = p
             elif fun('kckr'):
                 self.devices['injkckr'].strength = p
+
+            elif fun('tb_ch1'):
+                self.devices['tb_ch1'].current = p
+            elif fun('tb_injsept'):
+                self.devices['tb_injsept'].strength = p
+            elif fun('tb_cv1'):
+                self.devices['tb_cv1'].current = p
+            elif fun('tb_cv2'):
+                self.devices['tb_cv2'].current = p
 
             elif fun('shb_amp'):
                 self.devices['li_llrf'].dev_shb.amplitude = p
@@ -538,63 +645,92 @@ class OptimizeInjBO(_RCDS):
             else:
                 raise ValueError('Wrong specification of knob.')
 
+        self.wait_set_pos(pos, timeout=10)
+        if self.params.correct_tb_traj:
+            sofb = self.devices['sofb_tb']
+            sofb.cmd_calccorr()
+            sofb.cmd_applycorr_all()
+
     def _create_devices(self):
         # knobs devices
         # lenses
-        self.pvs["li_lens1"] = PV("LI-01:PS-Lens-1:Current-SP")
-        self.pvs["li_lens2"] = PV("LI-01:PS-Lens-2:Current-SP")
-        self.pvs["li_lens3"] = PV("LI-01:PS-Lens-3:Current-SP")
-        self.pvs["li_lens4"] = PV("LI-01:PS-Lens-4:Current-SP")
-        # solenoids
-        self.pvs["li_slnd1"] = PV("LI-01:PS-Slnd-1:Current-SP")
-        self.pvs["li_slnd2"] = PV("LI-01:PS-Slnd-2:Current-SP")
-        self.pvs["li_slnd3"] = PV("LI-01:PS-Slnd-3:Current-SP")
-        self.pvs["li_slnd4"] = PV("LI-01:PS-Slnd-4:Current-SP")
-        self.pvs["li_slnd5"] = PV("LI-01:PS-Slnd-5:Current-SP")
-        self.pvs["li_slnd6"] = PV("LI-01:PS-Slnd-6:Current-SP")
-        self.pvs["li_slnd7"] = PV("LI-01:PS-Slnd-7:Current-SP")
-        self.pvs["li_slnd8"] = PV("LI-01:PS-Slnd-8:Current-SP")
-        self.pvs["li_slnd9"] = PV("LI-01:PS-Slnd-9:Current-SP")
-        self.pvs["li_slnd10"] = PV("LI-01:PS-Slnd-10:Current-SP")
-        self.pvs["li_slnd11"] = PV("LI-01:PS-Slnd-11:Current-SP")
-        self.pvs["li_slnd12"] = PV("LI-01:PS-Slnd-12:Current-SP")
-        self.pvs["li_slnd13"] = PV("LI-01:PS-Slnd-13:Current-SP")
-        self.pvs["li_slnd14"] = PV("LI-Fam:PS-Slnd-14:Current-SP")
-        self.pvs["li_slnd15"] = PV("LI-Fam:PS-Slnd-15:Current-SP")
-        self.pvs["li_slnd16"] = PV("LI-Fam:PS-Slnd-16:Current-SP")
-        self.pvs["li_slnd17"] = PV("LI-Fam:PS-Slnd-17:Current-SP")
-        self.pvs["li_slnd18"] = PV("LI-Fam:PS-Slnd-18:Current-SP")
-        self.pvs["li_slnd19"] = PV("LI-Fam:PS-Slnd-19:Current-SP")
-        self.pvs["li_slnd20"] = PV("LI-Fam:PS-Slnd-20:Current-SP")
-        self.pvs["li_slnd21"] = PV("LI-Fam:PS-Slnd-21:Current-SP")
-        # LI quads
-        self.devices['li_qf1'] = PowerSupply('LI-Fam:PS-QF1')
-        self.devices['li_qf2'] = PowerSupply('LI-Fam:PS-QF2')
+        # self.pvs["li_lens1"] = PV("LI-01:PS-Lens-1:Current-SP")
+        # self.pvs["li_lens2"] = PV("LI-01:PS-Lens-2:Current-SP")
+        # self.pvs["li_lens3"] = PV("LI-01:PS-Lens-3:Current-SP")
+        # self.pvs["li_lens4"] = PV("LI-01:PS-Lens-4:Current-SP")
+        # # solenoids
+        # self.pvs["li_slnd1"] = PV("LI-01:PS-Slnd-1:Current-SP")
+        # self.pvs["li_slnd2"] = PV("LI-01:PS-Slnd-2:Current-SP")
+        # self.pvs["li_slnd3"] = PV("LI-01:PS-Slnd-3:Current-SP")
+        # self.pvs["li_slnd4"] = PV("LI-01:PS-Slnd-4:Current-SP")
+        # self.pvs["li_slnd5"] = PV("LI-01:PS-Slnd-5:Current-SP")
+        # self.pvs["li_slnd6"] = PV("LI-01:PS-Slnd-6:Current-SP")
+        # self.pvs["li_slnd7"] = PV("LI-01:PS-Slnd-7:Current-SP")
+        # self.pvs["li_slnd8"] = PV("LI-01:PS-Slnd-8:Current-SP")
+        # self.pvs["li_slnd9"] = PV("LI-01:PS-Slnd-9:Current-SP")
+        # self.pvs["li_slnd10"] = PV("LI-01:PS-Slnd-10:Current-SP")
+        # self.pvs["li_slnd11"] = PV("LI-01:PS-Slnd-11:Current-SP")
+        # self.pvs["li_slnd12"] = PV("LI-01:PS-Slnd-12:Current-SP")
+        # self.pvs["li_slnd13"] = PV("LI-01:PS-Slnd-13:Current-SP")
+        # self.pvs["li_slnd14"] = PV("LI-Fam:PS-Slnd-14:Current-SP")
+        # self.pvs["li_slnd15"] = PV("LI-Fam:PS-Slnd-15:Current-SP")
+        # self.pvs["li_slnd16"] = PV("LI-Fam:PS-Slnd-16:Current-SP")
+        # self.pvs["li_slnd17"] = PV("LI-Fam:PS-Slnd-17:Current-SP")
+        # self.pvs["li_slnd18"] = PV("LI-Fam:PS-Slnd-18:Current-SP")
+        # self.pvs["li_slnd19"] = PV("LI-Fam:PS-Slnd-19:Current-SP")
+        # self.pvs["li_slnd20"] = PV("LI-Fam:PS-Slnd-20:Current-SP")
+        # self.pvs["li_slnd21"] = PV("LI-Fam:PS-Slnd-21:Current-SP")
+        # # LI quads
+        # self.devices['li_qf1'] = PowerSupply('LI-Fam:PS-QF1')
+        # self.devices['li_qf2'] = PowerSupply('LI-Fam:PS-QF2')
         self.devices['li_qf3'] = PowerSupply('LI-01:PS-QF3')
-        self.devices['li_qd1'] = PowerSupply('LI-01:PS-QD1')
-        self.devices['li_qd2'] = PowerSupply('LI-01:PS-QD2')
+        # self.devices['li_qd1'] = PowerSupply('LI-01:PS-QD1')
+        # self.devices['li_qd2'] = PowerSupply('LI-01:PS-QD2')
         # TB quads
-        self.devices['tb_qf2a'] = PowerSupply('TB-02:PS-QF2A')
-        self.devices['tb_qf2b'] = PowerSupply('TB-02:PS-QF2B')
-        self.devices['tb_qd2a'] = PowerSupply('TB-02:PS-QD2A')
-        self.devices['tb_qd2b'] = PowerSupply('TB-02:PS-QD2B')
+        self.devices['tb_qf1'] = PowerSupply('TB-01:PS-QF1', props2init=None)
+        self.devices['tb_qd1'] = PowerSupply('TB-01:PS-QD1', props2init=None)
+        self.devices['tb_qf2a'] = PowerSupply('TB-02:PS-QF2A', props2init=None)
+        self.devices['tb_qd2a'] = PowerSupply('TB-02:PS-QD2A', props2init=None)
+        self.devices['tb_qf2b'] = PowerSupply('TB-02:PS-QF2B', props2init=None)
+        self.devices['tb_qd2b'] = PowerSupply('TB-02:PS-QD2B', props2init=None)
+        self.devices['tb_qf3'] = PowerSupply('TB-03:PS-QF3', props2init=None)
+        self.devices['tb_qd3'] = PowerSupply('TB-03:PS-QD3', props2init=None)
+        self.devices['tb_qf4'] = PowerSupply('TB-04:PS-QF4', props2init=None)
+        self.devices['tb_qd4'] = PowerSupply('TB-04:PS-QD4', props2init=None)
         # TB PosAng & Injkicker
-        self.devices['pos_ang'] = PosAng(PosAng.DEVICES.TB)
-        self.devices['injkckr'] = PowerSupplyPU(
-            PowerSupplyPU.DEVICES.BO_INJ_KCKR)
-        # LI LLRF
-        self.devices['li_llrf'] = LILLRF()
-        # BO LLRF
-        self.devices['bo_llrf'] = ASLLRF(ASLLRF.DEVICES.BO)
+        # self.devices['pos_ang'] = PosAng(PosAng.DEVICES.TB)
+        # self.devices['injkckr'] = PowerSupplyPU(
+        #     PowerSupplyPU.DEVICES.BO_INJ_KCKR)
+        # # TB PosAng knobs (alternative to PosAng)
+        # self.devices["tb_ch1"] = PowerSupply("TB-04:PS-CH-1")
+        # self.devices["tb_injsept"] = PowerSupplyPU("TB-04:PU-InjSept")
+        # self.devices["tb_cv1"] = PowerSupply("TB-04:PS-CV-1")
+        # self.devices["tb_cv2"] = PowerSupply("TB-04:PS-CV-2")
+        # # LI LLRF
+        # self.devices['li_llrf'] = LILLRF()
+        # # BO LLRF
+        # self.devices['bo_llrf'] = ASLLRF(ASLLRF.DEVICES.BO)
         # other rlevant devices
-        self.devices['ejekckr'] = PowerSupplyPU(
-            PowerSupplyPU.DEVICES.BO_EJE_KCKR)
+        # self.devices['ejekckr'] = PowerSupplyPU(
+        # PowerSupplyPU.DEVICES.BO_EJE_KCKR)
         self.devices['currinfo'] = CurrInfoBO()
         self.devices['dcct'] = DCCT(DCCT.DEVICES.BO)
         self.devices['evg'] = EVG()
-        self.devices['ejekckr_trig'] = Trigger("BO-48D:TI-EjeKckr")
+        # self.devices['ejekckr_trig'] = Trigger("BO-48D:TI-EjeKckr")
         self.devices['egun_trigps'] = EGTriggerPS()
-        self.devices['injctrl'] = InjCtrl()
+        self.devices['injctrl'] = InjCtrl(props2init=None)
+        # self.devices['sofb_bo'] = SOFB(SOFB.DEVICES.BO)
+        if self.params.correct_tb_traj:
+            self.devices['sofb_tb'] = SOFB(SOFB.DEVICES.TB)
+
+    def _curr150mev_update(self, pvname, value, **kwargs):
+        self._thread_update = _Thread(target=self._update_flag, daemon=True)
+        self._thread_update.start()
+
+    def _update_flag(self):
+        _time.sleep(0.05)
+        if not self.devices['currinfo'].current3gev:
+            self.news.set()
 
     def _initialization(self):
         """."""
@@ -603,5 +739,39 @@ class OptimizeInjBO(_RCDS):
         self.data['timestamp'] = _time.time()
         self.data['positions'] = []
         self.data['currents'] = []
-        self.prepare_evg()
+        if self.params.inject:
+            self.prepare_evg()
+        self._curr150mev_pv.add_callback(self._curr150mev_update)
+        self.pos0 = self.get_current_position()
         return True
+
+    def _finalization(self):
+        self._curr150mev_pv.clear_callbacks()
+        self.news.clear()
+        _log.info('Reseting machine initial position')
+        self.set_position_to_machine(self.pos0)
+        return super()._finalization()
+
+    def wait_set_pos(self, pos, timeout=20):
+        """Wait positions RB reach the desired SP vals.
+
+        Wait current RB values reach `pos` within a `tol` precision up to
+        `timeout` seconds.
+
+        Args:
+            pos (array): reference positions that have been set to SP PVs
+            tol (float): relative tolerance for comparing values.
+                i. e. |current_pos - pos| <= tol * |pos|. Defaults to 0.05
+            timeout (float): timeout in seconds. Defaults to 10 s.
+        """
+        sleep_time = 0.1
+        it = int(timeout/sleep_time)
+        for _ in range(it):
+            pos_ = self.get_current_position()
+            if _np.all(_np.isclose(pos_, pos, atol=1e-4)):
+                _log.info('Positions have been set.')
+                break
+            _time.sleep(sleep_time)
+        else:
+            _log.warning('Timed out waiting positions be set.')
+            _log.warning(f'Diff: {pos - pos_}')

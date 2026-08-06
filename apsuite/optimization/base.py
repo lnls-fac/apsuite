@@ -301,7 +301,7 @@ class Optimize(_Base):
         res = []
         for posi in _np.array(pos, ndmin=2):
             if self._stopevt.is_set():
-                raise OptimizationAborted
+                raise OptimizationAborted('Optimization Aborted by User')
             if _np.any(_np.isnan(posi)):
                 _log.warning('Position out of boundaries. Returning NaN.')
                 res.append(_np.nan)
