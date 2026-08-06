@@ -54,14 +54,14 @@ class ACBBAParams(_ParamsBaseClass):
 
         self.quad_modulation_mode = ACBBAParams.QUAD_MODULATION_MODE.DC
         self.quad_delta_kl = 0.01  # [1/m]
-        self.wait_quadrupole = 0.3  # [s]
+        self.wait_quadrupole = 1.0  # [s]
 
         self.cv_freq = 17.0  # [Hz]
         self.ch_freq = 23.0  # [Hz]
         self.qn_freq = 0.0  # [Hz]
         self.qs_freq = 0.0  # [Hz]
 
-        self.excit_time = 4  # [s]
+        self.excit_time = 2  # [s]
         self.corrs_delay = 5e-3  # [s]
 
         self.ch_kick = 5  # [urad]
@@ -283,6 +283,13 @@ class DoACBBA(_BaseClass):
 
     def _do_acbba(self):
         """."""
+        # Initial checkings
+        if not all([
+            self.check_isvalid_delta_kl(bpm) for bpm in self._bpms2dobba
+        ]):
+            self._log("Adjust quad strength or change dKL first.")
+            return
+
         # Initialize data
         self.data["measure"] = dict()
         self._setup_orm()
@@ -432,7 +439,7 @@ class DoACBBA(_BaseClass):
             msg = f'Changing quadrupole "{quadname}" strength... '
             self._log(msg, tab=tab + 1, end="")
             sts = self.set_quad_strength(
-                quadname, stren_ini + delta_kl, tab=tab + 1
+                quadname, stren_ini + delta_kl / 2, tab=tab + 1
             )
             if sts == self.STATUS.Fail:
                 self.set_quad_strength(
@@ -452,7 +459,7 @@ class DoACBBA(_BaseClass):
             msg = f'Changing quadrupole "{quadname}" strength... '
             self._log(msg, tab=tab + 1, end="")
             sts = self.set_quad_strength(
-                quadname, stren_ini - delta_kl, tab=tab + 1
+                quadname, stren_ini - delta_kl / 2, tab=tab + 1
             )
             if sts == self.STATUS.Fail:
                 self.set_quad_strength(
@@ -823,7 +830,7 @@ class DoACBBA(_BaseClass):
         for ch, cv in zip(chs, cvs):  # noqa: B905
             llt = set()
             for c in ch + cv:
-                trig = self._LLTime.get_trigger_name(c + ":BCKPLN")
+                trig = _LLTime.get_trigger_name(c + ":BCKPLN")
                 llt.add(trig)
             ll_trigs.append(llt)
 
@@ -976,12 +983,12 @@ class DoACBBA(_BaseClass):
         return _np.array([lolim, hilim], dtype=float)
 
     def check_isvalid_delta_kl(
-        self, quadname, init_strength=None, delta_kl=None
+        self, bpmname, init_strength=None, delta_kl=None
     ):
         """."""
-        if delta_kl is None:
-            delta_kl = self.params.quad_delta_kl
-        dkl = delta_kl
+        bpmidx = self.data['bpmnames'].index(bpmname)
+        quadname = self.data['quadnames'][bpmidx]
+        max_dkl = self.params.quad_delta_kl if delta_kl is None else delta_kl
 
         lolim, hilim = self.get_quad_strength_limits(quadname)
 
@@ -989,18 +996,18 @@ class DoACBBA(_BaseClass):
             init_strength = self.get_quad_strength(quadname)
         kl = init_strength
 
-        low = min(kl + dkl, kl - dkl)
-        upp = max(kl + dkl, kl - dkl)
+        low = min(kl + max_dkl / 2, kl - max_dkl / 2)
+        upp = max(kl + max_dkl / 2, kl - max_dkl / 2)
 
         if upp > hilim or low < lolim:
-            max_delta_kl = min(hilim - kl, kl - lolim)
-            msg = f"WARN: {quadname} KL = {kl:.2g}, dKL = {abs(dkl):.2g}. "
-            msg += f"Limits: ({lolim:.2g}, {hilim:.2g}). "
-            msg += f"Max. dKL = {max_delta_kl * 2:.2g}."
+            msg = f"WARN: {quadname} KL = {kl:.2g}, dKL = {abs(max_dkl):.2g}."
+            max_dkl = min(hilim - kl, kl - lolim)
+            msg += f" Limits: ({lolim:.2g}, {hilim:.2g}). "
+            msg += f" Max. dKL = {max_dkl * 2:.2g}."
             self._log(msg)
-            return False, max_delta_kl
+            return False, max_dkl
 
-        return True, delta_kl
+        return True, max_dkl
 
     def correct_orbit(self):
         """."""
@@ -1160,6 +1167,11 @@ class DoACBBA(_BaseClass):
         y0 = 0.5 * (y0_pos + y0_neg)
 
         self.analysis[bpmname] = dict(
+            tim=tim,
+            dcx_pos=dcx_pos,
+            dcy_pos=dcy_pos,
+            dcx_neg=dcx_neg,
+            dcy_neg=dcy_neg,
             x0=x0,
             y0=y0,
             m_h=m_h,
