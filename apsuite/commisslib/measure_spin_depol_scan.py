@@ -301,20 +301,20 @@ class MeasureTuneScanParams(ParamsBaseClass):
         self.wait_time_change_tune = 40  # [s]
         self.wait_time_acq_data = 1.0  # [s]
         self.nr_steps = 20
-        self.tunex_start = 0.16
-        self.tunex_stop = 0.16
-        self.tuney_start = 0.22
-        self.tuney_stop = 0.35
+        self.tunex_start = 0.14
+        self.tunex_stop = 0.14
+        self.tuney_start = 0.19
+        self.tuney_stop = 0.23
         self.change_tunex_error = 0.0
         self.change_tuney_error = 0.0
-        self.bbbv_set0_gain = 0.7
-        self.bbbv_set0_phase = -120
+        self.bbbv_set0_gain = 0.9
+        self.bbbv_set0_phase = -170
         self.bbbv_set1_gain = 0.1
-        self.bbbv_set1_phase = 60
-        self.bbbh_set0_gain = 0.6
-        self.bbbh_set0_phase = 150
-        self.bbbh_set1_gain = 0.6
-        self.bbbh_set1_phase = 150
+        self.bbbv_set1_phase = 10
+        self.bbbh_set0_gain = 1.0
+        self.bbbh_set0_phase = -50.0
+        self.bbbh_set1_gain = 1.0
+        self.bbbh_set1_phase = -50.0
 
     def __str__(self):
         """."""
