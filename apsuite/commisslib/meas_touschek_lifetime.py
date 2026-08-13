@@ -752,8 +752,8 @@ class MeasTouschekLifetime(_BaseClass):
         tune = self.devices['tune']
         bpm = self.devices[parms.bpm_name]
         bpm.cmd_sync_tbt()  # Sync TbT BPM acquisition
-        excx0 = tune.enablex
-        excy0 = tune.enabley
+        excx0 = tune.excitation_enabledx
+        excy0 = tune.excitation_enabledy
         # Ensures that tune excitation is off before measurement.
         tune.cmd_disablex()
         tune.cmd_disabley()
