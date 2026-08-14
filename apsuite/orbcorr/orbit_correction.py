@@ -119,6 +119,28 @@ class OrbitCorr:
         """Calculate figure of merit from residue vector."""
         return _np.sqrt(_np.sum(res * res) / res.size)
 
+    @staticmethod
+    def find_closest_corrs_ss(ss, nr_ch, nr_cv):
+        """Find the closest correctors indices to a given sector indices in SOFB matrix."""
+        nch = 6
+        ncv = 8
+        idx_upstream = (ss-1)*nch
+        idx_downstream = (ss-1)*nch + 1
+        idcs_ch_up = idx_upstream - _np.arange(int(nr_ch/2))
+        idcs_ch_dw = idx_downstream + _np.arange(int(nr_ch/2))
+        idcs_ch = _np.sort(_np.concatenate((idcs_ch_up, idcs_ch_dw)))
+        idcs_ch = _np.mod(idcs_ch, 120)
+
+        idx_upstream = (ss-1)*ncv
+        idx_downstream = (ss-1)*ncv + 1
+        idcs_cv_up = idx_upstream - _np.arange(int(nr_cv/2))
+        idcs_cv_dw = idx_downstream + _np.arange(int(nr_cv/2))
+        idcs_cv = _np.sort(_np.concatenate((idcs_cv_up, idcs_cv_dw)))
+        idcs_cv = _np.mod(idcs_cv, 160) + 120
+
+        idcs_corrs = _np.concatenate((idcs_ch, idcs_cv))
+        return idcs_corrs
+
     def get_inverse_matrix(self, jacobian_matrix, full=False):
         """Calculate the pseudo-inverse of jacobian_matrix.
 
