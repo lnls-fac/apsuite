@@ -14,7 +14,7 @@ from siriuspy.devices import (
     FamGammaMonitors,
     RFGen,
     Tune,
-    TuneCorr
+    SITuneCorr
 )
 
 from ..utils import ParamsBaseClass, ThreadedMeasBaseClass
@@ -79,7 +79,7 @@ class _BaseMeasureSpinDepol(ThreadedMeasBaseClass):
             props2init=['GeneralFreq-SP', 'GeneralFreq-RB']
         )
         self.devices['tune'] = Tune(Tune.DEVICES.SI)
-        self.devices['tunecorr'] = TuneCorr(TuneCorr.DEVICES.SI)
+        self.devices['tunecorr'] = SITuneCorr(SITuneCorr.DEVICES.SI)
         self.devices['gamma_monitors'] = FamGammaMonitors()
         self.devices['blms'] = FamBLMs()
         self.devices['cax'] = DVFImgProc(DVFImgProc.DEVICES.CAX_DVF2)
