@@ -129,10 +129,10 @@ class Bump(_BaseClass):
 
     def get_initial_state(self):
         """Get initial state of the SOFB and FOFB."""
-        clt = _ConfigDBClient(config_type='si_orbit')
-        ref_orb = clt.get_config_value('ref_orb')
-        refx = _np.array(ref_orb['x'])
-        refy = _np.array(ref_orb['y'])
+        # clt = _ConfigDBClient(config_type='si_orbit')
+        # ref_orb = clt.get_config_value('ref_orb')
+        refx = self.devices['sofb'].refx
+        refy = self.devices['sofb'].refy
         self.reforbx = refx
         self.reforby = refy
         self.get_sofb_bpm_enbl()
@@ -262,7 +262,7 @@ class Bump(_BaseClass):
             self.params.sleep_time
         )  # NOTE: For some reason We have to wait here.
 
-    def get_orbrms(self, refx, refy, idx):
+    def get_orbrms(self, idx):
         """Calculate rms of orbit distortion.
 
         Args:
@@ -274,6 +274,8 @@ class Bump(_BaseClass):
             float: rms of orbit distortion
         """
         sofb = self.devices['sofb']
+        refx = sofb.refx
+        refy = sofb.refy
         ref = _np.r_[refx, refy]
         orb = _np.r_[sofb.orbx, sofb.orby]
         dorb = (orb - ref)[idx] ** 2
@@ -356,7 +358,7 @@ class Bump(_BaseClass):
                     _np.abs(fofb.kickcv_acc),
                 ))
                 for _ in _np.arange(nr_orbit_verification_closed_loop):
-                    rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
+                    rms_residue = self.get_orbrms( idcs_bpm)
                     self._check_rms_conditions(rms_residue, bump_residue)
                 bump_residue *= 1.2
                 print(f'    kick fofb = {kick:.3f} urad, ')
@@ -365,7 +367,8 @@ class Bump(_BaseClass):
                 _ = sofb.correct_orbit_manually(
                     nr_iters=nr_iters, residue=residue
                 )
-                rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
+
+                rms_residue = self.get_orbrms(idcs_bpm)
                 self._check_rms_conditions(rms_residue, bump_residue)
                 bump_residue *= 1.2
         print('Done!')
