@@ -25,7 +25,8 @@ class BumpParams(_ParamsBaseClass):
         self.subsec = '01C1'
         self.do_angular_bumps = True
 
-        self.n_bpms_out = 3
+        self.n_bpms_outx = 3
+        self.n_bpms_outy = 3
         self.minsingval = 0.2
         self.bump_residue = 3  # [um]
         self.bump_max_residue = 10  # [um]
@@ -54,7 +55,8 @@ class BumpParams(_ParamsBaseClass):
         stg = '{0:20s} = {1:>9s}\n'.format('subsec', self.subsec)
         stg += dtmp('do_angular_bumps', self.do_angular_bumps)
 
-        stg += dtmp('n_bpms_out', self.n_bpms_out, '')
+        stg += dtmp('n_bpms_out_x', self.n_bpms_outx, '')
+        stg += dtmp('n_bpms_out_y', self.n_bpms_outy, '')
         stg += ftmp('minsingval', self.minsingval, '')
         stg += ftmp('bump_residue', self.bump_residue, '[um]')
         stg += ftmp('bump_max_residue', self.bump_max_residue, '[um]')
@@ -211,10 +213,11 @@ class Bump(_BaseClass):
         self._fofb_bpmxenbl = _np.copy(self.devices['fofb'].bpmxenbl)
         self._fofb_bpmyenbl = _np.copy(self.devices['fofb'].bpmyenbl)
 
-    def _generate_bpm_enbl(self, n_bpms_out, enblx, enbly, idcs_out):
-        if n_bpms_out != 0:
-            enblx[idcs_out[: n_bpms_out * 2]] = False
-            enbly[idcs_out[n_bpms_out * 2 :] - 160] = False
+    def _generate_bpm_enbl(self, n_bpms_outx, n_bpms_outy, enblx, enbly, idcs_out):
+        if n_bpms_outx != 0:
+            enblx[idcs_out[: n_bpms_outx * 2]] = False
+        if n_bpms_outy != 0:
+            enbly[idcs_out[n_bpms_outy * 2 :] - 160] = False
         return enblx, enbly
 
     def restore_initial_state(self):
@@ -232,19 +235,21 @@ class Bump(_BaseClass):
     def remove_bpms(self):
         """Remove BPMs from correction system."""
         subsec = self.params.subsec
-        n_bpms_out = self.params.n_bpms_out
+        n_bpms_outx = self.params.n_bpms_outx
+        n_bpms_outy = self.params.n_bpms_outy
         section_type, section_nr = self.subsec_2_sectype_nr(subsec)
 
         sofb = self.devices['sofb']
         idcs_out = self.bumptools.get_closest_bpms_indices(
             section_type=section_type,
             sidx=section_nr - 1,
-            n_bpms_out=n_bpms_out,
+            n_bpms_outx=n_bpms_outx,
+            n_bpms_outy=n_bpms_outy,
         )
         enblx = self._bpmxenbl
         enbly = self._bpmyenbl
         enblx, enbly = self._generate_bpm_enbl(
-            n_bpms_out, enblx, enbly, idcs_out
+            n_bpms_outx, n_bpms_outy, enblx, enbly, idcs_out
         )
         sofb.bpmxenbl = enblx
         sofb.bpmyenbl = enbly
@@ -254,7 +259,7 @@ class Bump(_BaseClass):
             enblx = self._fofb_bpmxenbl
             enbly = self._fofb_bpmyenbl
             enblx, enbly = self._generate_bpm_enbl(
-                n_bpms_out, enblx, enbly, idcs_out
+                n_bpms_outx, n_bpms_outy, enblx, enbly, idcs_out
             )
             fofb.bpmxenbl = enblx
             fofb.bpmyenbl = enbly
@@ -315,7 +320,7 @@ class Bump(_BaseClass):
         refx0 = self.reforbx
         refy0 = self.reforby
         subsec = subsec or self.params.subsec
-        n_bpms_out = self.params.n_bpms_out
+        n_bpms_out = self.params.n_bpms_outx
         minsingval = self.params.minsingval
         nr_iters = self.params.orbcorr_nr_iters
         residue = self.params.orbcorr_residue
