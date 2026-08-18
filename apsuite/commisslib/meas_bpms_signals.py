@@ -90,13 +90,13 @@ class AcqBPMsSignals(_BaseClass):
     BPM_TRIGGER = "SI-Fam:TI-BPM"
     PSM_TRIGGER = "SI-Fam:TI-BPM-PsMtm"
 
-    def __init__(self, isonline=True, ispost_mortem=False):
+    def __init__(self, isonline=True, ispost_mortem=False, bpmnames=None):
         """."""
         super().__init__(params=AcqBPMsSignalsParams(), isonline=isonline)
         self._ispost_mortem = ispost_mortem
 
         if self.isonline:
-            self.create_devices()
+            self.create_devices(bpmnames=bpmnames)
 
     calc_positions_from_amplitudes = staticmethod(
         FamBPMs.calc_positions_from_amplitudes)
@@ -122,11 +122,12 @@ class AcqBPMsSignals(_BaseClass):
         self.data = data
         return ret
 
-    def create_devices(self):
+    def create_devices(self, bpmnames=None):
         """."""
         self.devices["currinfo"] = CurrInfoSI()
         self.devices["fambpms"] = FamBPMs(
             devname=FamBPMs.DEVICES.SI,
+            bpmnames=bpmnames,
             ispost_mortem=self._ispost_mortem,
             props2init="acq",
         )
