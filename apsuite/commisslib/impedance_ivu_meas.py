@@ -12,7 +12,7 @@ from apsuite.commisslib.meas_bpms_signals import (
 from apsuite.utils import ThreadedMeasBaseClass as _BaseThreaded
 
 
-class MeasIVUImpedanceParams(_BaseParams):
+class ImpedanceIVUMeasParams(_BaseParams):
     """."""
 
     ADC_NSAMPLES_PER_TURN = 382
@@ -38,7 +38,7 @@ class MeasIVUImpedanceParams(_BaseParams):
         """."""
         stg = 'AcqBPMsSignalsParams:\n'
         stg += ''.join([f'    {l}\n' for l in super().__str__().splitlines()])
-        stg += '\nMeasIVUImpedanceParams:\n'
+        stg += '\nImpedanceIVUMeasParams:\n'
         stg += f'    num_acquisitions = {self.num_acquisitions}\n'
         stg += f'    save_raw_data = {self.save_raw_data}\n'
         stg += f'    num_buckets_to_process = {self.num_buckets_to_process}\n'
@@ -59,7 +59,7 @@ class MeasIVUImpedanceParams(_BaseParams):
         self.nrpoints_before = 0
 
 
-class MeasIVUImpedance(_BaseThreaded, _BaseAcq):
+class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
     """."""
 
     def __init__(self, isonline=True, bpmtype='all'):
@@ -71,7 +71,7 @@ class MeasIVUImpedance(_BaseThreaded, _BaseAcq):
             bpmnames = bpmnames[1::2]
         _BaseThreaded.__init__(self, isonline=isonline, target=self._measure)
         _BaseAcq.__init__(self, isonline=self.isonline, bpmnames=bpmnames)
-        self.params = MeasIVUImpedanceParams()
+        self.params = ImpedanceIVUMeasParams()
 
     def create_devices(self, bpmnames=None):
         """."""
@@ -216,8 +216,8 @@ class MeasIVUImpedance(_BaseThreaded, _BaseAcq):
         nbuc2proc = self.params.num_buckets_to_process
         bhigh = self.params.bucket_hi_charge
         blow = self.params.bucket_lo_charge
-        nsamp_pturn = MeasIVUImpedanceParams.ADC_NSAMPLES_PER_TURN
-        hnum = MeasIVUImpedanceParams.HARM_NUM
+        nsamp_pturn = ImpedanceIVUMeasParams.ADC_NSAMPLES_PER_TURN
+        hnum = ImpedanceIVUMeasParams.HARM_NUM
 
         ant_raw = np.array([data['ampl' + ant] for ant in 'abcd'])
         ant_raw = ant_raw.swapaxes(
@@ -251,7 +251,7 @@ class MeasIVUImpedance(_BaseThreaded, _BaseAcq):
         pref = lambda x: f'b{x + 1}_'
         for i in range(nbuc2proc):
             b_sigs = ant_raw2[..., slcs[i]].std(axis=-1)
-            b_posx, b_posy = MeasIVUImpedance.calc_positions_from_amplitudes(
+            b_posx, b_posy = ImpedanceIVUMeas.calc_positions_from_amplitudes(
                 b_sigs
             )
             b_sum = b_sigs.sum(axis=0)
