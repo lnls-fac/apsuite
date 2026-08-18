@@ -268,19 +268,3 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
             dic[pref(i) + 'curr'] = dic[pref(i) + 'sum'] * curr / bt_sum
 
         return dic
-
-    @staticmethod
-    def _find_peak(ant_amp, search_reg, npts=5):
-        slc = slice(*search_reg)
-        amax = ant_amp[..., slc].argmax(axis=-1) + (search_reg[0] or 0)
-        amax = np.expand_dims(amax, axis=-1)
-        x = np.arange(-npts, npts + 1)
-        slc = amax + x
-        ant_amp_slc = np.take_along_axis(ant_amp, slc, axis=-1)
-        coefs = np.polynomial.polynomial.polyfit(
-            x, ant_amp_slc.reshape(-1, ant_amp_slc.shape[-1]).T, deg=2
-        ).T.reshape(ant_amp_slc.shape[:-1] + (-1,))
-
-        xmax = -coefs[..., 1] / (2 * coefs[..., 2])
-        ymax = coefs[..., 0] + coefs[..., 1] * xmax + coefs[..., 2] * xmax**2
-        return ymax, amax, xmax, coefs
