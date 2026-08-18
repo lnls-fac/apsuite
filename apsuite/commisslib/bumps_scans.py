@@ -3,8 +3,8 @@
 import time as _time
 import numpy as _np
 from siriuspy.devices import SOFB, HLFOFB, CurrInfoSI
-from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 from apsuite.orbcorr.si_bumps import SiCalcBumps
+from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 
 from ..utils import (
     ThreadedMeasBaseClass as _BaseClass,
@@ -129,12 +129,16 @@ class Bump(_BaseClass):
             print('Not a measurement....')
         return self.meas_func(*self.args, **self.kwargs)
 
-    def get_initial_state(self):
+    def get_initial_state(self, use_ioc_reforb=True):
         """Get initial state of the SOFB and FOFB."""
-        # clt = _ConfigDBClient(config_type='si_orbit')
-        # ref_orb = clt.get_config_value('ref_orb')
-        refx = self.devices['sofb'].refx
-        refy = self.devices['sofb'].refy
+        if use_ioc_reforb:
+            refx = self.devices['sofb'].refx
+            refy = self.devices['sofb'].refy
+        else:
+            clt = _ConfigDBClient(config_type='si_orbit')
+            ref_orb = clt.get_config_value('ref_orb')
+            refx = ref_orb[:160]
+            refy = ref_orb[160:]
         self.reforbx = refx
         self.reforby = refy
         self.get_sofb_bpm_enbl()
@@ -320,7 +324,8 @@ class Bump(_BaseClass):
         refx0 = self.reforbx
         refy0 = self.reforby
         subsec = subsec or self.params.subsec
-        n_bpms_out = self.params.n_bpms_outx
+        n_bpms_outx = self.params.n_bpms_outx
+        n_bpms_outy = self.params.n_bpms_outy
         minsingval = self.params.minsingval
         nr_iters = self.params.orbcorr_nr_iters
         residue = self.params.orbcorr_residue
@@ -338,7 +343,8 @@ class Bump(_BaseClass):
             agy=agy,
             psx=psx,
             psy=psy,
-            n_bpms_out=n_bpms_out,
+            n_bpms_outx=n_bpms_outx,
+            n_bpms_outy=n_bpms_outy,
             minsingval=minsingval,
         )
         section_type, section_nr = self.subsec_2_sectype_nr(subsec)
@@ -363,7 +369,7 @@ class Bump(_BaseClass):
                     _np.abs(fofb.kickcv_acc),
                 ))
                 for _ in _np.arange(nr_orbit_verification_closed_loop):
-                    rms_residue = self.get_orbrms( idcs_bpm)
+                    rms_residue = self.get_orbrms(idcs_bpm)
                     self._check_rms_conditions(rms_residue, bump_residue)
                 bump_residue *= 1.2
                 print(f'    kick fofb = {kick:.3f} urad, ')

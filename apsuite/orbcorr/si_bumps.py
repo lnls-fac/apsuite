@@ -40,12 +40,13 @@ class SiCalcBumps:
     SECTION_TYPES = list(MARKER_NAMES.keys())
 
     def __init__(
-        self, model=None, section_type=None, section_nr=None, n_bpms_out=None
+        self, model=None, section_type=None, section_nr=None, n_bpms_outx=None, n_bpms_outy=None
     ):
         """."""
         self._section_type = section_type
         self._section_nr = section_nr
-        self._n_bpms_out = n_bpms_out
+        self._n_bpms_outx = n_bpms_outx
+        self._n_bpms_outy = n_bpms_outy
         self._model = model
         self._mat_i2s = None
         self._mat_i2r = None
@@ -78,18 +79,32 @@ class SiCalcBumps:
         self._section_nr = value
 
     @property
-    def n_bpms_out(self):
-        """Number of BPMs to remove from each side.
+    def n_bpms_outx(self):
+        """Number of horizontal BPMs to remove from each side.
 
         Returns:
            int: Number of BPMs to be removed from each side
              of the BPMs used in the bump.
         """
-        return self._n_bpms_out
+        return self._n_bpms_outx
 
-    @n_bpms_out.setter
-    def n_bpms_out(self, value):
-        self._n_bpms_out = value
+    @n_bpms_outx.setter
+    def n_bpms_outx(self, value):
+        self._n_bpms_outx = value
+
+    @property
+    def n_bpms_outy(self):
+        """Number of vertical BPMs to remove from each side.
+
+        Returns:
+           int: Number of BPMs to be removed from each side
+             of the BPMs used in the bump.
+        """
+        return self._n_bpms_outy
+
+    @n_bpms_outy.setter
+    def n_bpms_outy(self, value):
+        self._n_bpms_outy = value
 
     @property
     def model(self):
@@ -203,7 +218,7 @@ class SiCalcBumps:
         return idcs
 
     def get_closest_bpms_indices(
-        self, section_type=None, sidx=None, n_bpms_out=None
+        self, section_type=None, sidx=None, n_bpms_outx=None, n_bpms_outy=None
     ):
         """Get closest BPMs indices to remove from orbit correction.
 
@@ -221,19 +236,26 @@ class SiCalcBumps:
             section_type = self.section_type
         if sidx is None:
             sidx = self.section_nr - 1
-        if n_bpms_out is None:
-            n_bpms_out = self.n_bpms_out
+        if n_bpms_outx is None:
+            n_bpms_outx = self.n_bpms_outx
+        if n_bpms_outy is None:
+            n_bpms_outy = self.n_bpms_outy
         bpm1_sec_index, bpm2_sec_index = self._get_sec_bpm_indices(
             section_type
         )
         idlist = _np.arange(0, 160, 1)
-        idcs_ignore = list()
-        for i in _np.arange(n_bpms_out):
-            idcs_ignore.append(idlist[bpm1_sec_index + 8 * sidx - (i + 1)])
-            idcs_ignore.append(idlist[bpm2_sec_index + 8 * sidx + (i + 1)])
-        idcs_ignore = _np.array(idcs_ignore)
-        idcs_ignore = _np.tile(idcs_ignore, 2)
-        idcs_ignore[n_bpms_out * 2 :] += 160
+        idcs_ignorex = list()
+        for i in _np.arange(n_bpms_outx):
+            idcs_ignorex.append(idlist[bpm1_sec_index + 8 * sidx - (i + 1)])
+            idcs_ignorex.append(idlist[bpm2_sec_index + 8 * sidx + (i + 1)])
+        idcs_ignorex = _np.array(idcs_ignorex)
+        idcs_ignorey = list()
+        for i in _np.arange(n_bpms_outy):
+            idcs_ignorey.append(idlist[bpm1_sec_index + 8 * sidx - (i + 1)])
+            idcs_ignorey.append(idlist[bpm2_sec_index + 8 * sidx + (i + 1)])
+        idcs_ignorey = _np.array(idcs_ignorey)
+        idcs_ignorey += 160
+        idcs_ignore = _np.concatenate((idcs_ignorex, idcs_ignorey))
         return idcs_ignore
 
     def get_btwbpm_corrs_indices(self, section_type=None, sidx=None):
@@ -343,7 +365,7 @@ class SiCalcBumps:
         return orbcorr
 
     def remove_closest_bpms(
-        self, orbcorr, section_type=None, sidx=None, n_bpms_out=None
+        self, orbcorr, section_type=None, sidx=None, n_bpms_outx=None, n_bpms_outy=None
     ):
         """Remove closest BPMs form orbit correction.
 
@@ -362,10 +384,12 @@ class SiCalcBumps:
             section_type = self.section_type
         if sidx is None:
             sidx = self.section_nr - 1
-        if n_bpms_out is None:
-            n_bpms_out = self.n_bpms_out
+        if n_bpms_outx is None:
+            n_bpms_outx = self.n_bpms_outx
+        if n_bpms_outy is None:
+            n_bpms_outy = self.n_bpms_outy
         idcs_ignore = self.get_closest_bpms_indices(
-            section_type, sidx, n_bpms_out
+            section_type, sidx, n_bpms_outx, n_bpms_outy
         )
         if idcs_ignore.size != 0:
             orbcorr.params.enbllistbpm[idcs_ignore] = False
@@ -375,7 +399,8 @@ class SiCalcBumps:
         self,
         section_type=None,
         section_nr=None,
-        n_bpms_out=None,
+        n_bpms_outx=None,
+        n_bpms_outy=None,
         use_ss_tfm=False,
         minsingval=0.2,
         deltax=10e-6,
@@ -407,8 +432,10 @@ class SiCalcBumps:
             section_type = self.section_type
         if section_nr is None:
             section_nr = self.section_nr
-        if n_bpms_out is None:
-            n_bpms_out = self.n_bpms_out
+        if n_bpms_outx is None:
+            n_bpms_outx = self.n_bpms_outx
+        if n_bpms_outy is None:
+            n_bpms_outy = self.n_bpms_outy
 
         if 'S' in section_type and use_ss_tfm:
             length = self.SS_LENGTHS[section_type]
@@ -447,7 +474,7 @@ class SiCalcBumps:
 
         # remove closest BPMS
         orbcorr = self.remove_closest_bpms(
-            orbcorr, section_type, sidx, n_bpms_out
+            orbcorr, section_type, sidx, n_bpms_outx, n_bpms_outy
         )
 
         mat_i2s = _np.zeros((4, 4), dtype=float)
@@ -514,7 +541,8 @@ class SiCalcBumps:
                     minsingval=svals,
                     section_nr=section_nr,
                     section_type=section_type,
-                    n_bpms_out=n_bpms,
+                    n_bpms_outx=n_bpms,
+                    n_bpms_outy=n_bpms,
                 )
                 ms_i2s.append(m_i2s)
                 ms_i2r.append(m_i2r)
@@ -528,7 +556,8 @@ class SiCalcBumps:
                     minsingval=svals,
                     section_nr=section_nr,
                     section_type=section_type,
-                    n_bpms_out=n_bpms,
+                    n_bpms_outx=n_bpms,
+                    n_bpms_outy=n_bpms,
                 )
                 ms_i2s.append(m_i2s)
                 ms_i2r.append(m_i2r)
@@ -550,7 +579,8 @@ class SiCalcBumps:
         self,
         section_type=None,
         section_nr=None,
-        n_bpms_out=None,
+        n_bpms_outx=None,
+        n_bpms_outy=None,
         m_s2r=None,
         use_ss_tfm=False,
         posx=0,
@@ -585,8 +615,10 @@ class SiCalcBumps:
             section_type = self.section_type
         if section_nr is None:
             section_nr = self.section_nr
-        if n_bpms_out is None:
-            n_bpms_out = self.n_bpms_out
+        if n_bpms_outx is None:
+            n_bpms_outx = self.n_bpms_outx
+        if n_bpms_outy is None:
+            n_bpms_outy = self.n_bpms_outy
 
         # Get bump matrices
         if m_s2r is None:
@@ -594,7 +626,8 @@ class SiCalcBumps:
                 section_type=section_type,
                 minsingval=0.2,
                 section_nr=section_nr,
-                n_bpms_out=n_bpms_out,
+                n_bpms_outx=n_bpms_outx,
+                n_bpms_outy=n_bpms_outy,
                 use_ss_tfm=use_ss_tfm,
             )
         sidx = max(min(section_nr, 20), 1)
@@ -622,7 +655,7 @@ class SiCalcBumps:
 
         # remove closest BPMS
         orbcorr = self.remove_closest_bpms(
-            orbcorr, section_type, sidx, n_bpms_out
+            orbcorr, section_type, sidx, n_bpms_outx, n_bpms_outy
         )
 
         gorb = orbcorr.get_orbit()
@@ -635,7 +668,8 @@ class SiCalcBumps:
         self,
         section_type=None,
         section_nr=None,
-        n_bpms_out=None,
+        n_bpms_outx=None,
+        n_bpms_outy=None,
         m_s2r=None,
         use_ss_tfm=False,
         plot_results=True,
@@ -670,8 +704,10 @@ class SiCalcBumps:
             section_type = self.section_type
         if section_nr is None:
             section_nr = self.section_nr
-        if n_bpms_out is None:
-            n_bpms_out = self.n_bpms_out
+        if n_bpms_outx is None:
+            n_bpms_outx = self.n_bpms_outx
+        if n_bpms_outy is None:
+            n_bpms_outy = self.n_bpms_outy
 
         sidx = max(min(section_nr, 20), 1)
         sidx -= 1
@@ -679,7 +715,8 @@ class SiCalcBumps:
         gorb, orbcorr = self.calculate_bumps(
             section_type,
             section_nr,
-            n_bpms_out,
+            n_bpms_outx,
+            n_bpms_outy,
             m_s2r,
             use_ss_tfm,
             posx,
