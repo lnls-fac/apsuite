@@ -119,18 +119,16 @@ class MeasIVUImpedance(_BaseThreaded, _BaseAcq):
         self.process_data()
         self._filter_data_to_save()
 
-    def process_data(self, idcs_to_discard=None, return_all=False, proctype=2):
+    def process_data(self, idcs_to_discard=None, return_all=False):
         """."""
         idcs_to_discard = idcs_to_discard or []
-        proctype = str(proctype)
-        fun = getattr(self, '_proc_single_data' + proctype)
         data = self.data
         if isinstance(data, dict):
             data = [data]
         for i, dt in enumerate(data):
             if i in idcs_to_discard:
                 continue
-            dic = fun(dt, return_all=return_all)
+            dic = self._proc_single_data(dt, return_all=return_all)
             dt.update(dic)
 
     def calc_delta_orbit_2_bunches(self):
@@ -211,81 +209,7 @@ class MeasIVUImpedance(_BaseThreaded, _BaseAcq):
             for ant in 'abcd':
                 dt.pop('ampl' + ant)
 
-    def _proc_single_data1(self, data, return_all=False):
-        """."""
-        b1_offset = 50
-        window = 10
-        nbuc2proc = self.params.num_buckets_to_process
-        bhigh = self.params.bucket_hi_charge
-        blow = self.params.bucket_lo_charge
-        nsamp_pturn = MeasIVUImpedanceParams.ADC_NSAMPLES_PER_TURN
-        hnum = MeasIVUImpedanceParams.HARM_NUM
-
-        ant_raw = np.array([data['ampl' + ant] for ant in 'abcd'])
-        ant_raw = ant_raw.swapaxes(
-            1, 2
-        )  # [4, 382 * N, 160] --> [4, 160, 382 * N]
-        curr = data['stored_current']
-
-        ant_hil = MeasIVUImpedance.calc_hilbert_transform(ant_raw, axis=-1)
-        ant_amp = np.abs(ant_hil)
-        nturns = ant_amp.shape[-1] // nsamp_pturn
-        ant_amp = ant_amp.reshape(
-            ant_amp.shape[0], ant_amp.shape[1], nturns, -1
-        )
-
-        ant_amax = ant_amp.argmax(axis=-1)
-        n_cols = ant_amp.shape[-1]
-        idx = np.arange(n_cols)
-        old_idx = (idx - b1_offset + ant_amax[..., np.newaxis]) % n_cols
-        ant_amp2 = np.take_along_axis(ant_amp, old_idx, axis=-1)
-        ant_amp2_mean = ant_amp2.mean(axis=-2)
-        ant_amp2_std = ant_amp2.std(axis=-2)
-
-        dic = {}
-        if return_all:
-            dic['ant_raw'] = ant_raw
-            dic['ant_hil'] = ant_hil
-            dic['ant_amp'] = ant_amp
-            dic['ant_amax'] = ant_amax
-            #             dic['amin'] = amin
-            dic['ant_amp2'] = ant_amp2
-            dic['ant_amp2_mean'] = ant_amp2_mean
-            dic['ant_amp2_std'] = ant_amp2_std
-
-        b2_offset = abs(blow - bhigh) / hnum * nsamp_pturn
-        b2_offset = int(b2_offset) + b1_offset
-        slcs = [
-            (b1_offset - window, b1_offset + window),
-            (b2_offset - window, b2_offset + window),
-        ]
-        pref = lambda x: f'b{x + 1}_'
-        for i in range(nbuc2proc):
-            b_sigs, b_amax, b_xmax, b_coefs = MeasIVUImpedance._find_peak(
-                ant_amp2, search_reg=slcs[i], npts=2
-            )
-            b_posx, b_posy = MeasIVUImpedance.calc_positions_from_amplitudes(
-                b_sigs
-            )
-            b_sum = b_sigs.sum(axis=0)
-
-            dic[pref(i) + 'posx'] = b_posx
-            dic[pref(i) + 'posy'] = b_posy
-            dic[pref(i) + 'sum'] = b_sum
-            if return_all:
-                dic[pref(i) + 'sigs'] = b_sigs
-                dic[pref(i) + 'amax'] = b_amax
-                dic[pref(i) + 'xmax'] = b_xmax
-                dic[pref(i) + 'coefs'] = b_coefs
-
-        bt_sum = sum([dic[pref(i) + 'sum'] for i in range(nbuc2proc)])
-        dic['bt_sum'] = bt_sum
-        for i in range(nbuc2proc):
-            dic[pref(i) + 'curr'] = dic[pref(i) + 'sum'] * curr / bt_sum
-
-        return dic
-
-    def _proc_single_data2(self, data, return_all=False):
+    def _proc_single_data(self, data, return_all=False):
         b1_offset = 50
         windowp = 20
         windown = -10
@@ -327,74 +251,6 @@ class MeasIVUImpedance(_BaseThreaded, _BaseAcq):
         pref = lambda x: f'b{x + 1}_'
         for i in range(nbuc2proc):
             b_sigs = ant_raw2[..., slcs[i]].std(axis=-1)
-            b_posx, b_posy = MeasIVUImpedance.calc_positions_from_amplitudes(
-                b_sigs
-            )
-            b_sum = b_sigs.sum(axis=0)
-
-            dic[pref(i) + 'posx'] = b_posx
-            dic[pref(i) + 'posy'] = b_posy
-            dic[pref(i) + 'sum'] = b_sum
-            if return_all:
-                dic[pref(i) + 'sigs'] = b_sigs
-
-        bt_sum = sum([dic[pref(i) + 'sum'] for i in range(nbuc2proc)])
-        dic['bt_sum'] = bt_sum
-        for i in range(nbuc2proc):
-            dic[pref(i) + 'curr'] = dic[pref(i) + 'sum'] * curr / bt_sum
-
-        return dic
-
-    def _proc_single_data3(self, data, return_all=False):
-        """."""
-        b1_offset = 50
-        windowp = 20
-        windown = -10
-        nbuc2proc = self.params.num_buckets_to_process
-        bhigh = self.params.bucket_hi_charge
-        blow = self.params.bucket_lo_charge
-        nsamp_pturn = MeasIVUImpedanceParams.ADC_NSAMPLES_PER_TURN
-        hnum = MeasIVUImpedanceParams.HARM_NUM
-
-        ant_raw = np.array([data['ampl' + ant] for ant in 'abcd'])
-        ant_raw = ant_raw.swapaxes(
-            1, 2
-        )  # [4, 382 * N, 160] --> [4, 160, 382 * N]
-        curr = data['stored_current']
-
-        ant_hil = MeasIVUImpedance.calc_hilbert_transform(ant_raw, axis=-1)
-        ant_amp = np.abs(ant_hil)
-
-        # filt = scy_sig.butter(6, 0.1, fs=1, btype='low', output='sos')
-        # ant_amp = scy_sig.sosfiltfilt(filt, ant_amp, axis=-1)
-
-        ant_amax = ant_amp[..., :nsamp_pturn].argmax(axis=-1)
-
-        nsamp2keep = ant_amp.shape[-1]
-        nturn2keep = nsamp2keep // nsamp_pturn
-        idx = np.arange(nsamp2keep)
-        old_idx = (idx - b1_offset + ant_amax[..., None]) % nsamp2keep
-
-        ant_amp2 = np.take_along_axis(ant_amp, old_idx, axis=-1)
-        ant_amp2 = ant_amp2.reshape(ant_amp2.shape[:2] + (nturn2keep, -1))
-
-        dic = {}
-        if return_all:
-            dic['ant_raw'] = ant_raw
-            dic['ant_amax'] = ant_amax
-            dic['ant_hil'] = ant_hil
-            dic['ant_amp'] = ant_amp
-            dic['ant_amp2'] = ant_amp2
-
-        b2_offset = abs(blow - bhigh) / hnum * nsamp_pturn
-        b2_offset = int(b2_offset) + b1_offset
-        slcs = [
-            slice(b1_offset + windown, b1_offset + windowp),
-            slice(b2_offset + windown, b2_offset + windowp),
-        ]
-        pref = lambda x: f'b{x + 1}_'
-        for i in range(nbuc2proc):
-            b_sigs = np.sqrt((ant_amp2[..., slcs[i]] ** 2).mean(axis=-1))
             b_posx, b_posy = MeasIVUImpedance.calc_positions_from_amplitudes(
                 b_sigs
             )
