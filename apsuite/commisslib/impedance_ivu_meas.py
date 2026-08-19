@@ -149,7 +149,7 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         for dt in self.data:
             if 'b1_posx' not in dt or 'b2_posx' not in dt:
                 raise RuntimeError(
-                    'Missing bunch positions in data. Process data firts.'
+                    'Missing bunch positions in data. Process data first.'
                 )
             orb1.append(np.vstack([dt['b1_posx'], dt['b1_posy']]))
             orb2.append(np.vstack([dt['b2_posx'], dt['b2_posy']]))
@@ -176,13 +176,42 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         for dt in self.data:
             if 'b1_curr' not in dt or 'b2_curr' not in dt:
                 raise RuntimeError(
-                    'Missing bunch currents in data. Process data firts.'
+                    'Missing bunch currents in data. Process data first.'
                 )
             curr1.append(dt['b1_curr'])
             curr2.append(dt['b2_curr'])
         curr1 = np.array(curr1)
         curr2 = np.array(curr2)
         return curr1, curr2
+
+    def calc_sum_signal_2_bunches(self):
+        """Calculate the sum signal of the two stored bunches.
+
+        Raises:
+            RuntimeError: If there is no data acquired.
+            RuntimeError: If data is not processed yet.
+
+        Returns:
+            sumt: sum signal of the two bunches.
+            sum1: sum signal of the first stored bunch.
+            sum2: sum signal of the second stored bunch.
+
+        """
+        if not self.data:
+            raise RuntimeError('Get data First.')
+        sumt, sum1, sum2 = [], [], []
+        for dt in self.data:
+            if 'b1_sum' not in dt or 'b2_sum' not in dt:
+                raise RuntimeError(
+                    'Missing sum signals in data. Process data first.'
+                )
+            sumt.append(dt['bt_sum'])
+            sum1.append(dt['b1_sum'])
+            sum2.append(dt['b2_sum'])
+        sumt = np.array(sumt)
+        sum1 = np.array(sum1)
+        sum2 = np.array(sum2)
+        return sumt, sum1, sum2
 
     def calc_sofb_orbit(self, isref=False):
         """Calculate the SOFB orbit.
