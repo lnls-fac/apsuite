@@ -41,7 +41,9 @@ class ParallelBBAParams(_ParamsBaseClass):
         self.timeout_wait_orbit = 3  # [s]
 
         self.corr_max_nr_iters = 8
-        self.ios_conv_threshold = 0.1
+        self.ios_rms_threshold = 1.0  # [um]
+        self.ios_ptp_threshold = 2.0  # [um]
+        self.use_ptp = False
 
         self.sofb_nrpoints = 20
         self.sofb_maxcorriter = 5
@@ -57,7 +59,9 @@ class ParallelBBAParams(_ParamsBaseClass):
         stg += f'wait_quadrupole    = {self.wait_quadrupole:.3f}\n'
         stg += f'timeout_wait_orbit = {self.timeout_wait_orbit:.3f}\n'
         stg += f'corr_nr_iters      = {self.corr_max_nr_iters:.3f}\n'
-        stg += f'ios_conv_threshold = {self.ios_conv_threshold:.2e}\n'
+        stg += f'ios_rms_threshold  = {self.ios_rms_threshold:.2e}\n'
+        stg += f'ios_ptp_threshold  = {self.ios_ptp_threshold:.2e}\n'
+        stg += f'use_ptp            = {str(self.use_ptp):s}\n'
         stg += f'sofb_nrpoints      = {self.sofb_nrpoints:.3f}\n'
         stg += f'sofb_maxcorriter   = {self.sofb_maxcorriter:.3f}\n'
         stg += f'sofb_maxorberr     = {self.sofb_maxorberr:.3f}\n'
@@ -736,17 +740,14 @@ class DoParallelBBA(_BaseClass):
             self._log_print('    Correcting IOS:')
             nr_iters = self.params.corr_max_nr_iters
 
-        ios_iter, dkicks_iter = [], []
+        ios_iter, dkicks_iter, residue_iter = [], [], []
         sts = self.STATUS.Fail
 
         converged = False
         increased = False
-
-        def _reduction(a, a0):
-            rms_a0 = _np.std(a0)
-            if rms_a0 == 0:
-                return _np.inf
-            return _np.std(a) / rms_a0
+        comp_func, threshold = _np.std, self.params.ios_rms_threshold
+        if self.params.use_ptp:
+            comp_func, threshold = _np.ptp, self.params.ios_ptp_threshold
 
         for i in range(nr_iters):
             self._log_print(
@@ -777,21 +778,20 @@ class DoParallelBBA(_BaseClass):
 
             ios_iter.append(ios)  # save ios (all bpms)
             ios = ios[enblbpm]  # use only enabled bpms for correction
-            self._log_print(' IOS (rms):', _np.std(ios), '--> ', end='')
+            residue = comp_func(ios)
+            residue_iter.append(residue)
+            msg = f' IOS ({"ptp" if self.params.use_ptp else "rms"}): '
+            msg += f'{residue:.3f} [um] --> '
+            self._log_print(msg, end='')
 
-            if i > 0:
-                dios_p = _reduction(ios, ios_iter[-2][enblbpm])
-                if dios_p >= 1.0:  # deactivated
-                    prev_dkicks = dkicks_iter[-1]
-                    self.set_delta_kicks(-prev_dkicks)
-                    self._log_print('Done.', end=' ')
-                    increased = True
-                    break
-                dios_i = _reduction(ios, ios_iter[0][enblbpm])
-                if dios_i < self.params.ios_conv_threshold:
-                    self._log_print('Done.', end=' ')
-                    converged = True
-                    break
+            if residue < threshold:
+                self._log_print('Done.', end=' ')
+                converged = True
+                break
+            elif i > 0 and residue > residue_iter[-2]:
+                self.set_delta_kicks(-dkicks_iter[-1])
+                increased = True
+                break
 
             dkicks = list(-1 * _np.dot(inv_jac, ios))
             dkicks_iter.append(dkicks)
@@ -816,18 +816,20 @@ class DoParallelBBA(_BaseClass):
                 )
             else:
                 ios_iter.append(ios)
-                dios_i = _reduction(ios[enblbpm], ios_iter[0][enblbpm])
-                dios_p = _reduction(ios[enblbpm], ios_iter[-2][enblbpm])
+                residue = comp_func(ios[enblbpm])
+                residue_iter.append(residue)
                 msg = f'Max iterations reached ({i + 1:d})'
-                if dios_i < self.params.ios_conv_threshold:
+                if residue < threshold:
                     msg += ', but IOS converged'
-                elif dios_p >= 1.0:
+                elif residue > residue_iter[-2]:
                     msg += ', and IOS increased'
+                    self.set_delta_kicks(-dkicks_iter[-1])
                 self._log_print(msg + '.')
 
         group_data['kicks_end'] = self.get_kicks()
         group_data['ios_iter'] = ios_iter
         group_data['dkicks_iter'] = dkicks_iter
+        group_data['residue_iter'] = residue_iter
         group_data['orbit_end'] = self.get_orbit()
         group_data['delta_kl'] = self.data['delta_kl'][group_id]
         self.data['measure'].append(group_data)
