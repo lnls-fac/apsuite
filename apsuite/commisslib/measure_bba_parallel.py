@@ -147,8 +147,9 @@ class DoParallelBBA(_BaseClass):
 
     def __init__(self, isonline=True):
         """."""
+        self.params = ParallelBBAParams()
         super().__init__(
-            params=ParallelBBAParams(), target=self._do_pbba, isonline=isonline
+            params=self.params, target=self._do_pbba, isonline=isonline
         )
         self.data['bpmnames'] = list(ParallelBBAParams.BPMNAMES)
         self.data['quadnames'] = list(ParallelBBAParams.QUADNAMES)
