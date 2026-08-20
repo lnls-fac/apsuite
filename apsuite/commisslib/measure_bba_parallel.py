@@ -738,9 +738,16 @@ class DoParallelBBA(_BaseClass):
 
         ios_iter, dkicks_iter = [], []
         sts = self.STATUS.Fail
-        # converged = False
-        # increased = False
-        # _func = lambda a, b: (_np.std(a) - _np.std(b)) / _np.std(a)
+
+        converged = False
+        increased = False
+
+        def _reduction(a, a0):
+            rms_a0 = _np.std(a0)
+            if rms_a0 == 0:
+                return _np.inf
+            return _np.std(a) / rms_a0
+
         for i in range(nr_iters):
             self._log_print(
                 '        {:02d}/{:02d} --> '.format(i + 1, nr_iters), end=''
@@ -767,37 +774,39 @@ class DoParallelBBA(_BaseClass):
                     extra_info_before_message='Fail while measuring IOS. ',
                 )
                 break
+
             ios_iter.append(ios)  # save ios (all bpms)
             ios = ios[enblbpm]  # use only enabled bpms for correction
             self._log_print(' IOS (rms):', _np.std(ios), '--> ', end='')
 
-            # check convergence
-            # if i > 0:
-            #     dios_p = _func(ios_iter[-2][enblbpm], ios)
-            #     if dios_p < 0.0:
-            #         prev_dkicks = dkicks_iter[-1]
-            #         self.set_delta_kicks(prev_dkicks)
-            #         self._log_print("Done.", end=" ")
-            #         converged = False
-            #         increased = True
-            #         break
-            #     dios_i = _func(ios_iter[0][enblbpm], ios)
-            #     if dios_i < self.params.ios_conv_threshold:
-            #         self._log_print("Done.", end=" ")
-            #         converged = True
-            #         break
+            if i > 0:
+                dios_p = _reduction(ios, ios_iter[-2][enblbpm])
+                if dios_p >= 1.0:  # deactivated
+                    prev_dkicks = dkicks_iter[-1]
+                    self.set_delta_kicks(-prev_dkicks)
+                    self._log_print('Done.', end=' ')
+                    increased = True
+                    break
+                dios_i = _reduction(ios, ios_iter[0][enblbpm])
+                if dios_i < self.params.ios_conv_threshold:
+                    self._log_print('Done.', end=' ')
+                    converged = True
+                    break
 
             dkicks = list(-1 * _np.dot(inv_jac, ios))
             dkicks_iter.append(dkicks)
             self.set_delta_kicks(dkicks)
             self._log_print('Done.')
 
-        # if sts and converged:
-        #     print(f"IOS converged ({i:d} iterations).")
-        # elif sts and not converged and increased:
-        #     print(f"IOS increased ({i:d} iterations).")
-        # elif sts and not converged and not increased:
-        if True:
+        if sts and converged:
+            self._log_print(f'IOS converged ({i:d} iterations).')
+
+        elif sts and increased:
+            msg = f'IOS increased ({i:d} iterations). '
+            msg += 'Kicks were restored to the last valid values.'
+            self._log_print(msg)
+
+        elif sts and not converged and not increased:
             ios, sts = self.meas_ios(group_id, group_data['strengths_init'])
             if not sts:
                 self._restore_init_conditions(
@@ -807,19 +816,14 @@ class DoParallelBBA(_BaseClass):
                 )
             else:
                 ios_iter.append(ios)
-                # ios = ios[enblbpm]
-                # dios_i = _func(ios_iter[0][enblbpm], ios)
-                # dios_p = _func(ios_iter[-2][enblbpm], ios)
-                # if dios_i < self.params.ios_conv_threshold:
-                #     self._log_print(
-                #         f"Max iterations reached ({i + 1:d}), but IOS converged."
-                #     )
-                # elif dios_p < 0.0:
-                #     self._log_print(
-                #         f"Max iterations reached ({i + 1:d}), and IOS increased."
-                #     )
-                # else:
-                #     self._log_print(f"Max iterations reached ({i + 1:d}).")
+                dios_i = _reduction(ios[enblbpm], ios_iter[0][enblbpm])
+                dios_p = _reduction(ios[enblbpm], ios_iter[-2][enblbpm])
+                msg = f'Max iterations reached ({i + 1:d})'
+                if dios_i < self.params.ios_conv_threshold:
+                    msg += ', but IOS converged'
+                elif dios_p >= 1.0:
+                    msg += ', and IOS increased'
+                self._log_print(msg + '.')
 
         group_data['kicks_end'] = self.get_kicks()
         group_data['ios_iter'] = ios_iter
