@@ -358,9 +358,19 @@ class DoParallelBBA(_BaseClass):
 
     def set_quad_strengths(self, group_id, strengths, ignore_timeout=False):
         """."""
-        bpms = self.data['groups2dopbba'][group_id]
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
+
+        if group_id is None or group_id == 'All':
+            bpms = bpm_names
+        else:
+            bpms = self.data['groups2dopbba'][group_id]
+
+        if len(bpms) != len(strengths):
+            msg = 'Size mismatch between the group and strengths: '
+            msg += f'{len(bpms)} != {len(strengths)}!'
+            raise ValueError(msg)
+
         for strength, bpmname in zip(strengths, bpms):  # noqa: B905
             quadname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[quadname]
@@ -384,22 +394,31 @@ class DoParallelBBA(_BaseClass):
 
     def get_quad_strengths(self, group_id):
         """."""
-        bpms = self.data['groups2dopbba'][group_id]
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
+
+        if group_id is None or group_id == 'All':
+            bpms = bpm_names
+        else:
+            bpms = self.data['groups2dopbba'][group_id]
 
         strengths = []
         for bpmname in bpms:
             quadname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[quadname]
             strengths.append(quad.strength)
-        return _np.array(strengths)
+
+        return _np.array(strengths, dtype=float)
 
     def get_quad_strength_limits(self, group_id, margin=0.0005):
         """."""
-        bpms = self.data['groups2dopbba'][group_id]
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
+
+        if group_id == 'All' or group_id is None:
+            bpms = bpm_names
+        else:
+            bpms = self.data['groups2dopbba'][group_id]
 
         limits = []
         for bpmname in bpms:
@@ -412,16 +431,25 @@ class DoParallelBBA(_BaseClass):
             lolim = min(upp, low) + margin
             hilim = max(upp, low) - margin
             limits.append([lolim, hilim])
+
         return _np.array(limits, dtype=float)
 
     def check_isvalid_dkl(self, group_id, init_strengths=None, margin=0.0005):
         """."""
-        bpms = self.data['groups2dopbba'][group_id]
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
 
-        quadlims = self.get_quad_strength_limits(group_id, margin=margin)
-        delta_kl = self.data['delta_kl'][group_id]
+        if group_id is None or group_id == 'All':
+            bpms = bpm_names
+        else:
+            bpms = self.data['groups2dopbba'][group_id]
+
+        if len(bpms) != len(init_strengths):
+            msg = 'Size mismatch between the group and init_strengths: '
+            msg += f'{len(bpms)} != {len(init_strengths)}!'
+            raise ValueError(msg)
+
+        lims = self.get_quad_strength_limits(group_id, margin=margin)
 
         if init_strengths is None:
             strengths = self.get_quad_strengths(group_id)
@@ -429,17 +457,25 @@ class DoParallelBBA(_BaseClass):
             strengths = init_strengths
 
         ok = True
-        for idx, bpmname in enumerate(bpms):
-            quadname = quad_names[bpm_names.index(bpmname)]
+        for idx, bpm in enumerate(bpms):
+            quadname = quad_names[bpm_names.index(bpm)]
             stren = strengths[idx]
-            dkl = delta_kl[idx]
-            lolim, hilim = quadlims[idx]
+            _gid = [
+                True if bpm in gp else False
+                for gp in self.data['groups2dopbba']
+            ].index(True)
+            _gp = self.data['groups2dopbba'][_gid]
+            dkl = abs(self.data['delta_kl'][_gid][_gp.index(bpm)])
+            lolim, hilim = lims[idx]
             low = min(stren + dkl / 2, stren - dkl / 2)
             upp = max(stren + dkl / 2, stren - dkl / 2)
             if upp > hilim or low < lolim:
                 max_delta_kl = min(hilim - stren, stren - lolim)
-                msg = f'WARN: {quadname} KL = {stren:.2g}, dKL = {abs(dkl):.2g}. '
-                msg += f'Limits: ({lolim:.2g}, {hilim:.2g}). Max. dKL = {max_delta_kl * 2:.2g}.'
+                msg = f'WARN: {quadname}, '
+                msg += f'KL = {stren:.2g}, '
+                msg += f'dKL = {dkl:.2g}, '
+                msg += f'limits = ({lolim:.2g}, {hilim:.2g}), '
+                msg += f'max. dKL = {max_delta_kl * 2:.2g}.'
                 self._log(msg)
                 ok = False
         return ok
