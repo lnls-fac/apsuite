@@ -21,6 +21,7 @@ class ImpedanceIVUMeasParams(_BaseParams):
     def __init__(self):
         """."""
         super().__init__()
+        self.acq_strategy = 'all'  # 'all' or 'odd/even'
         self.num_acquisitions = 10
         self.save_raw_data = False
         self.num_buckets_to_process = 2
@@ -39,10 +40,12 @@ class ImpedanceIVUMeasParams(_BaseParams):
         stg = 'AcqBPMsSignalsParams:\n'
         stg += ''.join([f'    {l}\n' for l in super().__str__().splitlines()])
         stg += '\nImpedanceIVUMeasParams:\n'
+        stg += f'    acq_strategy = {self.acq_strategy}'
         stg += f'    num_acquisitions = {self.num_acquisitions}\n'
         stg += f'    save_raw_data = {self.save_raw_data}\n'
         stg += f'    num_buckets_to_process = {self.num_buckets_to_process}\n'
         stg += f'    nrturns = {self.nrturns}\n'
+        stg += '   (\'all\', \'odd/even\')\n'
         stg += f'    bucket_hi_charge = {self.bucket_hi_charge}\n'
         stg += f'    bucket_lo_charge = {self.bucket_lo_charge}\n'
         return stg
@@ -62,20 +65,15 @@ class ImpedanceIVUMeasParams(_BaseParams):
 class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
     """."""
 
-    def __init__(self, isonline=True, bpmtype='all'):
+    def __init__(self, isonline=True):
         """."""
-        bpmnames = BPMSearch.get_names(filters={'sec': 'SI', 'dev': 'BPM'})
-        if bpmtype.startswith('odd'):
-            bpmnames = bpmnames[::2]
-        elif bpmtype.startswith('even'):
-            bpmnames = bpmnames[1::2]
         _BaseThreaded.__init__(self, isonline=isonline, target=self._measure)
-        _BaseAcq.__init__(self, isonline=self.isonline, bpmnames=bpmnames)
+        _BaseAcq.__init__(self, isonline=self.isonline)
         self.params = ImpedanceIVUMeasParams()
 
-    def create_devices(self, bpmnames=None):
+    def create_devices(self):
         """."""
-        _BaseAcq.create_devices(self, bpmnames=bpmnames)
+        _BaseAcq.create_devices(self)
         self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
         self.devices['ivu18_08'] = IVU(IVU.DEVICES.IVU18_08SB)
         self.devices['ivu18_14'] = IVU(IVU.DEVICES.IVU18_14SB)
@@ -83,6 +81,9 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
     def get_data(self):
         """."""
         data = super().get_data()
+        data['bpm_names'] = [b.devname for b in self.devices['fambpms'].bpms]
+        bns = self.devices['fambpms'].bpm_names
+        data['bpm_indcs'] = np.array([bns.index(b) for b in data['bpm_names']])
         data['sofb_refx'] = self.devices['sofb'].refx
         data['sofb_refy'] = self.devices['sofb'].refy
         data['sofb_orbx'] = self.devices['sofb'].orbx
@@ -105,19 +106,38 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
 
     def _measure(self):
         data = []
+        fambpms = self.devices['fambpms']
+        bpms = fambpms.bpms
+        grp_slcs = [slice()]
+        if self.params.acq_strategy.startswith('odd'):
+            print(
+                'Acquisition strategy \'odd/even\' identified. '
+                'Breaking BPMs in two groups.'
+            )
+            grp_slcs = [slice(0, None, 2), slice(1, None, 2)]
         for i in range(self.params.num_acquisitions):
             print(
                 f'Acquisition {i + 1:02d}/{self.params.num_acquisitions:02d}'
             )
-            if self._stopevt.is_set():
-                break
-            self.acquire_data()
-            data.append(self.data)
+            dt = []
+            for grp, slc in enumerate(grp_slcs):
+                if len(grp_slcs) > 1:
+                    print(f'    acquiring BPMs group {grp}...')
+                fambpms.bpms = bpms[slc]
+                if self._stopevt.is_set():
+                    break
+                self.acquire_data()
+                self.data['acq_group'] = grp
+                dt.append(self.data)
+            else:
+                data.extend(dt)
 
-        print('Finished!')
+        fambpms.bpms = bpms
+        print('Acquisitions ended. Processing data...')
         self.data = data
         self.process_data()
         self._filter_data_to_save()
+        print('Finished!')
 
     def process_data(self, idcs_to_discard=None, return_all=False):
         """."""
