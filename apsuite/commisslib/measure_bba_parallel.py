@@ -36,18 +36,18 @@ class ParallelBBAParams(_ParamsBaseClass):
 
         self.quad_deltakl = 0.01  # [1/m]
 
-        self.wait_correctors = 0.3  # [s]
-        self.wait_quadrupole = 0.3  # [s]
-        self.timeout_wait_orbit = 3  # [s]
+        self.wait_correctors = 1.0  # [s]
+        self.wait_quadrupole = 2.0  # [s]
 
         self.corr_max_nr_iters = 8
         self.ios_rms_threshold = 1.0  # [um]
         self.ios_ptp_threshold = 2.0  # [um]
         self.use_ptp = False
 
-        self.sofb_nrpoints = 20
+        self.sofb_nrpoints = 80
         self.sofb_maxcorriter = 5
         self.sofb_maxorberr = 5  # [um]
+        self.timeout_wait_orbit = 12  # [s]
 
         self.cycling_nr_steps = 2
 
@@ -235,7 +235,7 @@ class DoParallelBBA(_BaseClass):
                 )
             if any([abs(v) > _max for v in value[i]]):
                 raise ValueError(f"values for delta kl can't exceed {_max}")
-        self.data['delta_kl'] = _dcopy(value)
+        self.data['delta_kl'] = _np.array(_dcopy(value))
 
     # #### model utils #####
     @property
@@ -266,7 +266,7 @@ class DoParallelBBA(_BaseClass):
 
     @model.setter
     def model(self, value):
-        if not value.cavity_on and value.radiation_on != 1:
+        if not value.cavity_on or value.radiation_on != 1:
             raise ValueError(
                 'cavity_on must be True and radiation_on must be 1'
             )
@@ -332,6 +332,7 @@ class DoParallelBBA(_BaseClass):
 
         sofb.deltakickch, sofb.deltakickcv, sofb.deltakickrf = dch, dcv, drf
         sofb.cmd_applycorr_all()
+        _time.sleep(self.params.wait_correctors)
 
     @property
     def enbllistbpm(self):
@@ -434,29 +435,45 @@ class DoParallelBBA(_BaseClass):
 
         return _np.array(limits, dtype=float)
 
-    def check_isvalid_dkl(self, group_id, init_strengths=None, margin=0.0005):
+    def check_isvalid_dkl(
+            self,
+            group_id,
+            init_strengths=None,
+            strength_limits=None,
+            margin=0.0005,
+            return_valid=False,
+        ):
         """."""
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
 
-        if group_id is None or group_id == 'All':
-            bpms = bpm_names
-        else:
-            bpms = self.data['groups2dopbba'][group_id]
+        bpms = (
+            bpm_names if group_id is None or group_id == 'All'
+            else self.data['groups2dopbba'][group_id]
+        )
 
-        if len(bpms) != len(init_strengths):
+        strengths = (
+            self.get_quad_strengths(group_id)
+            if init_strengths is None else init_strengths
+        )
+
+        lims = (
+            self.get_quad_strength_limits(group_id, margin=margin)
+            if strength_limits is None else strength_limits
+        )
+
+        if len(bpms) != len(strengths):
             msg = 'Size mismatch between the group and init_strengths: '
-            msg += f'{len(bpms)} != {len(init_strengths)}!'
+            msg += f'{len(bpms)} != {len(strengths)}!'
             raise ValueError(msg)
 
-        lims = self.get_quad_strength_limits(group_id, margin=margin)
-
-        if init_strengths is None:
-            strengths = self.get_quad_strengths(group_id)
-        else:
-            strengths = init_strengths
+        if len(strengths) != len(lims):
+            msg = 'Size mismatch between init_strengths and strength_limits: '
+            msg += f'{len(strengths)} != {len(lims)}!'
+            raise ValueError(msg)
 
         ok = True
+        valid = strengths.copy()
         for idx, bpm in enumerate(bpms):
             quadname = quad_names[bpm_names.index(bpm)]
             stren = strengths[idx]
@@ -467,17 +484,22 @@ class DoParallelBBA(_BaseClass):
             _gp = self.data['groups2dopbba'][_gid]
             dkl = abs(self.data['delta_kl'][_gid][_gp.index(bpm)])
             lolim, hilim = lims[idx]
-            low = min(stren + dkl / 2, stren - dkl / 2)
-            upp = max(stren + dkl / 2, stren - dkl / 2)
-            if upp > hilim or low < lolim:
-                max_delta_kl = min(hilim - stren, stren - lolim)
+            clow, chigh = lolim + dkl / 2, hilim - dkl / 2
+            if clow > chigh:
+                self._log(f'ERR: {quadname}, dKL = {dkl:.3g} too high!')
+                valid[idx] = None
+            else:
+                valid[idx] = _np.clip(stren, clow, chigh)
+            if valid[idx] != stren:
                 msg = f'WARN: {quadname}, '
-                msg += f'KL = {stren:.2g}, '
-                msg += f'dKL = {dkl:.2g}, '
-                msg += f'limits = ({lolim:.2g}, {hilim:.2g}), '
-                msg += f'max. dKL = {max_delta_kl * 2:.2g}.'
+                msg += f'KL = {stren:.3g}, '
+                msg += f'dKL = {dkl:.3g}, '
+                msg += f'limits = ({lolim:.3g}, {hilim:.3g}). '
+                msg += f'Change KL to: {valid[idx]}'
                 self._log(msg)
                 ok = False
+        if return_valid:
+            return ok, valid
         return ok
 
     def meas_ios(self, group_id, init_strengths=None):
@@ -707,7 +729,10 @@ class DoParallelBBA(_BaseClass):
         self._log(msg + tini.strftime('%Y-%m-%d %Hh%Mm%Ss'))
 
         groups = self.data['groups2dopbba']
-        if not all([self.check_isvalid_dkl(g) for g, _ in enumerate(groups)]):
+        isvalid = all([
+            self.check_isvalid_dkl(gid) for gid, _ in enumerate(groups)
+        ])
+        if not isvalid:
             self._log('Adjust quad strength or change dKL first.')
             return
 
@@ -781,11 +806,13 @@ class DoParallelBBA(_BaseClass):
                 self._restore_conditions(
                     group_id, strengths_init, 'Measurement stopped.'
                 )
+                sts = DoParallelBBA.STATUS.Fail
                 break
             if not self.havebeam:
                 self._restore_conditions(
                     group_id, strengths_init, 'Error: dont have beam.'
                 )
+                sts = DoParallelBBA.STATUS.Fail
                 break
             ios, sts = self.meas_ios(group_id, strengths_init)
             if not sts:
