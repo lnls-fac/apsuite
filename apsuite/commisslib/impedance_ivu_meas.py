@@ -108,30 +108,36 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         data = []
         fambpms = self.devices['fambpms']
         bpms = fambpms.bpms
-        grp_slcs = [slice()]
+        grp_slcs = [slice(None, None)]
         if self.params.acq_strategy.startswith('odd'):
             print(
                 'Acquisition strategy \'odd/even\' identified. '
                 'Breaking BPMs in two groups.'
             )
             grp_slcs = [slice(0, None, 2), slice(1, None, 2)]
-        for i in range(self.params.num_acquisitions):
-            print(
-                f'Acquisition {i + 1:02d}/{self.params.num_acquisitions:02d}'
-            )
-            dt = []
-            for grp, slc in enumerate(grp_slcs):
-                if len(grp_slcs) > 1:
-                    print(f'    acquiring BPMs group {grp}...')
-                fambpms.bpms = bpms[slc]
+        try:
+            for i in range(self.params.num_acquisitions):
+                print(
+                    f'Acquisition {i + 1:02d}/{self.params.num_acquisitions:02d}'
+                )
+                dt = []
                 if self._stopevt.is_set():
                     break
-                self.acquire_data()
-                self.data['acq_group'] = grp
-                dt.append(self.data)
-            else:
-                data.extend(dt)
-
+                for grp, slc in enumerate(grp_slcs):
+                    if len(grp_slcs) > 1:
+                        print(f'    acquiring BPMs group {grp}...')
+                    fambpms.bpms = bpms[slc]
+                    if self._stopevt.is_set():
+                        break
+                    self.acquire_data()
+                    self.data['acq_group'] = grp
+                    dt.append(self.data)
+                else:
+                    data.extend(dt)
+        except Exception:
+            fambpms.bpms = bpms
+            print('Problem with acquisition. Interrupting!')
+            return
         fambpms.bpms = bpms
         print('Acquisitions ended. Processing data...')
         self.data = data
@@ -268,7 +274,11 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         nsamp_pturn = ImpedanceIVUMeasParams.ADC_NSAMPLES_PER_TURN
         hnum = ImpedanceIVUMeasParams.HARM_NUM
 
-        ant_raw = np.array([data['ampl' + ant] for ant in 'abcd'])
+
+        # NOTE: I have to invert array B with C here because of the way
+        # the ADCSWAP rate works. See comment in function:
+        #     siriuspy.sofb.bpms.calc_sp_multturn_pos.
+        ant_raw = np.array([data['ampl' + ant] for ant in 'acbd'])
         ant_raw = ant_raw.swapaxes(
             1, 2
         )  # [4, 382 * N, 160] --> [4, 160, 382 * N]
