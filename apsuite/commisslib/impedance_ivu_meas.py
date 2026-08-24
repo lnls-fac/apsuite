@@ -71,9 +71,9 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         _BaseAcq.__init__(self, isonline=self.isonline)
         self.params = ImpedanceIVUMeasParams()
 
-    def create_devices(self):
+    def create_devices(self, bpmnames=None):
         """."""
-        _BaseAcq.create_devices(self)
+        _BaseAcq.create_devices(self, bpmnames=bpmnames)
         self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
         self.devices['ivu18_08'] = IVU(IVU.DEVICES.IVU18_08SB)
         self.devices['ivu18_14'] = IVU(IVU.DEVICES.IVU18_14SB)
