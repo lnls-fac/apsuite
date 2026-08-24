@@ -40,7 +40,7 @@ class ImpedanceIVUMeasParams(_BaseParams):
         stg = 'AcqBPMsSignalsParams:\n'
         stg += ''.join([f'    {l}\n' for l in super().__str__().splitlines()])
         stg += '\nImpedanceIVUMeasParams:\n'
-        stg += f'    acq_strategy = {self.acq_strategy}'
+        stg += f'    acq_strategy = {self.acq_strategy}\n'
         stg += f'    num_acquisitions = {self.num_acquisitions}\n'
         stg += f'    save_raw_data = {self.save_raw_data}\n'
         stg += f'    num_buckets_to_process = {self.num_buckets_to_process}\n'
