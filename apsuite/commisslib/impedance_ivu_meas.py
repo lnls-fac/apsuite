@@ -318,8 +318,7 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
             dic[pref(i) + 'posx'] = b_posx
             dic[pref(i) + 'posy'] = b_posy
             dic[pref(i) + 'sum'] = b_sum
-            if return_all:
-                dic[pref(i) + 'sigs'] = b_sigs
+            dic[pref(i) + 'sigs'] = b_sigs
 
         bt_sum = sum([dic[pref(i) + 'sum'] for i in range(nbuc2proc)])
         dic['bt_sum'] = bt_sum
