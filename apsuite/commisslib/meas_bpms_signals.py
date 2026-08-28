@@ -315,37 +315,44 @@ class AcqBPMsSignals(_BaseClass):
         return _sp_fft.irfft(dft, axis=0)
 
     @staticmethod
-    def filter_switching_cycles(orb, freq_sampling, freq_switching):
+    def filter_switching_cycles(orb, freq_sampling, freq_switching, axis=0):
         """Filter out switching perturbation on orbit data.
 
         Args:
-            orb (numpy.ndarray): Input signal of shape (Nsamples, Nbpms).
+            orb (numpy.ndarray): Input signal.
             freq_sampling (float): Sampling frequency of the input signal.
             freq_switching (float): Switching frequency to be filtered out.
+            axis (int): axis where to perform filtering. Defaults to 0.
 
         Returns:
             numpy.ndarray: Signal with the switching frequency removed, same
             shape as the input.
 
         """
+        # Move to last axis just to make indexing simpler:
+        orbm = _np.moveaxis(orb, axis, -1)
+
         # Calculate the number of samples per switching cycle
         sw_sample_size = round(freq_sampling / freq_switching)
-        osiz = orb.shape[0]
-        nr_sws = osiz // sw_sample_size
+        osiz = orbm.shape[-1]
+        nr_sws, remain = divmod(osiz, sw_sample_size)
         siz = nr_sws * sw_sample_size
 
-        # Divide data into 3D array with switching cycles
-        orb_reshape = orb[:siz].T.reshape(orb.shape[1], -1, sw_sample_size)
+        # Divide data into another dimension with switching cycles
+        orbm = orbm[..., :siz].reshape(
+            *orbm.shape[:-1], nr_sws, sw_sample_size
+        )
 
         # Average to get the switching signature
-        sw_sig = orb_reshape.mean(axis=1)
+        sw_sig = orbm.mean(axis=-2)
 
-        # Replicate the switching signature to match the size of original data
-        sw_pert = _np.tile(sw_sig, (1, nr_sws))
-        if osiz > siz:
-            sw_pert = _np.hstack([sw_pert, sw_sig[:, : osiz - siz]])
-        # Subtract the replicated switching signature from the original data
-        return orb - sw_pert.T
+        tile_shape = [1] * sw_sig.ndim
+        tile_shape[-1] = nr_sws
+        sw_fil = _np.tile(sw_sig, tile_shape)
+        if remain > 0:
+            sw_fil = _np.concatenate([sw_fil, sw_sig[..., :remain]], axis=-1)
+        sw_fil = _np.moveaxis(sw_fil, -1, axis)
+        return orb - sw_fil + orb.mean(axis=axis)[..., None]
 
     @staticmethod
     def filter_switching_fofb_like(orb):
@@ -471,8 +478,8 @@ class AcqBPMsSignals(_BaseClass):
         return _sp_sig.hilbert(data, axis=axis)
 
     def _bpm_tag(self, idx):
-        names = self.devices["fambpms"].bpm_names
-        return f"{names[idx]:s} (idx={idx:d})"
+        name = self.devices["fambpms"].bpms[idx].devname
+        return f"{name:s} (idx={idx:d})"
 
     def _get_event(self, evtname):
         if evtname not in _HLTimeSearch.get_configurable_hl_events():
