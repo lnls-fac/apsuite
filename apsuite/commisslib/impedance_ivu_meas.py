@@ -283,14 +283,9 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         nsamp_pturn = ImpedanceIVUMeasParams.ADC_NSAMPLES_PER_TURN
         hnum = ImpedanceIVUMeasParams.HARM_NUM
 
-
-        # NOTE: I have to invert array B with C here because of the way
-        # the ADCSWAP rate works. See comment in function:
-        #     siriuspy.sofb.bpms.calc_sp_multturn_pos.
-        ant_raw = np.array([data['ampl' + ant] for ant in 'acbd'])
-        ant_raw = ant_raw.swapaxes(
-            1, 2
-        )  # [4, 382 * N, 160] --> [4, 160, 382 * N]
+        ant_raw = np.array([data['ampl' + ant] for ant in 'abcd'])
+        # [4, 382 * N, 160] --> [4, 160, 382 * N]
+        ant_raw = ant_raw.swapaxes(1, 2)
         curr = data['stored_current']
 
         ant_abs = np.abs(ant_raw)
@@ -299,7 +294,7 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         nsamp2keep = ant_raw.shape[-1]
         nturn2keep = nsamp2keep // nsamp_pturn
         idx = np.arange(nsamp2keep)
-        old_idx = (idx - b1_offset + ant_amax[..., None]) % nsamp2keep
+        old_idx = (idx - of1 + ant_amax[..., None]) % nsamp2keep
 
         ant_raw2 = np.take_along_axis(ant_raw, old_idx, axis=-1)
         ant_raw2 = ant_raw2.reshape(ant_raw2.shape[:2] + (nturn2keep, -1))
@@ -312,11 +307,10 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
 
         of2 = ((blow - bhigh) // hnum) * nsamp_pturn + of1
         slcs = [slice(of1 + winn, of1 + winp), slice(of2 + winn, of2 + winp)]
-        pref = lambda x: f'b{x + 1}_'
         for i in range(nbuc2proc):
             b_sigs = ant_raw2[..., slcs[i]].std(axis=-1)
             b_posx, b_posy = ImpedanceIVUMeas.calc_positions_from_amplitudes(
-                b_sigs
+                b_sigs, is_adcswap_rate=True
             )
             b_sum = b_sigs.sum(axis=0)
 
