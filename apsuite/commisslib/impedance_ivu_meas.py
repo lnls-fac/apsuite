@@ -46,6 +46,9 @@ class ImpedanceIVUMeasParams(_BaseParams):
         stg += f'    save_raw_data = {self.save_raw_data}\n'
         stg += f'    num_buckets_to_process = {self.num_buckets_to_process}\n'
         stg += f'    nrturns = {self.nrturns}\n'
+        stg += '  The properties below are used to find out the position\n'
+        stg += '  of the second bunch, relative to the first, during the'
+        stg += '  data analysis:\n'
         stg += f'    bucket_hi_charge = {self.bucket_hi_charge}\n'
         stg += f'    bucket_lo_charge = {self.bucket_lo_charge}\n'
         return stg
