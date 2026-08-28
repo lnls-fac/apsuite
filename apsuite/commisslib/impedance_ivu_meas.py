@@ -167,14 +167,14 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
     def calc_delta_orbit_2_bunches(self):
         """Calculate orbit variation between the two stored bunches.
 
-        Raises:
-            RuntimeError: If there is no data acquired.
-            RuntimeError: If data is not processed yet.
-
         Returns:
             dorb: orbit deviation between the two stored bunches.
             orb1: orbit of the first stored bunch.
             orb2: orbit of the second stored bunch.
+
+        Raises:
+            RuntimeError: If there is no data acquired.
+            RuntimeError: If data is not processed yet.
         """
         if not self.data:
             raise RuntimeError('Get data First.')
@@ -194,13 +194,13 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
     def calc_current_2_bunches(self):
         """Calculate current of the two stored bunches.
 
-        Raises:
-            RuntimeError: If there is no data acquired.
-            RuntimeError: If data is not processed yet.
-
         Returns:
             curr1: current of the first stored bunch.
             curr2: current of the second stored bunch.
+
+        Raises:
+            RuntimeError: If there is no data acquired.
+            RuntimeError: If data is not processed yet.
 
         """
         if not self.data:
@@ -220,14 +220,14 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
     def calc_sum_signal_2_bunches(self):
         """Calculate the sum signal of the two stored bunches.
 
-        Raises:
-            RuntimeError: If there is no data acquired.
-            RuntimeError: If data is not processed yet.
-
         Returns:
             sumt: sum signal of the two bunches.
             sum1: sum signal of the first stored bunch.
             sum2: sum signal of the second stored bunch.
+
+        Raises:
+            RuntimeError: If there is no data acquired.
+            RuntimeError: If data is not processed yet.
 
         """
         if not self.data:
@@ -249,12 +249,12 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
     def calc_sofb_orbit(self, isref=False):
         """Calculate the SOFB orbit.
 
+        Returns:
+            orb: The SOFB orbit.
+
         Raises:
             RuntimeError: If there is no data acquired.
             RuntimeError: If data is not processed yet.
-
-        Returns:
-            orb: The SOFB orbit.
         """
         if not self.data:
             raise RuntimeError('Get data First.')
@@ -317,14 +317,14 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
             )
             b_sum = b_sigs.sum(axis=0)
 
-            dic[pref(i) + 'posx'] = b_posx
-            dic[pref(i) + 'posy'] = b_posy
-            dic[pref(i) + 'sum'] = b_sum
-            dic[pref(i) + 'sigs'] = b_sigs
+            dic[f'b{i + 1}_posx'] = b_posx
+            dic[f'b{i + 1}_posy'] = b_posy
+            dic[f'b{i + 1}_sum'] = b_sum
+            dic[f'b{i + 1}_sigs'] = b_sigs
 
-        bt_sum = sum([dic[pref(i) + 'sum'] for i in range(nbuc2proc)])
+        bt_sum = sum([dic[f'b{i + 1}_sum'] for i in range(nbuc2proc)])
         dic['bt_sum'] = bt_sum
         for i in range(nbuc2proc):
-            dic[pref(i) + 'curr'] = dic[pref(i) + 'sum'] * curr / bt_sum
+            dic[f'b{i + 1}_curr'] = dic[f'b{i + 1}_sum'] * curr / bt_sum
 
         return dic
