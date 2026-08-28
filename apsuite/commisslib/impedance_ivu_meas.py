@@ -65,6 +65,13 @@ class ImpedanceIVUMeasParams(_BaseParams):
 class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
     """."""
 
+    # position, in ADC samples, to put the max. amplitude of the first bunch:
+    BUN1_OFFSET = 50
+    # Window, in ADC samples, where RMS to estimate bunch ampl. is calculated.
+    # These values were determined during machine studies, by looking at the
+    # typical antenna waveform induced by a single bunch.
+    WINDOW_RMS = (-10, 20)
+
     def __init__(self, isonline=True):
         """."""
         _BaseThreaded.__init__(self, isonline=isonline, target=self._measure)
@@ -265,9 +272,8 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
                 dt.pop('ampl' + ant)
 
     def _proc_single_data(self, data, return_all=False):
-        b1_offset = 50
-        windowp = 20
-        windown = -10
+        of1 = self.BUN1_OFFSET
+        winn, winp = self.WINDOW_RMS
         nbuc2proc = self.params.num_buckets_to_process
         bhigh = self.params.bucket_hi_charge
         blow = self.params.bucket_lo_charge
@@ -301,12 +307,8 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
             dic['ant_amax'] = ant_amax
             dic['ant_raw2'] = ant_raw2
 
-        b2_offset = abs(blow - bhigh) / hnum * nsamp_pturn
-        b2_offset = int(b2_offset) + b1_offset
-        slcs = [
-            slice(b1_offset + windown, b1_offset + windowp),
-            slice(b2_offset + windown, b2_offset + windowp),
-        ]
+        of2 = ((blow - bhigh) // hnum) * nsamp_pturn + of1
+        slcs = [slice(of1 + winn, of1 + winp), slice(of2 + winn, of2 + winp)]
         pref = lambda x: f'b{x + 1}_'
         for i in range(nbuc2proc):
             b_sigs = ant_raw2[..., slcs[i]].std(axis=-1)
