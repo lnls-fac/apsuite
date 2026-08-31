@@ -182,6 +182,7 @@ class SiCalcBumps:
         Returns:
             1d numpy array: Indices of the BPMs where orbit bump will
               be applied.
+
         """
         if section_type is None:
             section_type = self.section_type
@@ -230,7 +231,7 @@ class SiCalcBumps:
             idcs_ignore.append(idlist[bpm2_sec_index + 8 * sidx + (i + 1)])
         idcs_ignore = _np.array(idcs_ignore)
         idcs_ignore = _np.tile(idcs_ignore, 2)
-        idcs_ignore[n_bpms_out * 2 :] += 160
+        idcs_ignore[n_bpms_out * 2:] += 160
         return idcs_ignore
 
     def get_btwbpm_corrs_indices(self, section_type=None, sidx=None):
