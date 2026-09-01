@@ -16,7 +16,7 @@ from .. import asparams as _asparams
 from ..utils import (
     MeasBaseClass as _BaseClass,
     ParamsBaseClass as _ParamsBaseClass,
-    ThreadedMeasBaseClass as _ThreadBaseClass
+    ThreadedMeasBaseClass as _ThreadBaseClass,
 )
 
 
@@ -221,7 +221,7 @@ class UtilClass:
         # based on:
         # https://www.scribd.com/doc/14674814/Regressions-et-equations-integrales
         # pages 16-18
-        s = _scyint.cumtrapz(dtim, x=tim, initial=0.0)
+        s = _scyint.cumulative_trapezoid(dtim, x=tim, initial=0.0)
         ym = dtim - dtim[0]
         xm = tim - tim[0]
         mat = _np.array([xm, s]).T
@@ -234,12 +234,14 @@ class UtilClass:
         # Now use scipy to refine the estimatives:
         coefs = (off, amp, rate)
         try:
-            coefs, _ = _scyopt.curve_fit(
+            coefs, pcov = _scyopt.curve_fit(
                 cls.exponential_func, tim, dtim, p0=coefs
             )
+            errs = _np.sqrt(_np.diag(pcov))
         except RuntimeError:
             print("Curve fit didn't converge.")
-        return tim, coefs
+            errs = _np.full(len(coefs), _np.nan)
+        return tim, coefs, errs
 
     @staticmethod
     def exponential_func(tim, off, amp, rate):
@@ -465,6 +467,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         labels=None,
         title='',
         analysis=None,
+        plane='',
     ):
         """."""
         if analysis is None:
@@ -489,16 +492,18 @@ class BbBAcqData(_BaseClass, UtilClass):
         aty.plot(tim, abs_mode, label='Data')
 
         gtimes = []
+        gtimes_err = []
         for inter, label in zip(intervals, labels):
             ini, fin = inter
-            tim_fit, coef = self.fit_exponential(
+            tim_fit, coef, err = self.fit_exponential(
                 tim, abs_mode, t_ini=ini, t_fin=fin, offset=offset
             )
             fit = self.exponential_func(tim_fit, *coef)
             gtimes.append(coef[2] * 1000)
+            gtimes_err.append(err[2] * 1000)
             aty.plot(tim_fit, fit, label=label)
             aty.annotate(
-                f'rate = {coef[2] * 1000:.2f} Hz',
+                f'rate = ({coef[2] * 1000:.2f} +- {err[2] * 1000:.2f}) Hz',
                 fontsize='x-small',
                 xy=(tim_fit[fit.size // 2], fit[fit.size // 2]),
                 textcoords='offset points',
@@ -513,7 +518,10 @@ class BbBAcqData(_BaseClass, UtilClass):
         aty.legend(loc='best', fontsize='small')
         aty.set_title(title_, fontsize='small')
         aty.set_xlabel('time [ms]')
-        pln = self.devices['bbb'].devname[-1]
+        if self.isonline:
+            pln = self.devices['bbb'].devname[-1]
+        else:
+            pln = plane
         unit = '[°]' if pln == 'L' else '[um]'
         aty.set_ylabel('Amplitude ' + unit)
 
@@ -528,7 +536,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         atx.set_ylim([cenf - sig, cenf + sig])
 
         fig.show()
-        return fig, aty, atx, gtimes
+        return fig, aty, atx, gtimes, gtimes_err
 
     def plot_modes_evolution(
         self,
@@ -537,6 +545,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         ignore_mode0=True,
         title='',
         analysis=None,
+        plane='',
     ):
         """."""
         if analysis is None:
@@ -573,7 +582,10 @@ class BbBAcqData(_BaseClass, UtilClass):
             nzer = abs_mode > abs_mode.max() / 10
             atx.plot(tim[nzer], inst_freq[nzer] / 1e3, label=f'{idx:03d}')
 
-        pln = self.devices['bbb'].devname[-1]
+        if self.isonline:
+            pln = self.devices['bbb'].devname[-1]
+        else:
+            pln = plane
         unit = '[°]' if pln == 'L' else '[um]'
         aty.legend(loc='best', fontsize='small')
         ax.set_title(title)
@@ -623,7 +635,7 @@ class BbBAcqData(_BaseClass, UtilClass):
         f.show()
         return f, aty
 
-    def plot_modes_summary(self, analysis=None):
+    def plot_modes_summary(self, analysis=None, plane=''):
         """."""
         if analysis is None:
             analysis = self.analysis
@@ -654,7 +666,10 @@ class BbBAcqData(_BaseClass, UtilClass):
         abs_modes = _np.abs(data_modes)
         abs_dataf = _np.abs(data_anly)
 
-        pln = self.devices['bbb'].devname[-1]
+        if self.isonline:
+            pln = self.devices['bbb'].devname[-1]
+        else:
+            pln = plane
         unit = '[°]' if pln == 'L' else '[um]'
 
         afx.plot(mode_nums, abs_modes.mean(axis=1))
@@ -897,24 +912,26 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         self.data = dict()
         self.analysis = dict()
 
-    def process_data(self):
+    def process_data(self, interval):
         """."""
         infos = self.data['infos']
         data = self.data['modes_data']
 
-        analysis = dict(coeffs=[], tim_fits=[], fits=[], modes_filt=[])
+        analysis = dict(
+            coeffs=[], tim_fits=[], fits=[], modes_filt=[], errs=[]
+        )
         for i, (info, datum) in enumerate(zip(infos, data)):
             print('.', end='')
             if not ((i + 1) % 80):
                 print()
             tim = info['time']
             freq = info['dft_freq']
-            interval = self.estimate_fitting_intervals(
-                info,
-                clearance_ini=self.params.fitting_clearance_ini,
-                clearance_fin=self.params.fitting_clearance_fin,
-            )
-            coeff, tim_fit, fit = self.fit_growth_rates(
+            # interval = self.estimate_fitting_intervals(
+            #     info,
+            #     clearance_ini=self.params.fitting_clearance_ini,
+            #     clearance_fin=self.params.fitting_clearance_fin,
+            # )
+            coeff, tim_fit, fit, err = self.fit_growth_rates(
                 tim,
                 datum,
                 interval=interval,
@@ -925,6 +942,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             mode_filt = self.filter_data(freq, datum, self.params)
 
             analysis['coeffs'].append(coeff)
+            analysis['errs'].append(err)
             analysis['tim_fits'].append(tim_fit)
             analysis['fits'].append(fit)
             analysis['modes_filt'].append(mode_filt)
@@ -944,14 +962,14 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
     def fit_growth_rates(self, tim, data, interval, offset=True, full=False):
         """."""
         freq = _np.fft.fftfreq(tim.size, d=(tim[1] - tim[0]) / 1000)
-        data = UtilClass.filter_data(freq, data, self.params)
+        # data = UtilClass.filter_data(freq, data, self.params)
         abs_data = _np.abs(data)
         if len(abs_data.shape) == 1:
             abs_data = abs_data.reshape(-1, abs_data.size)
 
-        coeffs, fittings = [], []
+        coeffs, fittings, errs = [], [], []
         for abs_mode in abs_data:
-            tim_fit, coef = self.fit_exponential(
+            tim_fit, coef, err = self.fit_exponential(
                 tim,
                 abs_mode,
                 t_ini=interval[0],
@@ -960,13 +978,15 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             )
             fit = self.exponential_func(tim_fit, *coef)
             coeffs.append(coef)
+            errs.append(err)
             fittings.append(fit)
 
         coeffs = _np.array(coeffs)
+        errs = _np.array(err)
         fittings = _np.array(fittings)
         if not full:
             return coeffs[:, 2] * 1000
-        return coeffs, tim_fit, fittings
+        return coeffs, tim_fit, fittings, errs
 
     def plot_growth_rates(self, title=''):
         """."""
@@ -984,7 +1004,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
         ax.set_xlabel('Modes')
         return fig, ax
 
-    def plot_modes_evolution(self, data_index=0, title=''):
+    def plot_modes_evolution(self, data_index=0, title='', plane=''):
         """."""
         mode_meas = self.data['modes_measured'][data_index]
         infos = self.data['infos'][data_index]
@@ -1025,8 +1045,10 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             inst_freq /= 1e3
             idx = absm > absm.max() / 10
             atx.plot(tim[idx], inst_freq[idx], color=lin.get_color())
-
-        pln = self.devices['bbb'].devname[-1]
+        if self.isonline:
+            pln = self.devices['bbb'].devname[-1]
+        else:
+            pln = plane
         unit = '[°]' if pln == 'L' else '[um]'
 
         aty.legend(loc='best', fontsize='small')
@@ -1094,7 +1116,7 @@ class MeasDriveDamp(_ThreadBaseClass, UtilClass):
             self.data['modes_data'].append(data)
             self.data['infos'].append(infos)
 
-            grt = self.fit_growth_rates(
+            grt, _ = self.fit_growth_rates(
                 tim,
                 data,
                 interval=interval,
@@ -1329,7 +1351,8 @@ class MeasTuneShift(_ThreadBaseClass):
         # based on:
         # https://www.scribd.com/doc/14674814/Regressions-et-equations-integrales
         # pages 16-18
-        s = _scyint.cumtrapz(dtim, x=tim, initial=0.0)
+        # s = _scyint.cumtrapz(dtim, x=tim, initial=0.0)
+        s = _scyint.cumulative_trapezoid(dtim, x=tim, initial=0.0)
         ym = dtim - dtim[0]
         xm = tim - tim[0]
         mat = _np.array([xm, s]).T
