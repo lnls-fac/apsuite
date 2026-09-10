@@ -269,12 +269,6 @@ class OptimizeInjBOParams(_RCDSParams):
                 limu.append(self.LIMS_UPPER[idx])
                 liml.append(self.LIMS_LOWER[idx])
                 kns.append(kn)
-        # for i, kn in enumerate(self.KNOBS):
-        #     if kn not in knobs:
-        #         continue
-        #     kns.append(kn)
-        #     limu.append(self.LIMS_UPPER[i])
-        #     liml.append(self.LIMS_LOWER[i])
         self._knobs = kns
         self.limit_lower = _np.array(liml)
         self.limit_upper = _np.array(limu)
@@ -294,12 +288,13 @@ class OptimizeInjBO(_RCDS):
         if self.isonline:
             self._create_devices()
 
-        self.news = Event()
+        self.news = Event()  # signals whether a new injection pulse happened
         self._curr150mev_pv = self.devices['currinfo'].pv_object(
             'Current150MeV-Mon'
-        )
+        )  # 150MeV current PV: will be monitored to singal an injection pulse
         self._curr150mev_pv.auto_monitor = True
-        self._thread_update = None
+        self._thread_update = None  # Thread to monitor injection pulses
+        # initialized to None because not needed yet
 
     def prepare_evg(self):
         """Prepare EVG for optimization."""
@@ -317,7 +312,7 @@ class OptimizeInjBO(_RCDS):
         if pos is not None:
             self.set_position_to_machine(pos)
             self.data['positions'].append(pos)
-            _time.sleep(2)
+            _time.sleep(2)  # revisit this once position setter is refactored
         else:
             self.data['positions'].append(pos0)
         self.news.clear()
@@ -344,10 +339,8 @@ class OptimizeInjBO(_RCDS):
     def inject_beam_and_get_current(self):
         """Inject beam and get injected current, if desired."""
         idx = self.params.curr_wfm_index
-        # inj0 = self.devices['dcct'].current_fast.std()
-        # inj0 = self.devices['sofb_bo'].mt_sum
         if not self.params.trigger_injection:
-            while not self.news.wait(15):
+            while not self.news.wait(15):  # revisit this wait time
                 _log.warning('Timed out waiting for injection.')
                 if self._stopevt.is_set():
                     _log.warning('Stopped by user. Exiting')
@@ -360,8 +353,6 @@ class OptimizeInjBO(_RCDS):
         self.devices['evg'].wait_injection_finish()
         for _ in range(50):
             inj = self.devices['dcct'].current_fast[idx]
-            # inj = self.devices['dcct'].current_fast[idx].std()
-            # inj = self.devices['sofb_bo'].mt_sum
             if inj0 != inj:
                 break
             _time.sleep(0.1)
@@ -750,10 +741,10 @@ class OptimizeInjBO(_RCDS):
         )
 
         # TB PosAng knobs (alternative to PosAng)
-        # self.devices["tb_ch1"] = PowerSupply("TB-04:PS-CH-1")
-        # self.devices["tb_injsept"] = PowerSupplyPU("TB-04:PU-InjSept")
-        # self.devices["tb_cv1"] = PowerSupply("TB-04:PS-CV-1")
-        # self.devices["tb_cv2"] = PowerSupply("TB-04:PS-CV-2")
+        self.devices["tb_ch1"] = PowerSupply("TB-04:PS-CH-1")
+        self.devices["tb_injsept"] = PowerSupplyPU("TB-04:PU-InjSept")
+        self.devices["tb_cv1"] = PowerSupply("TB-04:PS-CV-1")
+        self.devices["tb_cv2"] = PowerSupply("TB-04:PS-CV-2")
 
         # LI LLRF
         self.devices['li_llrf'] = LILLRF()
@@ -780,6 +771,9 @@ class OptimizeInjBO(_RCDS):
         _time.sleep(0.05)
         if not self.devices['currinfo'].current3gev:
             self.news.set()
+            # only signals as valid injection pulses
+            # those for which there is no transmission to the
+            # storage ring (non-top-up pulses)
 
     def _initialization(self):
         """."""
