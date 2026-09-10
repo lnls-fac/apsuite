@@ -6,14 +6,14 @@ import numpy as _np
 
 from siriuspy.epics import PV, CAThread as _Thread
 from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoBO, EVG, \
-    EGTriggerPS, LILLRF, InjCtrl, PosAng, DCCT, Trigger, ASLLRF, SOFB
+    EGTriggerPS, LILLRF, InjCtrl, PosAng, DCCT, Trigger, ASLLRF
 
 from ..optimization.rcds import RCDS as _RCDS, RCDSParams as _RCDSParams
 
 
 class OptimizeInjBOParams(_RCDSParams):
     """."""
-
+    
     KNOBS = [
         'li_lens1',
         'li_lens2',
@@ -229,7 +229,6 @@ class OptimizeInjBOParams(_RCDSParams):
         self.nrpulses = 5
         self.use_median = False
         self.wait_between_injections = 3  # [s]
-        self.correct_tb_traj = True
         self.trigger_injection = False
 
         self.pos0 = None
@@ -646,10 +645,6 @@ class OptimizeInjBO(_RCDS):
                 raise ValueError('Wrong specification of knob.')
 
         self.wait_set_pos(pos, timeout=10)
-        if self.params.correct_tb_traj:
-            sofb = self.devices['sofb_tb']
-            sofb.cmd_calccorr()
-            sofb.cmd_applycorr_all()
 
     def _create_devices(self):
         # knobs devices
