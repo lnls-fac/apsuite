@@ -63,7 +63,7 @@ class OptimizeInjBOParams(_RCDSParams):
         'angx',
         'posy',
         'angy',
-        'kckr',
+        'injkckr',
 
         "tb_ch1",
         "tb_injsept",
@@ -129,7 +129,7 @@ class OptimizeInjBOParams(_RCDSParams):
         +1.0,    # 'angx',
         +2.0,    # 'posy',
         +1.0,    # 'angy',
-        -19.0,   # 'kckr',
+        -19.0,   # 'injkckr',
 
         +10.0,   # tb_ch1
         0.0,     # tb_injsept
@@ -195,7 +195,7 @@ class OptimizeInjBOParams(_RCDSParams):
         -1.0,   # 'angx',
         -2.0,   # 'posy',
         -1.0,   # 'angy',
-        -25.0,  # 'kckr',
+        -25.0,  # 'injkckr',
 
         -10.0,    # tb_ch1
         -776.69,  # tb_injsept
@@ -230,7 +230,7 @@ class OptimizeInjBOParams(_RCDSParams):
         self.use_median = False
         self.wait_between_injections = 3  # [s]
         self.correct_tb_traj = True
-        self.inject = False
+        self.trigger_injection = False
 
         self.pos0 = None
 
@@ -239,6 +239,7 @@ class OptimizeInjBOParams(_RCDSParams):
         stg = '-----  RCDS Parameters  -----\n\n'
         stg += super().__str__()
         stg += '\n\n-----  OptimizeInjBO Parameters  -----\n\n'
+        stg += self._TMPS('trigger_injection', str(self.trigger_injection), '')
         stg += self._TMPD('curr_wfm_index', self.curr_wfm_index, '')
         stg += self._TMPD('nrpulses', self.nrpulses, '')
         stg += self._TMPD(
@@ -260,12 +261,20 @@ class OptimizeInjBOParams(_RCDSParams):
         kns = []
         limu = []
         liml = []
-        for i, kn in enumerate(self.KNOBS):
-            if kn not in knobs:
-                continue
-            kns.append(kn)
-            limu.append(self.LIMS_UPPER[i])
-            liml.append(self.LIMS_LOWER[i])
+        for kn in knobs:
+            if kn not in self.KNOBS:
+                raise ValueError(f'Knob {kn} is not a valid knob.')
+            else:
+                idx = self.KNOBS.index(kn)
+                limu.append(self.LIMS_UPPER[idx])
+                liml.append(self.LIMS_LOWER[idx])
+                kns.append(kn)
+        # for i, kn in enumerate(self.KNOBS):
+        #     if kn not in knobs:
+        #         continue
+        #     kns.append(kn)
+        #     limu.append(self.LIMS_UPPER[i])
+        #     liml.append(self.LIMS_LOWER[i])
         self._knobs = kns
         self.limit_lower = _np.array(liml)
         self.limit_upper = _np.array(limu)
@@ -337,7 +346,7 @@ class OptimizeInjBO(_RCDS):
         idx = self.params.curr_wfm_index
         # inj0 = self.devices['dcct'].current_fast.std()
         # inj0 = self.devices['sofb_bo'].mt_sum
-        if not self.params.inject:
+        if not self.params.trigger_injection:
             while not self.news.wait(15):
                 _log.warning('Timed out waiting for injection.')
                 if self._stopevt.is_set():
@@ -480,7 +489,7 @@ class OptimizeInjBO(_RCDS):
                 pos.append(self.devices['pos_ang'].delta_posy)
             elif fun('angy'):
                 pos.append(self.devices['pos_ang'].delta_angy)
-            elif fun('kckr'):
+            elif fun('injkckr'):
                 pos.append(self.devices['injkckr'].strength)
 
             elif fun('tb_ch1'):
@@ -613,7 +622,7 @@ class OptimizeInjBO(_RCDS):
                 self.devices['pos_ang'].delta_posy = p
             elif fun('angy'):
                 self.devices['pos_ang'].delta_angy = p
-            elif fun('kckr'):
+            elif fun('injkckr'):
                 self.devices['injkckr'].strength = p
 
             elif fun('tb_ch1'):
@@ -653,75 +662,115 @@ class OptimizeInjBO(_RCDS):
 
     def _create_devices(self):
         # knobs devices
+
         # lenses
-        # self.pvs["li_lens1"] = PV("LI-01:PS-Lens-1:Current-SP")
-        # self.pvs["li_lens2"] = PV("LI-01:PS-Lens-2:Current-SP")
-        # self.pvs["li_lens3"] = PV("LI-01:PS-Lens-3:Current-SP")
-        # self.pvs["li_lens4"] = PV("LI-01:PS-Lens-4:Current-SP")
-        # # solenoids
-        # self.pvs["li_slnd1"] = PV("LI-01:PS-Slnd-1:Current-SP")
-        # self.pvs["li_slnd2"] = PV("LI-01:PS-Slnd-2:Current-SP")
-        # self.pvs["li_slnd3"] = PV("LI-01:PS-Slnd-3:Current-SP")
-        # self.pvs["li_slnd4"] = PV("LI-01:PS-Slnd-4:Current-SP")
-        # self.pvs["li_slnd5"] = PV("LI-01:PS-Slnd-5:Current-SP")
-        # self.pvs["li_slnd6"] = PV("LI-01:PS-Slnd-6:Current-SP")
-        # self.pvs["li_slnd7"] = PV("LI-01:PS-Slnd-7:Current-SP")
-        # self.pvs["li_slnd8"] = PV("LI-01:PS-Slnd-8:Current-SP")
-        # self.pvs["li_slnd9"] = PV("LI-01:PS-Slnd-9:Current-SP")
-        # self.pvs["li_slnd10"] = PV("LI-01:PS-Slnd-10:Current-SP")
-        # self.pvs["li_slnd11"] = PV("LI-01:PS-Slnd-11:Current-SP")
-        # self.pvs["li_slnd12"] = PV("LI-01:PS-Slnd-12:Current-SP")
-        # self.pvs["li_slnd13"] = PV("LI-01:PS-Slnd-13:Current-SP")
-        # self.pvs["li_slnd14"] = PV("LI-Fam:PS-Slnd-14:Current-SP")
-        # self.pvs["li_slnd15"] = PV("LI-Fam:PS-Slnd-15:Current-SP")
-        # self.pvs["li_slnd16"] = PV("LI-Fam:PS-Slnd-16:Current-SP")
-        # self.pvs["li_slnd17"] = PV("LI-Fam:PS-Slnd-17:Current-SP")
-        # self.pvs["li_slnd18"] = PV("LI-Fam:PS-Slnd-18:Current-SP")
-        # self.pvs["li_slnd19"] = PV("LI-Fam:PS-Slnd-19:Current-SP")
-        # self.pvs["li_slnd20"] = PV("LI-Fam:PS-Slnd-20:Current-SP")
-        # self.pvs["li_slnd21"] = PV("LI-Fam:PS-Slnd-21:Current-SP")
-        # # LI quads
-        # self.devices['li_qf1'] = PowerSupply('LI-Fam:PS-QF1')
-        # self.devices['li_qf2'] = PowerSupply('LI-Fam:PS-QF2')
-        self.devices['li_qf3'] = PowerSupply('LI-01:PS-QF3')
-        # self.devices['li_qd1'] = PowerSupply('LI-01:PS-QD1')
-        # self.devices['li_qd2'] = PowerSupply('LI-01:PS-QD2')
+        self.pvs["li_lens1"] = PV("LI-01:PS-Lens-1:Current-SP")
+        self.pvs["li_lens2"] = PV("LI-01:PS-Lens-2:Current-SP")
+        self.pvs["li_lens3"] = PV("LI-01:PS-Lens-3:Current-SP")
+        self.pvs["li_lens4"] = PV("LI-01:PS-Lens-4:Current-SP")
+
+        # solenoids
+        self.pvs["li_slnd1"] = PV("LI-01:PS-Slnd-1:Current-SP")
+        self.pvs["li_slnd2"] = PV("LI-01:PS-Slnd-2:Current-SP")
+        self.pvs["li_slnd3"] = PV("LI-01:PS-Slnd-3:Current-SP")
+        self.pvs["li_slnd4"] = PV("LI-01:PS-Slnd-4:Current-SP")
+        self.pvs["li_slnd5"] = PV("LI-01:PS-Slnd-5:Current-SP")
+        self.pvs["li_slnd6"] = PV("LI-01:PS-Slnd-6:Current-SP")
+        self.pvs["li_slnd7"] = PV("LI-01:PS-Slnd-7:Current-SP")
+        self.pvs["li_slnd8"] = PV("LI-01:PS-Slnd-8:Current-SP")
+        self.pvs["li_slnd9"] = PV("LI-01:PS-Slnd-9:Current-SP")
+        self.pvs["li_slnd10"] = PV("LI-01:PS-Slnd-10:Current-SP")
+        self.pvs["li_slnd11"] = PV("LI-01:PS-Slnd-11:Current-SP")
+        self.pvs["li_slnd12"] = PV("LI-01:PS-Slnd-12:Current-SP")
+        self.pvs["li_slnd13"] = PV("LI-01:PS-Slnd-13:Current-SP")
+        self.pvs["li_slnd14"] = PV("LI-Fam:PS-Slnd-14:Current-SP")
+        self.pvs["li_slnd15"] = PV("LI-Fam:PS-Slnd-15:Current-SP")
+        self.pvs["li_slnd16"] = PV("LI-Fam:PS-Slnd-16:Current-SP")
+        self.pvs["li_slnd17"] = PV("LI-Fam:PS-Slnd-17:Current-SP")
+        self.pvs["li_slnd18"] = PV("LI-Fam:PS-Slnd-18:Current-SP")
+        self.pvs["li_slnd19"] = PV("LI-Fam:PS-Slnd-19:Current-SP")
+        self.pvs["li_slnd20"] = PV("LI-Fam:PS-Slnd-20:Current-SP")
+        self.pvs["li_slnd21"] = PV("LI-Fam:PS-Slnd-21:Current-SP")
+
+        # LI quads
+        props2init = ['Current-SP', 'Current-RB']
+        self.devices['li_qf1'] = PowerSupply(
+            'LI-Fam:PS-QF1', props2init=props2init
+        )
+        self.devices['li_qf2'] = PowerSupply(
+            'LI-Fam:PS-QF2', props2init=props2init
+        )
+        self.devices['li_qf3'] = PowerSupply(
+            'LI-01:PS-QF3', props2init=props2init
+        )
+        self.devices['li_qd1'] = PowerSupply(
+            'LI-01:PS-QD1', props2init=props2init
+        )
+        self.devices['li_qd2'] = PowerSupply(
+            'LI-01:PS-QD2', props2init=props2init
+        )
+
         # TB quads
-        self.devices['tb_qf1'] = PowerSupply('TB-01:PS-QF1', props2init=None)
-        self.devices['tb_qd1'] = PowerSupply('TB-01:PS-QD1', props2init=None)
-        self.devices['tb_qf2a'] = PowerSupply('TB-02:PS-QF2A', props2init=None)
-        self.devices['tb_qd2a'] = PowerSupply('TB-02:PS-QD2A', props2init=None)
-        self.devices['tb_qf2b'] = PowerSupply('TB-02:PS-QF2B', props2init=None)
-        self.devices['tb_qd2b'] = PowerSupply('TB-02:PS-QD2B', props2init=None)
-        self.devices['tb_qf3'] = PowerSupply('TB-03:PS-QF3', props2init=None)
-        self.devices['tb_qd3'] = PowerSupply('TB-03:PS-QD3', props2init=None)
-        self.devices['tb_qf4'] = PowerSupply('TB-04:PS-QF4', props2init=None)
-        self.devices['tb_qd4'] = PowerSupply('TB-04:PS-QD4', props2init=None)
+        props2init = ['Current-SP', 'Current-RB']
+        self.devices['tb_qf1'] = PowerSupply(
+            'TB-01:PS-QF1', props2init=props2init
+        )
+        self.devices['tb_qd1'] = PowerSupply(
+            'TB-01:PS-QD1', props2init=props2init
+        )
+        self.devices['tb_qf2a'] = PowerSupply(
+            'TB-02:PS-QF2A', props2init=props2init
+        )
+        self.devices['tb_qd2a'] = PowerSupply(
+            'TB-02:PS-QD2A', props2init=props2init
+        )
+        self.devices['tb_qf2b'] = PowerSupply(
+            'TB-02:PS-QF2B', props2init=props2init
+        )
+        self.devices['tb_qd2b'] = PowerSupply(
+            'TB-02:PS-QD2B', props2init=props2init
+        )
+        self.devices['tb_qf3'] = PowerSupply(
+            'TB-03:PS-QF3', props2init=props2init
+        )
+        self.devices['tb_qd3'] = PowerSupply(
+            'TB-03:PS-QD3', props2init=props2init
+        )
+        self.devices['tb_qf4'] = PowerSupply(
+            'TB-04:PS-QF4', props2init=props2init
+        )
+        self.devices['tb_qd4'] = PowerSupply(
+            'TB-04:PS-QD4', props2init=props2init
+        )
+
         # TB PosAng & Injkicker
-        # self.devices['pos_ang'] = PosAng(PosAng.DEVICES.TB)
-        # self.devices['injkckr'] = PowerSupplyPU(
-        #     PowerSupplyPU.DEVICES.BO_INJ_KCKR)
-        # # TB PosAng knobs (alternative to PosAng)
+        self.devices['pos_ang'] = PosAng(PosAng.DEVICES.TB)
+        self.devices['injkckr'] = PowerSupplyPU(
+            PowerSupplyPU.DEVICES.BO_INJ_KCKR
+        )
+
+        # TB PosAng knobs (alternative to PosAng)
         # self.devices["tb_ch1"] = PowerSupply("TB-04:PS-CH-1")
         # self.devices["tb_injsept"] = PowerSupplyPU("TB-04:PU-InjSept")
         # self.devices["tb_cv1"] = PowerSupply("TB-04:PS-CV-1")
         # self.devices["tb_cv2"] = PowerSupply("TB-04:PS-CV-2")
-        # # LI LLRF
-        # self.devices['li_llrf'] = LILLRF()
-        # # BO LLRF
-        # self.devices['bo_llrf'] = ASLLRF(ASLLRF.DEVICES.BO)
-        # other rlevant devices
-        # self.devices['ejekckr'] = PowerSupplyPU(
-        # PowerSupplyPU.DEVICES.BO_EJE_KCKR)
+
+        # LI LLRF
+        self.devices['li_llrf'] = LILLRF()
+
+        # BO LLRF
+        self.devices['bo_llrf'] = ASLLRF(ASLLRF.DEVICES.BO)
+
+        # other relevant devices
+        self.devices['ejekckr'] = PowerSupplyPU(
+            PowerSupplyPU.DEVICES.BO_EJE_KCKR
+        )
         self.devices['currinfo'] = CurrInfoBO()
         self.devices['dcct'] = DCCT(DCCT.DEVICES.BO)
         self.devices['evg'] = EVG()
-        # self.devices['ejekckr_trig'] = Trigger("BO-48D:TI-EjeKckr")
+        self.devices['ejekckr_trig'] = Trigger("BO-48D:TI-EjeKckr")
         self.devices['egun_trigps'] = EGTriggerPS()
         self.devices['injctrl'] = InjCtrl(props2init=None)
-        # self.devices['sofb_bo'] = SOFB(SOFB.DEVICES.BO)
-        if self.params.correct_tb_traj:
-            self.devices['sofb_tb'] = SOFB(SOFB.DEVICES.TB)
 
     def _curr150mev_update(self, pvname, value, **kwargs):
         self._thread_update = _Thread(target=self._update_flag, daemon=True)
@@ -739,7 +788,7 @@ class OptimizeInjBO(_RCDS):
         self.data['timestamp'] = _time.time()
         self.data['positions'] = []
         self.data['currents'] = []
-        if self.params.inject:
+        if self.params.trigger_injection:
             self.prepare_evg()
         self._curr150mev_pv.add_callback(self._curr150mev_update)
         self.pos0 = self.get_current_position()
