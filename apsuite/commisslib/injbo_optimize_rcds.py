@@ -1,430 +1,347 @@
 """."""
+
 import time as _time
 import logging as _log
 from threading import Event
 import numpy as _np
 
 from siriuspy.epics import PV, CAThread as _Thread
-from siriuspy.devices import PowerSupply, PowerSupplyPU, CurrInfoBO, EVG, \
-    EGTriggerPS, LILLRF, InjCtrl, PosAng, DCCT, Trigger, ASLLRF
+from siriuspy.devices import (
+    PowerSupply,
+    PowerSupplyPU,
+    CurrInfoBO,
+    EVG,
+    EGTriggerPS,
+    LILLRF,
+    InjCtrl,
+    PosAng,
+    DCCT,
+    Trigger,
+    ASLLRF,
+)
 
 from ..optimization.rcds import RCDS as _RCDS, RCDSParams as _RCDSParams
 
 
 class OptimizeInjBOParams(_RCDSParams):
     """."""
-    KNOB_DEFS = {
 
+    KNOB_DEFS = {
         # Linac lenses
         'li_lens1': {
-            'lower': -5.0, # [A]
+            'lower': -5.0,  # [A]
             'upper': 5.0,
             'get': lambda self: self.pvs['li_lens1'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_lens1'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_lens1'], 'value', v),
         },
-
         'li_lens2': {
-            'lower': -5.0, # [A]
+            'lower': -5.0,  # [A]
             'upper': 5.0,
             'get': lambda self: self.pvs['li_lens2'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_lens2'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_lens2'], 'value', v),
         },
-
         'li_lens3': {
-            'lower': -5.0, # [A]
+            'lower': -5.0,  # [A]
             'upper': 5.0,
             'get': lambda self: self.pvs['li_lens3'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_lens3'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_lens3'], 'value', v),
         },
-
         'li_lens4': {
-            'lower': -5.0, # [A]
+            'lower': -5.0,  # [A]
             'upper': 5.0,
             'get': lambda self: self.pvs['li_lens4'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_lens4'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_lens4'], 'value', v),
         },
-
         # Linac solenoids
         'li_slnd1': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd1'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd1'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd1'], 'value', v),
         },
-
         'li_slnd2': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd2'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd2'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd2'], 'value', v),
         },
-
         'li_slnd3': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd3'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd3'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd3'], 'value', v),
         },
-
         'li_slnd4': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd4'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd4'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd4'], 'value', v),
         },
-
         'li_slnd5': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd5'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd5'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd5'], 'value', v),
         },
-
         'li_slnd6': {
-            'lower': 0.0, # [A] 
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd6'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd6'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd6'], 'value', v),
         },
-
         'li_slnd7': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd7'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd7'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd7'], 'value', v),
         },
-
         'li_slnd8': {
-            'lower': 0.0, # [A] 
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd8'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd8'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd8'], 'value', v),
         },
-
         'li_slnd9': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd9'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd9'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd9'], 'value', v),
         },
-
         'li_slnd10': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd10'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd10'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd10'], 'value', v),
         },
-
         'li_slnd11': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd11'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd11'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd11'], 'value', v),
         },
-
         'li_slnd12': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd12'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd12'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd12'], 'value', v),
         },
-
         'li_slnd13': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd13'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd13'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd13'], 'value', v),
         },
-
         'li_slnd14': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd14'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd14'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd14'], 'value', v),
         },
-
         'li_slnd15': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd15'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd15'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd15'], 'value', v),
         },
-
         'li_slnd16': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd16'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd16'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd16'], 'value', v),
         },
-
         'li_slnd17': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd17'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd17'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd17'], 'value', v),
         },
-
         'li_slnd18': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd18'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd18'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd18'], 'value', v),
         },
-
         'li_slnd19': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd19'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd19'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd19'], 'value', v),
         },
-
         'li_slnd20': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd20'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd20'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd20'], 'value', v),
         },
-
         'li_slnd21': {
-            'lower': 0.0, # [A]
+            'lower': 0.0,  # [A]
             'upper': 35.0,
             'get': lambda self: self.pvs['li_slnd21'].value,
-            'set': lambda self, v: setattr(
-                self.pvs['li_slnd21'], 'value', v
-                ),
+            'set': lambda self, v: setattr(self.pvs['li_slnd21'], 'value', v),
         },
-
         # Linac quadrupoles
         'li_qf1': {
-            'lower': -5.0, # [A]
+            'lower': -5.0,  # [A]
             'upper': 5.0,
             'get': lambda self: self.devices['li_qf1'].current,
             'set': lambda self, v: setattr(
                 self.devices['li_qf1'], 'current', v
-                ),
+            ),
         },
-
         'li_qf2': {
-            'lower': -5.0, # [A]
+            'lower': -5.0,  # [A]
             'upper': 5.0,
             'get': lambda self: self.devices['li_qf2'].current,
             'set': lambda self, v: setattr(
                 self.devices['li_qf2'], 'current', v
-                ),
+            ),
         },
-
         'li_qf3': {
-            'lower': -5.0, # [A]
+            'lower': -5.0,  # [A]
             'upper': 5.0,
             'get': lambda self: self.devices['li_qf3'].current,
             'set': lambda self, v: setattr(
                 self.devices['li_qf3'], 'current', v
-                ),
+            ),
         },
-
         'li_qd1': {
-            'lower': -5.0, # [A]
+            'lower': -5.0,  # [A]
             'upper': 5.0,
             'get': lambda self: self.devices['li_qd1'].current,
             'set': lambda self, v: setattr(
                 self.devices['li_qd1'], 'current', v
-                ),
+            ),
         },
-
         'li_qd2': {
-            'lower': -5.0, # [A]
+            'lower': -5.0,  # [A]
             'upper': 5.0,
             'get': lambda self: self.devices['li_qd2'].current,
             'set': lambda self, v: setattr(
                 self.devices['li_qd2'], 'current', v
-                ),
+            ),
         },
-
         # TB quadrupoles
         'tb_qf1': {
-            'lower': -10.0, # [A]
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_qf1'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_qf1'], 'current', v
-                ),
+            ),
         },
-
         'tb_qd1': {
-            'lower': -10.0, # [A]
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_qd1'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_qd1'], 'current', v
-                ),
+            ),
         },
-
         'tb_qf2a': {
-            'lower': -10.0, # [A]
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_qf2a'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_qf2a'], 'current', v
-                ),
+            ),
         },
-
         'tb_qd2a': {
-            'lower': -10.0, # [A]
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_qd2a'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_qd2a'], 'current', v
-                ),
+            ),
         },
-
         'tb_qf2b': {
-            'lower': -10.0, # [A]
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_qf2b'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_qf2b'], 'current', v
-                ),
+            ),
         },
-
         'tb_qd2b': {
-            'lower': -10.0, # [A]
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_qd2b'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_qd2b'], 'current', v
-                ),
+            ),
         },
-
         'tb_qf3': {
-            'lower': -10.0, # [A]
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_qf3'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_qf3'], 'current', v
-                ),
+            ),
         },
-
         'tb_qd3': {
-            'lower': -10.0, # [A]
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_qd3'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_qd3'], 'current', v
-                ),
+            ),
         },
-
         'tb_qf4': {
-            'lower': -10.0, # [A]
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_qf4'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_qf4'], 'current', v
-                ),
+            ),
         },
-
         'tb_qd4': {
-            'lower': -10.0, # [A]
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_qd4'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_qd4'], 'current', v
-                ),
+            ),
         },
-
         # Position / angle
         'posx': {
-            'lower': -2.0, # [mm]
+            'lower': -2.0,  # [mm]
             'upper': 2.0,
             'get': lambda self: self.devices['pos_ang'].delta_posx,
             'set': lambda self, v: setattr(
                 self.devices['pos_ang'], 'delta_posx', v
-                ),
+            ),
         },
-
         'angx': {
-            'lower': -1.0, # [mrad]
+            'lower': -1.0,  # [mrad]
             'upper': 1.0,
             'get': lambda self: self.devices['pos_ang'].delta_angx,
             'set': lambda self, v: setattr(
                 self.devices['pos_ang'], 'delta_angx', v
-                ),
+            ),
         },
-
         'posy': {
-            'lower': -2.0, # [mm]
+            'lower': -2.0,  # [mm]
             'upper': 2.0,
             'get': lambda self: self.devices['pos_ang'].delta_posy,
             'set': lambda self, v: setattr(
                 self.devices['pos_ang'], 'delta_posy', v
-                ),
+            ),
         },
-
         'angy': {
-            'lower': -1.0, # [mrad]
+            'lower': -1.0,  # [mrad]
             'upper': 1.0,
             'get': lambda self: self.devices['pos_ang'].delta_angy,
             'set': lambda self, v: setattr(
                 self.devices['pos_ang'], 'delta_angy', v
-                ),
+            ),
         },
-
         'injkckr': {
-            'lower': -25.0, # 
+            'lower': -25.0,  #
             'upper': -19.0,
             'get': lambda self: self.devices['injkckr'].strength,
             'set': lambda self, v: setattr(
                 self.devices['injkckr'], 'strength', v
-                ),
+            ),
         },
-
         # TB correctors / septum
         'tb_ch1': {
             'lower': -10.0,
@@ -432,148 +349,127 @@ class OptimizeInjBOParams(_RCDSParams):
             'get': lambda self: self.devices['tb_ch1'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_ch1'], 'current', v
-                ),
+            ),
         },
-
         'tb_injsept': {
             'lower': -776.69,
             'upper': 0.0,
             'get': lambda self: self.devices['tb_injsept'].strength,
             'set': lambda self, v: setattr(
                 self.devices['tb_injsept'], 'strength', v
-                ),
+            ),
         },
-
         'tb_cv1': {
             'lower': -10.0,
             'upper': 10.0,
             'get': lambda self: self.devices['tb_cv1'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_cv1'], 'current', v
-                ),
+            ),
         },
-
         'tb_cv2': {
             'lower': -10.0,
             'upper': 10.0,
             'get': lambda self: self.devices['tb_cv2'].current,
             'set': lambda self, v: setattr(
                 self.devices['tb_cv2'], 'current', v
-                ),
+            ),
         },
-
         # Linac LLRF
         'shb_amp': {
             'lower': 20,
             'upper': 40,
-            'get': lambda self: self.devices[
-                'li_llrf'].dev_shb.amplitude,
+            'get': lambda self: self.devices['li_llrf'].dev_shb.amplitude,
             'set': lambda self, v: setattr(
                 self.devices['li_llrf'].dev_shb, 'amplitude', v
-                ),
+            ),
         },
-
         'kly1_amp': {
             'lower': 85,
             'upper': 91,
-            'get': lambda self: self.devices[
-                'li_llrf'].dev_klystron1.amplitude,
+            'get': lambda self: (
+                self.devices['li_llrf'].dev_klystron1.amplitude
+            ),
             'set': lambda self, v: setattr(
                 self.devices['li_llrf'].dev_klystron1, 'amplitude', v
-                ),
+            ),
         },
-
         'kly2_amp': {
             'lower': 70,
             'upper': 76,
-            'get': lambda self: self.devices[
-                'li_llrf'].dev_klystron2.amplitude,
+            'get': lambda self: (
+                self.devices['li_llrf'].dev_klystron2.amplitude
+            ),
             'set': lambda self, v: setattr(
                 self.devices['li_llrf'].dev_klystron2, 'amplitude', v
-                ),
+            ),
         },
-
         'shb_phs': {
             'lower': 160,
             'upper': 180,
-            'get': lambda self: self.devices[
-                'li_llrf'].dev_shb.phase,
+            'get': lambda self: self.devices['li_llrf'].dev_shb.phase,
             'set': lambda self, v: setattr(
                 self.devices['li_llrf'].dev_shb, 'phase', v
-                ),
+            ),
         },
-
         'kly1_phs': {
             'lower': -180,
             'upper': -150,
-            'get': lambda self: self.devices[
-                'li_llrf'].dev_klystron1.phase,
+            'get': lambda self: self.devices['li_llrf'].dev_klystron1.phase,
             'set': lambda self, v: setattr(
                 self.devices['li_llrf'].dev_klystron1, 'phase', v
-                ),
+            ),
         },
-
         'kly2_phs': {
             'lower': -20,
             'upper': 0,
-            'get': lambda self: self.devices[
-                'li_llrf'].dev_klystron2.phase,
+            'get': lambda self: self.devices['li_llrf'].dev_klystron2.phase,
             'set': lambda self, v: setattr(
                 self.devices['li_llrf'].dev_klystron2, 'phase', v
-                ),
+            ),
         },
-
         # Booster RF
         'borf_amp': {
             'lower': 30,
             'upper': 80,
-            'get': lambda self: self.devices[
-                'bo_llrf'].voltage_bottom,
+            'get': lambda self: self.devices['bo_llrf'].voltage_bottom,
             'set': lambda self, v: setattr(
                 self.devices['bo_llrf'], 'voltage_bottom', v
-                ),
+            ),
         },
-
         'borf_phs': {
             'lower': 90,
             'upper': 160,
-            'get': lambda self: self.devices[
-                'bo_llrf'].phase_bottom,
+            'get': lambda self: self.devices['bo_llrf'].phase_bottom,
             'set': lambda self, v: setattr(
                 self.devices['bo_llrf'], 'phase_bottom', v
-                ),
+            ),
         },
     }
-    
+
     KNOBS = list(KNOB_DEFS.keys())
-    
+
     def __init__(self):
         """."""
         super().__init__()
         self._knobs = self.KNOBS
-        
+
         self.limit_lower = _np.array([
-            self.KNOB_DEFS[knob]['lower']
-            for knob in self._knobs
+            self.KNOB_DEFS[knob]['lower'] for knob in self._knobs
         ])
-        
+
         self.limit_upper = _np.array([
-            self.KNOB_DEFS[knob]['upper']
-            for knob in self._knobs
+            self.KNOB_DEFS[knob]['upper'] for knob in self._knobs
         ])
 
         self.initial_position = _np.array([
-            0.5 * (
-                self.KNOB_DEFS[knob]['lower']
-                + self.KNOB_DEFS[knob]['upper']
-            )
+            0.5
+            * (self.KNOB_DEFS[knob]['lower'] + self.KNOB_DEFS[knob]['upper'])
             for knob in self._knobs
         ])
-        
-        self.initial_search_directions = _np.eye(
-            len(self._knobs), dtype=float
-        )
-        
+
+        self.initial_search_directions = _np.eye(len(self._knobs), dtype=float)
+
         self.curr_wfm_index = 100
         self.nrpulses = 5
         self.use_median = False
@@ -620,16 +516,11 @@ class OptimizeInjBOParams(_RCDSParams):
         ])
 
         self.initial_position = _np.array([
-            0.5 * (
-                self.KNOB_DEFS[k]['lower']
-                + self.KNOB_DEFS[k]['upper']
-            )
+            0.5 * (self.KNOB_DEFS[k]['lower'] + self.KNOB_DEFS[k]['upper'])
             for k in knobs
         ])
 
-        self.initial_search_directions = _np.eye(
-            len(knobs)
-        )
+        self.initial_search_directions = _np.eye(len(knobs))
 
 
 class OptimizeInjBO(_RCDS):
@@ -686,7 +577,7 @@ class OptimizeInjBO(_RCDS):
             injcurrs = _np.array(injcurrs)
             self.data['currents'].append(injcurrs)
             func = _np.median if self.params.use_median else _np.mean
-            obj = - func(injcurrs)
+            obj = -func(injcurrs)
 
         if pos is not None and not apply:
             self.set_position_to_machine(pos0)
@@ -726,7 +617,7 @@ class OptimizeInjBO(_RCDS):
         obj = []
         for i in range(nr_evals):
             obj.append(self.objective_function(pos))
-            _log.info(f'{i+1:02d}/{nr_evals:02d}  --> obj. = {obj[-1]:.3f}')
+            _log.info(f'{i + 1:02d}/{nr_evals:02d}  --> obj. = {obj[-1]:.3f}')
         noise_level = _np.std(obj)
         self.params.noise_level = noise_level
         self.data['measured_objfuncs_for_noise'] = obj
@@ -742,17 +633,18 @@ class OptimizeInjBO(_RCDS):
             numpy.ndarray (N,): vector of knobs values.
 
         """
-        
+
         return _np.array([
             self.params.KNOB_DEFS[knob]['get'](self)
             for knob in self.params.knobs
-            ])
+        ])
 
     def set_position_to_machine(self, pos):
         """."""
         if len(pos) != len(self.params.knobs):
             raise ValueError(
-                'Length of pos must match number of knobs selected.')
+                'Length of pos must match number of knobs selected.'
+            )
 
         for knob, value in zip(self.params.knobs, pos):
             self.params.KNOB_DEFS[knob]['set'](self, value)
@@ -763,33 +655,33 @@ class OptimizeInjBO(_RCDS):
         # knobs devices
 
         # lenses
-        self.pvs["li_lens1"] = PV("LI-01:PS-Lens-1:Current-SP")
-        self.pvs["li_lens2"] = PV("LI-01:PS-Lens-2:Current-SP")
-        self.pvs["li_lens3"] = PV("LI-01:PS-Lens-3:Current-SP")
-        self.pvs["li_lens4"] = PV("LI-01:PS-Lens-4:Current-SP")
+        self.pvs['li_lens1'] = PV('LI-01:PS-Lens-1:Current-SP')
+        self.pvs['li_lens2'] = PV('LI-01:PS-Lens-2:Current-SP')
+        self.pvs['li_lens3'] = PV('LI-01:PS-Lens-3:Current-SP')
+        self.pvs['li_lens4'] = PV('LI-01:PS-Lens-4:Current-SP')
 
         # solenoids
-        self.pvs["li_slnd1"] = PV("LI-01:PS-Slnd-1:Current-SP")
-        self.pvs["li_slnd2"] = PV("LI-01:PS-Slnd-2:Current-SP")
-        self.pvs["li_slnd3"] = PV("LI-01:PS-Slnd-3:Current-SP")
-        self.pvs["li_slnd4"] = PV("LI-01:PS-Slnd-4:Current-SP")
-        self.pvs["li_slnd5"] = PV("LI-01:PS-Slnd-5:Current-SP")
-        self.pvs["li_slnd6"] = PV("LI-01:PS-Slnd-6:Current-SP")
-        self.pvs["li_slnd7"] = PV("LI-01:PS-Slnd-7:Current-SP")
-        self.pvs["li_slnd8"] = PV("LI-01:PS-Slnd-8:Current-SP")
-        self.pvs["li_slnd9"] = PV("LI-01:PS-Slnd-9:Current-SP")
-        self.pvs["li_slnd10"] = PV("LI-01:PS-Slnd-10:Current-SP")
-        self.pvs["li_slnd11"] = PV("LI-01:PS-Slnd-11:Current-SP")
-        self.pvs["li_slnd12"] = PV("LI-01:PS-Slnd-12:Current-SP")
-        self.pvs["li_slnd13"] = PV("LI-01:PS-Slnd-13:Current-SP")
-        self.pvs["li_slnd14"] = PV("LI-Fam:PS-Slnd-14:Current-SP")
-        self.pvs["li_slnd15"] = PV("LI-Fam:PS-Slnd-15:Current-SP")
-        self.pvs["li_slnd16"] = PV("LI-Fam:PS-Slnd-16:Current-SP")
-        self.pvs["li_slnd17"] = PV("LI-Fam:PS-Slnd-17:Current-SP")
-        self.pvs["li_slnd18"] = PV("LI-Fam:PS-Slnd-18:Current-SP")
-        self.pvs["li_slnd19"] = PV("LI-Fam:PS-Slnd-19:Current-SP")
-        self.pvs["li_slnd20"] = PV("LI-Fam:PS-Slnd-20:Current-SP")
-        self.pvs["li_slnd21"] = PV("LI-Fam:PS-Slnd-21:Current-SP")
+        self.pvs['li_slnd1'] = PV('LI-01:PS-Slnd-1:Current-SP')
+        self.pvs['li_slnd2'] = PV('LI-01:PS-Slnd-2:Current-SP')
+        self.pvs['li_slnd3'] = PV('LI-01:PS-Slnd-3:Current-SP')
+        self.pvs['li_slnd4'] = PV('LI-01:PS-Slnd-4:Current-SP')
+        self.pvs['li_slnd5'] = PV('LI-01:PS-Slnd-5:Current-SP')
+        self.pvs['li_slnd6'] = PV('LI-01:PS-Slnd-6:Current-SP')
+        self.pvs['li_slnd7'] = PV('LI-01:PS-Slnd-7:Current-SP')
+        self.pvs['li_slnd8'] = PV('LI-01:PS-Slnd-8:Current-SP')
+        self.pvs['li_slnd9'] = PV('LI-01:PS-Slnd-9:Current-SP')
+        self.pvs['li_slnd10'] = PV('LI-01:PS-Slnd-10:Current-SP')
+        self.pvs['li_slnd11'] = PV('LI-01:PS-Slnd-11:Current-SP')
+        self.pvs['li_slnd12'] = PV('LI-01:PS-Slnd-12:Current-SP')
+        self.pvs['li_slnd13'] = PV('LI-01:PS-Slnd-13:Current-SP')
+        self.pvs['li_slnd14'] = PV('LI-Fam:PS-Slnd-14:Current-SP')
+        self.pvs['li_slnd15'] = PV('LI-Fam:PS-Slnd-15:Current-SP')
+        self.pvs['li_slnd16'] = PV('LI-Fam:PS-Slnd-16:Current-SP')
+        self.pvs['li_slnd17'] = PV('LI-Fam:PS-Slnd-17:Current-SP')
+        self.pvs['li_slnd18'] = PV('LI-Fam:PS-Slnd-18:Current-SP')
+        self.pvs['li_slnd19'] = PV('LI-Fam:PS-Slnd-19:Current-SP')
+        self.pvs['li_slnd20'] = PV('LI-Fam:PS-Slnd-20:Current-SP')
+        self.pvs['li_slnd21'] = PV('LI-Fam:PS-Slnd-21:Current-SP')
 
         # LI quads
         props2init = ['Current-SP', 'Current-RB']
@@ -849,10 +741,10 @@ class OptimizeInjBO(_RCDS):
         )
 
         # TB PosAng knobs (alternative to PosAng)
-        self.devices["tb_ch1"] = PowerSupply("TB-04:PS-CH-1")
-        self.devices["tb_injsept"] = PowerSupplyPU("TB-04:PU-InjSept")
-        self.devices["tb_cv1"] = PowerSupply("TB-04:PS-CV-1")
-        self.devices["tb_cv2"] = PowerSupply("TB-04:PS-CV-2")
+        self.devices['tb_ch1'] = PowerSupply('TB-04:PS-CH-1')
+        self.devices['tb_injsept'] = PowerSupplyPU('TB-04:PU-InjSept')
+        self.devices['tb_cv1'] = PowerSupply('TB-04:PS-CV-1')
+        self.devices['tb_cv2'] = PowerSupply('TB-04:PS-CV-2')
 
         # LI LLRF
         self.devices['li_llrf'] = LILLRF()
@@ -867,7 +759,7 @@ class OptimizeInjBO(_RCDS):
         self.devices['currinfo'] = CurrInfoBO()
         self.devices['dcct'] = DCCT(DCCT.DEVICES.BO)
         self.devices['evg'] = EVG()
-        self.devices['ejekckr_trig'] = Trigger("BO-48D:TI-EjeKckr")
+        self.devices['ejekckr_trig'] = Trigger('BO-48D:TI-EjeKckr')
         self.devices['egun_trigps'] = EGTriggerPS()
         self.devices['injctrl'] = InjCtrl(props2init=None)
 
@@ -916,7 +808,7 @@ class OptimizeInjBO(_RCDS):
             timeout (float): timeout in seconds. Defaults to 10 s.
         """
         sleep_time = 0.1
-        it = int(timeout/sleep_time)
+        it = int(timeout / sleep_time)
         for _ in range(it):
             pos_ = self.get_current_position()
             if _np.all(_np.isclose(pos_, pos, atol=1e-4)):
