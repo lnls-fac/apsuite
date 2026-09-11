@@ -344,7 +344,7 @@ class OptimizeInjBOParams(_RCDSParams):
         },
         # TB correctors / septum
         'tb_ch1': {
-            'lower': -10.0,
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_ch1'].current,
             'set': lambda self, v: setattr(
@@ -352,7 +352,7 @@ class OptimizeInjBOParams(_RCDSParams):
             ),
         },
         'tb_injsept': {
-            'lower': -776.69,
+            'lower': -776.69,  # [mrad]
             'upper': 0.0,
             'get': lambda self: self.devices['tb_injsept'].strength,
             'set': lambda self, v: setattr(
@@ -360,7 +360,7 @@ class OptimizeInjBOParams(_RCDSParams):
             ),
         },
         'tb_cv1': {
-            'lower': -10.0,
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_cv1'].current,
             'set': lambda self, v: setattr(
@@ -368,7 +368,7 @@ class OptimizeInjBOParams(_RCDSParams):
             ),
         },
         'tb_cv2': {
-            'lower': -10.0,
+            'lower': -10.0,  # [A]
             'upper': 10.0,
             'get': lambda self: self.devices['tb_cv2'].current,
             'set': lambda self, v: setattr(
@@ -377,7 +377,7 @@ class OptimizeInjBOParams(_RCDSParams):
         },
         # Linac LLRF
         'shb_amp': {
-            'lower': 20,
+            'lower': 20,  # [%]
             'upper': 40,
             'get': lambda self: self.devices['li_llrf'].dev_shb.amplitude,
             'set': lambda self, v: setattr(
@@ -385,7 +385,7 @@ class OptimizeInjBOParams(_RCDSParams):
             ),
         },
         'kly1_amp': {
-            'lower': 85,
+            'lower': 85,  # [%]
             'upper': 91,
             'get': lambda self: (
                 self.devices['li_llrf'].dev_klystron1.amplitude
@@ -395,7 +395,7 @@ class OptimizeInjBOParams(_RCDSParams):
             ),
         },
         'kly2_amp': {
-            'lower': 70,
+            'lower': 70,  # [%]
             'upper': 76,
             'get': lambda self: (
                 self.devices['li_llrf'].dev_klystron2.amplitude
@@ -405,7 +405,7 @@ class OptimizeInjBOParams(_RCDSParams):
             ),
         },
         'shb_phs': {
-            'lower': 160,
+            'lower': 160,  # [deg]
             'upper': 180,
             'get': lambda self: self.devices['li_llrf'].dev_shb.phase,
             'set': lambda self, v: setattr(
@@ -413,7 +413,7 @@ class OptimizeInjBOParams(_RCDSParams):
             ),
         },
         'kly1_phs': {
-            'lower': -180,
+            'lower': -180,  # [deg]
             'upper': -150,
             'get': lambda self: self.devices['li_llrf'].dev_klystron1.phase,
             'set': lambda self, v: setattr(
@@ -421,7 +421,7 @@ class OptimizeInjBOParams(_RCDSParams):
             ),
         },
         'kly2_phs': {
-            'lower': -20,
+            'lower': -20,  # [deg]
             'upper': 0,
             'get': lambda self: self.devices['li_llrf'].dev_klystron2.phase,
             'set': lambda self, v: setattr(
@@ -430,16 +430,16 @@ class OptimizeInjBOParams(_RCDSParams):
         },
         # Booster RF
         'borf_amp': {
-            'lower': 30,
-            'upper': 80,
-            'get': lambda self: self.devices['bo_llrf'].voltage_bottom,
+            'lower': 30,  # [mV]
+            'upper': 80,  # not sure these limits are updated and reasonable
+            'get': lambda self: self.devices['bo_llrf'].voltage,
             'set': lambda self, v: setattr(
-                self.devices['bo_llrf'], 'voltage_bottom', v
+                self.devices['bo_llrf'], 'voltage', v
             ),
         },
         'borf_phs': {
-            'lower': 90,
-            'upper': 160,
+            'lower': 90,  # [deg]
+            'upper': 160,  # not sure these limits are updated and reasonable
             'get': lambda self: self.devices['bo_llrf'].phase_bottom,
             'set': lambda self, v: setattr(
                 self.devices['bo_llrf'], 'phase_bottom', v
@@ -631,9 +631,7 @@ class OptimizeInjBO(_RCDS):
 
         Returns:
             numpy.ndarray (N,): vector of knobs values.
-
         """
-
         return _np.array([
             self.params.KNOB_DEFS[knob]['get'](self)
             for knob in self.params.knobs
