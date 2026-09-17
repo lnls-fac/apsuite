@@ -827,19 +827,32 @@ class InjCtrlOptimizeInjBOParams(_ParamsBase):
     def __init__(self):
         """."""
         super().__init__()
+        self.wait_between_injections = 3  # [s]
         self.stop_pulsing_time = 14  # [s]
         self.bias_voltage = -34.0  # [V]
 
     def __str__(self):
         """."""
         TMPF = '{:30s}: {:10.3f} {:s}\n'.format
-        stg = TMPF('stop_pulsing_time', self.stop_pulsing_time, '[s]')
+        stg = TMPF(
+            'wait_between_injections', self.wait_between_injections, '[s]'
+        )
+        stg += TMPF('stop_pulsing_time', self.stop_pulsing_time, '[s]')
         stg += TMPF('bias_voltage', self.bias_voltage, '[V]')
         return stg
 
 
-class InjCtrlOptimzeInjBO(_BaseClass):
-    """."""
+class InjCtrlOptimizeInjBO(_BaseClass):
+    """Control injection for optimizing BO injection during top-up.
+
+    Once fired, controls the injection system to pulse in between top-up
+    injections. The optimization pulses are configured so that the injected
+    beam is not transported to BO extraction. The beam is dumped before the
+    end of the ramp. Pulses are triggered separated by
+    `self.params.wait_between_injections` seconds, as long as the next top-up
+    pulse time is larger then `self.params.stop_pulsning_time` seconds away in
+    the future.
+    """
 
     def __init__(self):
         """."""
@@ -875,15 +888,21 @@ class InjCtrlOptimzeInjBO(_BaseClass):
                         print('Injecting for optimization...')
                     else:
                         print(
-                            'self.allow_injection is False ' +
-                            'Not injecting while False.'
+                            'self.allow_injection is False '
+                            + 'Not injecting while False.'
                         )
                 else:
                     print(
                         'Not injecting for optimization. Preparing for top-up.'
                     )
                     self.prepare_for_inj(delay_raw_inj)
-                _time.sleep(max(0, 3 - (_time.time() - t0)))
+                _time.sleep(
+                    max(
+                        0,
+                        self.params.wait_between_injections
+                        - (_time.time() - t0),
+                    )
+                )
         finally:
             print('Exiting. Setting up injection for top-up')
             self.prepare_for_inj(delay_raw_inj)
@@ -893,7 +912,7 @@ class InjCtrlOptimzeInjBO(_BaseClass):
         self.devices['injctrl'].biasfb_model_updatedata = 0
         self.set_trigger_delay_raw(self.devices['trig_ejekckr'], dly)
         self.devices['egunbias'].voltage = self.params.bias_voltage
-        self._set_triggers_devices_state(state=0)
+        self._set_triggers_state(state=0)
 
     def prepare_for_inj(self, dly):
         """."""
@@ -902,7 +921,7 @@ class InjCtrlOptimzeInjBO(_BaseClass):
         self.devices['egunbias'].voltage = self.devices[
             'injctrl'
         ].bias_volt_multbun
-        self._set_tirggers_devices_state(state=1)
+        self._set_triggers_state(state=1)
 
     def set_trigger_delay_raw(self, trig, val):
         """."""
@@ -926,7 +945,7 @@ class InjCtrlOptimzeInjBO(_BaseClass):
         self.devices['trig_osc_injsi1'] = Trigger('AS-Glob:TI-Osc-InjSI')
         self.devices['trig_osc_injsi2'] = Trigger('AS-Glob:TI-Osc-InjSI2')
 
-    def _set_triggers_devices_state(self, state):
+    def _set_triggers_state(self, state):
         """."""
         self.devices['trig_ejeseptf'].state = state
         self.devices['trig_ejeseptg'].state = state
