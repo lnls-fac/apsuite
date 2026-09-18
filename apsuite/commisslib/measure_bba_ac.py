@@ -1090,41 +1090,45 @@ class DoACBBA(_BaseClass):
         )
 
         amp_x_pos, ph_x_pos = self.fit_calc_amp_and_phase(cosx_pos, sinx_pos)
-        amp_y_pos, ph_y_pos = self.fit_calc_amp_and_phase(cosy_pos, siny_pos)
         amp_x_neg, ph_x_neg = self.fit_calc_amp_and_phase(cosx_neg, sinx_neg)
+
+        amp_y_pos, ph_y_pos = self.fit_calc_amp_and_phase(cosy_pos, siny_pos)
         amp_y_neg, ph_y_neg = self.fit_calc_amp_and_phase(cosy_neg, siny_neg)
 
-        phref_h_pos = ph_x_pos[bpmidx]
-        phref_v_pos = ph_y_pos[bpmidx]
-        phref_h_neg = ph_x_neg[bpmidx]
-        phref_v_neg = ph_y_neg[bpmidx]
+        phref_h_pos = ph_x_pos[:, bpmidx]
+        phref_h_neg = ph_x_neg[:, bpmidx]
+        phref_v_pos = ph_y_pos[:, bpmidx]
+        phref_v_neg = ph_y_neg[:, bpmidx]
 
+        f = 0.0
         if quadmode == self.params.QUAD_MODULATION_MODE.DC:
-            sgn_xh_pos = _np.sign(_np.cos(ph_x_pos[0] - phref_h_pos))
-            sgn_yh_pos = _np.sign(_np.cos(ph_y_pos[0] - phref_h_pos))
-            sgn_xv_pos = _np.sign(_np.cos(ph_x_pos[1] - phref_v_pos))
-            sgn_yv_pos = _np.sign(_np.cos(ph_y_pos[1] - phref_v_pos))
-            sgn_xh_neg = _np.sign(_np.cos(ph_x_neg[0] - phref_h_neg))
-            sgn_yh_neg = _np.sign(_np.cos(ph_y_neg[0] - phref_h_neg))
-            sgn_xv_neg = _np.sign(_np.cos(ph_x_neg[1] - phref_v_neg))
-            sgn_yv_neg = _np.sign(_np.cos(ph_y_neg[1] - phref_v_neg))
+            sgn_xh_pos = _np.sign(_np.cos(ph_x_pos[0] - phref_h_pos[0] * f))
+            sgn_xv_pos = _np.sign(_np.cos(ph_x_pos[1] - phref_v_pos[1] * f))
+            sgn_xh_neg = _np.sign(_np.cos(ph_x_neg[0] - phref_h_neg[0] * f))
+            sgn_xv_neg = _np.sign(_np.cos(ph_x_neg[1] - phref_v_neg[1] * f))
+            sgn_yh_pos = _np.sign(_np.cos(ph_y_pos[0] - phref_h_pos[0] * f))
+            sgn_yv_pos = _np.sign(_np.cos(ph_y_pos[1] - phref_v_pos[1] * f))
+            sgn_yh_neg = _np.sign(_np.cos(ph_y_neg[0] - phref_h_neg[0] * f))
+            sgn_yv_neg = _np.sign(_np.cos(ph_y_neg[1] - phref_v_neg[1] * f))
 
             sgn_xh_pos[sgn_xh_pos == 0] = 1.0
-            sgn_yh_pos[sgn_yh_pos == 0] = 1.0
             sgn_xv_pos[sgn_xv_pos == 0] = 1.0
-            sgn_yv_pos[sgn_yv_pos == 0] = 1.0
             sgn_xh_neg[sgn_xh_neg == 0] = 1.0
-            sgn_yh_neg[sgn_yh_neg == 0] = 1.0
             sgn_xv_neg[sgn_xv_neg == 0] = 1.0
+
+            sgn_yh_pos[sgn_yh_pos == 0] = 1.0
+            sgn_yv_pos[sgn_yv_pos == 0] = 1.0
+            sgn_yh_neg[sgn_yh_neg == 0] = 1.0
             sgn_yv_neg[sgn_yv_neg == 0] = 1.0
 
             sxh_pos = amp_x_pos[0] * sgn_xh_pos
-            syh_pos = amp_y_pos[0] * sgn_yh_pos
             sxv_pos = amp_x_pos[1] * sgn_xv_pos
-            syv_pos = amp_y_pos[1] * sgn_yv_pos
             sxh_neg = amp_x_neg[0] * sgn_xh_neg
-            syh_neg = amp_y_neg[0] * sgn_yh_neg
             sxv_neg = amp_x_neg[1] * sgn_xv_neg
+
+            syh_pos = amp_y_pos[0] * sgn_yh_pos
+            syv_pos = amp_y_pos[1] * sgn_yv_pos
+            syh_neg = amp_y_neg[0] * sgn_yh_neg
             syv_neg = amp_y_neg[1] * sgn_yv_neg
 
             d_x = dcx_pos - dcx_neg
@@ -1133,16 +1137,18 @@ class DoACBBA(_BaseClass):
             d_yh = syh_pos - syh_neg
             d_xv = sxv_pos - sxv_neg
             d_yv = syv_pos - syv_neg
+
         elif quadmode == self.params.QUAD_MODULATION_MODE.AC:
             msg = "AC quadrupole modulation mode not implemented yet."
             raise NotImplementedError(msg)
+
         else:
             quadmode_str = self.params.QUAD_MODULATION_MODE._field[quadmode]
             msg = f"Invalid quadrupole modulation mode: {quadmode_str}"
             raise ValueError(msg)
 
-        y_h = d_x * d_yv - d_xv * d_y
-        y_v = d_xh * d_y - d_x * d_yh
+        y_h = -(d_x * d_yv - d_xv * d_y)
+        y_v = -(d_xh * d_y - d_x * d_yh)
         x_h = d_xh * d_yv - d_xv * d_yh
         x_v = d_xh * d_yv - d_xv * d_yh
 
@@ -1152,12 +1158,12 @@ class DoACBBA(_BaseClass):
         x0_pos = (
             dcx_pos[bpmidx] + sxh_pos[bpmidx] * m_h + sxv_pos[bpmidx] * m_v
         )
-        y0_pos = (
-            dcy_pos[bpmidx] + syv_pos[bpmidx] * m_v + syh_pos[bpmidx] * m_h
-        )
-
         x0_neg = (
             dcx_neg[bpmidx] + sxh_neg[bpmidx] * m_h + sxv_neg[bpmidx] * m_v
+        )
+
+        y0_pos = (
+            dcy_pos[bpmidx] + syv_pos[bpmidx] * m_v + syh_pos[bpmidx] * m_h
         )
         y0_neg = (
             dcy_neg[bpmidx] + syv_neg[bpmidx] * m_v + syh_neg[bpmidx] * m_h
@@ -1168,12 +1174,24 @@ class DoACBBA(_BaseClass):
 
         self.analysis[bpmname] = dict(
             tim=tim,
-            dcx_pos=dcx_pos,
-            dcy_pos=dcy_pos,
-            dcx_neg=dcx_neg,
-            dcy_neg=dcy_neg,
             x0=x0,
             y0=y0,
+            x0pos=x0_pos,
+            x0neg=x0_neg,
+            y0pos=y0_pos,
+            y0neg=y0_neg,
+            dcx_pos=dcx_pos[bpmidx],
+            dcy_pos=dcy_pos[bpmidx],
+            dcx_neg=dcx_neg[bpmidx],
+            dcy_neg=dcy_neg[bpmidx],
+            sxh_pos=sxh_pos[bpmidx],
+            sxh_neg=sxh_neg[bpmidx],
+            sxv_pos=sxv_pos[bpmidx],
+            sxv_neg=sxv_neg[bpmidx],
+            syh_pos=syh_pos[bpmidx],
+            syh_neg=syh_neg[bpmidx],
+            syv_pos=syv_pos[bpmidx],
+            syv_neg=syv_neg[bpmidx],
             m_h=m_h,
             m_v=m_v,
             d_x=d_x,
