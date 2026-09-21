@@ -300,10 +300,10 @@ class DoParallelBBA(_BaseClass):
 
         sofb.cmd_reset()
         sofb.wait_buffer(self.params.timeout_wait_orbit)
-
+        orb = _np.hstack([sofb.orbx, sofb.orby])
         sofb.nr_points = nrpts
 
-        return _np.hstack([sofb.orbx, sofb.orby])
+        return orb
 
     def correct_orbit(self):
         """."""
