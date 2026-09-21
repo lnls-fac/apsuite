@@ -945,7 +945,7 @@ class DoParallelBBA(_BaseClass):
                 abs_tol=0.05 * self.params.quad_deltakl,
                 timeout=self.params.wait_quadrupole,
             ):
-                self._log(f'{qname}: could restore strength!')
+                self._log(f'{qname}: could not restore strength!')
 
         if correct_orbit:
             self.correct_orbit()
