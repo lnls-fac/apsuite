@@ -839,7 +839,7 @@ class DoParallelBBA(_BaseClass):
                 increased = True
                 break
 
-            dkicks = list(-1 * _np.dot(inv_jac, ios))
+            dkicks = -1 * _np.dot(inv_jac, ios)
             dkicks_iter.append(dkicks)
             self.set_delta_kicks(dkicks)
             self._log('Done.')
