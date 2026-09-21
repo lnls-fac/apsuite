@@ -195,8 +195,8 @@ class DoParallelBBA(_BaseClass):
     @property
     def havebeam(self):
         """."""
-        haveb = self.devices['currinfosi']
-        return haveb.connected and haveb.storedbeam
+        cinfo = self.devices['currinfosi']
+        return cinfo.connected and cinfo.storedbeam
 
     @property
     def measuredbpms(self):
