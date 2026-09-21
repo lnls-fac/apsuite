@@ -926,7 +926,7 @@ class DoParallelBBA(_BaseClass):
         message='Restoring conditions and exiting...',
         correct_orbit=True,
     ):
-        info = info + ' ' if info else ''
+        info += ' ' if info else ''
         self._log(info + message)
 
         self.set_quad_strengths(group_id, strengths, ignore_timeout=True)
