@@ -58,7 +58,7 @@ class ParallelBBAParams(_ParamsBaseClass):
         stg += f'wait_correctors    = {self.wait_correctors:.3f}\n'
         stg += f'wait_quadrupole    = {self.wait_quadrupole:.3f}\n'
         stg += f'timeout_wait_orbit = {self.timeout_wait_orbit:.3f}\n'
-        stg += f'corr_nr_iters      = {self.corr_max_nr_iters:.3f}\n'
+        stg += f'corr_nr_iters      = {self.corr_max_nr_iters:d}\n'
         stg += f'ios_rms_threshold  = {self.ios_rms_threshold:.2e}\n'
         stg += f'ios_ptp_threshold  = {self.ios_ptp_threshold:.2e}\n'
         stg += f'use_ptp            = {str(self.use_ptp):s}\n'
