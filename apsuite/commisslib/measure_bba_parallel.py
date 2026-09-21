@@ -380,15 +380,17 @@ class DoParallelBBA(_BaseClass):
         if ignore_timeout:
             return DoParallelBBA.STATUS.Success
 
+        t0_ = _time.time()
         for strength, bpmname in zip(strengths, bpms):  # noqa: B905
             quadname = quad_names[bpm_names.index(bpmname)]
             quad = self.devices[quadname]
-            if not quad.wait_float(
+            dt_ = self.params.wait_quadrupole - (_time.time() - t0_)
+            if dt_ <= 0 or not quad.wait_float(
                 'KLRef-Mon',
                 strength,
                 rel_tol=0.0,
                 abs_tol=0.05 * self.params.quad_deltakl,
-                timeout=self.params.wait_quadrupole,
+                timeout=dt_,
             ):
                 return DoParallelBBA.STATUS.Fail
         return DoParallelBBA.STATUS.Success
