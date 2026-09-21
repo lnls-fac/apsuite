@@ -126,10 +126,22 @@ class DoACBBA(_BaseClass):
         "trigbpms_source",
         "trigbpms_nr_pulses",
         "trigbpms_delay_raw",
+
         "trigcorrs_source",
         "trigcorrs_nr_pulses",
         "trigcorrs_delay_raw",
         "trigcorrs_delta_delay_raw",
+
+        "trigquads_source",
+        "trigquads_nr_pulses",
+        "trigquads_delay_raw",
+        "trigquads_delta_delay_raw",
+
+        "trigskews_source",
+        "trigskews_nr_pulses",
+        "trigskews_delay_raw",
+        "trigskews_delta_delay_raw",
+
         "evt_mode",
         "evt_delay_raw",
     )
@@ -183,7 +195,32 @@ class DoACBBA(_BaseClass):
         self.devices["fambpms"] = self.bpms
 
         # Quadrupoles
-        props = ["PwrState-Sts", "KL-SP", "KL-RB", "KLRef-Mon"]
+        props = [
+            "PwrState-Sts",
+            "KL-SP",
+            "KL-RB",
+            "KLRef-Mon",
+            "OpMode-Sel",
+            "OpMode-Sts",
+            "Current-SP",
+            "Current-RB",
+            "Current-Mon",
+            "CurrentRef-Mon",
+            "CycleType-Sel",
+            "CycleFreq-SP",
+            "CycleAmpl-SP",
+            "CycleOffset-SP",
+            "CycleAuxParam-SP",
+            "CycleAuxParam-RB",
+            "CycleNrCycles-SP",
+            "CycleAmpl-RB",
+            "CycleOffset-RB",
+            "CycleFreq-RB",
+            "CycleNrCycles-RB",
+            "CycleType-Sts",
+            "CycleEnbl-Mon",
+            "ParamPWMFreq-Cte",
+        ]
         for qname in self.data["quadnames"]:
             if qname in self.devices:
                 continue
@@ -249,7 +286,7 @@ class DoACBBA(_BaseClass):
         ]
         self.devices["trigbpms"] = _Trigger("SI-Fam:TI-BPM", props2init=props)
 
-        # Correctors Trigger
+        # Correctors, Quads and Skews Triggers
         props = [
             "Src-Sts",
             "NrPulses-RB",
@@ -264,6 +301,13 @@ class DoACBBA(_BaseClass):
         self.devices["trigcorrs"] = _Trigger(
             "SI-Glob:TI-Mags-Corrs", props2init=props
         )
+        self.devices["trigquads"] = _Trigger(
+            "SI-Glob:TI-Mags-QTrims", props2init=props
+        )
+        self.devices["trigskews"] = _Trigger(
+            "SI-Glob:TI-Mags-Skews", props2init=props
+        )
+
         # Event to start synchronous acquisition:
         props = [
             "Mode-Sts",
@@ -493,7 +537,7 @@ class DoACBBA(_BaseClass):
 
         return self.STATUS.Success, data
 
-    def _acquire_data(self, ch_name, cv_name, **kw):
+    def _acquire_data(self, ch_name, cv_name, quad_name=None, **kw):
         """."""
         tab = kw.pop("tab", 0)
         corr_names = [ch_name, cv_name]
@@ -516,6 +560,7 @@ class DoACBBA(_BaseClass):
             self.params.corrs_delay,
             chs=[[ch_name]],
             cvs=[[cv_name]],
+            quads=[[quad_name]],
             nr_points=nr_points,
         )
         msg = f"Done! ET: {_time.time() - t00:.2f}s"
@@ -776,7 +821,13 @@ class DoACBBA(_BaseClass):
         _time.sleep(0.1)
         self.devices["evg"].cmd_update_events()
 
-    def _config_timing(self, cm_dly=0, chs=None, cvs=None, nr_points=None):
+    def _config_timing(
+        self,
+        cm_dly=0,
+        chs=None,
+        cvs=None,
+        quads=None,
+        nr_points=None):
         """Configure timing.
 
         Args:
@@ -806,15 +857,26 @@ class DoACBBA(_BaseClass):
         state["trigcorrs_source"] = "Study"
         state["trigcorrs_nr_pulses"] = 1
 
+        if quads is not None:
+            state["trigquads_source"] = "Study"
+            state["trigquads_nr_pulses"] = 1
+
+            state["trigskews_source"] = "Study"
+            state["trigskews_nr_pulses"] = 1
+
         rf_freq = self.devices["rfgen"].frequency
         ftim = rf_freq / 4  # timing base frequency
         dly = int(cm_dly * ftim)
         if chs is None or cvs is None or nr_points is None:
             state["trigcorrs_delay_raw"] = dly
+            state["trigquads_delay_raw"] = dly
+            state["trigskews_delay_raw"] = dly
             self.set_timing_state(state)
             return
 
         state["trigcorrs_delay_raw"] = 0
+        state["trigquads_delay_raw"] = 0
+        state["trigskews_delay_raw"] = 0
         nr_runs = len(chs)
         # Calculate delta_delay for correctors to be as close as possible to a
         # multiple of the the sampling period to ensure repeatability of
@@ -826,29 +888,50 @@ class DoACBBA(_BaseClass):
 
         # get low level trigger names to be configured in each run of the
         # acquisition:
-        ll_trigs = []
-        for ch, cv in zip(chs, cvs):  # noqa: B905
-            llt = set()
-            for c in ch + cv:
+        ll_trigs_corrs = []
+        ll_trigs_quads = []
+        ll_trigs_skews = []
+        if quads is None:
+            quads = _np.full_like(chs, False, dtype=bool).tolist()
+        for ch, cv, quad in zip(chs, cvs, quads):  # noqa: B905
+            llt_corrs = set()
+            llt_quads = set()
+            llt_skews = set()
+            for c in ch + cv + quad:
+                if not c:
+                    continue
                 trig = _LLTime.get_trigger_name(c + ":BCKPLN")
-                llt.add(trig)
-            ll_trigs.append(llt)
+                if c.dev in ["CH", "CV"]:
+                    llt_corrs.add(trig)
+                elif c.dev == "QS":
+                    llt_skews.add(trig)
+                else:
+                    llt_quads.add(trig)
+            ll_trigs_corrs.append(llt_corrs)
+            ll_trigs_quads.append(llt_quads)
+            ll_trigs_skews.append(llt_skews)
 
         # check if correctors controlled by the same trigger are requested to
         # be triggered in different times during the same acquisition
-        if len(_red(_opr.or_, ll_trigs)) != _red(_opr.add, map(len, ll_trigs)):
-            raise ValueError("Impossible trigger configuration requested.")
+        for ll_trigs in [ll_trigs_corrs, ll_trigs_quads, ll_trigs_skews]:
+            if len(_red(_opr.or_, ll_trigs)) != \
+                _red(_opr.add, map(len, ll_trigs)):
+                raise ValueError("Impossible trigger configuration requested.")
 
-        trigcorr = self.devices["trigcorrs"]
-        delta_delay_raw = _np.zeros(trigcorr.delta_delay_raw.size)
-        low_level = trigcorr.low_level_triggers
-        for llts, ddlyr in zip(ll_trigs, runs_delta_dlyr):  # noqa: B905
-            # Find all low level triggers of this sector and set their delay:
-            for llt in llts:
-                if llt not in low_level:
-                    raise ValueError(f"Trigger {llt:s} is not valid.")
-                delta_delay_raw[low_level.index(llt)] = ddlyr + dly
-        state["trigcorr_delta_delay_raw"] = delta_delay_raw
+        for trig_type, ll_trigs in zip(  # noqa: B905
+            ["trigcorrs", "trigquads", "trigskews"],
+            [ll_trigs_corrs, ll_trigs_quads, ll_trigs_skews]
+            ):
+            trig = self.devices[trig_type]
+            delta_delay_raw = _np.zeros(trig.delta_delay_raw.size)
+            low_level = trig.low_level_triggers
+            for llts, ddlyr in zip(ll_trigs, runs_delta_dlyr):  # noqa: B905
+                # Find all ll triggers of this sector and set their delay:
+                for llt in llts:
+                    if llt not in low_level:
+                        raise ValueError(f"Trigger {llt:s} is not valid.")
+                    delta_delay_raw[low_level.index(llt)] = ddlyr + dly
+            state[f"{trig_type}_delta_delay_raw"] = delta_delay_raw
         self.set_timing_state(state)
 
     def _log(self, msg, *args, **kwargs):
