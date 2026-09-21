@@ -62,10 +62,10 @@ class ParallelBBAParams(_ParamsBaseClass):
         stg += f'ios_rms_threshold  = {self.ios_rms_threshold:.2e}\n'
         stg += f'ios_ptp_threshold  = {self.ios_ptp_threshold:.2e}\n'
         stg += f'use_ptp            = {str(self.use_ptp):s}\n'
-        stg += f'sofb_nrpoints      = {self.sofb_nrpoints:.3f}\n'
-        stg += f'sofb_maxcorriter   = {self.sofb_maxcorriter:.3f}\n'
+        stg += f'sofb_nrpoints      = {self.sofb_nrpoints:d}\n'
+        stg += f'sofb_maxcorriter   = {self.sofb_maxcorriter:d}\n'
         stg += f'sofb_maxorberr     = {self.sofb_maxorberr:.3f}\n'
-        stg += f'cycling_nr_steps   = {self.cycling_nr_steps:.3f}\n'
+        stg += f'cycling_nr_steps   = {self.cycling_nr_steps:d}\n'
         return stg
 
     @staticmethod
