@@ -132,7 +132,7 @@ class MeasBaseClass(DataBaseClass):
 
     def __init__(self, params=None, isonline=True):
         """."""
-        super().__init__(params=params)
+        DataBaseClass.__init__(self, params=params)
         self.isonline = bool(isonline)
         self.devices = dict()
         self.analysis = dict()
@@ -170,7 +170,7 @@ class ThreadedMeasBaseClass(MeasBaseClass):
 
     def __init__(self, params=None, target=None, isonline=True):
         """."""
-        super().__init__(params=params, isonline=isonline)
+        MeasBaseClass.__init__(self, params=params, isonline=isonline)
         self._target = target
         self._stopevt = _Event()
         self._finished = _Event()
