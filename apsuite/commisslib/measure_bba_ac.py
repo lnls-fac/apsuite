@@ -41,38 +41,34 @@ class ACBBAParams(_ParamsBaseClass):
 
     BPMNAMES = _BBAParams.BPMNAMES
     QUADNAMES = _BBAParams.QUADNAMES
-    QUAD_MODULATION_MODE = _get_namedtuple("QuadModulationMode", ["AC", "DC"])
+    QUAD_MODULATION_MODE = _get_namedtuple('QuadModulationMode', ['AC', 'DC'])
 
     def __init__(self):
         """."""
         super().__init__()
         self.timeout_bpms = 60  # [s]
-        self.timeout_correctors = 20  # [s]
+        self.timeout_magnets = 20  # [s]
 
-        self.quad_modulation_mode = ACBBAParams.QUAD_MODULATION_MODE.DC
+        self._quad_modulation_mode = ACBBAParams.QUAD_MODULATION_MODE.DC
         self.quad_delta_kl = 0.01  # [1/m]
-        self.wait_quadrupole = 1.0  # [s]
+        self.wait_quadrupole = 2.0  # [s]
 
         self.cv_freq = 17.0  # [Hz]
         self.ch_freq = 23.0  # [Hz]
-        self.qn_freq = 0.0  # [Hz]
-        self.qs_freq = 0.0  # [Hz]
+        self.q_freq = 5.0  # [Hz]
 
         self.excit_time = 2  # [s]
         self.corrs_delay = 5e-3  # [s]
 
         self.ch_kick = 5  # [urad]
         self.cv_kick = 5  # [urad]
-
-        self.dorbx = 100.0  # [um]
-        self.dorby = 100.0  # [um]
-
-        self.use_qs_excitation = False
-        self.use_qn_excitation = False
+        # self.dorbx = 100.0  # [um]
+        # self.dorby = 100.0  # [um]
+        # self.use_normalized_kicks = False
 
         self.measure_bpms_noise = True
-        self.acq_rate = "FAcq"
-        self.orm_name = "ref_respmat"
+        self.acq_rate = 'FAcq'
+        self.orm_name = 'ref_respmat'
 
         self.sofb_maxcorriter = 5
         self.sofb_maxorberr = 5  # [um]
@@ -80,38 +76,59 @@ class ACBBAParams(_ParamsBaseClass):
 
     def __str__(self):
         """."""
-        ftmp = "{0:24s} = {1:9.3f}  {2:s}\n".format
-        dtmp = "{0:24s} = {1:9d}  {2:s}\n".format
-        stmp = "{0:24s} = {1:9s}  {2:s}\n".format
+        ftmp = '{0:24s} = {1:9.3f}  {2:s}\n'.format
+        dtmp = '{0:24s} = {1:9d}  {2:s}\n'.format
+        stmp = '{0:24s} = {1:9s}  {2:s}\n'.format
 
-        stg = ""
-        stg += "AC-BBA Parameters:\n"
-        stg += ftmp("timeout_bpms", self.timeout_bpms, "[s]")
-        stg += ftmp("timeout_correctors", self.timeout_correctors, "[s]")
+        stg = ''
+        stg += 'AC-BBA Parameters:\n'
+        stg += ftmp('timeout_bpms', self.timeout_bpms, '[s]')
+        stg += ftmp('timeout_magnets', self.timeout_magnets, '[s]')
+        stg += stmp('quad_modulation_mode', self.quad_modulation_mode_str, '')
+        stg += ftmp('quad_delta_kl', self.quad_delta_kl, '[1/m]')
+        stg += ftmp('wait_quadrupole', self.wait_quadrupole, '[s]')
+        stg += ftmp('cv_freq', self.cv_freq, '[Hz]')
+        stg += ftmp('ch_freq', self.ch_freq, '[Hz]')
+        stg += ftmp('q_freq', self.q_freq, '[Hz]')
+        stg += ftmp('excit_time', self.excit_time, '[s]')
+        stg += ftmp('corrs_delay', self.corrs_delay, '[s]')
+        stg += ftmp('ch_kick', self.ch_kick, '[urad]')
+        stg += ftmp('cv_kick', self.cv_kick, '[urad]')
+        stg += ftmp('dorbx', self.dorbx, '[um]')
+        stg += ftmp('dorby', self.dorby, '[um]')
+
+        stg += stmp('measure_bpms_noise', str(self.measure_bpms_noise), '')
+        stg += stmp('acq_rate', self.acq_rate, '')
+        stg += stmp('orm_name', self.orm_name, '')
+        stg += dtmp('sofb_maxcorriter', self.sofb_maxcorriter, '')
+        stg += ftmp('sofb_maxorberr', self.sofb_maxorberr, '[um]')
         stg += stmp(
-            "quad_modulation_mode",
-            self.QUAD_MODULATION_MODE._fields[self.quad_modulation_mode],
-            "",
+            'correct_orbit_each_step', str(self.correct_orbit_each_step), ''
         )
-        stg += ftmp("quad_delta_kl", self.quad_delta_kl, "[1/m]")
-        stg += ftmp("wait_quadrupole", self.wait_quadrupole, "[s]")
-        stg += ftmp("cv_freq", self.cv_freq, "[Hz]")
-        stg += ftmp("ch_freq", self.ch_freq, "[Hz]")
-        stg += ftmp("qn_freq", self.qn_freq, "[Hz]")
-        stg += ftmp("qs_freq", self.qs_freq, "[Hz]")
-        stg += ftmp("excit_time", self.excit_time, "[s]")
-        stg += ftmp("corrs_delay", self.corrs_delay, "[s]")
-        stg += ftmp("ch_kick", self.ch_kick, "[urad]")
-        stg += ftmp("cv_kick", self.cv_kick, "[urad]")
-        stg += ftmp("dorbx", self.dorbx, "[um]")
-        stg += ftmp("dorby", self.dorby, "[um]")
-        stg += dtmp("use_qs_excitation", int(self.use_qs_excitation), "")
-        stg += dtmp("use_qn_excitation", int(self.use_qn_excitation), "")
-        stg += dtmp("measure_bpms_noise", int(self.measure_bpms_noise), "")
-        stg += stmp("acq_rate", self.acq_rate, "")
-        stg += stmp("orm_name", self.orm_name, "")
-
         return stg
+
+    @property
+    def quad_modulation_mode(self):
+        """Quadrupole Modulation Mode (int)."""
+        return self._quad_modulation_mode
+
+    @property
+    def quad_modulation_mode_str(self):
+        """Quadrupole Modulation Mode (str)."""
+        return self.QUAD_MODULATION_MODE._fields[self._quad_modulation_mode]
+
+    @quad_modulation_mode.setter
+    def quad_modulation_mode(self, value):
+        fields = self.QUAD_MODULATION_MODE._fields
+        if isinstance(value, str) and value.upper() in fields:
+            self._quad_modulation_mode = fields.index(value)
+        elif value in self.QUAD_MODULATION_MODE:
+            self._quad_modulation_mode = int(value)
+        else:
+            raise ValueError(
+                "Invalid Quadrupole Modulation Mode! Select " +
+                "(int) 0 or 1 | (str) 'AC' or 'DC'"
+            )
 
 
 class DoACBBA(_BaseClass):
