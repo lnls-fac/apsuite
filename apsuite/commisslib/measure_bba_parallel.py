@@ -29,6 +29,7 @@ class ParallelBBAParams(_ParamsBaseClass):
 
     BPMNAMES = _BBAParams.BPMNAMES
     QUADNAMES = _BBAParams.QUADNAMES
+    METHODS = _get_namedtuple("Method", ["rms", "ptp"])
 
     def __init__(self):
         """."""
@@ -40,9 +41,9 @@ class ParallelBBAParams(_ParamsBaseClass):
         self.wait_quadrupole = 2.0  # [s]
 
         self.corr_max_nr_iters = 8
-        self.ios_rms_threshold = 1.0  # [um]
-        self.ios_ptp_threshold = 2.0  # [um]
-        self.use_ptp = False
+        self.ios_conv_tol = 0.5  # [um]
+        self._conv_method = self.METHODS.rms
+        self.ios_raise_cnt_limit = 2
 
         self.sofb_nrpoints = 80
         self.sofb_maxcorriter = 5
@@ -58,15 +59,41 @@ class ParallelBBAParams(_ParamsBaseClass):
         stg += f'wait_correctors    = {self.wait_correctors:.3f}\n'
         stg += f'wait_quadrupole    = {self.wait_quadrupole:.3f}\n'
         stg += f'timeout_wait_orbit = {self.timeout_wait_orbit:.3f}\n'
-        stg += f'corr_nr_iters      = {self.corr_max_nr_iters:d}\n'
-        stg += f'ios_rms_threshold  = {self.ios_rms_threshold:.2e}\n'
-        stg += f'ios_ptp_threshold  = {self.ios_ptp_threshold:.2e}\n'
-        stg += f'use_ptp            = {str(self.use_ptp):s}\n'
+        stg += f'corr_max_nr_iters  = {self.corr_max_nr_iters:d}\n'
+        stg += f'ios_conv_tol       = {self.ios_conv_tol:.2e}\n'
+        stg += 'conv_method        = ' + \
+            f'{self.METHODS._fields[self._conv_method]:s} (RMS or PTP)\n'
         stg += f'sofb_nrpoints      = {self.sofb_nrpoints:d}\n'
         stg += f'sofb_maxcorriter   = {self.sofb_maxcorriter:d}\n'
         stg += f'sofb_maxorberr     = {self.sofb_maxorberr:.3f}\n'
         stg += f'cycling_nr_steps   = {self.cycling_nr_steps:d}\n'
         return stg
+
+    @property
+    def conv_method(self):
+        """."""
+        return self._conv_method
+
+    @property
+    def conv_method_str(self):
+        """."""
+        return self.METHODS._fields[self._conv_method]
+
+    @conv_method_str.setter
+    def conv_method_str(self, value):
+        """."""
+        self.conv_method = value
+
+    @conv_method.setter
+    def conv_method(self, value):
+        if isinstance(value, str) and value.lower() in self.METHODS._fields:
+            self._conv_method = self.METHODS._fields.index(value.lower())
+        elif 0 <= value < len(self.METHODS._fields):
+            self._conv_method = int(value)
+        else:
+            raise ValueError(
+                'Invalid method! Select: (int) 0 or 1 | (str) "rms" or "ptp"'
+            )
 
     @staticmethod
     def get_default_groups(ngroups=8):
@@ -797,10 +824,10 @@ class DoParallelBBA(_BaseClass):
         ios_iter, dkicks_iter, residue_iter = [], [], []
 
         converged = False
-        increased = False
-        comp_func, threshold = _np.std, self.params.ios_rms_threshold
-        if self.params.use_ptp:
-            comp_func, threshold = _np.ptp, self.params.ios_ptp_threshold
+        increased = 0
+        tolerance = self.params.ios_conv_tol
+        comp_func = _np.ptp \
+            if self.params.conv_method == self.params.METHODS.ptp else _np.std
 
         for i in range(nr_iters):
             self._log(f'{i + 1:02d}/{nr_iters:02d} --> ', tab=2, end='')
@@ -827,17 +854,20 @@ class DoParallelBBA(_BaseClass):
             ios = ios[enblbpm]  # use only enabled bpms for correction
             residue = comp_func(ios)
             residue_iter.append(residue)
-            msg = ' IOS (' + 'ptp' if self.params.use_ptp else 'rms' + '): '
+            msg = ' IOS (' + ('ptp'
+                if self.params.conv_method == self.params.METHODS.ptp
+                else 'rms') + '): '
             msg += f'{residue:.3f} [um] --> '
             self._log(msg, end='')
 
-            if residue < threshold:
+            if residue < tolerance:
                 converged = True
                 break
             elif i > 0 and residue > residue_iter[-2]:
-                self.set_delta_kicks(-dkicks_iter[-1])
-                increased = True
-                break
+                increased += 1
+                if increased > self.params.ios_raise_cnt_limit:
+                    self.set_delta_kicks(-dkicks_iter[-1])
+                    break
 
             dkicks = -1 * _np.dot(inv_jac, ios)
             dkicks_iter.append(dkicks)
@@ -862,7 +892,7 @@ class DoParallelBBA(_BaseClass):
                 residue = comp_func(ios[enblbpm])
                 residue_iter.append(residue)
                 msg = f'Max iterations reached ({i + 1:d})'
-                if residue < threshold:
+                if residue < tolerance:
                     msg += ', but IOS converged'
                 elif residue > residue_iter[-2]:
                     msg += ', and IOS increased'
