@@ -57,7 +57,7 @@ class ACBBAParams(_ParamsBaseClass):
         self.ch_freq = 23.0  # [Hz]
         self.q_freq = 5.0  # [Hz]
 
-        self.excit_time = 2  # [s]
+        self.excit_time = 4  # [s]
         self.corrs_delay = 5e-3  # [s]
 
         self.ch_kick = 5  # [urad]
@@ -218,14 +218,13 @@ class DoACBBA(_BaseClass):
 
     @bpms_corrs_mapping.setter
     def bpms_corrs_mapping(self, value):
-        for bpm in value:
+        for bpm, (ch, cv) in enumerate(value.items()):
             if bpm not in self.data["bpmnames"]:
                 raise ValueError(f"Invalid BPM: {bpm}!")
-            ch, cv = value[bpm]
             if ch not in self.sofb_data.ch_names:
-                raise ValueError(f"Invalid CH: {ch}!")
+                raise ValueError(f"Invalid CH: {ch} for BPM {bpm}!")
             if cv not in self.sofb_data.cv_names:
-                raise ValueError(f"Invalid CV: {cv}!")
+                raise ValueError(f"Invalid CV: {cv} for BPM {bpm}!")
         self._bpms_corrs_mapping = value.copy()
 
     @property
@@ -438,55 +437,48 @@ class DoACBBA(_BaseClass):
     def check_isvalid_dkl(
             self,
             bpm_names=None,
-            init_strengths=None,
+            strengths=None,
             strength_limits=None,
             margin=0.0005,
             return_valid=False,
         ):
         """."""
         quad_names = self.data['quadnames']
-        bpms = self.data['bpmnames'] if bpm_names is None else bpm_names
+        bpms = bpm_names if bpm_names else self.data['bpmnames']
+        quads = [quad_names[self.data['bpmnames'].index(bpm)] for bpm in bpms]
 
-        strengths = (
-            self.get_quad_strength(quad)
-            if init_strengths is None else init_strengths
-        )
+        if strengths is None:
+            strengths = [self.get_quad_strength(quad) for quad in quads]
 
-        lims = (
-            self.get_quad_strength_limits(group_id, margin=margin)
-            if strength_limits is None else strength_limits
-        )
+        if strength_limits is None:
+            strength_limits = [
+                self.get_quad_strength_limits(quad, margin) for quad in quads
+            ]
 
         if len(bpms) != len(strengths):
             msg = 'Size mismatch between the group and init_strengths: '
             msg += f'{len(bpms)} != {len(strengths)}!'
             raise ValueError(msg)
 
-        if len(strengths) != len(lims):
+        if len(strengths) != len(strength_limits):
             msg = 'Size mismatch between init_strengths and strength_limits: '
-            msg += f'{len(strengths)} != {len(lims)}!'
+            msg += f'{len(strengths)} != {len(strength_limits)}!'
             raise ValueError(msg)
 
         ok = True
         valid = strengths.copy()
-        for idx, bpm in enumerate(bpms):
-            quadname = quad_names[bpm_names.index(bpm)]
+        for idx, quad in enumerate(quads):
             stren = strengths[idx]
-            _gid = [
-                True if bpm in gp else False
-                for gp in self.data['groups2dopbba']
-            ].index(True)
-            _gp = self.data['groups2dopbba'][_gid]
-            dkl = abs(self.data['delta_kl'][_gid][_gp.index(bpm)])
-            lolim, hilim = lims[idx]
+            dkl = abs(self.params.quad_delta_kl)
+            lolim, hilim = strength_limits[idx]
             clow, chigh = lolim + dkl / 2, hilim - dkl / 2
             if clow > chigh:
-                self._log(f'ERR: {quadname}, dKL = {dkl:.3g} too high!')
+                self._log(f'ERR: {quad}, dKL = {dkl:.3g} too high!')
                 valid[idx] = None
             else:
                 valid[idx] = _np.clip(stren, clow, chigh)
             if valid[idx] != stren:
-                msg = f'WARN: {quadname}, '
+                msg = f'WARN: {quad}, '
                 msg += f'KL = {stren:.3g}, '
                 msg += f'dKL = {dkl:.3g}, '
                 msg += f'limits = ({lolim:.3g}, {hilim:.3g}). '
@@ -521,8 +513,14 @@ class DoACBBA(_BaseClass):
         msg = f"Starting measurement at {tini.strftime('%Y-%m-%d %Hh%Mm%Ss')}"
         self._log("\n" + msg)
 
-        if self.devices["sofb"].autocorrsts:
-            msg = "SOFB feedback is enabled. Please desable it first."
+        sofb = self.devices['sofb']
+        if sofb.autocorrsts:
+            msg = "SOFB feedback is enabled. Please disable it first."
+            self._log(msg)
+            return self.STATUS.Fail
+
+        if sofb.synckicksts != sofb._data.CorrSync.Off:
+            msg = "SOFB correctors synchronization is On. Please turn it Off."
             self._log(msg)
             return self.STATUS.Fail
 
@@ -540,18 +538,6 @@ class DoACBBA(_BaseClass):
             if not measnoise_ok:
                 msg = "Problem measuring BPMs noise."
                 self._log(msg)
-
-        # Set/Check if Correctors are in SlowRef mode
-        msg = "Setting Correctors OpMode to SlowRef... "
-        self._log(msg, end="")
-        corrs_opmode_ok = self._change_mags_opmode(
-            "slowref", self.sofb_data.ch_names + self.sofb_data.cv_names
-        )
-        if not corrs_opmode_ok:
-            msg = "Fail: Could not set OpMode to SlowRef. Exiting."
-            self._log(msg)
-            return self.STATUS.Fail
-        self._log("Done!")
 
         # Do AC-BBA for each BPM
         nr_bpms = len(self._bpms2dobba)
@@ -580,21 +566,6 @@ class DoACBBA(_BaseClass):
                 break
             self._log("Done!", tab=1)
         self._log(f"{'Done' if stsok else 'Fail'}!")
-
-        # Restore Correctors opmode to SlowRef
-        msg = "Restoring Correctors OpMode to SlowRef... "
-        self._log(msg, end="")
-        corrs_opmode_ok = self._change_mags_opmode(
-            "slowref",
-            self.sofb_data.ch_names + self.sofb_data.cv_names,
-            timeout=self.params.timeout_magnets,
-        )
-        if not corrs_opmode_ok:
-            msg = "Fail: Could restore OpMode to SlowRef. Exiting."
-            self._log(msg)
-            stsok = False
-        else:
-            self._log("Done!")
 
         # Restore timing state
         self._log("Restoring Timing state... ", end="")
@@ -643,9 +614,9 @@ class DoACBBA(_BaseClass):
             "ch_freq": self.params.ch_freq,
             "cv_freq": self.params.cv_freq,
             "q_freq": self.params.q_freq,
-            "pos": None,
-            "neg": None,
-            "zer": None,
+            "data_dc_kl_pos": None,
+            "data_dc_kl_neg": None,
+            "data_ac": None,
             "quadmode": quadmode,
             "quad_stren_ini": stren_ini,
             "quad_delta_kl": delta_kl,
@@ -654,14 +625,14 @@ class DoACBBA(_BaseClass):
         if quadmode == self.params.QUAD_MODULATION_MODE.AC:
             msg = "Setup: Quadrupole modulation mode: AC."
             self._log(msg, tab=tab)
-            sts, data_zer = self._acquire_data(
+            sts, data_ac = self._acquire_data(
                 chname,
                 cvname,
                 quad_name=quadname,
                 delta_kl=delta_kl,
                 tab=tab + 1
             )
-            data["zer"] = data_zer
+            data["data_ac"] = data_ac
             if sts == self.STATUS.Fail:
                 return sts, data
 
@@ -1033,7 +1004,8 @@ class DoACBBA(_BaseClass):
         chs=None,
         cvs=None,
         quads=None,
-        nr_points=None):
+        nr_points=None
+    ):
         state = dict()
         state["trigbpms_source"] = "Study"
         state["trigbpms_nr_pulses"] = 1
@@ -1065,61 +1037,62 @@ class DoACBBA(_BaseClass):
         state["trigcorrs_delay_raw"] = 0
         state["trigquads_delay_raw"] = 0
         state["trigskews_delay_raw"] = 0
-        nr_runs = len(chs)
-        # Calculate delta_delay for correctors to be as close as possible to a
-        # multiple of the the sampling period to ensure repeatability of
-        # experiment along runs excited during single acquisition:
-        fsamp = self.bpms.get_sampling_frequency(rf_freq, self.params.acq_rate)
-        runs_delta_dly = _np.arange(nr_runs, dtype=float)
-        runs_delta_dly *= nr_points / fsamp
-        runs_delta_dlyr = _np.round(runs_delta_dly * ftim)
+        # nr_runs = len(chs)
+        # # Calculate delta_delay for correctors to be as close as possible to a
+        # # multiple of the the sampling period to ensure repeatability of
+        # # experiment along runs excited during single acquisition:
+        # fsamp = self.bpms.get_sampling_frequency(rf_freq, self.params.acq_rate)
+        # runs_delta_dly = _np.arange(nr_runs, dtype=float)
+        # runs_delta_dly *= nr_points / fsamp
+        # runs_delta_dlyr = _np.round(runs_delta_dly * ftim)
 
-        # get low level trigger names to be configured in each run of the
-        # acquisition:
-        ll_trigs_corrs = []
-        ll_trigs_quads = []
-        ll_trigs_skews = []
-        if quads is None:
-            quads = _np.full_like(chs, False, dtype=bool).tolist()
-        for ch, cv, quad in zip(chs, cvs, quads):  # noqa: B905
-            llt_corrs = set()
-            llt_quads = set()
-            llt_skews = set()
-            for c in ch + cv + quad:
-                if not c:
-                    continue
-                trig = _LLTime.get_trigger_name(c + ":BCKPLN")
-                if c.dev in ["CH", "CV"]:
-                    llt_corrs.add(trig)
-                elif c.dev == "QS":
-                    llt_skews.add(trig)
-                else:
-                    llt_quads.add(trig)
-            ll_trigs_corrs.append(llt_corrs)
-            ll_trigs_quads.append(llt_quads)
-            ll_trigs_skews.append(llt_skews)
+        # # get low level trigger names to be configured in each run of the
+        # # acquisition:
+        # ll_trigs_corrs = []
+        # ll_trigs_quads = []
+        # ll_trigs_skews = []
+        # if quads is None:
+        #     quads = _np.full_like(chs, False, dtype=bool).tolist()
+        # for ch, cv, quad in zip(chs, cvs, quads):  # noqa: B905
+        #     llt_corrs = set()
+        #     llt_quads = set()
+        #     llt_skews = set()
+        #     for c in ch + cv + quad:
+        #         if not c:
+        #             continue
+        #         trig = _LLTime.get_trigger_name(c + ":BCKPLN")
+        #         if c.dev in ["CH", "CV"]:
+        #             llt_corrs.add(trig)
+        #         elif c.dev == "QS":
+        #             llt_skews.add(trig)
+        #         else:
+        #             llt_quads.add(trig)
+        #     ll_trigs_corrs.append(llt_corrs)
+        #     ll_trigs_quads.append(llt_quads)
+        #     ll_trigs_skews.append(llt_skews)
 
-        # check if correctors controlled by the same trigger are requested to
-        # be triggered in different times during the same acquisition
-        for ll_trigs in [ll_trigs_corrs, ll_trigs_quads, ll_trigs_skews]:
-            if len(_red(_opr.or_, ll_trigs)) != \
-                _red(_opr.add, map(len, ll_trigs)):
-                raise ValueError("Impossible trigger configuration requested.")
+        # # check if correctors controlled by the same trigger are requested to
+        # # be triggered in different times during the same acquisition
+        # for ll_trigs in [ll_trigs_corrs, ll_trigs_quads, ll_trigs_skews]:
+        #     if len(_red(_opr.or_, ll_trigs)) != \
+        #         _red(_opr.add, map(len, ll_trigs)):
+        #         raise ValueError("Impossible trigger configuration requested.")
 
-        for trig_type, ll_trigs in zip(  # noqa: B905
-            ["trigcorrs", "trigquads", "trigskews"],
-            [ll_trigs_corrs, ll_trigs_quads, ll_trigs_skews]
-            ):
-            trig = self.devices[trig_type]
-            delta_delay_raw = _np.zeros(trig.delta_delay_raw.size)
-            low_level = trig.low_level_triggers
-            for llts, ddlyr in zip(ll_trigs, runs_delta_dlyr):  # noqa: B905
-                # Find all ll triggers of this sector and set their delay:
-                for llt in llts:
-                    if llt not in low_level:
-                        raise ValueError(f"Trigger {llt:s} is not valid.")
-                    delta_delay_raw[low_level.index(llt)] = ddlyr + dly
-            state[f"{trig_type}_delta_delay_raw"] = delta_delay_raw
+        # for trig_type, ll_trigs in zip(  # noqa: B905
+        #     ["trigcorrs", "trigquads", "trigskews"],
+        #     [ll_trigs_corrs, ll_trigs_quads, ll_trigs_skews]
+        #     ):
+        #     trig = self.devices[trig_type]
+        #     delta_delay_raw = _np.zeros(trig.delta_delay_raw.size)
+        #     low_level = trig.low_level_triggers
+        #     for llts, ddlyr in zip(ll_trigs, runs_delta_dlyr):  # noqa: B905
+        #         # Find all ll triggers of this sector and set their delay:
+        #         for llt in llts:
+        #             if llt not in low_level:
+        #                 raise ValueError(f"Trigger {llt:s} is not valid.")
+        #             delta_delay_raw[low_level.index(llt)] = ddlyr + dly
+        #     state[f"{trig_type}_delta_delay_raw"] = delta_delay_raw
+
         self.set_timing_state(state)
 
     def _log(self, msg, *args, **kwargs):
