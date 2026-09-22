@@ -94,9 +94,8 @@ class ACBBAParams(_ParamsBaseClass):
         stg += ftmp('corrs_delay', self.corrs_delay, '[s]')
         stg += ftmp('ch_kick', self.ch_kick, '[urad]')
         stg += ftmp('cv_kick', self.cv_kick, '[urad]')
-        stg += ftmp('dorbx', self.dorbx, '[um]')
-        stg += ftmp('dorby', self.dorby, '[um]')
-
+        # stg += ftmp('dorbx', self.dorbx, '[um]')
+        # stg += ftmp('dorby', self.dorby, '[um]')
         stg += stmp('measure_bpms_noise', str(self.measure_bpms_noise), '')
         stg += stmp('acq_rate', self.acq_rate, '')
         stg += stmp('orm_name', self.orm_name, '')
@@ -190,7 +189,7 @@ class DoACBBA(_BaseClass):
     # ----- Imported methods -----
 
     fitting_matrix = staticmethod(_MeasACORM.fitting_matrix)
-    fit_fourier_components = classmethod(_MeasACORM.fit_fourier_components)
+    fit_fourier_components = _MeasACORM.fit_fourier_components
     fit_calc_amp_and_phase = staticmethod(_MeasACORM.fit_calc_amp_and_phase)
 
     # ----- Properties -----
@@ -218,7 +217,7 @@ class DoACBBA(_BaseClass):
 
     @bpms_corrs_mapping.setter
     def bpms_corrs_mapping(self, value):
-        for bpm, (ch, cv) in enumerate(value.items()):
+        for bpm, (ch, cv) in value.items():
             if bpm not in self.data["bpmnames"]:
                 raise ValueError(f"Invalid BPM: {bpm}!")
             if ch not in self.sofb_data.ch_names:
@@ -498,9 +497,7 @@ class DoACBBA(_BaseClass):
     def _do_acbba(self):
         """."""
         # Initial checkings
-        if not all([
-            self.check_isvalid_dkl(bpm) for bpm in self._bpms2dobba
-        ]):
+        if not self.check_isvalid_dkl(self._bpms2dobba):
             self._log("Adjust quad strength or change dKL first.")
             return
 
