@@ -175,6 +175,7 @@ class DoACBBA(_BaseClass):
         self.data["scancentery"] = _np.zeros(len(ACBBAParams.BPMNAMES))
 
         self._bpms2dobba = self.data["bpmnames"]
+        self._bpms_corrs_mapping = {}
         self.sofb_data = None
         self.configdb_orm = None
         self._orm = None
@@ -186,9 +187,13 @@ class DoACBBA(_BaseClass):
 
         self.data["log"] = [(_time.time(), "Started.")]
 
+    # ----- Imported methods -----
+
     fitting_matrix = staticmethod(_MeasACORM.fitting_matrix)
     fit_fourier_components = classmethod(_MeasACORM.fit_fourier_components)
     fit_calc_amp_and_phase = staticmethod(_MeasACORM.fit_calc_amp_and_phase)
+
+    # ----- Properties -----
 
     @property
     def bpms2dobba(self):
@@ -205,6 +210,31 @@ class DoACBBA(_BaseClass):
                 msg = f'Invalid BPM: {bpm}. Check "ACBBAParams.BPMNAMES".'
                 raise ValueError(msg)
         self._bpms2dobba = bpmnames
+
+    @property
+    def bpms_corrs_mapping(self):
+        """Mapping of which CH and CV to excite for each BPM."""
+        return self._bpms_corrs_mapping.copy()
+
+    @bpms_corrs_mapping.setter
+    def bpms_corrs_mapping(self, value):
+        for bpm in value:
+            if bpm not in self.data["bpmnames"]:
+                raise ValueError(f"Invalid BPM: {bpm}!")
+            ch, cv = value[bpm]
+            if ch not in self.sofb_data.ch_names:
+                raise ValueError(f"Invalid CH: {ch}!")
+            if cv not in self.sofb_data.cv_names:
+                raise ValueError(f"Invalid CV: {cv}!")
+        self._bpms_corrs_mapping = value.copy()
+
+    @property
+    def havebeam(self):
+        """."""
+        cinfo = self.devices["currinfo"]
+        return cinfo.connected and cinfo.storedbeam
+
+    # ----- Setup devices -----
 
     def _create_devices(self):
         """Create and connect to devices."""
@@ -244,14 +274,8 @@ class DoACBBA(_BaseClass):
                 continue
             self.devices[qname] = _PowerSupply(qname, props2init=props)
 
-        # Kick converters
-        sofbdata = self.sofb_data
-        self.devices.update({
-            n + ":StrengthConv": _StrengthConv(n, "Ref-Mon")
-            for n in (sofbdata.ch_names + sofbdata.cv_names)
-        })
-
         # Correctors
+        sofbdata = self.sofb_data
         props = [
             "Kick-SP",
             "OpMode-Sel",
@@ -278,6 +302,13 @@ class DoACBBA(_BaseClass):
         self.devices.update({
             name: _PowerSupply(name, props2init=props)
             for name in (sofbdata.ch_names + sofbdata.cv_names)
+        })
+
+        # Strength converters
+        self.devices.update({
+            n + ":StrengthConv": _StrengthConv(n, "Ref-Mon") for n in (
+                sofbdata.ch_names + sofbdata.cv_names + self.data["quadnames"]
+            )
         })
 
         # SOFB
@@ -343,11 +374,140 @@ class DoACBBA(_BaseClass):
         name = self.params.orm_name
         self._orm = _np.array(self.configdb_orm.get_config_value(name))
 
+    # ----- SOFB utils -----
+
+    def correct_orbit(self):
+        """."""
+        if not self.havebeam:
+            return
+        sofb = self.devices["sofb"]
+        sofb.correct_orbit_manually(
+            nr_iters=self.params.sofb_maxcorriter,
+            residue=self.params.sofb_maxorberr,
+        )
+
+    # ----- Quadrupole handling -----
+
+    def get_quad_strength(self, quadname):
+        """."""
+        if quadname not in self.data["quadnames"]:
+            raise ValueError(f"Invalid quadrupole: {quadname}.")
+        quad = self.devices[quadname]
+        return float(quad.strength)
+
+    def set_quad_strength(
+        self, quadname, strength, ignore_timeout=False, **kw
+    ):
+        """."""
+        tab = kw.pop("tab", 0)
+        if quadname not in self.data["quadnames"]:
+            raise ValueError(f"Invalid quadrupole: {quadname}.")
+        quad = self.devices[quadname]
+        quad.strength = float(strength)
+
+        if ignore_timeout:
+            return self.STATUS.Success
+
+        if not quad.wait_float(
+            "KLRef-Mon",
+            strength,
+            rel_tol=0.0,
+            abs_tol=0.05 * self.params.quad_delta_kl,
+            timeout=self.params.wait_quadrupole,
+        ):
+            msg = f'Could not change quadrupole "{quadname}" strength!'
+            msg += f"\nTryed to set KL = {strength}, "
+            msg += f"current KL = {quad.strength} [1/m]."
+            self._log(msg, tab=tab)
+            return self.STATUS.Fail
+        return self.STATUS.Success
+
+    def get_quad_strength_limits(self, quadname, margin=0.0005):
+        """."""
+        if quadname not in self.data["quadnames"]:
+            raise ValueError(f"Invalid quadrupole: {quadname}.")
+        quad = self.devices[quadname]
+        pv = quad.pv_object("KL-SP")
+        upp = pv.upper_disp_limit
+        low = pv.lower_disp_limit
+        # Limits are interchanged in some quads:
+        lolim = min(upp, low) + margin
+        hilim = max(upp, low) - margin
+        return _np.array([lolim, hilim], dtype=float)
+
+    def check_isvalid_dkl(
+            self,
+            bpm_names=None,
+            init_strengths=None,
+            strength_limits=None,
+            margin=0.0005,
+            return_valid=False,
+        ):
+        """."""
+        quad_names = self.data['quadnames']
+        bpms = self.data['bpmnames'] if bpm_names is None else bpm_names
+
+        strengths = (
+            self.get_quad_strength(quad)
+            if init_strengths is None else init_strengths
+        )
+
+        lims = (
+            self.get_quad_strength_limits(group_id, margin=margin)
+            if strength_limits is None else strength_limits
+        )
+
+        if len(bpms) != len(strengths):
+            msg = 'Size mismatch between the group and init_strengths: '
+            msg += f'{len(bpms)} != {len(strengths)}!'
+            raise ValueError(msg)
+
+        if len(strengths) != len(lims):
+            msg = 'Size mismatch between init_strengths and strength_limits: '
+            msg += f'{len(strengths)} != {len(lims)}!'
+            raise ValueError(msg)
+
+        ok = True
+        valid = strengths.copy()
+        for idx, bpm in enumerate(bpms):
+            quadname = quad_names[bpm_names.index(bpm)]
+            stren = strengths[idx]
+            _gid = [
+                True if bpm in gp else False
+                for gp in self.data['groups2dopbba']
+            ].index(True)
+            _gp = self.data['groups2dopbba'][_gid]
+            dkl = abs(self.data['delta_kl'][_gid][_gp.index(bpm)])
+            lolim, hilim = lims[idx]
+            clow, chigh = lolim + dkl / 2, hilim - dkl / 2
+            if clow > chigh:
+                self._log(f'ERR: {quadname}, dKL = {dkl:.3g} too high!')
+                valid[idx] = None
+            else:
+                valid[idx] = _np.clip(stren, clow, chigh)
+            if valid[idx] != stren:
+                msg = f'WARN: {quadname}, '
+                msg += f'KL = {stren:.3g}, '
+                msg += f'dKL = {dkl:.3g}, '
+                msg += f'limits = ({lolim:.3g}, {hilim:.3g}). '
+                msg += f'Change KL to: {valid[idx]}'
+                self._log(msg)
+                ok = False
+        if return_valid:
+            return ok, valid
+        return ok
+
+    # ----- A -----
+
+    # ----- A -----
+
+    # ----- A -----
+
     def _do_acbba(self):
         """."""
         # Initial checkings
         if not all([
-            self.check_isvalid_delta_kl(bpm) for bpm in self._bpms2dobba
+            self.check_isvalid_dkl(bpm) for bpm in self._bpms2dobba
         ]):
             self._log("Adjust quad strength or change dKL first.")
             return
@@ -384,7 +544,7 @@ class DoACBBA(_BaseClass):
         # Set/Check if Correctors are in SlowRef mode
         msg = "Setting Correctors OpMode to SlowRef... "
         self._log(msg, end="")
-        corrs_opmode_ok = self._change_corrs_opmode(
+        corrs_opmode_ok = self._change_mags_opmode(
             "slowref", self.sofb_data.ch_names + self.sofb_data.cv_names
         )
         if not corrs_opmode_ok:
@@ -424,10 +584,10 @@ class DoACBBA(_BaseClass):
         # Restore Correctors opmode to SlowRef
         msg = "Restoring Correctors OpMode to SlowRef... "
         self._log(msg, end="")
-        corrs_opmode_ok = self._change_corrs_opmode(
+        corrs_opmode_ok = self._change_mags_opmode(
             "slowref",
             self.sofb_data.ch_names + self.sofb_data.cv_names,
-            timeout=self.params.timeout_correctors,
+            timeout=self.params.timeout_magnets,
         )
         if not corrs_opmode_ok:
             msg = "Fail: Could restore OpMode to SlowRef. Exiting."
@@ -480,17 +640,31 @@ class DoACBBA(_BaseClass):
             "quadname": quadname,
             "chname": chname,
             "cvname": cvname,
+            "ch_freq": self.params.ch_freq,
+            "cv_freq": self.params.cv_freq,
+            "q_freq": self.params.q_freq,
             "pos": None,
             "neg": None,
+            "zer": None,
             "quadmode": quadmode,
             "quad_stren_ini": stren_ini,
             "quad_delta_kl": delta_kl,
         }
 
         if quadmode == self.params.QUAD_MODULATION_MODE.AC:
-            msg = "Quadrupole AC modulation mode is not implemented yet."
+            msg = "Setup: Quadrupole modulation mode: AC."
             self._log(msg, tab=tab)
-            return self.STATUS.Fail, data
+            sts, data_zer = self._acquire_data(
+                chname,
+                cvname,
+                quad_name=quadname,
+                delta_kl=delta_kl,
+                tab=tab + 1
+            )
+            data["zer"] = data_zer
+            if sts == self.STATUS.Fail:
+                return sts, data
+
         elif quadmode == self.params.QUAD_MODULATION_MODE.DC:
             msg = "Setup: Quadrupole modulation mode: DC."
             self._log(msg, tab=tab)
@@ -558,12 +732,18 @@ class DoACBBA(_BaseClass):
     def _acquire_data(self, ch_name, cv_name, quad_name=None, **kw):
         """."""
         tab = kw.pop("tab", 0)
-        corr_names = [ch_name, cv_name]
-        corr_freqs = [self.params.ch_freq, self.params.cv_freq]
-        corr_kicks = [self.params.ch_kick, self.params.cv_kick]
+
+        magnets = [ch_name, cv_name]
+        strengths = [self.params.ch_kick, self.params.cv_kick]
+        excit_freqs = [self.params.ch_freq, self.params.cv_freq]
         excit_time = self.params.excit_time
         tout_bpms = self.params.timeout_bpms
-        tout_corrs = self.params.timeout_correctors
+        tout_mags = self.params.timeout_magnets
+
+        if quad_name is not None:
+            magnets += [quad_name]
+            excit_freqs += [self.params.q_freq]
+            strengths += [self.params.quad_delta_kl/2]
 
         # Configure BPMs and Timing
         t00 = _time.time()
@@ -588,15 +768,15 @@ class DoACBBA(_BaseClass):
         t01 = _time.time()
         msg = "Configuring correctors... "
         self._log(msg, tab=tab, end="")
-        self._config_correctors(corr_names, corr_kicks, corr_freqs, excit_time)
+        self._config_magnets(magnets, strengths, excit_freqs, excit_time)
         msg = f"Done! ET: {_time.time() - t01:.2f}s"
         self._log(msg)
 
         # Configure correctors opmode to Cycle
         t02 = _time.time()
-        msg = f"Changing Corrs. ({ch_name}, {cv_name}) OpMode to Cycle... "
+        msg = f"Changing Mags. ({', '.join(magnets)}) OpMode to Cycle... "
         self._log(msg, tab=tab, end="")
-        if not self._change_corrs_opmode("cycle", corr_names, tab=tab):
+        if not self._change_mags_opmode("cycle", magnets, tab=tab):
             msg = "Fail! Could not set OpMode to Cycle."
             self._log(msg, tab=tab)
             return self.STATUS.Fail, None
@@ -633,13 +813,13 @@ class DoACBBA(_BaseClass):
 
         # Restore Correctors opmode to SlowRef
         t06 = _time.time()
-        msg = f"Restoring Corrs. ({ch_name}, {cv_name}) OpMode to SlowRef... "
+        msg = f"Restoring Mags. ({', '.join(magnets)}) OpMode to SlowRef... "
         self._log(msg, tab=tab, end="")
-        if not self._wait_cycle_to_finish(corr_names, timeout=tout_corrs):
+        if not self._wait_cycle_to_finish(magnets, timeout=tout_mags):
             msg = "Fail! Cycle still not finished."
             self._log(msg)
             return self.STATUS.Fail, data
-        if not self._change_corrs_opmode("slowref", corr_names, tab=tab):
+        if not self._change_mags_opmode("slowref", magnets, tab=tab):
             msg = "Fail! Could restore OpMode to SlowRef."
             self._log(msg, tab=tab)
             return self.STATUS.Fail, data
@@ -681,13 +861,21 @@ class DoACBBA(_BaseClass):
 
     def _get_correctors_for_bpm(self, bpmname, orm=None):
         """Choose a CH and a CV that most affect the target BPM."""
+
+        sofb = self.sofb_data
+        bpmnames = self.data["bpmnames"]
+
+        if bpmname in self._bpms_corrs_mapping:
+            ch_name, cv_name = self._bpms_corrs_mapping[bpmname]
+            ch_idx = sofb.ch_names.index(ch_name)
+            cv_idx = sofb.cv_names.index(cv_name)
+            return ch_name, cv_name, ch_idx, cv_idx + sofb.nr_ch
+
         if orm is None:
             orm = self._orm
         if orm is None:
             raise RuntimeError("Orbit Response Matrix not loaded.")
 
-        sofb = self.sofb_data
-        bpmnames = self.data["bpmnames"]
         if bpmname not in bpmnames:
             raise ValueError("Invalid BPM! Check ACBBAParams.BPMNAMES")
         bpm_idx = bpmnames.index(bpmname)
@@ -846,24 +1034,6 @@ class DoACBBA(_BaseClass):
         cvs=None,
         quads=None,
         nr_points=None):
-        """Configure timing.
-
-        Args:
-            cm_dly (float, optional): General Delay of correctors;
-            chs (list, optional): List of lists of CH names. Each list
-                represent a different run in the same BPM acquisition.
-                Defaults to None.
-            cvs (list, optional): List of lists of CV names. Each list
-                represent a different run in the same BPM acquisition.
-                Defaults to None.
-            nr_points (int, optional): number of points of each run.
-                Defaults to None.
-
-        Raises:
-            ValueError: Impossible trigger configuration.
-            ValueError: Invalid trigger name.
-
-        """
         state = dict()
         state["trigbpms_source"] = "Study"
         state["trigbpms_nr_pulses"] = 1
@@ -961,20 +1131,14 @@ class DoACBBA(_BaseClass):
             print(msg, *args, **kwargs)
         self.data["log"].append((_time.time(), msg))
 
-    @property
-    def havebeam(self):
+    def _config_magnets(self, magnets, strengths, freqs, excit_time):
         """."""
-        haveb = self.devices["currinfo"]
-        return haveb.connected and haveb.storedbeam
-
-    def _config_correctors(self, corr_names, kicks, freqs, excit_time):
-        """."""
-        for i, cmn in enumerate(corr_names):
+        for i, cmn in enumerate(magnets):
             cmo = self.devices[cmn]
             conv = self.devices[cmn + ":StrengthConv"].conv_strength_2_current
             cmo.cycle_type = cmo.CYCLETYPE.Sine
             cmo.cycle_freq = freqs[i]
-            cmo.cycle_ampl = conv(kicks[i])
+            cmo.cycle_ampl = conv(strengths[i])
             cmo.cycle_offset = cmo.currentref_mon
             cmo.cycle_theta_begin = 0
             cmo.cycle_theta_end = 0
@@ -993,216 +1157,133 @@ class DoACBBA(_BaseClass):
             params[1] *= 0.1
             cmo.cycle_aux_param = params
 
-    def _change_corrs_opmode(self, mode, corr_names=None, timeout=None, **kw):
+    def _change_mags_opmode(self, mode, magnets=None, timeout=None, **kw):
         """."""
         tab = kw.pop("tab", 0)
         if timeout is None:
-            timeout = self.params.timeout_correctors
+            timeout = self.params.timeout_magnets
 
         opm_sel = _PowerSupply.OPMODE_SEL
         opm_sts = _PowerSupply.OPMODE_STS
         mode_sel = opm_sel.Cycle if mode == "cycle" else opm_sel.SlowRef
         mode_sts = opm_sts.Cycle if mode == "cycle" else opm_sts.SlowRef
 
-        if corr_names is None:
-            corr_names = self.sofb_data.ch_names + self.sofb_data.cv_names
+        quadmod_mode = self.params.quad_modulation_mode
+        if magnets is None:
+            magnets = self.sofb_data.ch_names + self.sofb_data.cv_names
+            if quadmod_mode == self.params.QUAD_MODULATION_MODE.AC:
+                magnets += self.data["quadnames"]
 
-        for cmn in corr_names:
-            cmo = self.devices[cmn]
-            cmo.opmode = mode_sel
+        for magname in magnets:
+            mag = self.devices[magname]
+            mag.opmode = mode_sel
 
-        for cmn in corr_names:
+        for magname in magnets:
             dt_ = _time.time()
-            cmo = self.devices[cmn]
-            if not cmo.wait("OpMode-Sts", mode_sts, timeout=timeout):
-                msg = "\nERR:" + cmn + " did not change to " + mode
+            mag = self.devices[magname]
+            if not mag.wait("OpMode-Sts", mode_sts, timeout=timeout):
+                msg = "\nERR:" + mag + " did not change to " + mode
                 self._log(msg, tab=tab)
                 return False
             dt_ -= _time.time()
             timeout = max(timeout + dt_, 0)
-            cmo.current = cmo.current
+            mag.current = mag.current
         return True
 
-    def _wait_cycle_to_finish(self, corr_names=None, timeout=None):
+    def _wait_cycle_to_finish(self, magnets=None, timeout=None):
         """."""
         if timeout is None:
-            timeout = self.params.timeout_correctors
-        if corr_names is None:
-            corr_names = self.sofb_data.ch_names + self.sofb_data.cv_names
+            timeout = self.params.timeout_magnets
 
-        for cmn in corr_names:
-            cmo = self.devices[cmn]
-            if not cmo.wait_cycle_to_finish(timeout=timeout):
+        quadmod_mode = self.params.quad_modulation_mode
+        if magnets is None:
+            magnets = self.sofb_data.ch_names + self.sofb_data.cv_names
+            if quadmod_mode == self.params.QUAD_MODULATION_MODE.AC:
+                magnets += self.data["quadnames"]
+
+        t0 = _time.time()
+        for magname in magnets:
+            mag = self.devices[magname]
+            dt = timeout - (_time.time() - t0)
+            if dt < 0 or not mag.wait_cycle_to_finish(timeout=dt):
                 return False
         return True
 
-    def get_quad_strength(self, quadname):
-        """."""
-        if quadname not in self.data["quadnames"]:
-            raise ValueError(f"Invalid quadrupole: {quadname}.")
-        quad = self.devices[quadname]
-        return float(quad.strength)
-
-    def set_quad_strength(
-        self, quadname, strength, ignore_timeout=False, **kw
-    ):
-        """."""
-        tab = kw.pop("tab", 0)
-        if quadname not in self.data["quadnames"]:
-            raise ValueError(f"Invalid quadrupole: {quadname}.")
-        quad = self.devices[quadname]
-        quad.strength = float(strength)
-
-        if ignore_timeout:
-            return self.STATUS.Success
-
-        if not quad.wait_float(
-            "KLRef-Mon",
-            strength,
-            rel_tol=0.0,
-            abs_tol=0.05 * self.params.quad_delta_kl,
-            timeout=self.params.wait_quadrupole,
-        ):
-            msg = f'Could not change quadrupole "{quadname}" strength!'
-            msg += f"\nTryed to set KL = {strength}, "
-            msg += f"current KL = {quad.strength} [1/m]."
-            self._log(msg, tab=tab)
-            return self.STATUS.Fail
-        return self.STATUS.Success
-
-    def get_quad_strength_limits(self, quadname, margin=0.0005):
-        """."""
-        if quadname not in self.data["quadnames"]:
-            raise ValueError(f"Invalid quadrupole: {quadname}.")
-        quad = self.devices[quadname]
-        pv = quad.pv_object("KL-SP")
-        upp = pv.upper_disp_limit
-        low = pv.lower_disp_limit
-        # Limits are interchanged in some quads:
-        lolim = min(upp, low) + margin
-        hilim = max(upp, low) - margin
-        return _np.array([lolim, hilim], dtype=float)
-
-    def check_isvalid_delta_kl(
-        self, bpmname, init_strength=None, delta_kl=None
-    ):
-        """."""
-        bpmidx = self.data['bpmnames'].index(bpmname)
-        quadname = self.data['quadnames'][bpmidx]
-        max_dkl = self.params.quad_delta_kl if delta_kl is None else delta_kl
-
-        lolim, hilim = self.get_quad_strength_limits(quadname)
-
-        if init_strength is None:
-            init_strength = self.get_quad_strength(quadname)
-        kl = init_strength
-
-        low = min(kl + max_dkl / 2, kl - max_dkl / 2)
-        upp = max(kl + max_dkl / 2, kl - max_dkl / 2)
-
-        if upp > hilim or low < lolim:
-            msg = f"WARN: {quadname} KL = {kl:.2g}, dKL = {abs(max_dkl):.2g}."
-            max_dkl = min(hilim - kl, kl - lolim)
-            msg += f" Limits: ({lolim:.2g}, {hilim:.2g}). "
-            msg += f" Max. dKL = {max_dkl * 2:.2g}."
-            self._log(msg)
-            return False, max_dkl
-
-        return True, max_dkl
-
-    def correct_orbit(self):
-        """."""
-        if not self.havebeam:
-            return
-        sofb = self.devices["sofb"]
-        sofb.correct_orbit_manually(
-            nr_iters=self.params.sofb_maxcorriter,
-            residue=self.params.sofb_maxorberr,
-        )
-
-    def _process_data_single_bpm(self, bpmname):
+    def _process_data_single_bpm(self, bpmname, phase_adjust=0):
         if bpmname not in self.data["measure"]:
             return
 
         meas = self.data["measure"][bpmname]
-        data_pos = meas["pos"]
-        data_neg = meas["neg"]
         quadmode = meas["quadmode"]
-
-        if data_pos is None or data_neg is None:
-            return
 
         bpmnames = self.data["bpmnames"]
         bpmidx = bpmnames.index(bpmname)
 
-        fs = float(data_pos["sampling_frequency"])
-        dt = 1.0 / fs
-        fh = float(data_pos.get("ch_freq", self.params.ch_freq))
-        fv = float(data_pos.get("cv_freq", self.params.cv_freq))
-
-        freqs = _np.array([fh, fv], dtype=float)
-
-        orbx_pos = _np.asarray(data_pos["orbx"], dtype=float)
-        orby_pos = _np.asarray(data_pos["orby"], dtype=float)
-        orbx_neg = _np.asarray(data_neg["orbx"], dtype=float)
-        orby_neg = _np.asarray(data_neg["orby"], dtype=float)
-
-        npts = min(
-            orbx_pos.shape[0],
-            orbx_neg.shape[0],
-            orby_pos.shape[0],
-            orby_neg.shape[0],
-        )
-        orbx_pos = orbx_pos[:npts]
-        orby_pos = orby_pos[:npts]
-        orbx_neg = orbx_neg[:npts]
-        orby_neg = orby_neg[:npts]
-
-        tim = _np.arange(npts) * dt
-
-        nr_cycles = _np.array(
-            [
-                int(round(self.params.excit_time * fh)),
-                int(round(self.params.excit_time * fv)),
-            ],
-            dtype=int,
-        )
-
-        mat = self.fitting_matrix(tim, freqs, num_cycles=nr_cycles)
-        u, s, vt = _np.linalg.svd(mat, full_matrices=False)
-        pinv = vt.T / s @ u.T
-
-        dcx_pos = _np.mean(orbx_pos, axis=0)
-        dcy_pos = _np.mean(orby_pos, axis=0)
-        dcx_neg = _np.mean(orbx_neg, axis=0)
-        dcy_neg = _np.mean(orby_neg, axis=0)
-
-        cosx_pos, sinx_pos, _ = self.fit_fourier_components(
-            orbx_pos - dcx_pos, freqs, dt, pinv=pinv
-        )
-        cosy_pos, siny_pos, _ = self.fit_fourier_components(
-            orby_pos - dcy_pos, freqs, dt, pinv=pinv
-        )
-        cosx_neg, sinx_neg, _ = self.fit_fourier_components(
-            orbx_neg - dcx_neg, freqs, dt, pinv=pinv
-        )
-        cosy_neg, siny_neg, _ = self.fit_fourier_components(
-            orby_neg - dcy_neg, freqs, dt, pinv=pinv
-        )
-
-        amp_x_pos, ph_x_pos = self.fit_calc_amp_and_phase(cosx_pos, sinx_pos)
-        amp_x_neg, ph_x_neg = self.fit_calc_amp_and_phase(cosx_neg, sinx_neg)
-
-        amp_y_pos, ph_y_pos = self.fit_calc_amp_and_phase(cosy_pos, siny_pos)
-        amp_y_neg, ph_y_neg = self.fit_calc_amp_and_phase(cosy_neg, siny_neg)
-
-        phref_h_pos = ph_x_pos[:, bpmidx]
-        phref_h_neg = ph_x_neg[:, bpmidx]
-        phref_v_pos = ph_y_pos[:, bpmidx]
-        phref_v_neg = ph_y_neg[:, bpmidx]
-
-        f = 0.0
         if quadmode == self.params.QUAD_MODULATION_MODE.DC:
+
+            data_pos = meas["pos"]
+            data_neg = meas["neg"]
+
+            if data_pos is None or data_neg is None:
+                return
+
+            fs = float(data_pos["sampling_frequency"])
+            dt = 1.0 / fs
+            fh = float(data_pos.get("ch_freq", self.params.ch_freq))
+            fv = float(data_pos.get("cv_freq", self.params.cv_freq))
+
+            freqs = _np.array([fh, fv], dtype=float)
+
+            orbx_pos = _np.asarray(data_pos["orbx"], dtype=float)
+            orby_pos = _np.asarray(data_pos["orby"], dtype=float)
+            orbx_neg = _np.asarray(data_neg["orbx"], dtype=float)
+            orby_neg = _np.asarray(data_neg["orby"], dtype=float)
+
+            npts = orbx_pos.shape[0]
+            tim = _np.arange(npts) * dt
+
+            nr_cycles = _np.array(
+                [
+                    int(round(self.params.excit_time * fh)),
+                    int(round(self.params.excit_time * fv)),
+                ],
+                dtype=int,
+            )
+
+            mat = self.fitting_matrix(tim, freqs, num_cycles=nr_cycles)
+            u, s, vt = _np.linalg.svd(mat, full_matrices=False)
+            pinv = vt.T / s @ u.T
+
+            dcx_pos = _np.mean(orbx_pos, axis=0)
+            dcy_pos = _np.mean(orby_pos, axis=0)
+            dcx_neg = _np.mean(orbx_neg, axis=0)
+            dcy_neg = _np.mean(orby_neg, axis=0)
+
+            cosx_pos, sinx_pos, _ = self.fit_fourier_components(
+                orbx_pos - dcx_pos, freqs, dt, pinv=pinv
+            )
+            cosy_pos, siny_pos, _ = self.fit_fourier_components(
+                orby_pos - dcy_pos, freqs, dt, pinv=pinv
+            )
+            cosx_neg, sinx_neg, _ = self.fit_fourier_components(
+                orbx_neg - dcx_neg, freqs, dt, pinv=pinv
+            )
+            cosy_neg, siny_neg, _ = self.fit_fourier_components(
+                orby_neg - dcy_neg, freqs, dt, pinv=pinv
+            )
+
+            amp_x_pos, ph_x_pos = self.fit_calc_amp_and_phase(cosx_pos, sinx_pos)
+            amp_x_neg, ph_x_neg = self.fit_calc_amp_and_phase(cosx_neg, sinx_neg)
+
+            amp_y_pos, ph_y_pos = self.fit_calc_amp_and_phase(cosy_pos, siny_pos)
+            amp_y_neg, ph_y_neg = self.fit_calc_amp_and_phase(cosy_neg, siny_neg)
+
+            phref_h_pos = ph_x_pos[:, bpmidx]
+            phref_h_neg = ph_x_neg[:, bpmidx]
+            phref_v_pos = ph_y_pos[:, bpmidx]
+            phref_v_neg = ph_y_neg[:, bpmidx]
+
+            f = phase_adjust
             sgn_xh_pos = _np.sign(_np.cos(ph_x_pos[0] - phref_h_pos[0] * f))
             sgn_xv_pos = _np.sign(_np.cos(ph_x_pos[1] - phref_v_pos[1] * f))
             sgn_xh_neg = _np.sign(_np.cos(ph_x_neg[0] - phref_h_neg[0] * f))
@@ -1303,24 +1384,24 @@ class DoACBBA(_BaseClass):
             )
 
         elif quadmode == self.params.QUAD_MODULATION_MODE.AC:
-            data = meas
+            data = meas["zer"]
 
-            if data_pos is None or data_neg is None:
+            if data is None:
                 return
 
-            fs = float(data_pos["sampling_frequency"])
+            fs = float(data["sampling_frequency"])
             dt = 1.0 / fs
-            fh = float(data_pos.get("ch_freq", self.params.ch_freq))
-            fv = float(data_pos.get("cv_freq", self.params.cv_freq))
+            fh = float(data.get("ch_freq", self.params.ch_freq))
+            fv = float(data.get("cv_freq", self.params.cv_freq))
+            fq = float(data.get("q_freq", self.params.q_freq))
 
-            freqs = _np.array([fh, fv], dtype=float)
+            # freqs = _np.array([fh, fv, fq], dtype=float)
+            freqs = _np.array([fh - fq, fh + fq, fv - fq, fv + fq], dtype=float)
 
-            orbx_pos = _np.asarray(data_pos["orbx"], dtype=float)
-            orby_pos = _np.asarray(data_pos["orby"], dtype=float)
-            orbx_neg = _np.asarray(data_neg["orbx"], dtype=float)
-            orby_neg = _np.asarray(data_neg["orby"], dtype=float)
+            orbx = _np.asarray(data["orbx"], dtype=float)
+            orby = _np.asarray(data["orby"], dtype=float)
 
-            npts = orbx_pos.shape[0]
+            npts = orbx.shape[0]
             tim = _np.arange(npts) * dt
 
             nr_cycles = _np.array(
@@ -1335,133 +1416,27 @@ class DoACBBA(_BaseClass):
             u, s, vt = _np.linalg.svd(mat, full_matrices=False)
             pinv = vt.T / s @ u.T
 
-            dcx_pos = _np.mean(orbx_pos, axis=0)
-            dcy_pos = _np.mean(orby_pos, axis=0)
-            dcx_neg = _np.mean(orbx_neg, axis=0)
-            dcy_neg = _np.mean(orby_neg, axis=0)
+            dcx = _np.mean(orbx, axis=0)
+            dcy = _np.mean(orby, axis=0)
 
-            cosx_pos, sinx_pos, _ = self.fit_fourier_components(
-                orbx_pos - dcx_pos, freqs, dt, pinv=pinv
+            cosx, sinx, _ = self.fit_fourier_components(
+                orbx - dcx, freqs, dt, pinv=pinv
             )
-            cosy_pos, siny_pos, _ = self.fit_fourier_components(
-                orby_pos - dcy_pos, freqs, dt, pinv=pinv
-            )
-            cosx_neg, sinx_neg, _ = self.fit_fourier_components(
-                orbx_neg - dcx_neg, freqs, dt, pinv=pinv
-            )
-            cosy_neg, siny_neg, _ = self.fit_fourier_components(
-                orby_neg - dcy_neg, freqs, dt, pinv=pinv
+            cosy, siny, _ = self.fit_fourier_components(
+                orby - dcy, freqs, dt, pinv=pinv
             )
 
-            amp_x_pos, ph_x_pos = self.fit_calc_amp_and_phase(cosx_pos, sinx_pos)
-            amp_x_neg, ph_x_neg = self.fit_calc_amp_and_phase(cosx_neg, sinx_neg)
-
-            amp_y_pos, ph_y_pos = self.fit_calc_amp_and_phase(cosy_pos, siny_pos)
-            amp_y_neg, ph_y_neg = self.fit_calc_amp_and_phase(cosy_neg, siny_neg)
-
-            phref_h_pos = ph_x_pos[:, bpmidx]
-            phref_h_neg = ph_x_neg[:, bpmidx]
-            phref_v_pos = ph_y_pos[:, bpmidx]
-            phref_v_neg = ph_y_neg[:, bpmidx]
-
-            f = 1.0
-            sgn_xh_pos = _np.sign(_np.cos(ph_x_pos[0] - phref_h_pos[0] * f))
-            sgn_xv_pos = _np.sign(_np.cos(ph_x_pos[1] - phref_v_pos[1] * f))
-            sgn_xh_neg = _np.sign(_np.cos(ph_x_neg[0] - phref_h_neg[0] * f))
-            sgn_xv_neg = _np.sign(_np.cos(ph_x_neg[1] - phref_v_neg[1] * f))
-            sgn_yh_pos = _np.sign(_np.cos(ph_y_pos[0] - phref_h_pos[0] * f))
-            sgn_yv_pos = _np.sign(_np.cos(ph_y_pos[1] - phref_v_pos[1] * f))
-            sgn_yh_neg = _np.sign(_np.cos(ph_y_neg[0] - phref_h_neg[0] * f))
-            sgn_yv_neg = _np.sign(_np.cos(ph_y_neg[1] - phref_v_neg[1] * f))
-
-            sgn_xh_pos[sgn_xh_pos == 0] = 1.0
-            sgn_xv_pos[sgn_xv_pos == 0] = 1.0
-            sgn_xh_neg[sgn_xh_neg == 0] = 1.0
-            sgn_xv_neg[sgn_xv_neg == 0] = 1.0
-
-            sgn_yh_pos[sgn_yh_pos == 0] = 1.0
-            sgn_yv_pos[sgn_yv_pos == 0] = 1.0
-            sgn_yh_neg[sgn_yh_neg == 0] = 1.0
-            sgn_yv_neg[sgn_yv_neg == 0] = 1.0
-
-            sxh_pos = amp_x_pos[0] * sgn_xh_pos
-            sxv_pos = amp_x_pos[1] * sgn_xv_pos
-            sxh_neg = amp_x_neg[0] * sgn_xh_neg
-            sxv_neg = amp_x_neg[1] * sgn_xv_neg
-
-            syh_pos = amp_y_pos[0] * sgn_yh_pos
-            syv_pos = amp_y_pos[1] * sgn_yv_pos
-            syh_neg = amp_y_neg[0] * sgn_yh_neg
-            syv_neg = amp_y_neg[1] * sgn_yv_neg
-
-            d_x = dcx_pos - dcx_neg
-            d_y = dcy_pos - dcy_neg
-            d_xh = sxh_pos - sxh_neg
-            d_yh = syh_pos - syh_neg
-            d_xv = sxv_pos - sxv_neg
-            d_yv = syv_pos - syv_neg
-
-            y_h = -(d_x * d_yv - d_xv * d_y)
-            y_v = -(d_xh * d_y - d_x * d_yh)
-            x_h = d_xh * d_yv - d_xv * d_yh
-            x_v = d_xh * d_yv - d_xv * d_yh
-
-            m_h = _np.polyfit(x_h, y_h, 1)[0]
-            m_v = _np.polyfit(x_v, y_v, 1)[0]
-
-            x0_pos = (
-                dcx_pos[bpmidx] + sxh_pos[bpmidx] * m_h + sxv_pos[bpmidx] * m_v
-            )
-            x0_neg = (
-                dcx_neg[bpmidx] + sxh_neg[bpmidx] * m_h + sxv_neg[bpmidx] * m_v
-            )
-
-            y0_pos = (
-                dcy_pos[bpmidx] + syv_pos[bpmidx] * m_v + syh_pos[bpmidx] * m_h
-            )
-            y0_neg = (
-                dcy_neg[bpmidx] + syv_neg[bpmidx] * m_v + syh_neg[bpmidx] * m_h
-            )
-
-            x0 = 0.5 * (x0_pos + x0_neg)
-            y0 = 0.5 * (y0_pos + y0_neg)
+            amp_x, ph_x = self.fit_calc_amp_and_phase(cosx, sinx)
+            amp_y, ph_y = self.fit_calc_amp_and_phase(cosy, siny)
 
             self.analysis[bpmname] = dict(
                 tim=tim,
-                x0=x0,
-                y0=y0,
-                x0pos=x0_pos,
-                x0neg=x0_neg,
-                y0pos=y0_pos,
-                y0neg=y0_neg,
-                dcx_pos=dcx_pos[bpmidx],
-                dcy_pos=dcy_pos[bpmidx],
-                dcx_neg=dcx_neg[bpmidx],
-                dcy_neg=dcy_neg[bpmidx],
-                sxh_pos=sxh_pos[bpmidx],
-                sxh_neg=sxh_neg[bpmidx],
-                sxv_pos=sxv_pos[bpmidx],
-                sxv_neg=sxv_neg[bpmidx],
-                syh_pos=syh_pos[bpmidx],
-                syh_neg=syh_neg[bpmidx],
-                syv_pos=syv_pos[bpmidx],
-                syv_neg=syv_neg[bpmidx],
-                m_h=m_h,
-                m_v=m_v,
-                d_x=d_x,
-                d_y=d_y,
-                d_xh=d_xh,
-                d_yh=d_yh,
-                d_xv=d_xv,
-                d_yv=d_yv,
-                amp_x_pos=amp_x_pos,
-                amp_y_pos=amp_y_pos,
-                amp_x_neg=amp_x_neg,
-                amp_y_neg=amp_y_neg,
-                ph_x_pos=ph_x_pos,
-                ph_y_pos=ph_y_pos,
-                ph_x_neg=ph_x_neg,
-                ph_y_neg=ph_y_neg,
+                dcx=dcx,
+                dcy=dcy,
+                amp_x=amp_x,
+                amp_y=amp_y,
+                ph_x=ph_x,
+                ph_y=ph_y,
             )
 
         else:
