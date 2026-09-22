@@ -1,42 +1,39 @@
 """Main module."""
 
-import time as _time
 import datetime as _datetime
-from functools import reduce as _red
 import operator as _opr
+import time as _time
 from copy import deepcopy as _dcopy
+from functools import reduce as _red
 
 import numpy as _np
-
 from mathphys.functions import (
     get_namedtuple as _get_namedtuple,
     load as _load,
     save as _save,
 )
-
+from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 from siriuspy.devices import (
+    EVG as _EVG,
     SOFB as _SOFB,
-    StrengthConv as _StrengthConv,
     CurrInfoSI as _CurrInfoSI,
+    Event as _Event,
     FamBPMs as _FamBPMs,
     PowerSupply as _PowerSupply,
     RFGen as _RFGen,
+    StrengthConv as _StrengthConv,
     Trigger as _Trigger,
-    Event as _Event,
-    EVG as _EVG,
     Tune as _Tune,
 )
 from siriuspy.search import LLTimeSearch as _LLTime
 from siriuspy.sofb.csdev import SOFBFactory as _SOFBFactory
-from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 
+from apsuite.commisslib.meas_ac_orm import MeasACORM as _MeasACORM
+from apsuite.commisslib.measure_bba import BBAParams as _BBAParams
 from apsuite.utils import (
     ParamsBaseClass as _ParamsBaseClass,
     ThreadedMeasBaseClass as _BaseClass,
 )
-
-from apsuite.commisslib.meas_ac_orm import MeasACORM as _MeasACORM
-from apsuite.commisslib.measure_bba import BBAParams as _BBAParams
 
 
 class ACBBAParams(_ParamsBaseClass):
