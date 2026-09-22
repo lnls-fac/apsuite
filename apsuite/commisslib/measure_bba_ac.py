@@ -186,6 +186,10 @@ class DoACBBA(_BaseClass):
 
         self.data["log"] = [(_time.time(), "Started.")]
 
+    fitting_matrix = staticmethod(_MeasACORM.fitting_matrix)
+    fit_fourier_components = classmethod(_MeasACORM.fit_fourier_components)
+    fit_calc_amp_and_phase = staticmethod(_MeasACORM.fit_calc_amp_and_phase)
+
     @property
     def bpms2dobba(self):
         """List of BPMs to perform BBA."""
@@ -1235,172 +1239,232 @@ class DoACBBA(_BaseClass):
             d_xv = sxv_pos - sxv_neg
             d_yv = syv_pos - syv_neg
 
+            y_h = -(d_x * d_yv - d_xv * d_y)
+            y_v = -(d_xh * d_y - d_x * d_yh)
+            x_h = d_xh * d_yv - d_xv * d_yh
+            x_v = d_xh * d_yv - d_xv * d_yh
+
+            m_h = _np.polyfit(x_h, y_h, 1)[0]
+            m_v = _np.polyfit(x_v, y_v, 1)[0]
+
+            x0_pos = (
+                dcx_pos[bpmidx] + sxh_pos[bpmidx] * m_h + sxv_pos[bpmidx] * m_v
+            )
+            x0_neg = (
+                dcx_neg[bpmidx] + sxh_neg[bpmidx] * m_h + sxv_neg[bpmidx] * m_v
+            )
+
+            y0_pos = (
+                dcy_pos[bpmidx] + syv_pos[bpmidx] * m_v + syh_pos[bpmidx] * m_h
+            )
+            y0_neg = (
+                dcy_neg[bpmidx] + syv_neg[bpmidx] * m_v + syh_neg[bpmidx] * m_h
+            )
+
+            x0 = 0.5 * (x0_pos + x0_neg)
+            y0 = 0.5 * (y0_pos + y0_neg)
+
+            self.analysis[bpmname] = dict(
+                tim=tim,
+                x0=x0,
+                y0=y0,
+                x0pos=x0_pos,
+                x0neg=x0_neg,
+                y0pos=y0_pos,
+                y0neg=y0_neg,
+                dcx_pos=dcx_pos[bpmidx],
+                dcy_pos=dcy_pos[bpmidx],
+                dcx_neg=dcx_neg[bpmidx],
+                dcy_neg=dcy_neg[bpmidx],
+                sxh_pos=sxh_pos[bpmidx],
+                sxh_neg=sxh_neg[bpmidx],
+                sxv_pos=sxv_pos[bpmidx],
+                sxv_neg=sxv_neg[bpmidx],
+                syh_pos=syh_pos[bpmidx],
+                syh_neg=syh_neg[bpmidx],
+                syv_pos=syv_pos[bpmidx],
+                syv_neg=syv_neg[bpmidx],
+                m_h=m_h,
+                m_v=m_v,
+                d_x=d_x,
+                d_y=d_y,
+                d_xh=d_xh,
+                d_yh=d_yh,
+                d_xv=d_xv,
+                d_yv=d_yv,
+                amp_x_pos=amp_x_pos,
+                amp_y_pos=amp_y_pos,
+                amp_x_neg=amp_x_neg,
+                amp_y_neg=amp_y_neg,
+                ph_x_pos=ph_x_pos,
+                ph_y_pos=ph_y_pos,
+                ph_x_neg=ph_x_neg,
+                ph_y_neg=ph_y_neg,
+            )
+
         elif quadmode == self.params.QUAD_MODULATION_MODE.AC:
-            msg = "AC quadrupole modulation mode not implemented yet."
-            raise NotImplementedError(msg)
+            data = meas
+
+            if data_pos is None or data_neg is None:
+                return
+
+            fs = float(data_pos["sampling_frequency"])
+            dt = 1.0 / fs
+            fh = float(data_pos.get("ch_freq", self.params.ch_freq))
+            fv = float(data_pos.get("cv_freq", self.params.cv_freq))
+
+            freqs = _np.array([fh, fv], dtype=float)
+
+            orbx_pos = _np.asarray(data_pos["orbx"], dtype=float)
+            orby_pos = _np.asarray(data_pos["orby"], dtype=float)
+            orbx_neg = _np.asarray(data_neg["orbx"], dtype=float)
+            orby_neg = _np.asarray(data_neg["orby"], dtype=float)
+
+            npts = orbx_pos.shape[0]
+            tim = _np.arange(npts) * dt
+
+            nr_cycles = _np.array(
+                [
+                    int(round(self.params.excit_time * fh)),
+                    int(round(self.params.excit_time * fv)),
+                ],
+                dtype=int,
+            )
+
+            mat = self.fitting_matrix(tim, freqs, num_cycles=nr_cycles)
+            u, s, vt = _np.linalg.svd(mat, full_matrices=False)
+            pinv = vt.T / s @ u.T
+
+            dcx_pos = _np.mean(orbx_pos, axis=0)
+            dcy_pos = _np.mean(orby_pos, axis=0)
+            dcx_neg = _np.mean(orbx_neg, axis=0)
+            dcy_neg = _np.mean(orby_neg, axis=0)
+
+            cosx_pos, sinx_pos, _ = self.fit_fourier_components(
+                orbx_pos - dcx_pos, freqs, dt, pinv=pinv
+            )
+            cosy_pos, siny_pos, _ = self.fit_fourier_components(
+                orby_pos - dcy_pos, freqs, dt, pinv=pinv
+            )
+            cosx_neg, sinx_neg, _ = self.fit_fourier_components(
+                orbx_neg - dcx_neg, freqs, dt, pinv=pinv
+            )
+            cosy_neg, siny_neg, _ = self.fit_fourier_components(
+                orby_neg - dcy_neg, freqs, dt, pinv=pinv
+            )
+
+            amp_x_pos, ph_x_pos = self.fit_calc_amp_and_phase(cosx_pos, sinx_pos)
+            amp_x_neg, ph_x_neg = self.fit_calc_amp_and_phase(cosx_neg, sinx_neg)
+
+            amp_y_pos, ph_y_pos = self.fit_calc_amp_and_phase(cosy_pos, siny_pos)
+            amp_y_neg, ph_y_neg = self.fit_calc_amp_and_phase(cosy_neg, siny_neg)
+
+            phref_h_pos = ph_x_pos[:, bpmidx]
+            phref_h_neg = ph_x_neg[:, bpmidx]
+            phref_v_pos = ph_y_pos[:, bpmidx]
+            phref_v_neg = ph_y_neg[:, bpmidx]
+
+            f = 1.0
+            sgn_xh_pos = _np.sign(_np.cos(ph_x_pos[0] - phref_h_pos[0] * f))
+            sgn_xv_pos = _np.sign(_np.cos(ph_x_pos[1] - phref_v_pos[1] * f))
+            sgn_xh_neg = _np.sign(_np.cos(ph_x_neg[0] - phref_h_neg[0] * f))
+            sgn_xv_neg = _np.sign(_np.cos(ph_x_neg[1] - phref_v_neg[1] * f))
+            sgn_yh_pos = _np.sign(_np.cos(ph_y_pos[0] - phref_h_pos[0] * f))
+            sgn_yv_pos = _np.sign(_np.cos(ph_y_pos[1] - phref_v_pos[1] * f))
+            sgn_yh_neg = _np.sign(_np.cos(ph_y_neg[0] - phref_h_neg[0] * f))
+            sgn_yv_neg = _np.sign(_np.cos(ph_y_neg[1] - phref_v_neg[1] * f))
+
+            sgn_xh_pos[sgn_xh_pos == 0] = 1.0
+            sgn_xv_pos[sgn_xv_pos == 0] = 1.0
+            sgn_xh_neg[sgn_xh_neg == 0] = 1.0
+            sgn_xv_neg[sgn_xv_neg == 0] = 1.0
+
+            sgn_yh_pos[sgn_yh_pos == 0] = 1.0
+            sgn_yv_pos[sgn_yv_pos == 0] = 1.0
+            sgn_yh_neg[sgn_yh_neg == 0] = 1.0
+            sgn_yv_neg[sgn_yv_neg == 0] = 1.0
+
+            sxh_pos = amp_x_pos[0] * sgn_xh_pos
+            sxv_pos = amp_x_pos[1] * sgn_xv_pos
+            sxh_neg = amp_x_neg[0] * sgn_xh_neg
+            sxv_neg = amp_x_neg[1] * sgn_xv_neg
+
+            syh_pos = amp_y_pos[0] * sgn_yh_pos
+            syv_pos = amp_y_pos[1] * sgn_yv_pos
+            syh_neg = amp_y_neg[0] * sgn_yh_neg
+            syv_neg = amp_y_neg[1] * sgn_yv_neg
+
+            d_x = dcx_pos - dcx_neg
+            d_y = dcy_pos - dcy_neg
+            d_xh = sxh_pos - sxh_neg
+            d_yh = syh_pos - syh_neg
+            d_xv = sxv_pos - sxv_neg
+            d_yv = syv_pos - syv_neg
+
+            y_h = -(d_x * d_yv - d_xv * d_y)
+            y_v = -(d_xh * d_y - d_x * d_yh)
+            x_h = d_xh * d_yv - d_xv * d_yh
+            x_v = d_xh * d_yv - d_xv * d_yh
+
+            m_h = _np.polyfit(x_h, y_h, 1)[0]
+            m_v = _np.polyfit(x_v, y_v, 1)[0]
+
+            x0_pos = (
+                dcx_pos[bpmidx] + sxh_pos[bpmidx] * m_h + sxv_pos[bpmidx] * m_v
+            )
+            x0_neg = (
+                dcx_neg[bpmidx] + sxh_neg[bpmidx] * m_h + sxv_neg[bpmidx] * m_v
+            )
+
+            y0_pos = (
+                dcy_pos[bpmidx] + syv_pos[bpmidx] * m_v + syh_pos[bpmidx] * m_h
+            )
+            y0_neg = (
+                dcy_neg[bpmidx] + syv_neg[bpmidx] * m_v + syh_neg[bpmidx] * m_h
+            )
+
+            x0 = 0.5 * (x0_pos + x0_neg)
+            y0 = 0.5 * (y0_pos + y0_neg)
+
+            self.analysis[bpmname] = dict(
+                tim=tim,
+                x0=x0,
+                y0=y0,
+                x0pos=x0_pos,
+                x0neg=x0_neg,
+                y0pos=y0_pos,
+                y0neg=y0_neg,
+                dcx_pos=dcx_pos[bpmidx],
+                dcy_pos=dcy_pos[bpmidx],
+                dcx_neg=dcx_neg[bpmidx],
+                dcy_neg=dcy_neg[bpmidx],
+                sxh_pos=sxh_pos[bpmidx],
+                sxh_neg=sxh_neg[bpmidx],
+                sxv_pos=sxv_pos[bpmidx],
+                sxv_neg=sxv_neg[bpmidx],
+                syh_pos=syh_pos[bpmidx],
+                syh_neg=syh_neg[bpmidx],
+                syv_pos=syv_pos[bpmidx],
+                syv_neg=syv_neg[bpmidx],
+                m_h=m_h,
+                m_v=m_v,
+                d_x=d_x,
+                d_y=d_y,
+                d_xh=d_xh,
+                d_yh=d_yh,
+                d_xv=d_xv,
+                d_yv=d_yv,
+                amp_x_pos=amp_x_pos,
+                amp_y_pos=amp_y_pos,
+                amp_x_neg=amp_x_neg,
+                amp_y_neg=amp_y_neg,
+                ph_x_pos=ph_x_pos,
+                ph_y_pos=ph_y_pos,
+                ph_x_neg=ph_x_neg,
+                ph_y_neg=ph_y_neg,
+            )
 
         else:
             quadmode_str = self.params.QUAD_MODULATION_MODE._field[quadmode]
             msg = f"Invalid quadrupole modulation mode: {quadmode_str}"
             raise ValueError(msg)
-
-        y_h = -(d_x * d_yv - d_xv * d_y)
-        y_v = -(d_xh * d_y - d_x * d_yh)
-        x_h = d_xh * d_yv - d_xv * d_yh
-        x_v = d_xh * d_yv - d_xv * d_yh
-
-        m_h = _np.polyfit(x_h, y_h, 1)[0]
-        m_v = _np.polyfit(x_v, y_v, 1)[0]
-
-        x0_pos = (
-            dcx_pos[bpmidx] + sxh_pos[bpmidx] * m_h + sxv_pos[bpmidx] * m_v
-        )
-        x0_neg = (
-            dcx_neg[bpmidx] + sxh_neg[bpmidx] * m_h + sxv_neg[bpmidx] * m_v
-        )
-
-        y0_pos = (
-            dcy_pos[bpmidx] + syv_pos[bpmidx] * m_v + syh_pos[bpmidx] * m_h
-        )
-        y0_neg = (
-            dcy_neg[bpmidx] + syv_neg[bpmidx] * m_v + syh_neg[bpmidx] * m_h
-        )
-
-        x0 = 0.5 * (x0_pos + x0_neg)
-        y0 = 0.5 * (y0_pos + y0_neg)
-
-        self.analysis[bpmname] = dict(
-            tim=tim,
-            x0=x0,
-            y0=y0,
-            x0pos=x0_pos,
-            x0neg=x0_neg,
-            y0pos=y0_pos,
-            y0neg=y0_neg,
-            dcx_pos=dcx_pos[bpmidx],
-            dcy_pos=dcy_pos[bpmidx],
-            dcx_neg=dcx_neg[bpmidx],
-            dcy_neg=dcy_neg[bpmidx],
-            sxh_pos=sxh_pos[bpmidx],
-            sxh_neg=sxh_neg[bpmidx],
-            sxv_pos=sxv_pos[bpmidx],
-            sxv_neg=sxv_neg[bpmidx],
-            syh_pos=syh_pos[bpmidx],
-            syh_neg=syh_neg[bpmidx],
-            syv_pos=syv_pos[bpmidx],
-            syv_neg=syv_neg[bpmidx],
-            m_h=m_h,
-            m_v=m_v,
-            d_x=d_x,
-            d_y=d_y,
-            d_xh=d_xh,
-            d_yh=d_yh,
-            d_xv=d_xv,
-            d_yv=d_yv,
-            amp_x_pos=amp_x_pos,
-            amp_y_pos=amp_y_pos,
-            amp_x_neg=amp_x_neg,
-            amp_y_neg=amp_y_neg,
-            ph_x_pos=ph_x_pos,
-            ph_y_pos=ph_y_pos,
-            ph_x_neg=ph_x_neg,
-            ph_y_neg=ph_y_neg,
-        )
-
-    @staticmethod
-    def fitting_matrix(tim, freqs, num_cycles=None, idx_ini=None):
-        """Create the matrix used for fitting of fourier components.
-
-        The ordering of the matrix is the following:
-           mat[i, 2*j] = cos(2*pi*freqs[j]*tim[i])
-           mat[i, 2*j+1] = sin(2*pi*freqs[j]*tim[i])
-
-        Args:
-            tim (numpy.ndarray): array with times
-            freqs (numpy.ndarray): array with frequencies to fit.
-            num_cycles (numpy.ndarray, optional): number of cycles of each
-                frequency. If not provided, all data range will be considered.
-            idx_ini (int|list|tuple|numpy.ndarray, optional): starting index
-                for fitting. If it is an iterable, must have the same size as
-                freqs. Defaults to None, which means the first index will be
-                the starting point.
-
-        Returns:
-            numpy.ndarray: fitting matrix (len(tim), 2*len(freqs))
-
-        """
-        if idx_ini is None:
-            idx_ini = _np.zeros(freqs.shape, dtype=int)
-        elif not isinstance(idx_ini, (list, tuple, _np.ndarray)):
-            idx_ini = _np.full(freqs.shape, idx_ini, dtype=int)
-
-        mat = _np.zeros((tim.size, 2 * freqs.size))
-        mat2 = mat.copy()
-        arg = 2 * _np.pi * freqs[None, :] * tim[:, None]
-        cos = _np.cos(arg)
-        sin = _np.sin(arg)
-        idx_ini = _np.vstack([idx_ini, idx_ini]).T.ravel()
-
-        if num_cycles is not None:
-            cond = arg > 2 * _np.pi * num_cycles[None, :]
-            cos[cond] = 0
-            sin[cond] = 0
-        mat[:, ::2] = cos
-        mat[:, 1::2] = sin
-
-        for i, idx in enumerate(idx_ini):
-            if not idx:
-                mat2[:, i] = mat[:, i]
-            else:
-                mat2[idx:, i] = mat[:-idx, i]
-        return mat2
-
-    @classmethod
-    def fit_fourier_components(
-        cls, data, freqs, dtim, num_cycles=None, idx_ini=None, pinv=None
-    ):
-        """Fit Fourier components in signal for the given frequencies.
-
-        Args:
-            data (numpy.ndarray, NxM): signal to be fitted consisting of M
-                columns of data.
-            freqs (numpy.ndarray, K): K frequencies to fit Fourier components.
-            dtim (numpy.ndarray, N): time vector for data columns.
-            num_cycles (num.ndarray, K, optional): number of cycles of each
-                frequency. If not provided, all data range will be considered.
-                Not used if pinv is not None.
-            idx_ini (int|list|tuple|numpy.ndarray, optional): starting index
-                for fitting. If it is an iterable, must have the same size as
-                freqs. Defaults to None, which means the first index will be
-                the starting point. Not used if pinv is not None.
-            pinv (numpy.ndarray, Mx2K, optional): if provided must be the
-                pseudo inverve of the fitting matrix. Defaults to None, which
-                means the fitting matrix and its pseudo-inverse will be
-                calculated.
-
-        Returns:
-            cos (numpy.ndarray, KxM): Fourier cosine coefficients.
-            sin (numpy.ndarray, KxM): Fourier sine coefficients.
-            pinv (numpy.ndarray, Mx2K): pseudo-inverse of fitting matrix.
-
-        """
-        if pinv is None:
-            tim = _np.arange(data.shape[0]) * dtim
-            mat = cls.fitting_matrix(tim, freqs, num_cycles, idx_ini)
-            u, s, vt = _np.linalg.svd(mat, full_matrices=False)
-            pinv = vt.T / s @ u.T
-            coeffs = pinv @ data
-        else:
-            siz = min(pinv.shape[1], data.shape[0])
-            coeffs = pinv[:, :siz] @ data[:siz]
-        # coeffs, *_ = _np.linalg.lstsq(mat, data, rcond=None)
-        cos = coeffs[::2]
-        sin = coeffs[1::2]
-        return cos, sin, pinv
-
-    @staticmethod
-    def fit_calc_amp_and_phase(cos, sin):
-        """."""
-        amps = _np.sqrt(cos**2 + sin**2)
-        phases = _np.arctan2(cos, sin)
-        return amps, phases
