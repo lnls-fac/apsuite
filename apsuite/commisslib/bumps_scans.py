@@ -3,8 +3,8 @@
 import time as _time
 import numpy as _np
 from siriuspy.devices import SOFB, HLFOFB, CurrInfoSI
-from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 from apsuite.orbcorr.si_bumps import SiCalcBumps
+from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 
 from ..utils import (
     ThreadedMeasBaseClass as _BaseClass,
@@ -25,7 +25,8 @@ class BumpParams(_ParamsBaseClass):
         self.subsec = '01C1'
         self.do_angular_bumps = True
 
-        self.n_bpms_out = 3
+        self.n_bpms_outx = 3
+        self.n_bpms_outy = 3
         self.minsingval = 0.2
         self.bump_residue = 3  # [um]
         self.bump_max_residue = 10  # [um]
@@ -54,7 +55,8 @@ class BumpParams(_ParamsBaseClass):
         stg = '{0:20s} = {1:>9s}\n'.format('subsec', self.subsec)
         stg += dtmp('do_angular_bumps', self.do_angular_bumps)
 
-        stg += dtmp('n_bpms_out', self.n_bpms_out, '')
+        stg += dtmp('n_bpms_out_x', self.n_bpms_outx, '')
+        stg += dtmp('n_bpms_out_y', self.n_bpms_outy, '')
         stg += ftmp('minsingval', self.minsingval, '')
         stg += ftmp('bump_residue', self.bump_residue, '[um]')
         stg += ftmp('bump_max_residue', self.bump_max_residue, '[um]')
@@ -127,12 +129,16 @@ class Bump(_BaseClass):
             print('Not a measurement....')
         return self.meas_func(*self.args, **self.kwargs)
 
-    def get_initial_state(self):
+    def get_initial_state(self, use_ioc_reforb=True):
         """Get initial state of the SOFB and FOFB."""
-        clt = _ConfigDBClient(config_type='si_orbit')
-        ref_orb = clt.get_config_value('ref_orb')
-        refx = _np.array(ref_orb['x'])
-        refy = _np.array(ref_orb['y'])
+        if use_ioc_reforb:
+            refx = self.devices['sofb'].refx
+            refy = self.devices['sofb'].refy
+        else:
+            clt = _ConfigDBClient(config_type='si_orbit')
+            ref_orb = clt.get_config_value('ref_orb')
+            refx = ref_orb[:160]
+            refy = ref_orb[160:]
         self.reforbx = refx
         self.reforby = refy
         self.get_sofb_bpm_enbl()
@@ -211,10 +217,11 @@ class Bump(_BaseClass):
         self._fofb_bpmxenbl = _np.copy(self.devices['fofb'].bpmxenbl)
         self._fofb_bpmyenbl = _np.copy(self.devices['fofb'].bpmyenbl)
 
-    def _generate_bpm_enbl(self, n_bpms_out, enblx, enbly, idcs_out):
-        if n_bpms_out != 0:
-            enblx[idcs_out[: n_bpms_out * 2]] = False
-            enbly[idcs_out[n_bpms_out * 2 :] - 160] = False
+    def _generate_bpm_enbl(self, n_bpms_outx, n_bpms_outy, enblx, enbly, idcs_out):
+        if n_bpms_outx != 0:
+            enblx[idcs_out[: n_bpms_outx * 2]] = False
+        if n_bpms_outy != 0:
+            enbly[idcs_out[n_bpms_outy * 2 :] - 160] = False
         return enblx, enbly
 
     def restore_initial_state(self):
@@ -232,19 +239,21 @@ class Bump(_BaseClass):
     def remove_bpms(self):
         """Remove BPMs from correction system."""
         subsec = self.params.subsec
-        n_bpms_out = self.params.n_bpms_out
+        n_bpms_outx = self.params.n_bpms_outx
+        n_bpms_outy = self.params.n_bpms_outy
         section_type, section_nr = self.subsec_2_sectype_nr(subsec)
 
         sofb = self.devices['sofb']
         idcs_out = self.bumptools.get_closest_bpms_indices(
             section_type=section_type,
             sidx=section_nr - 1,
-            n_bpms_out=n_bpms_out,
+            n_bpms_outx=n_bpms_outx,
+            n_bpms_outy=n_bpms_outy,
         )
         enblx = self._bpmxenbl
         enbly = self._bpmyenbl
         enblx, enbly = self._generate_bpm_enbl(
-            n_bpms_out, enblx, enbly, idcs_out
+            n_bpms_outx, n_bpms_outy, enblx, enbly, idcs_out
         )
         sofb.bpmxenbl = enblx
         sofb.bpmyenbl = enbly
@@ -254,7 +263,7 @@ class Bump(_BaseClass):
             enblx = self._fofb_bpmxenbl
             enbly = self._fofb_bpmyenbl
             enblx, enbly = self._generate_bpm_enbl(
-                n_bpms_out, enblx, enbly, idcs_out
+                n_bpms_outx, n_bpms_outy, enblx, enbly, idcs_out
             )
             fofb.bpmxenbl = enblx
             fofb.bpmyenbl = enbly
@@ -262,7 +271,7 @@ class Bump(_BaseClass):
             self.params.sleep_time
         )  # NOTE: For some reason We have to wait here.
 
-    def get_orbrms(self, refx, refy, idx):
+    def get_orbrms(self, idx):
         """Calculate rms of orbit distortion.
 
         Args:
@@ -274,6 +283,8 @@ class Bump(_BaseClass):
             float: rms of orbit distortion
         """
         sofb = self.devices['sofb']
+        refx = sofb.refx
+        refy = sofb.refy
         ref = _np.r_[refx, refy]
         orb = _np.r_[sofb.orbx, sofb.orby]
         dorb = (orb - ref)[idx] ** 2
@@ -313,7 +324,8 @@ class Bump(_BaseClass):
         refx0 = self.reforbx
         refy0 = self.reforby
         subsec = subsec or self.params.subsec
-        n_bpms_out = self.params.n_bpms_out
+        n_bpms_outx = self.params.n_bpms_outx
+        n_bpms_outy = self.params.n_bpms_outy
         minsingval = self.params.minsingval
         nr_iters = self.params.orbcorr_nr_iters
         residue = self.params.orbcorr_residue
@@ -331,7 +343,8 @@ class Bump(_BaseClass):
             agy=agy,
             psx=psx,
             psy=psy,
-            n_bpms_out=n_bpms_out,
+            n_bpms_outx=n_bpms_outx,
+            n_bpms_outy=n_bpms_outy,
             minsingval=minsingval,
         )
         section_type, section_nr = self.subsec_2_sectype_nr(subsec)
@@ -356,7 +369,7 @@ class Bump(_BaseClass):
                     _np.abs(fofb.kickcv_acc),
                 ))
                 for _ in _np.arange(nr_orbit_verification_closed_loop):
-                    rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
+                    rms_residue = self.get_orbrms(idcs_bpm)
                     self._check_rms_conditions(rms_residue, bump_residue)
                 bump_residue *= 1.2
                 print(f'    kick fofb = {kick:.3f} urad, ')
@@ -365,7 +378,8 @@ class Bump(_BaseClass):
                 _ = sofb.correct_orbit_manually(
                     nr_iters=nr_iters, residue=residue
                 )
-                rms_residue = self.get_orbrms(refx, refy, idcs_bpm)
+
+                rms_residue = self.get_orbrms(idcs_bpm)
                 self._check_rms_conditions(rms_residue, bump_residue)
                 bump_residue *= 1.2
         print('Done!')
