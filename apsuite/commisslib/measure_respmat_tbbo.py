@@ -171,7 +171,7 @@ class MeasureRespMatTBBO(_BaseClass):
             _ = args, kwgs
             flag.set()
 
-        dcct_pv = self.devices['dcct_bo'].pv_object('RawReadings-Mon')
+        dcct_pv = self.devices['bo_dcct'].pv_object('RawReadings-Mon')
         dcct_pv.auto_monitor = True
         dcct_pv.add_callback(set_flag)
         flag.clear()
