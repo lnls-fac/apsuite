@@ -854,10 +854,13 @@ class InjCtrlOptimizeInjBO(_BaseClass):
     the future.
     """
 
-    def __init__(self):
+    def __init__(self, isonline=True):
         """."""
-        super().__init__(params=InjCtrlOptimizeInjBOParams(), isonline=True)
-        self._create_devices()
+        super().__init__(
+            params=InjCtrlOptimizeInjBOParams(), isonline=isonline
+        )
+        if self.isonline:
+            self._create_devices()
         self.allow_injection = True
         self.target = self.ctrl_injection
 
