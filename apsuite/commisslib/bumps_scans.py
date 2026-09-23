@@ -156,7 +156,6 @@ class Bump(_BaseClass):
         if self.devices['currinfo'].storedbeam:
             return True
         print('Beam is dead!')
-        self.restore_initial_state()
 
     @staticmethod
     def subsec_2_sectype_nr(subsec):
@@ -398,13 +397,14 @@ class Bump(_BaseClass):
         idy, idx = idy.ravel(), idx.ravel()
 
         data = list()
+        self.config_sofb()
         for i in range(idx.size):
             if not self._is_beam_alive():
+                self.restore_initial_state()
                 break
             x = x_span[idx[i]]
             y = y_span[idy[i]]
 
-            self.config_sofb()
             if prms.do_angular_bumps:
                 self.implement_bump(agx=x, agy=y)
                 unit = 'urad'
