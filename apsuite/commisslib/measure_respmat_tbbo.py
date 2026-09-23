@@ -8,13 +8,15 @@ from matplotlib import rcParams
 import pyaccel as pa
 from pymodels import li, tb, bo
 
-from siriuspy.namesys import SiriusPVName as _PVName
+# from siriuspy.namesys import SiriusPVName as _PVName
 from siriuspy.devices import PowerSupply as _PowerSupply
 from siriuspy.devices import EVG as _EVG
 from siriuspy.devices import SOFB as _SOFB
+from siriuspy.devices import DCCT as _DCCT
 from siriuspy.search import PSSearch as _PSSearch
+from threading import Event as _Event
 
-from ..optimization import SimulAnneal
+# from ..optimization import SimulAnneal
 from ..utils import (
     ThreadedMeasBaseClass as _BaseClass,
     ParamsBaseClass as _ParamsBaseClass,
@@ -163,9 +165,24 @@ class MeasureRespMatTBBO(_BaseClass):
         traj_sum = list()
         timestamp = list()
         corr_strn = list()
+
+        flag = _Event()
+        def set_flag(*args, **kwgs):
+            _ = args, kwgs
+            flag.set()
+
+        dcct_pv = self.devices['dcct_bo'].pv_object('RawReadings-Mon')
+        dcct_pv.auto_monitor = True
+        dcct_pv.add_callback(set_flag)
+        flag.clear()
+
         for i in range(self.params.nr_points):
             traj_xy_0 = self.trajxy
-            evg.cmd_turn_on_injection()
+            # evg.cmd_turn_on_injection()
+
+            while not flag.wait(1):
+                continue
+            flag.clear()
 
             t0_ = _time.time()
             stg = f'    {i + 1:02d}/{self.params.nr_points:02d} -> '
@@ -189,6 +206,9 @@ class MeasureRespMatTBBO(_BaseClass):
                 _time.sleep(dtim)
             if self._stopevt.is_set():
                 break
+
+        dcct_pv.clear_callbacks()
+
         return dict(
             traj_xy=traj_xy,
             traj_sum=traj_sum,
@@ -469,6 +489,7 @@ class MeasureRespMatTBBO(_BaseClass):
             evg=_EVG(),
             tb_sofb=_SOFB(_SOFB.DEVICES.TB),
             bo_sofb=_SOFB(_SOFB.DEVICES.BO),
+            bo_dcct=_DCCT(_DCCT.DEVICES.BO),
         )
         for corr_name in self.params.ALL_CORRS:
             self.devices[corr_name] = _PowerSupply(corr_name)
