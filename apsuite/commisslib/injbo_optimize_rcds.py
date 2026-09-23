@@ -10,7 +10,6 @@ from siriuspy.devices import (
     PowerSupply,
     PowerSupplyPU,
     CurrInfoBO,
-    EGBias,
     EVG,
     EGTriggerPS,
     LILLRF,
@@ -22,8 +21,6 @@ from siriuspy.devices import (
 )
 
 from ..optimization.rcds import RCDS as _RCDS, RCDSParams as _RCDSParams
-from ..utils import ParamsBaseClass as _ParamsBase
-from ..utils import ThreadedMeasBaseClass as _BaseClass
 
 
 class OptimizeInjBOParams(_RCDSParams):
