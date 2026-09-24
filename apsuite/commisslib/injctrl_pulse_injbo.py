@@ -108,7 +108,7 @@ class InjCtrlPulseInjBO(_BaseClass):
                             + 'Not injecting while False.'
                         )
                 else:
-                    _log.info(
+                    _log.debug(
                         'Not injecting for optimization. Preparing for top-up.'
                     )
                     self.prepare_for_inj(delay_raw_inj)
