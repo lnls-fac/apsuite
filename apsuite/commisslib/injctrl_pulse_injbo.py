@@ -101,7 +101,7 @@ class InjCtrlPulseInjBO(_BaseClass):
                         self.prepare_for_opt(delay_raw_opt)
                         self.devices['evg'].cmd_turn_on_injection()
                         self.devices['evg'].wait_injection_finish()
-                        _log.info('Injecting for optimization...')
+                        _log.debug('Injecting for optimization...')
                     else:
                         _log.debug(
                             'self.allow_injection is False '
