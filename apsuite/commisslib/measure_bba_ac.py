@@ -241,11 +241,7 @@ class DoACBBA(_BaseClass):
         self.devices["fambpms"] = self.bpms
 
         # Quadrupoles
-        props = [
-            "PwrState-Sts",
-            "KL-SP",
-            "KL-RB",
-            "KLRef-Mon",
+        ac_props = [
             "OpMode-Sel",
             "OpMode-Sts",
             "Current-SP",
@@ -267,6 +263,7 @@ class DoACBBA(_BaseClass):
             "CycleEnbl-Mon",
             "ParamPWMFreq-Cte",
         ]
+        props = ["PwrState-Sts", "KL-SP", "KL-RB", "KLRef-Mon"] + ac_props
         for qname in self.data["quadnames"]:
             if qname in self.devices:
                 continue
@@ -274,29 +271,7 @@ class DoACBBA(_BaseClass):
 
         # Correctors
         sofbdata = self.sofb_data
-        props = [
-            "Kick-SP",
-            "OpMode-Sel",
-            "OpMode-Sts",
-            "Current-SP",
-            "Current-RB",
-            "Current-Mon",
-            "CurrentRef-Mon",
-            "CycleType-Sel",
-            "CycleFreq-SP",
-            "CycleAmpl-SP",
-            "CycleOffset-SP",
-            "CycleAuxParam-SP",
-            "CycleAuxParam-RB",
-            "CycleNrCycles-SP",
-            "CycleAmpl-RB",
-            "CycleOffset-RB",
-            "CycleFreq-RB",
-            "CycleNrCycles-RB",
-            "CycleType-Sts",
-            "CycleEnbl-Mon",
-            "ParamPWMFreq-Cte",
-        ]
+        props = ["Kick-SP"] + ac_props
         self.devices.update({
             name: _PowerSupply(name, props2init=props)
             for name in (sofbdata.ch_names + sofbdata.cv_names)
@@ -384,7 +359,7 @@ class DoACBBA(_BaseClass):
             residue=self.params.sofb_maxorberr,
         )
 
-    # ----- Quadrupole handling -----
+    # ----- Quadrupole utils -----
 
     def get_quad_strength(self, quadname):
         """."""
@@ -392,6 +367,19 @@ class DoACBBA(_BaseClass):
             raise ValueError(f"Invalid quadrupole: {quadname}.")
         quad = self.devices[quadname]
         return float(quad.strength)
+
+    def get_quad_strength_limits(self, quadname, margin=0.0005):
+        """."""
+        if quadname not in self.data["quadnames"]:
+            raise ValueError(f"Invalid quadrupole: {quadname}.")
+        quad = self.devices[quadname]
+        pv = quad.pv_object("KL-SP")
+        upp = pv.upper_disp_limit
+        low = pv.lower_disp_limit
+        # Limits are interchanged in some quads:
+        lolim = min(upp, low) + margin
+        hilim = max(upp, low) - margin
+        return _np.array([lolim, hilim], dtype=float)
 
     def set_quad_strength(
         self, quadname, strength, ignore_timeout=False, **kw
@@ -419,19 +407,6 @@ class DoACBBA(_BaseClass):
             self._log(msg, tab=tab)
             return self.STATUS.Fail
         return self.STATUS.Success
-
-    def get_quad_strength_limits(self, quadname, margin=0.0005):
-        """."""
-        if quadname not in self.data["quadnames"]:
-            raise ValueError(f"Invalid quadrupole: {quadname}.")
-        quad = self.devices[quadname]
-        pv = quad.pv_object("KL-SP")
-        upp = pv.upper_disp_limit
-        low = pv.lower_disp_limit
-        # Limits are interchanged in some quads:
-        lolim = min(upp, low) + margin
-        hilim = max(upp, low) - margin
-        return _np.array([lolim, hilim], dtype=float)
 
     def check_isvalid_dkl(
             self,
@@ -488,214 +463,337 @@ class DoACBBA(_BaseClass):
             return ok, valid
         return ok
 
-    # ----- A -----
+    # ----- Config Timing -----
+    # public
+    def get_timing_state(self):
+        """Get the timing state."""
+        state = dict()
+        for opt in DoACBBA.TIMING_STATE_OPTIONS:
+            devname, *state_opt = opt.split("_")
+            state_opt = "_".join(state_opt)
+            device = self.devices.get(devname, None)
+            if device is not None:
+                state[opt] = 0
+                state[opt] = getattr(device, state_opt)
+        return state
 
-    # ----- A -----
+    def set_timing_state(self, state):
+        """Set the timing state."""
+        for opt in DoACBBA.TIMING_STATE_OPTIONS:
+            if opt not in state.keys():
+                continue
+            devname, *state_opt = opt.split("_")
+            device = self.devices.get(devname, None)
+            state_opt = "_".join(state_opt)
+            if device is not None:
+                setattr(device, state_opt, state[opt])
+                continue
+        _time.sleep(0.1)
+        self.devices["evg"].cmd_update_events()
 
-    # ----- A -----
+    # private
+    def _config_timing(
+        self,
+        cm_dly=0,
+        chs=None,
+        cvs=None,
+        quads=None,
+        nr_points=None
+    ):
+        state = dict()
+        state["trigbpms_source"] = "Study"
+        state["trigbpms_nr_pulses"] = 1
+        state["trigbpms_delay_raw"] = 0.0
 
-    def _do_acbba(self):
-        """."""
-        # Initial checkings
-        if not self.check_isvalid_dkl(self._bpms2dobba):
-            self._log("Adjust quad strength or change dKL first.")
+        state["evt_mode"] = "External"
+        state["evt_delay_raw"] = 0
+
+        state["trigcorrs_source"] = "Study"
+        state["trigcorrs_nr_pulses"] = 1
+
+        if quads is not None:
+            state["trigquads_source"] = "Study"
+            state["trigquads_nr_pulses"] = 1
+
+            state["trigskews_source"] = "Study"
+            state["trigskews_nr_pulses"] = 1
+
+        rf_freq = self.devices["rfgen"].frequency
+        ftim = rf_freq / 4  # timing base frequency
+        dly = int(cm_dly * ftim)
+        if chs is None or cvs is None or nr_points is None:
+            state["trigcorrs_delay_raw"] = dly
+            state["trigquads_delay_raw"] = dly
+            state["trigskews_delay_raw"] = dly
+            self.set_timing_state(state)
             return
 
-        # Initialize data
-        self.data["measure"] = dict()
-        self._setup_orm()
+        state["trigcorrs_delay_raw"] = 0
+        state["trigquads_delay_raw"] = 0
+        state["trigskews_delay_raw"] = 0
+        # nr_runs = len(chs)
+        # # Calculate delta_delay for correctors to be as close as possible to a
+        # # multiple of the the sampling period to ensure repeatability of
+        # # experiment along runs excited during single acquisition:
+        # fsamp = self.bpms.get_sampling_frequency(rf_freq, self.params.acq_rate)
+        # runs_delta_dly = _np.arange(nr_runs, dtype=float)
+        # runs_delta_dly *= nr_points / fsamp
+        # runs_delta_dlyr = _np.round(runs_delta_dly * ftim)
 
-        # Start
-        tini = _datetime.datetime.fromtimestamp(_time.time())
-        msg = f"Starting measurement at {tini.strftime('%Y-%m-%d %Hh%Mm%Ss')}"
-        self._log("\n" + msg)
+        # # get low level trigger names to be configured in each run of the
+        # # acquisition:
+        # ll_trigs_corrs = []
+        # ll_trigs_quads = []
+        # ll_trigs_skews = []
+        # if quads is None:
+        #     quads = _np.full_like(chs, False, dtype=bool).tolist()
+        # for ch, cv, quad in zip(chs, cvs, quads):  # noqa: B905
+        #     llt_corrs = set()
+        #     llt_quads = set()
+        #     llt_skews = set()
+        #     for c in ch + cv + quad:
+        #         if not c:
+        #             continue
+        #         trig = _LLTime.get_trigger_name(c + ":BCKPLN")
+        #         if c.dev in ["CH", "CV"]:
+        #             llt_corrs.add(trig)
+        #         elif c.dev == "QS":
+        #             llt_skews.add(trig)
+        #         else:
+        #             llt_quads.add(trig)
+        #     ll_trigs_corrs.append(llt_corrs)
+        #     ll_trigs_quads.append(llt_quads)
+        #     ll_trigs_skews.append(llt_skews)
 
-        sofb = self.devices['sofb']
-        if sofb.autocorrsts:
-            msg = "SOFB feedback is enabled. Please disable it first."
+        # # check if correctors controlled by the same trigger are requested to
+        # # be triggered in different times during the same acquisition
+        # for ll_trigs in [ll_trigs_corrs, ll_trigs_quads, ll_trigs_skews]:
+        #     if len(_red(_opr.or_, ll_trigs)) != \
+        #         _red(_opr.add, map(len, ll_trigs)):
+        #         raise ValueError("Impossible trigger configuration requested.")
+
+        # for trig_type, ll_trigs in zip(  # noqa: B905
+        #     ["trigcorrs", "trigquads", "trigskews"],
+        #     [ll_trigs_corrs, ll_trigs_quads, ll_trigs_skews]
+        #     ):
+        #     trig = self.devices[trig_type]
+        #     delta_delay_raw = _np.zeros(trig.delta_delay_raw.size)
+        #     low_level = trig.low_level_triggers
+        #     for llts, ddlyr in zip(ll_trigs, runs_delta_dlyr):  # noqa: B905
+        #         # Find all ll triggers of this sector and set their delay:
+        #         for llt in llts:
+        #             if llt not in low_level:
+        #                 raise ValueError(f"Trigger {llt:s} is not valid.")
+        #             delta_delay_raw[low_level.index(llt)] = ddlyr + dly
+        #     state[f"{trig_type}_delta_delay_raw"] = delta_delay_raw
+
+        self.set_timing_state(state)
+
+    # ----- Config BPMs -----
+    # private
+    def _config_bpms(self, nr_points, rate=None):
+        if rate is None:
+            rate = self.params.acq_rate
+        return self.bpms.config_mturn_acquisition(
+            acq_rate=rate,
+            nr_points_before=0,
+            nr_points_after=nr_points,
+            repeat=False,
+            external=True,
+        )
+
+    def _check_bpms_configok(self, ret):
+        bpmnames = self.data["bpmnames"]
+        if ret < 0:
+            idx = -int(ret) - 1
+            # msg = f"BPM {idx:d} did not finish last acquisition."
+            bpmname = bpmnames[idx]
+            msg = f'"{bpmname}" did not finish last acquisition.'
+            self._log(msg)
+        elif ret > 0:
+            idx = int(ret) - 1
+            # msg = f"BPM {idx:d} is not ready for acquisition."
+            bpmname = bpmnames[idx]
+            msg = f'"{bpmname}" is not ready for acquisition.'
+            self._log(msg)
+        return self.STATUS.Fail if ret else self.STATUS.Success
+
+    def _check_if_bpms_updated(self, ret):
+        """."""
+        if ret != 0:
+            if ret > 0:
+                tag = self.bpms.bpm_names[int(ret) - 1]
+                pos = self.bpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
+                msg = f'Problem: BPM "{tag}" did not update, signal {pos}.'
+            elif ret == -1:
+                msg = "Problem: Initial timestamps were not defined."
+            elif ret == -2:
+                msg = "Problem: signals size changed."
             self._log(msg)
             return self.STATUS.Fail
+        return self.STATUS.Success
 
-        if sofb.synckicksts != sofb._data.CorrSync.Off:
-            msg = "SOFB correctors synchronization is On. Please turn it Off."
-            self._log(msg)
-            return self.STATUS.Fail
+    def _get_correctors_for_bpm(self, bpmname, orm=None):
+        """Choose a CH and a CV that most affect the target BPM."""
+        sofb = self.sofb_data
+        bpmnames = self.data["bpmnames"]
 
-        # Get initial timing state
-        self._log("Getting Timing state... ", end="")
-        timing_state = self.get_timing_state()
-        self._log("Done!")
+        if bpmname in self._bpms_corrs_mapping:
+            ch_name, cv_name = self._bpms_corrs_mapping[bpmname]
+            ch_idx = sofb.ch_names.index(ch_name)
+            cv_idx = sofb.cv_names.index(cv_name)
+            return ch_name, cv_name, ch_idx, cv_idx + sofb.nr_ch
 
-        # Measure BPMs noise
-        if self.params.measure_bpms_noise:
-            msg = "Measuring BPMs noise:"
-            self._log(msg)
-            measnoise_ok, noise_data = self._do_measure_bpms_noise(tab=1)
-            self.data["bpms_noise"] = noise_data
-            if not measnoise_ok:
-                msg = "Problem measuring BPMs noise."
-                self._log(msg)
+        if orm is None:
+            orm = self._orm
+        if orm is None:
+            raise RuntimeError("Orbit Response Matrix not loaded.")
 
-        # Do AC-BBA for each BPM
-        nr_bpms = len(self._bpms2dobba)
-        msg = f"Running AC-BBA for {nr_bpms:03d} BPMs:"
-        self._log(msg)
-        stsok = True
-        for i, bpm in enumerate(self._bpms2dobba):
-            if self._stopevt.is_set():
-                msg = "Stopped!"
-                self._log(msg, tab=1)
-                stsok = False
-                break
-            if not self.havebeam:
-                msg = "Beam was lost!"
-                self._log(msg, tab=1)
-                stsok = False
-                break
-            msg = f'Doing AC-BBA for BPM "{bpm}" ({i + 1:03d}/{nr_bpms:03d}):'
-            self._log(msg, tab=1)
-            sts, data_acq = self._do_acbba_single_bpm(bpm, tab=2)
-            self.data["measure"][bpm] = data_acq
-            if sts == self.STATUS.Fail:
-                stsok = False
-                msg = "Fail!"
-                self._log(msg, tab=1)
-                break
-            self._log("Done!", tab=1)
-        self._log(f"{'Done' if stsok else 'Fail'}!")
+        if bpmname not in bpmnames:
+            raise ValueError("Invalid BPM! Check ACBBAParams.BPMNAMES")
+        bpm_idx = bpmnames.index(bpmname)
 
-        # Restore timing state
-        self._log("Restoring Timing state... ", end="")
-        self.set_timing_state(timing_state)
-        self._log("Done!")
+        orm_xx = orm[: sofb.nr_bpms, : sofb.nr_ch]
+        orm_yy = orm[sofb.nr_bpms :, sofb.nr_ch : sofb.nr_chcv]
 
-        # Correct orbit before ending
-        if self.havebeam:
-            self._log("Correcting Orbit... ", end="")
-            self.correct_orbit()
-            self._log("Ok!")
+        ch_idx = int(_np.argmax(_np.abs(orm_xx[bpm_idx, :])))
+        cv_idx = int(_np.argmax(_np.abs(orm_yy[bpm_idx, :])))
 
-        # Finish
-        tfin = _datetime.datetime.fromtimestamp(_time.time())
-        dtime = str(tfin - tini).split(".")[0]
-        msg = f"Measurement finished! ET: {dtime}"
-        self._log(msg)
-        return self.STATUS.Success if stsok else self.STATUS.Fail
+        ch_name = sofb.ch_names[ch_idx]
+        cv_name = sofb.cv_names[cv_idx]
+        return ch_name, cv_name, ch_idx, cv_idx + sofb.nr_ch
 
-    def _do_acbba_single_bpm(self, bpmname, **kw):
+    # ----- Config Magnets -----
+    # private
+    def _config_magnets(self, magnets, strengths, freqs, excit_time):
+        """."""
+        for i, cmn in enumerate(magnets):
+            cmo = self.devices[cmn]
+            conv = self.devices[cmn + ":StrengthConv"].conv_strength_2_current
+            cmo.cycle_type = cmo.CYCLETYPE.Sine
+            cmo.cycle_freq = freqs[i]
+            cmo.cycle_ampl = conv(strengths[i])
+            cmo.cycle_offset = cmo.currentref_mon
+            cmo.cycle_theta_begin = 0
+            cmo.cycle_theta_end = 0
+            cmo.cycle_num_cycles = int(excit_time * freqs[i])
+            # NOTE: There is a bug in the firmware of the power supplies
+            # (apparently comparison >= should be replaced by > in line 353 of
+            # the file siggen.c of the repository C28) that makes the endpoint
+            # of the cycle not be equal to the starting point. So we need to
+            # add a very small phase at the ending of the senoid to compensate
+            # for this bug. The code bellow adds a phase compatible with a
+            # small fraction (0.1) of the phase advance between two points of
+            # the signal at the end of the cycling.
+            fsamp = cmo["ParamPWMFreq-Cte"]
+            params = cmo.cycle_aux_param
+            params[1] = freqs[i] / fsamp * 360
+            params[1] *= 0.1
+            cmo.cycle_aux_param = params
+
+    def _change_mags_opmode(self, mode, magnets=None, timeout=None, **kw):
+        """."""
         tab = kw.pop("tab", 0)
+        if timeout is None:
+            timeout = self.params.timeout_magnets
 
-        if bpmname not in self.data["bpmnames"]:
-            msg = f"Invalid BPM: {bpmname}."
-            self._log(msg, tab=tab)
-            return self.STATUS.Fail, None
+        opm_sel = _PowerSupply.OPMODE_SEL
+        opm_sts = _PowerSupply.OPMODE_STS
+        mode_sel = opm_sel.Cycle if mode == "cycle" else opm_sel.SlowRef
+        mode_sts = opm_sts.Cycle if mode == "cycle" else opm_sts.SlowRef
 
-        # correct orbit
-        if self.params.correct_orbit_each_step:
-            self._log("Correcting Orbit... ", end="", tab=tab)
-            self.correct_orbit()
-            self._log("Ok!")
+        quadmod_mode = self.params.quad_modulation_mode
+        if magnets is None:
+            magnets = self.sofb_data.ch_names + self.sofb_data.cv_names
+            if quadmod_mode == self.params.QUAD_MODULATION_MODE.AC:
+                magnets += self.data["quadnames"]
 
-        quadname = self.data["quadnames"][self.data["bpmnames"].index(bpmname)]
-        quadmode = self.params.quad_modulation_mode
+        for magname in magnets:
+            mag = self.devices[magname]
+            mag.opmode = mode_sel
 
-        chname, cvname, *_ = self._get_correctors_for_bpm(bpmname, self._orm)
+        for magname in magnets:
+            dt_ = _time.time()
+            mag = self.devices[magname]
+            if not mag.wait("OpMode-Sts", mode_sts, timeout=timeout):
+                msg = "\nERR:" + mag + " did not change to " + mode
+                self._log(msg, tab=tab)
+                return False
+            dt_ -= _time.time()
+            timeout = max(timeout + dt_, 0)
+            mag.current = mag.current
+        return True
 
-        stren_ini = self.get_quad_strength(quadname)
-        delta_kl = self.params.quad_delta_kl
+    def _wait_cycle_to_finish(self, magnets=None, timeout=None):
+        """."""
+        if timeout is None:
+            timeout = self.params.timeout_magnets
 
-        data = {
-            "quadname": quadname,
-            "chname": chname,
-            "cvname": cvname,
-            "ch_freq": self.params.ch_freq,
-            "cv_freq": self.params.cv_freq,
-            "q_freq": self.params.q_freq,
-            "data_dc_kl_pos": None,
-            "data_dc_kl_neg": None,
-            "data_ac": None,
-            "quadmode": quadmode,
-            "quad_stren_ini": stren_ini,
-            "quad_delta_kl": delta_kl,
-        }
+        quadmod_mode = self.params.quad_modulation_mode
+        if magnets is None:
+            magnets = self.sofb_data.ch_names + self.sofb_data.cv_names
+            if quadmod_mode == self.params.QUAD_MODULATION_MODE.AC:
+                magnets += self.data["quadnames"]
 
-        if quadmode == self.params.QUAD_MODULATION_MODE.AC:
-            msg = "Setup: Quadrupole modulation mode: AC."
-            self._log(msg, tab=tab)
-            sts, data_ac = self._acquire_data(
-                chname,
-                cvname,
-                quad_name=quadname,
-                delta_kl=delta_kl,
-                tab=tab + 1
-            )
-            data["data_ac"] = data_ac
-            if sts == self.STATUS.Fail:
-                return sts, data
+        t0 = _time.time()
+        for magname in magnets:
+            mag = self.devices[magname]
+            dt = timeout - (_time.time() - t0)
+            if dt < 0 or not mag.wait_cycle_to_finish(timeout=dt):
+                return False
+        return True
 
-        elif quadmode == self.params.QUAD_MODULATION_MODE.DC:
-            msg = "Setup: Quadrupole modulation mode: DC."
-            self._log(msg, tab=tab)
+    # ----- Acquire data -----
+    # public
+    def get_bpms_data(self):
+        """Get all BPM related data relevant for the measurements.
 
-            # Set Quad KL = KL0 + dKL
-            msg = "Step: Positive quadrupole modulation."
-            self._log(msg, tab=tab)
-            msg = f'Changing quadrupole "{quadname}" strength... '
-            self._log(msg, tab=tab + 1, end="")
-            sts = self.set_quad_strength(
-                quadname, stren_ini + delta_kl / 2, tab=tab + 1
-            )
-            if sts == self.STATUS.Fail:
-                self.set_quad_strength(
-                    quadname, stren_ini, ignore_timeout=True
-                )
-                return sts, data
-            self._log("Done!")
+        Returns:
+            dict: BPMs data.
 
-            sts, data_pos = self._acquire_data(chname, cvname, tab=tab + 1)
-            data["pos"] = data_pos
-            if sts == self.STATUS.Fail:
-                return sts, data
+        """
+        orbx, orby = self.bpms.get_mturn_signals()
+        bpm0 = self.bpms.devices[0]
+        rf_freq = self.devices["rfgen"].frequency
 
-            # Set Quad KL = KL0 - dKL
-            msg = "Step: Negative quadrupole modulation."
-            self._log(msg, tab=tab)
-            msg = f'Changing quadrupole "{quadname}" strength... '
-            self._log(msg, tab=tab + 1, end="")
-            sts = self.set_quad_strength(
-                quadname, stren_ini - delta_kl / 2, tab=tab + 1
-            )
-            if sts == self.STATUS.Fail:
-                self.set_quad_strength(
-                    quadname, stren_ini, ignore_timeout=True
-                )
-                return sts, data
-            self._log("Done!")
+        data = dict()
+        data["orbx"] = orbx
+        data["orby"] = orby
+        data["rf_frequency"] = rf_freq
+        data["acq_rate"] = bpm0.acq_channel_str
+        data["sampling_frequency"] = self.bpms.get_sampling_frequency(rf_freq)
+        data["nrsamples_pre"] = bpm0.acq_nrsamples_pre
+        data["nrsamples_post"] = bpm0.acq_nrsamples_post
+        data["trig_delay_raw"] = self.devices["trigbpms"].delay_raw
+        data["switching_mode"] = bpm0.switching_mode_str
+        data["switching_frequency"] = self.bpms.get_switching_frequency(
+            rf_freq
+        )
+        return data
 
-            sts, data_neg = self._acquire_data(chname, cvname, tab=tab + 1)
-            data["neg"] = data_neg
-            if sts == self.STATUS.Fail:
-                return sts, data
+    def get_general_data(self):
+        """Get general purpose data.
 
-            # Restore Quad KL = KL0
-            msg = "Step: Restoring quadrupole strength."
-            self._log(msg, tab=tab)
-            msg = f'Changing quadrupole "{quadname}" strength... '
-            self._log(msg, tab=tab + 1, end="")
-            sts = self.set_quad_strength(quadname, stren_ini, tab=tab + 1)
-            if sts == self.STATUS.Fail:
-                self.set_quad_strength(
-                    quadname, stren_ini, ignore_timeout=True
-                )
-                return sts, data
-            self._log("Done!")
+        Returns:
+            dict: general purpose data.
 
-        else:
-            msg = "Invalid Quadrupole modulation mode. Skipping..."
-            self._log(msg, tab=tab)
-            return self.STATUS.Fail, data
+        """
+        data = dict()
+        data["timestamp"] = _time.time()
+        data["stored_current"] = self.devices["currinfo"].current
+        data["tunex"] = self.devices["tune"].tunex
+        data["tuney"] = self.devices["tune"].tuney
+        return data
 
-        return self.STATUS.Success, data
+    # private
+    def _get_acq_nr_points(self):
+        freq = self.devices["rfgen"].frequency
+        rate = self.params.acq_rate
+        n_pts = self.params.excit_time
+        n_pts += self.params.corrs_delay * 2
+        n_pts *= self.bpms.get_sampling_frequency(freq, acq_rate=rate)
+        n_pts = int(_np.ceil(n_pts))
+        return n_pts
 
     def _acquire_data(self, ch_name, cv_name, quad_name=None, **kw):
         """."""
@@ -796,69 +894,7 @@ class DoACBBA(_BaseClass):
 
         return self.STATUS.Success, data
 
-    def _check_bpms_configok(self, ret):
-        bpmnames = self.data["bpmnames"]
-        if ret < 0:
-            idx = -int(ret) - 1
-            # msg = f"BPM {idx:d} did not finish last acquisition."
-            bpmname = bpmnames[idx]
-            msg = f'"{bpmname}" did not finish last acquisition.'
-            self._log(msg)
-        elif ret > 0:
-            idx = int(ret) - 1
-            # msg = f"BPM {idx:d} is not ready for acquisition."
-            bpmname = bpmnames[idx]
-            msg = f'"{bpmname}" is not ready for acquisition.'
-            self._log(msg)
-        return self.STATUS.Fail if ret else self.STATUS.Success
-
-    def _check_if_bpms_updated(self, ret):
-        """."""
-        if ret != 0:
-            if ret > 0:
-                tag = self.bpms.bpm_names[int(ret) - 1]
-                pos = self.bpms.mturn_signals2acq[int((ret % 1) * 10) - 1]
-                msg = f'Problem: BPM "{tag}" did not update, signal {pos}.'
-            elif ret == -1:
-                msg = "Problem: Initial timestamps were not defined."
-            elif ret == -2:
-                msg = "Problem: signals size changed."
-            self._log(msg)
-            return self.STATUS.Fail
-        return self.STATUS.Success
-
-    def _get_correctors_for_bpm(self, bpmname, orm=None):
-        """Choose a CH and a CV that most affect the target BPM."""
-
-        sofb = self.sofb_data
-        bpmnames = self.data["bpmnames"]
-
-        if bpmname in self._bpms_corrs_mapping:
-            ch_name, cv_name = self._bpms_corrs_mapping[bpmname]
-            ch_idx = sofb.ch_names.index(ch_name)
-            cv_idx = sofb.cv_names.index(cv_name)
-            return ch_name, cv_name, ch_idx, cv_idx + sofb.nr_ch
-
-        if orm is None:
-            orm = self._orm
-        if orm is None:
-            raise RuntimeError("Orbit Response Matrix not loaded.")
-
-        if bpmname not in bpmnames:
-            raise ValueError("Invalid BPM! Check ACBBAParams.BPMNAMES")
-        bpm_idx = bpmnames.index(bpmname)
-
-        orm_xx = orm[: sofb.nr_bpms, : sofb.nr_ch]
-        orm_yy = orm[sofb.nr_bpms :, sofb.nr_ch : sofb.nr_chcv]
-
-        ch_idx = int(_np.argmax(_np.abs(orm_xx[bpm_idx, :])))
-        cv_idx = int(_np.argmax(_np.abs(orm_yy[bpm_idx, :])))
-
-        ch_name = sofb.ch_names[ch_idx]
-        cv_name = sofb.cv_names[cv_idx]
-        return ch_name, cv_name, ch_idx, cv_idx + sofb.nr_ch
-
-    def _do_measure_bpms_noise(self, **kw):
+    def _measure_bpms_noise(self, **kw):
         tab = kw.pop("tab", 0)
         tini = _datetime.datetime.fromtimestamp(_time.time())
 
@@ -909,275 +945,7 @@ class DoACBBA(_BaseClass):
         self._log(msg)
         return stsok, data
 
-    def _get_acq_nr_points(self):
-        freq = self.devices["rfgen"].frequency
-        rate = self.params.acq_rate
-        n_pts = self.params.excit_time
-        n_pts += self.params.corrs_delay * 2
-        n_pts *= self.bpms.get_sampling_frequency(freq, acq_rate=rate)
-        n_pts = int(_np.ceil(n_pts))
-        return n_pts
-
-    def get_bpms_data(self):
-        """Get all BPM related data relevant for the measurements.
-
-        Returns:
-            dict: BPMs data.
-
-        """
-        orbx, orby = self.bpms.get_mturn_signals()
-        bpm0 = self.bpms.devices[0]
-        rf_freq = self.devices["rfgen"].frequency
-
-        data = dict()
-        data["orbx"] = orbx
-        data["orby"] = orby
-        data["rf_frequency"] = rf_freq
-        data["acq_rate"] = bpm0.acq_channel_str
-        data["sampling_frequency"] = self.bpms.get_sampling_frequency(rf_freq)
-        data["nrsamples_pre"] = bpm0.acq_nrsamples_pre
-        data["nrsamples_post"] = bpm0.acq_nrsamples_post
-        data["trig_delay_raw"] = self.devices["trigbpms"].delay_raw
-        data["switching_mode"] = bpm0.switching_mode_str
-        data["switching_frequency"] = self.bpms.get_switching_frequency(
-            rf_freq
-        )
-        return data
-
-    def get_general_data(self):
-        """Get general purpose data.
-
-        Returns:
-            dict: general purpose data.
-
-        """
-        data = dict()
-        data["timestamp"] = _time.time()
-        data["stored_current"] = self.devices["currinfo"].current
-        data["tunex"] = self.devices["tune"].tunex
-        data["tuney"] = self.devices["tune"].tuney
-        return data
-
-    def _config_bpms(self, nr_points, rate=None):
-        if rate is None:
-            rate = self.params.acq_rate
-        return self.bpms.config_mturn_acquisition(
-            acq_rate=rate,
-            nr_points_before=0,
-            nr_points_after=nr_points,
-            repeat=False,
-            external=True,
-        )
-
-    def get_timing_state(self):
-        """Get the timing state."""
-        state = dict()
-        for opt in DoACBBA.TIMING_STATE_OPTIONS:
-            devname, *state_opt = opt.split("_")
-            state_opt = "_".join(state_opt)
-            device = self.devices.get(devname, None)
-            if device is not None:
-                state[opt] = 0
-                state[opt] = getattr(device, state_opt)
-        return state
-
-    def set_timing_state(self, state):
-        """Set the timing state."""
-        for opt in DoACBBA.TIMING_STATE_OPTIONS:
-            if opt not in state.keys():
-                continue
-            devname, *state_opt = opt.split("_")
-            device = self.devices.get(devname, None)
-            state_opt = "_".join(state_opt)
-            if device is not None:
-                setattr(device, state_opt, state[opt])
-                continue
-        _time.sleep(0.1)
-        self.devices["evg"].cmd_update_events()
-
-    def _config_timing(
-        self,
-        cm_dly=0,
-        chs=None,
-        cvs=None,
-        quads=None,
-        nr_points=None
-    ):
-        state = dict()
-        state["trigbpms_source"] = "Study"
-        state["trigbpms_nr_pulses"] = 1
-        state["trigbpms_delay_raw"] = 0.0
-
-        state["evt_mode"] = "External"
-        state["evt_delay_raw"] = 0
-
-        state["trigcorrs_source"] = "Study"
-        state["trigcorrs_nr_pulses"] = 1
-
-        if quads is not None:
-            state["trigquads_source"] = "Study"
-            state["trigquads_nr_pulses"] = 1
-
-            state["trigskews_source"] = "Study"
-            state["trigskews_nr_pulses"] = 1
-
-        rf_freq = self.devices["rfgen"].frequency
-        ftim = rf_freq / 4  # timing base frequency
-        dly = int(cm_dly * ftim)
-        if chs is None or cvs is None or nr_points is None:
-            state["trigcorrs_delay_raw"] = dly
-            state["trigquads_delay_raw"] = dly
-            state["trigskews_delay_raw"] = dly
-            self.set_timing_state(state)
-            return
-
-        state["trigcorrs_delay_raw"] = 0
-        state["trigquads_delay_raw"] = 0
-        state["trigskews_delay_raw"] = 0
-        # nr_runs = len(chs)
-        # # Calculate delta_delay for correctors to be as close as possible to a
-        # # multiple of the the sampling period to ensure repeatability of
-        # # experiment along runs excited during single acquisition:
-        # fsamp = self.bpms.get_sampling_frequency(rf_freq, self.params.acq_rate)
-        # runs_delta_dly = _np.arange(nr_runs, dtype=float)
-        # runs_delta_dly *= nr_points / fsamp
-        # runs_delta_dlyr = _np.round(runs_delta_dly * ftim)
-
-        # # get low level trigger names to be configured in each run of the
-        # # acquisition:
-        # ll_trigs_corrs = []
-        # ll_trigs_quads = []
-        # ll_trigs_skews = []
-        # if quads is None:
-        #     quads = _np.full_like(chs, False, dtype=bool).tolist()
-        # for ch, cv, quad in zip(chs, cvs, quads):  # noqa: B905
-        #     llt_corrs = set()
-        #     llt_quads = set()
-        #     llt_skews = set()
-        #     for c in ch + cv + quad:
-        #         if not c:
-        #             continue
-        #         trig = _LLTime.get_trigger_name(c + ":BCKPLN")
-        #         if c.dev in ["CH", "CV"]:
-        #             llt_corrs.add(trig)
-        #         elif c.dev == "QS":
-        #             llt_skews.add(trig)
-        #         else:
-        #             llt_quads.add(trig)
-        #     ll_trigs_corrs.append(llt_corrs)
-        #     ll_trigs_quads.append(llt_quads)
-        #     ll_trigs_skews.append(llt_skews)
-
-        # # check if correctors controlled by the same trigger are requested to
-        # # be triggered in different times during the same acquisition
-        # for ll_trigs in [ll_trigs_corrs, ll_trigs_quads, ll_trigs_skews]:
-        #     if len(_red(_opr.or_, ll_trigs)) != \
-        #         _red(_opr.add, map(len, ll_trigs)):
-        #         raise ValueError("Impossible trigger configuration requested.")
-
-        # for trig_type, ll_trigs in zip(  # noqa: B905
-        #     ["trigcorrs", "trigquads", "trigskews"],
-        #     [ll_trigs_corrs, ll_trigs_quads, ll_trigs_skews]
-        #     ):
-        #     trig = self.devices[trig_type]
-        #     delta_delay_raw = _np.zeros(trig.delta_delay_raw.size)
-        #     low_level = trig.low_level_triggers
-        #     for llts, ddlyr in zip(ll_trigs, runs_delta_dlyr):  # noqa: B905
-        #         # Find all ll triggers of this sector and set their delay:
-        #         for llt in llts:
-        #             if llt not in low_level:
-        #                 raise ValueError(f"Trigger {llt:s} is not valid.")
-        #             delta_delay_raw[low_level.index(llt)] = ddlyr + dly
-        #     state[f"{trig_type}_delta_delay_raw"] = delta_delay_raw
-
-        self.set_timing_state(state)
-
-    def _log(self, msg, *args, **kwargs):
-        """."""
-        if "tab" in kwargs:
-            tab = kwargs.pop("tab")
-            msg = "  " * tab + msg
-        if self.verbose:
-            print(msg, *args, **kwargs)
-        self.data["log"].append((_time.time(), msg))
-
-    def _config_magnets(self, magnets, strengths, freqs, excit_time):
-        """."""
-        for i, cmn in enumerate(magnets):
-            cmo = self.devices[cmn]
-            conv = self.devices[cmn + ":StrengthConv"].conv_strength_2_current
-            cmo.cycle_type = cmo.CYCLETYPE.Sine
-            cmo.cycle_freq = freqs[i]
-            cmo.cycle_ampl = conv(strengths[i])
-            cmo.cycle_offset = cmo.currentref_mon
-            cmo.cycle_theta_begin = 0
-            cmo.cycle_theta_end = 0
-            cmo.cycle_num_cycles = int(excit_time * freqs[i])
-            # NOTE: There is a bug in the firmware of the power supplies
-            # (apparently comparison >= should be replaced by > in line 353 of
-            # the file siggen.c of the repository C28) that makes the endpoint
-            # of the cycle not be equal to the starting point. So we need to
-            # add a very small phase at the ending of the senoid to compensate
-            # for this bug. The code bellow adds a phase compatible with a
-            # small fraction (0.1) of the phase advance between two points of
-            # the signal at the end of the cycling.
-            fsamp = cmo["ParamPWMFreq-Cte"]
-            params = cmo.cycle_aux_param
-            params[1] = freqs[i] / fsamp * 360
-            params[1] *= 0.1
-            cmo.cycle_aux_param = params
-
-    def _change_mags_opmode(self, mode, magnets=None, timeout=None, **kw):
-        """."""
-        tab = kw.pop("tab", 0)
-        if timeout is None:
-            timeout = self.params.timeout_magnets
-
-        opm_sel = _PowerSupply.OPMODE_SEL
-        opm_sts = _PowerSupply.OPMODE_STS
-        mode_sel = opm_sel.Cycle if mode == "cycle" else opm_sel.SlowRef
-        mode_sts = opm_sts.Cycle if mode == "cycle" else opm_sts.SlowRef
-
-        quadmod_mode = self.params.quad_modulation_mode
-        if magnets is None:
-            magnets = self.sofb_data.ch_names + self.sofb_data.cv_names
-            if quadmod_mode == self.params.QUAD_MODULATION_MODE.AC:
-                magnets += self.data["quadnames"]
-
-        for magname in magnets:
-            mag = self.devices[magname]
-            mag.opmode = mode_sel
-
-        for magname in magnets:
-            dt_ = _time.time()
-            mag = self.devices[magname]
-            if not mag.wait("OpMode-Sts", mode_sts, timeout=timeout):
-                msg = "\nERR:" + mag + " did not change to " + mode
-                self._log(msg, tab=tab)
-                return False
-            dt_ -= _time.time()
-            timeout = max(timeout + dt_, 0)
-            mag.current = mag.current
-        return True
-
-    def _wait_cycle_to_finish(self, magnets=None, timeout=None):
-        """."""
-        if timeout is None:
-            timeout = self.params.timeout_magnets
-
-        quadmod_mode = self.params.quad_modulation_mode
-        if magnets is None:
-            magnets = self.sofb_data.ch_names + self.sofb_data.cv_names
-            if quadmod_mode == self.params.QUAD_MODULATION_MODE.AC:
-                magnets += self.data["quadnames"]
-
-        t0 = _time.time()
-        for magname in magnets:
-            mag = self.devices[magname]
-            dt = timeout - (_time.time() - t0)
-            if dt < 0 or not mag.wait_cycle_to_finish(timeout=dt):
-                return False
-        return True
+    # ----- Process data -----
 
     def _process_data_single_bpm(self, bpmname, phase_adjust=0):
         if bpmname not in self.data["measure"]:
@@ -1413,3 +1181,219 @@ class DoACBBA(_BaseClass):
             quadmode_str = self.params.QUAD_MODULATION_MODE._field[quadmode]
             msg = f"Invalid quadrupole modulation mode: {quadmode_str}"
             raise ValueError(msg)
+
+    # ----- Do AC-BBA -----
+
+    def _do_acbba(self):
+        """."""
+        # Initial checkings
+        if not self.check_isvalid_dkl(self._bpms2dobba):
+            self._log("Adjust quad strength or change dKL first.")
+            return
+
+        # Initialize data
+        self.data["measure"] = dict()
+        self._setup_orm()
+
+        # Start
+        tini = _datetime.datetime.fromtimestamp(_time.time())
+        msg = f"Starting measurement at {tini.strftime('%Y-%m-%d %Hh%Mm%Ss')}"
+        self._log("\n" + msg)
+
+        sofb = self.devices['sofb']
+        if sofb.autocorrsts:
+            msg = "SOFB feedback is enabled. Please disable it first."
+            self._log(msg)
+            return self.STATUS.Fail
+
+        if sofb.synckicksts != sofb._data.CorrSync.Off:
+            msg = "SOFB correctors synchronization is On. Please turn it Off."
+            self._log(msg)
+            return self.STATUS.Fail
+
+        # Get initial timing state
+        self._log("Getting Timing state... ", end="")
+        timing_state = self.get_timing_state()
+        self._log("Done!")
+
+        # Measure BPMs noise
+        if self.params.measure_bpms_noise:
+            msg = "Measuring BPMs noise:"
+            self._log(msg)
+            measnoise_ok, noise_data = self._measure_bpms_noise(tab=1)
+            self.data["bpms_noise"] = noise_data
+            if not measnoise_ok:
+                msg = "Problem measuring BPMs noise."
+                self._log(msg)
+
+        # Do AC-BBA for each BPM
+        nr_bpms = len(self._bpms2dobba)
+        msg = f"Running AC-BBA for {nr_bpms:03d} BPMs:"
+        self._log(msg)
+        stsok = True
+        for i, bpm in enumerate(self._bpms2dobba):
+            if self._stopevt.is_set():
+                msg = "Stopped!"
+                self._log(msg, tab=1)
+                stsok = False
+                break
+            if not self.havebeam:
+                msg = "Beam was lost!"
+                self._log(msg, tab=1)
+                stsok = False
+                break
+            msg = f'Doing AC-BBA for BPM "{bpm}" ({i + 1:03d}/{nr_bpms:03d}):'
+            self._log(msg, tab=1)
+            sts, data_acq = self._do_acbba_single_bpm(bpm, tab=2)
+            self.data["measure"][bpm] = data_acq
+            if sts == self.STATUS.Fail:
+                stsok = False
+                msg = "Fail!"
+                self._log(msg, tab=1)
+                break
+            self._log("Done!", tab=1)
+        self._log(f"{'Done' if stsok else 'Fail'}!")
+
+        # Restore timing state
+        self._log("Restoring Timing state... ", end="")
+        self.set_timing_state(timing_state)
+        self._log("Done!")
+
+        # Correct orbit before ending
+        if self.havebeam:
+            self._log("Correcting Orbit... ", end="")
+            self.correct_orbit()
+            self._log("Ok!")
+
+        # Finish
+        tfin = _datetime.datetime.fromtimestamp(_time.time())
+        dtime = str(tfin - tini).split(".")[0]
+        msg = f"Measurement finished! ET: {dtime}"
+        self._log(msg)
+        return self.STATUS.Success if stsok else self.STATUS.Fail
+
+    def _do_acbba_single_bpm(self, bpmname, **kw):
+        tab = kw.pop("tab", 0)
+
+        if bpmname not in self.data["bpmnames"]:
+            msg = f"Invalid BPM: {bpmname}."
+            self._log(msg, tab=tab)
+            return self.STATUS.Fail, None
+
+        # correct orbit
+        if self.params.correct_orbit_each_step:
+            self._log("Correcting Orbit... ", end="", tab=tab)
+            self.correct_orbit()
+            self._log("Ok!")
+
+        quadname = self.data["quadnames"][self.data["bpmnames"].index(bpmname)]
+        quadmode = self.params.quad_modulation_mode
+
+        chname, cvname, *_ = self._get_correctors_for_bpm(bpmname, self._orm)
+
+        stren_ini = self.get_quad_strength(quadname)
+        delta_kl = self.params.quad_delta_kl
+
+        data = {
+            "quadname": quadname,
+            "chname": chname,
+            "cvname": cvname,
+            "ch_freq": self.params.ch_freq,
+            "cv_freq": self.params.cv_freq,
+            "q_freq": self.params.q_freq,
+            "data_dc_kl_pos": None,
+            "data_dc_kl_neg": None,
+            "data_ac": None,
+            "quadmode": quadmode,
+            "quad_stren_ini": stren_ini,
+            "quad_delta_kl": delta_kl,
+        }
+
+        if quadmode == self.params.QUAD_MODULATION_MODE.AC:
+            msg = "Setup: Quadrupole modulation mode: AC."
+            self._log(msg, tab=tab)
+            sts, data_ac = self._acquire_data(
+                chname,
+                cvname,
+                quad_name=quadname,
+                delta_kl=delta_kl,
+                tab=tab + 1
+            )
+            data["data_ac"] = data_ac
+            if sts == self.STATUS.Fail:
+                return sts, data
+
+        elif quadmode == self.params.QUAD_MODULATION_MODE.DC:
+            msg = "Setup: Quadrupole modulation mode: DC."
+            self._log(msg, tab=tab)
+
+            # Set Quad KL = KL0 + dKL
+            msg = "Step: Positive quadrupole modulation."
+            self._log(msg, tab=tab)
+            msg = f'Changing quadrupole "{quadname}" strength... '
+            self._log(msg, tab=tab + 1, end="")
+            sts = self.set_quad_strength(
+                quadname, stren_ini + delta_kl / 2, tab=tab + 1
+            )
+            if sts == self.STATUS.Fail:
+                self.set_quad_strength(
+                    quadname, stren_ini, ignore_timeout=True
+                )
+                return sts, data
+            self._log("Done!")
+
+            sts, data_pos = self._acquire_data(chname, cvname, tab=tab + 1)
+            data["pos"] = data_pos
+            if sts == self.STATUS.Fail:
+                return sts, data
+
+            # Set Quad KL = KL0 - dKL
+            msg = "Step: Negative quadrupole modulation."
+            self._log(msg, tab=tab)
+            msg = f'Changing quadrupole "{quadname}" strength... '
+            self._log(msg, tab=tab + 1, end="")
+            sts = self.set_quad_strength(
+                quadname, stren_ini - delta_kl / 2, tab=tab + 1
+            )
+            if sts == self.STATUS.Fail:
+                self.set_quad_strength(
+                    quadname, stren_ini, ignore_timeout=True
+                )
+                return sts, data
+            self._log("Done!")
+
+            sts, data_neg = self._acquire_data(chname, cvname, tab=tab + 1)
+            data["neg"] = data_neg
+            if sts == self.STATUS.Fail:
+                return sts, data
+
+            # Restore Quad KL = KL0
+            msg = "Step: Restoring quadrupole strength."
+            self._log(msg, tab=tab)
+            msg = f'Changing quadrupole "{quadname}" strength... '
+            self._log(msg, tab=tab + 1, end="")
+            sts = self.set_quad_strength(quadname, stren_ini, tab=tab + 1)
+            if sts == self.STATUS.Fail:
+                self.set_quad_strength(
+                    quadname, stren_ini, ignore_timeout=True
+                )
+                return sts, data
+            self._log("Done!")
+
+        else:
+            msg = "Invalid Quadrupole modulation mode. Skipping..."
+            self._log(msg, tab=tab)
+            return self.STATUS.Fail, data
+
+        return self.STATUS.Success, data
+
+    # ----- Logging -----
+    # private
+    def _log(self, msg, *args, **kwargs):
+        """."""
+        if "tab" in kwargs:
+            tab = kwargs.pop("tab")
+            msg = "  " * tab + msg
+        if self.verbose:
+            print(msg, *args, **kwargs)
+        self.data["log"].append((_time.time(), msg))
