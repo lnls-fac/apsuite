@@ -103,7 +103,7 @@ class InjCtrlPulseInjBO(_BaseClass):
                         self.devices['evg'].wait_injection_finish()
                         _log.info('Injecting for optimization...')
                     else:
-                        _log.info(
+                        _log.debug(
                             'self.allow_injection is False '
                             + 'Not injecting while False.'
                         )
