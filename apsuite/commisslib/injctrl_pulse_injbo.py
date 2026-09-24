@@ -186,7 +186,7 @@ class InjCtrlPulseInjBO(_BaseClass):
         injc.topup_standby_tb_injsept = stdby_stt
 
         # After turning off the warmup of the LI LLRF we have to turn the
-        # injection system on to make sure the system is pulsing at 2Hz.
+        # injection system on to make sure the LI LLRF is pulsing at 2Hz.
         # We can't turn the system off at the end to not compromise topup.
         if start_opt:
             injc.cmd_injsys_turn_on()
