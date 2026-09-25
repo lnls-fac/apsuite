@@ -87,9 +87,9 @@ class InjCtrlPulseInjBO(_BaseClass):
 
         delay_raw_opt = delay_raw_inj - delta_dly_raw
 
+        init_state = dict()
         try:
-
-            self._prepare_injector_state(start_opt=True)
+            init_state = self._prepare_injector_state(start_opt=True)
 
             while not self._stopevt.is_set():
                 t0 = _time.time()
@@ -126,7 +126,7 @@ class InjCtrlPulseInjBO(_BaseClass):
         finally:
             _log.info('Exiting. Setting up injection for top-up')
             self.prepare_for_inj(delay_raw_inj)
-            self._prepare_injector_state(start_opt=False)
+            self._prepare_injector_state(start_opt=False, state=init_state)
 
     def prepare_for_opt(self, dly):
         """."""
@@ -179,18 +179,30 @@ class InjCtrlPulseInjBO(_BaseClass):
         self.devices['trig_osc_injsi1'].state = state
         self.devices['trig_osc_injsi2'].state = state
 
-    def _prepare_injector_state(self, start_opt=True):
+    def _prepare_injector_state(self, start_opt=True, state=None):
         injc = self.devices['injctrl']
 
-        stdby_stt = not start_opt
-        injc.topup_warmup_li_rf = stdby_stt
-        injc.topup_standby_bo_rf = stdby_stt
-        injc.topup_standby_bo_injkckr = stdby_stt
-        injc.topup_standby_bo_ejekckr = stdby_stt
-        injc.topup_standby_tb_injsept = stdby_stt
+        props = [
+            'topup_warmup_li_rf',
+            'topup_standby_bo_rf',
+            'topup_standby_bo_injkckr',
+            'topup_standby_bo_ejekckr',
+            'topup_standby_tb_injsept',
+        ]
+
+        init_state = {prp: getattr(injc, prp) for prp in props}
+
+        if state is None:
+            stdby_stt = not start_opt
+            state = {prp: stdby_stt for prp in props}
+
+        for prp, val in state.items():
+            setattr(injc, prp, val)
 
         # After turning off the warmup of the LI LLRF we have to turn the
         # injection system on to make sure the LI LLRF is pulsing at 2Hz.
         # We can't turn the system off at the end to not compromise topup.
         if start_opt:
             injc.cmd_injsys_turn_on()
+
+        return init_state
