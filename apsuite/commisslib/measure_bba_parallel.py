@@ -664,10 +664,9 @@ class DoParallelBBA(_BaseClass):
                 _id = self.data['bpmnames'].index(bpm)
                 qname = self.data['quadnames'][_id]
                 qidx = quadindices[_id]
-                if 'QS' in qname:
-                    model[qidx].KsL += fac * dkl / 2
-                else:
-                    model[qidx].KL += fac * dkl / 2
+                att = 'KsL' if 'QS' in qname else 'KL'
+                ele = model[qidx]
+                setattr(ele, att,  getattr(ele, att) + fac * dkl / 2)
                 tune_variation.append(_pyacc.optics.get_frac_tunes(model)[:2])
                 if analyze_coupling:
                     min_tunesep, emit_ratio = _get_coupling_parameters()
