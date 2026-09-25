@@ -375,10 +375,7 @@ class DoParallelBBA(_BaseClass):
         nbpms = sofb._data.nr_bpms
         if len(value) != 2 * nbpms:
             raise ValueError(f'Invalid size! Must be {2 * nbpms}.')
-        if all(v in [0, 1, True, False] for v in value):
-            value = _np.array(value, dtype=bool)
-        else:
-            raise ValueError('Values must be boolean (0 / 1 or True / False).')
+        value = _np.array(value, dtype=bool)
         sofb.bpmxenbl = value[:nbpms]
         sofb.bpmyenbl = value[nbpms:]
 
