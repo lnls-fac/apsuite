@@ -401,7 +401,7 @@ class DoParallelBBA(_BaseClass):
             quad = self.devices[quadname]
             quad.strength = strength
 
-        if ignore_timeout:
+        if not wait_refmon:
             return DoParallelBBA.STATUS.Success
 
         t0_ = _time.time()
