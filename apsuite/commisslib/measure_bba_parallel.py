@@ -381,7 +381,7 @@ class DoParallelBBA(_BaseClass):
 
     # #### pbba utils #####
 
-    def set_quad_strengths(self, group_id, strengths, ignore_timeout=False):
+    def set_quad_strengths(self, group_id, strengths, wait_refmon=True):
         """."""
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
