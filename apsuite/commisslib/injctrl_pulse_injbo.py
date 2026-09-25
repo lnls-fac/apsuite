@@ -94,7 +94,7 @@ class InjCtrlPulseInjBO(_BaseClass):
             while not self._stopevt.is_set():
                 t0 = _time.time()
 
-                is_topup = injc.injmode == injc.InjMode.TopUp and injc.topup_state
+                is_topup = bool(injc.topup_state)
                 do_inj = (not is_topup) or (
                     injc.topup_nextinj_timestamp - _time.time() >=
                     self.params.stop_pulsing_time
