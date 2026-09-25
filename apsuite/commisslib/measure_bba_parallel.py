@@ -462,13 +462,13 @@ class DoParallelBBA(_BaseClass):
         return _np.array(limits, dtype=float)
 
     def check_isvalid_dkl(
-            self,
-            group_id,
-            init_strengths=None,
-            strength_limits=None,
-            margin=0.0005,
-            return_valid=False,
-        ):
+        self,
+        group_id,
+        init_strengths=None,
+        strength_limits=None,
+        margin=0.0005,
+        return_valid=False,
+    ):
         """."""
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
