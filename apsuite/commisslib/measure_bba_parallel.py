@@ -685,12 +685,17 @@ class DoParallelBBA(_BaseClass):
             ret['emit_ratio_variation'] = _np.array(emit_ratio_variation)
         return ret
 
-    def process_data(self):
+    def process_data(self, group_ids=None):
         """."""
-        for group_id in range(len(self.data['groups2dopbba'])):
-            self.process_data_single_group(group_id)
+        if group_ids is None:
+            groups_ids = range(len(self.data['groups2dopbba']))
+        elif isinstance(group_ids, (int, float)):
+            group_ids = [group_ids]
+            
+        for group_id in group_ids:
+            self._process_data_single_group(group_id)
 
-    def process_data_single_group(self, group_id):
+    def _process_data_single_group(self, group_id):
         """."""
         meas_data = self.data['measure'][group_id]
         bpmnames = self.data['bpmnames']
