@@ -503,10 +503,7 @@ class DoParallelBBA(_BaseClass):
         for idx, bpm in enumerate(bpms):
             quadname = quad_names[bpm_names.index(bpm)]
             stren = strengths[idx]
-            _gid = [
-                True if bpm in gp else False
-                for gp in self.data['groups2dopbba']
-            ].index(True)
+            _gid = [bpm in gp for gp in self.data['groups2dopbba']].index(True)
             _gp = self.data['groups2dopbba'][_gid]
             dkl = abs(self.data['delta_kl'][_gid][_gp.index(bpm)])
             lolim, hilim = lims[idx]
