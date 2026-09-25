@@ -29,10 +29,12 @@ class InjCtrlPulseInjBOParams(_ParamsBase):
         self.stop_pulsing_time = 14  # [s]
         self.bias_voltage = -35.0  # [V]
         self.ejekckr_delay = 80  # [ms]
+        self.do_inject = True
 
     def __str__(self):
         """."""
         TMPF = '{:30s}: {:10.3f} {:s}\n'.format
+        TMPS = '{:30s}: {:10} {:s}\n'.format
         stg = TMPF(
             'wait_between_injections', self.wait_between_injections, '[s]'
         )
@@ -40,6 +42,9 @@ class InjCtrlPulseInjBOParams(_ParamsBase):
         stg += TMPF('bias_voltage', self.bias_voltage, '[V]')
         stg += TMPF(
             'ejekckr_delay', self.ejekckr_delay, '[ms] (approximately)'
+        )
+        stg += TMPS(
+            'do_inject', str(self.do_inject), '(Set False to pause injection.)'
         )
         return stg
 
@@ -65,7 +70,6 @@ class InjCtrlPulseInjBO(_BaseClass):
         )
         if self.isonline:
             self._create_devices()
-        self.allow_injection = True
 
     def ctrl_injection(self):
         """."""
@@ -97,14 +101,14 @@ class InjCtrlPulseInjBO(_BaseClass):
                 )
 
                 if do_inj:
-                    if self.allow_injection:
+                    if self.params.do_inject:
                         self.prepare_for_opt(delay_raw_opt)
                         self.devices['evg'].cmd_turn_on_injection()
                         self.devices['evg'].wait_injection_finish()
                         _log.debug('Injecting for optimization...')
                     else:
                         _log.debug(
-                            'self.allow_injection is False '
+                            'self.params.do_inject is False '
                             + 'Not injecting while False.'
                         )
                 else:
