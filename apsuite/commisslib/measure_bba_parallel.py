@@ -578,11 +578,8 @@ class DoParallelBBA(_BaseClass):
                 _get_or_set_kl(bname, strength)
 
         jacobians = []
-        groups_to_calc = (
-            _np.arange(len(self.data['groups2dopbba']))
-            if groups_to_calc is None
-            else groups_to_calc
-        )
+        if groups_to_calc is None:
+            groups_to_calc = _np.arange(len(self.data['groups2dopbba']))
         for group_id in groups_to_calc:
             group = self.data['groups2dopbba'][group_id]
             try:
