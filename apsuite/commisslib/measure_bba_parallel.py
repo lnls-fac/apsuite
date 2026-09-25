@@ -634,7 +634,7 @@ class DoParallelBBA(_BaseClass):
     def analyze_group(self, group_id, analyze_coupling=False):
         """Helper function to analyze group's properties."""
         jacobian = self.data['jacobians'][group_id]
-        u_mat, svals, vt_mat = _np.linalg.svd(jacobian)
+        u_mat, svals, vt_mat = _np.linalg.svd(jacobian, full_matrices=False)
 
         model = self.model
         quadindices = self._get_quads_indices_in_model(self.data['quadnames'])
