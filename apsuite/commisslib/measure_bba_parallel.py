@@ -423,9 +423,8 @@ class DoParallelBBA(_BaseClass):
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
 
-        if group_id is None or group_id == 'All':
-            bpms = bpm_names
-        else:
+        bpms = bpm_names
+        if group_id is not None and group_id != 'All':
             bpms = self.data['groups2dopbba'][group_id]
 
         strengths = []
