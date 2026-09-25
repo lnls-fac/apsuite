@@ -582,12 +582,7 @@ class DoParallelBBA(_BaseClass):
             groups_to_calc = _np.arange(len(self.data['groups2dopbba']))
         for group_id in groups_to_calc:
             group = self.data['groups2dopbba'][group_id]
-            try:
-                delta_strens = self.data['delta_kl'][group_id]
-            except Exception as e:
-                str_msg = 'undefined or empty "delta_kl"'
-                str_msg += f' of group {group_id}'
-                raise IndexError(str_msg) from e
+            delta_strens = self.data['delta_kl'][group_id]
             strens_orig = _get_quad_strengths(group)
 
             _set_quad_strengths(group, strens_orig + delta_strens / 2)
