@@ -941,7 +941,7 @@ class DoParallelBBA(_BaseClass):
             if not self.set_quad_strengths(group_id, kl - dkl / 2):
                 self._log('Fail!')
                 return DoParallelBBA.STATUS.Fail
-            if not self.set_quad_strengths(group_id, init_strengths):
+            if not self.set_quad_strengths(group_id, kl):
                 self._log('Fail!')
                 return DoParallelBBA.STATUS.Fail
             self._log('Ok!')
