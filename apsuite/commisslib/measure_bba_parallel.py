@@ -814,12 +814,14 @@ class DoParallelBBA(_BaseClass):
         }
 
         sts = self._do_cycling(group_id, strengths_init)
+        nr_iters = self.params.corr_max_nr_iters
         if not sts:
-            self._restore_conditions(group_id, strengths_init)
             nr_iters = 0
+            self._restore_conditions(
+                group_id, strengths_init, 'Error: Failed during cycling'
+            )
         else:  # proceed to IOS correction
             self._log('Correcting IOS:', tab=1)
-            nr_iters = self.params.corr_max_nr_iters
 
         ios_iter, dkicks_iter, residue_iter = [], [], []
 
