@@ -568,11 +568,10 @@ class DoParallelBBA(_BaseClass):
         def _get_or_set_kl(bname, value=None):
             _do = getattr if value is None else setattr
             bidx = self.data['bpmnames'].index(bname)
+            qname = self.data['quadnames'][bidx]
             qidx = quadindices[bidx]
-            if 'QS' == self.data['quadnames'][bidx].dev:
-                return _do(model[qidx], 'KsL', value)
-            else:
-                return _do(model[qidx], 'KL', value)
+            att = 'KsL' if 'QS' in qname else 'KL'
+            return _do(model[qidx], att, value)
 
         def _get_quad_strengths(group):
             strens = []
@@ -666,7 +665,7 @@ class DoParallelBBA(_BaseClass):
                 qidx = quadindices[_id]
                 att = 'KsL' if 'QS' in qname else 'KL'
                 ele = model[qidx]
-                setattr(ele, att,  getattr(ele, att) + fac * dkl / 2)
+                setattr(ele, att, getattr(ele, att) + fac * dkl / 2)
                 tune_variation.append(_pyacc.optics.get_frac_tunes(model)[:2])
                 if analyze_coupling:
                     min_tunesep, emit_ratio = _get_coupling_parameters()
