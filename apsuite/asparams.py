@@ -40,6 +40,7 @@ del (_BEAMPARAMS_HIGH, _BEAMPARAMS_LOW)
 # RF_FREQ = 499663824.380981  # [Hz] -- compatible with SI nominal model length
 # RF_FREQ = 499666862 - 150  # [Hz] -- compatible with BO nominal model @ 3 Gev
 RF_FREQ = 499668000        # [Hz] -- close to operation value in 2025-09-30
+TIMING_RF_DIVISOR = 4  # base time scale for timing system operation w.r.t. RF.
 
 # --- SI LATTICE ---
 
