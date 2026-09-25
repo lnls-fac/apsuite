@@ -614,7 +614,7 @@ class DoParallelBBA(_BaseClass):
             group_ids = range(len(self.data['groups2dopbba']))
         elif isinstance(group_ids, (int, float)):
             group_ids = [group_ids]
-            
+
         anl = []
         for group_id in group_ids:
             print(f'Analyzing group: {group_id:d}')
@@ -677,10 +677,10 @@ class DoParallelBBA(_BaseClass):
     def process_data(self, group_ids=None):
         """."""
         if group_ids is None:
-            groups_ids = range(len(self.data['groups2dopbba']))
+            group_ids = range(len(self.data['groups2dopbba']))
         elif isinstance(group_ids, (int, float)):
             group_ids = [group_ids]
-            
+
         for group_id in group_ids:
             self._process_data_single_group(group_id)
 
