@@ -619,18 +619,23 @@ class DoParallelBBA(_BaseClass):
             jacobians.append(jac)
         return jacobians
 
-    def analyze_groups(self, analyze_coupling=False):
+    def analyze_groups(self, group_ids=None, analyze_coupling=False):
         """Helper function to analyze the groups' properties."""
         if not self.data['jacobians']:
             raise ValueError('Please calculate and set jacobians first.')
 
+        if group_ids is None:
+            group_ids = range(len(self.data['groups2dopbba']))
+        elif isinstance(group_ids, (int, float)):
+            group_ids = [group_ids]
+            
         anl = []
-        for group_id in range(len(self.data['groups2dopbba'])):
+        for group_id in group_ids:
             print(f'Analyzing group: {group_id:d}')
-            anl.append(self.analyze_group(group_id, analyze_coupling))
+            anl.append(self._analyze_group(group_id, analyze_coupling))
         return anl
 
-    def analyze_group(self, group_id, analyze_coupling=False):
+    def _analyze_group(self, group_id, analyze_coupling=False):
         """Helper function to analyze group's properties."""
         jacobian = self.data['jacobians'][group_id]
         u_mat, svals, vt_mat = _np.linalg.svd(jacobian, full_matrices=False)
