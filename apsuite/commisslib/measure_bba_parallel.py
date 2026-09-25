@@ -653,11 +653,11 @@ class DoParallelBBA(_BaseClass):
                 mtsp, ratio = _pyacc.optics.estimate_coupling_parameters(ed)
                 model.radiation_on = rad_on
                 model.cavity_on = cav_on
-                return mtsp, _np.std(ratio)
+                return mtsp, _np.mean(ratio)
 
-            min_tunesep, std_ratio = _get_coupling_parameters()
+            min_tunesep, emit_ratio = _get_coupling_parameters()
             min_tunesep_variation = [min_tunesep]
-            std_ratio_variation = [std_ratio]
+            emit_ratio_variation = [emit_ratio]
 
         for fac in [1, -2, 1]:
             for dkl, bpm in zip(delta_strens, group):  # noqa: B905
@@ -670,9 +670,9 @@ class DoParallelBBA(_BaseClass):
                     model[qidx].KL += fac * dkl / 2
                 tune_variation.append(_pyacc.optics.get_frac_tunes(model)[:2])
                 if analyze_coupling:
-                    min_tunesep, std_ratio = _get_coupling_parameters()
+                    min_tunesep, emit_ratio = _get_coupling_parameters()
                     min_tunesep_variation.append(min_tunesep)
-                    std_ratio_variation.append(std_ratio)
+                    emit_ratio_variation.append(emit_ratio)
 
         ret = {
             'u_matrix': u_mat,
@@ -682,7 +682,7 @@ class DoParallelBBA(_BaseClass):
         }
         if analyze_coupling:
             ret['min_tunesep_variation'] = _np.array(min_tunesep_variation)
-            ret['std_ratio_variation'] = _np.array(std_ratio_variation)
+            ret['emit_ratio_variation'] = _np.array(emit_ratio_variation)
         return ret
 
     def process_data(self):
