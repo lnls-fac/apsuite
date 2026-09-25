@@ -397,7 +397,6 @@ class Bump(_BaseClass):
         idy, idx = idy.ravel(), idx.ravel()
 
         data = list()
-        self.config_sofb()
         for i in range(idx.size):
             if not self._is_beam_alive():
                 self.restore_initial_state()
