@@ -697,12 +697,6 @@ class DoParallelBBA(_BaseClass):
         nbpms = len(bpmnames)
         orbit = meas_data['orbit_end']
 
-        # #### error estimation ? #####
-        # ios_iter = meas_data['ios_iter']
-        # ios_init = ios_iter[0]
-        # iosx_init, iosy_init = ios_init[:nbpms], ios_init[nbpms:]
-        # ios_end = ios_iter[-1]
-        # iosx_end, iosy_end = ios_end[:nbpms], ios_end[nbpms:]
         stdx0 = 0.0
         stdy0 = 0.0
 
