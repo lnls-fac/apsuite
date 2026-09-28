@@ -459,6 +459,12 @@ class LOCOConfig:
 
     def update_quad_knobs(self, use_families):
         """."""
+        if self.quadrupoles_to_fit == []:
+            # empty list does not update knobs
+            # knobs must be set directly to the
+            # quad_indices_kl attribute
+            self.quad_indices_ksl = self.quad_indices_kl
+            return
         if self.quadrupoles_to_fit is None:
             self.quadrupoles_to_fit = self.famname_quadset
         else:
@@ -514,22 +520,35 @@ class LOCOConfig:
 
     def update_skew_quad_knobs(self):
         """."""
-        if self.skew_quadrupoles_to_fit is None:
-            self.skew_quad_indices_ksl = self.respm.fam_data['QS']['index']
-        else:
+        if self.skew_quadrupoles_to_fit == []:
+            # empty list does not update knobs
+            # knobs must be set directly to the
+            # quad_indices_kl attribute
+            return
+        if self.skew_quadrupoles_to_fit is not None:
             skewquadfit = set(self.skew_quadrupoles_to_fit)
             skewquadall = set(self.famname_skewquadset)
+            skewquadall = skewquadall.union(set(self.famname_idskewquadset))
             if not skewquadfit.issubset(skewquadall):
                 raise Exception('invalid skew quadrupole name used to fit!')
-            else:
-                self.skew_quad_indices_ksl = []
-                for fam_name in self.skew_quadrupoles_to_fit:
-                    fam = self.respm.fam_data
-                    self.skew_quad_indices_ksl += fam[fam_name]['index']
-                idx_all = _np.array(self.respm.fam_data['QS']['index']).ravel()
-                idx_sub = _np.array(self.skew_quad_indices_ksl).ravel()
-                self.skew_quad_indices_ksl = list(set(idx_sub) & set(idx_all))
-                self.skew_quad_indices_ksl.sort()
+
+            self.skew_quad_indices_ksl = []
+            for fam_name in self.skew_quadrupoles_to_fit:
+                fam = self.respm.fam_data
+                self.skew_quad_indices_ksl += fam[fam_name]['index']
+            idx_all = _np.array(self.respm.fam_data['QS']['index']).ravel()
+            idx_all = _np.concatenate((
+                idx_all,
+                _np.array(self.respm.fam_data['IDQS']['index']).ravel(),
+            ))
+            idx_sub = _np.array(self.skew_quad_indices_ksl).ravel()
+            self.skew_quad_indices_ksl = list(set(idx_sub) & set(idx_all))
+            self.skew_quad_indices_ksl.sort()
+            self.skew_quad_indices_ksl = [
+                [idx] for idx in self.skew_quad_indices_ksl
+            ]
+            return
+        self.skew_quad_indices_ksl = self.respm.fam_data['QS']['index']
 
     def update_b1_knobs(self):
         """."""
@@ -726,6 +745,11 @@ class LOCOConfigSI(LOCOConfig):
             'SDB3',
             'SDP3',
         ]
+
+    @property
+    def famname_idskewquadset(self):
+        """."""
+        return ['IDQS']
 
 
 class LOCOConfigBO(LOCOConfig):
