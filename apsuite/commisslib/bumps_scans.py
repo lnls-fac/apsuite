@@ -249,8 +249,8 @@ class Bump(_BaseClass):
             n_bpms_outx=n_bpms_outx,
             n_bpms_outy=n_bpms_outy,
         )
-        enblx = self._bpmxenbl
-        enbly = self._bpmyenbl
+        enblx = _np.copy(self._bpmxenbl)
+        enbly = _np.copy(self._bpmyenbl)
         enblx, enbly = self._generate_bpm_enbl(
             n_bpms_outx, n_bpms_outy, enblx, enbly, idcs_out
         )
