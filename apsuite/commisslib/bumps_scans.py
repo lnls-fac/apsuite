@@ -118,6 +118,8 @@ class Bump(_BaseClass):
         self.meas_func = self.params.meas_func
         self.args = self.params.args
         self.kwargs = self.params.kwargs
+        self._x = None
+        self._y = None
         if self.isonline:
             self.devices['sofb'] = SOFB(SOFB.DEVICES.SI)
             self.devices['fofb'] = HLFOFB(HLFOFB.DEVICES.SI)
@@ -127,7 +129,10 @@ class Bump(_BaseClass):
         """Measurement function."""
         if self.meas_func is None:
             print('Not a measurement....')
-        return self.meas_func(*self.args, **self.kwargs)
+        if self.params.do_angular_bumps:
+            return self.meas_func(*self.args, **self.kwargs, agx=self._x, agy=self._y)
+        else:
+            return self.meas_func(*self.args, **self.kwargs, psx=self._x, psy=self._y)
 
     def get_initial_state(self, use_ioc_reforb=True):
         """Get initial state of the SOFB and FOFB."""
@@ -234,6 +239,7 @@ class Bump(_BaseClass):
         if self.params.closed_loops:
             fofb.bpmxenbl = self._fofb_bpmxenbl
             fofb.bpmyenbl = self._fofb_bpmyenbl
+        sofb.correct_orbit_manually(5, 1)
 
     def remove_bpms(self):
         """Remove BPMs from correction system."""
@@ -287,7 +293,7 @@ class Bump(_BaseClass):
         ref = _np.r_[refx, refy]
         orb = _np.r_[sofb.orbx, sofb.orby]
         dorb = (orb - ref)[idx] ** 2
-        return _np.sqrt(dorb.sum())
+        return _np.sqrt(dorb.sum())/4
 
     def set_reforb(self, orbx, orby):
         """Update orbit of corr. sytems.
@@ -374,9 +380,13 @@ class Bump(_BaseClass):
                 print(f'    kick fofb = {kick:.3f} urad, ')
         else:
             while rms_residue > bump_residue:
-                _ = sofb.correct_orbit_manually(
-                    nr_iters=nr_iters, residue=residue
-                )
+                for i in range(nr_iters):
+
+                    sofb.wait_buffer()
+                    sofb.cmd_calccorr()
+                    sofb.cmd_applycorr_all()
+                    sofb.wait_apply_delta_kick()
+                    sofb.cmd_reset()
 
                 rms_residue = self.get_orbrms(idcs_bpm)
                 self._check_rms_conditions(rms_residue, bump_residue)
@@ -403,6 +413,8 @@ class Bump(_BaseClass):
                 break
             x = x_span[idx[i]]
             y = y_span[idy[i]]
+            self._x = x
+            self._y = y
 
             if prms.do_angular_bumps:
                 self.implement_bump(agx=x, agy=y)
