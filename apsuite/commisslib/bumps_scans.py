@@ -265,8 +265,8 @@ class Bump(_BaseClass):
 
         if self.params.closed_loops:
             fofb = self.devices['fofb']
-            enblx = self._fofb_bpmxenbl
-            enbly = self._fofb_bpmyenbl
+            enblx = _np.copy(self._fofb_bpmxenbl)
+            enbly = _np.copy(self._fofb_bpmyenbl)
             enblx, enbly = self._generate_bpm_enbl(
                 n_bpms_outx, n_bpms_outy, enblx, enbly, idcs_out
             )
@@ -359,25 +359,40 @@ class Bump(_BaseClass):
         )
 
         # Set orbit
+        if self.params.closed_loops:
+            fofb = self.devices['fofb']
+            fofb.cmd_turn_off_loop_state()
+            sofb.cmd_turn_off_autocorr()
         self.set_reforb(refx, refy)
 
         # Verify orbit correction
         rms_residue = bump_residue + 1
-        kick = fofb_min_kick - 1
-        if self.params.closed_loops:
-            fofb = self.devices['fofb']
+        # kick = fofb_min_kick - 1
         print('Waiting orbit...')
         if self.params.closed_loops:
-            while rms_residue > bump_residue and kick > fofb_min_kick:
-                kick = _np.max((
-                    _np.abs(fofb.kickch_acc),
-                    _np.abs(fofb.kickcv_acc),
-                ))
-                for _ in _np.arange(nr_orbit_verification_closed_loop):
-                    rms_residue = self.get_orbrms(idcs_bpm)
-                    self._check_rms_conditions(rms_residue, bump_residue)
+            for i in range(nr_iters):
+                sofb.wait_buffer()
+                sofb.cmd_calccorr()
+                sofb.cmd_applycorr_all()
+                sofb.wait_apply_delta_kick()
+                sofb.cmd_reset()
+            sofb.cmd_turn_on_autocorr()
+            fofb.cmd_turn_on_loop_state()
+            while rms_residue > bump_residue:
+                rms_residue = self.get_orbrms(idcs_bpm)
+                self._check_rms_conditions(rms_residue, bump_residue)
+                _time.sleep(1)
                 bump_residue *= 1.2
-                print(f'    kick fofb = {kick:.3f} urad, ')
+            # while rms_residue > bump_residue and kick > fofb_min_kick:
+            #     kick = _np.max((
+            #         _np.abs(fofb.kickch_acc),
+            #         _np.abs(fofb.kickcv_acc),
+            #     ))
+            #     for _ in _np.arange(nr_orbit_verification_closed_loop):
+            #         rms_residue = self.get_orbrms(idcs_bpm)
+            #         self._check_rms_conditions(rms_residue, bump_residue)
+            #     bump_residue *= 1.2
+            #     print(f'    kick fofb = {kick:.3f} urad, ')
         else:
             while rms_residue > bump_residue:
                 for i in range(nr_iters):
