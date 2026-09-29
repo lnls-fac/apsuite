@@ -195,21 +195,22 @@ class Bump(_BaseClass):
         fofb = self.devices['fofb']
         print('Configuring sofb...')
         if sofb.autocorrsts or fofb.loop_state:
-            fofb.cmd_turn_off_loop_state(timeout=self.params.timeout_fofb_ramp)
+            fofb.cmd_turn_off_loop_state()
             sofb.cmd_turn_off_autocorr()
         sofb.nr_points = self.params.buffer_sloworb
         sofb.cmd_change_opmode_to_sloworb()
         sofb.cmd_reset()
+        fofb.cmd_fofbctrl_reset()
         # NOTE: the factor of 8 is because the current version of SOFB is too
         # slow to update multi-turn orbits.
         sofb.wait_buffer(timeout=sofb.nr_points * 0.5 * 8)
         print('Done!')
-        if self.params.closed_loops:
-            sofb.cmd_turn_on_autocorr()
-            fofb.cmd_turn_on_loop_state()
-        else:
-            sofb.cmd_turn_off_autocorr()
-            fofb.cmd_turn_off_loop_state()
+        # if self.params.closed_loops:
+            # sofb.cmd_turn_on_autocorr()
+            # fofb.cmd_turn_on_loop_state()
+        # else:
+        sofb.cmd_turn_off_autocorr()
+        fofb.cmd_turn_off_loop_state()
 
     def get_sofb_bpm_enbl(self):
         """."""
@@ -263,15 +264,15 @@ class Bump(_BaseClass):
         sofb.bpmxenbl = enblx
         sofb.bpmyenbl = enbly
 
-        if self.params.closed_loops:
-            fofb = self.devices['fofb']
-            enblx = _np.copy(self._fofb_bpmxenbl)
-            enbly = _np.copy(self._fofb_bpmyenbl)
-            enblx, enbly = self._generate_bpm_enbl(
-                n_bpms_outx, n_bpms_outy, enblx, enbly, idcs_out
-            )
-            fofb.bpmxenbl = enblx
-            fofb.bpmyenbl = enbly
+        # if self.params.closed_loops:
+            # fofb = self.devices['fofb']
+            # enblx = _np.copy(self._fofb_bpmxenbl)
+            # enbly = _np.copy(self._fofb_bpmyenbl)
+            # enblx, enbly = self._generate_bpm_enbl(
+            #     n_bpms_outx, n_bpms_outy, enblx, enbly, idcs_out
+            # )
+            # fofb.bpmxenbl = enblx
+            # fofb.bpmyenbl = enbly
         _time.sleep(
             self.params.sleep_time
         )  # NOTE: For some reason We have to wait here.
@@ -303,10 +304,10 @@ class Bump(_BaseClass):
             orby (1d numpy array): Vertical orbit
 
         """
-        if self.params.closed_loops:
-            fofb = self.devices['fofb']
-            fofb.refx = orbx
-            fofb.refy = orby
+        # if self.params.closed_loops:
+        #     fofb = self.devices['fofb']
+            # fofb.refx = orbx
+            # fofb.refy = orby
         sofb = self.devices['sofb']
         sofb.refx = orbx
         sofb.refy = orby
@@ -377,7 +378,7 @@ class Bump(_BaseClass):
                 sofb.wait_apply_delta_kick()
                 sofb.cmd_reset()
             sofb.cmd_turn_on_autocorr()
-            fofb.cmd_turn_on_loop_state()
+            # fofb.cmd_turn_on_loop_state()
             while rms_residue > bump_residue:
                 rms_residue = self.get_orbrms(idcs_bpm)
                 self._check_rms_conditions(rms_residue, bump_residue)
