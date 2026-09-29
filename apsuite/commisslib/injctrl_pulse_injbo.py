@@ -81,7 +81,7 @@ class InjCtrlPulseInjBO(_BaseClass):
         delay_inj = self.devices['trig_ejekckr'].delay / 1000  # us -> ms
         delay_raw_inj = self.devices['trig_ejekckr'].delay_raw
 
-        delta_dly = abs(self.params.ejekckr_delay - delay_inj) / 1000 # ms -> s
+        delta_dly = abs(self.params.ejekckr_delay - delay_inj) / 1e3  # ms -> s
         delta_dly_raw = int(delta_dly / _asp.BO_REV_TIME)
         delta_dly_raw *= _asp.BO_HARM_NUM // _asp.TIMING_RF_DIVISOR
 
@@ -94,8 +94,8 @@ class InjCtrlPulseInjBO(_BaseClass):
             while not self._stopevt.is_set():
                 t0 = _time.time()
 
-                is_topup = bool(injc.topup_state)
-                do_inj = (not is_topup) or (
+                in_topup_or_accum = bool(injc.topup_state or injc.accum_state)
+                do_inj = (not in_topup_or_accum) or (
                     injc.topup_nextinj_timestamp - _time.time() >=
                     self.params.stop_pulsing_time
                 )
