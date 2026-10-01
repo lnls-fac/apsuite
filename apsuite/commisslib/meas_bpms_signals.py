@@ -352,7 +352,7 @@ class AcqBPMsSignals(_BaseClass):
         if remain > 0:
             sw_fil = _np.concatenate([sw_fil, sw_sig[..., :remain]], axis=-1)
         sw_fil = _np.moveaxis(sw_fil, -1, axis)
-        return orb - sw_fil + orb.mean(axis=axis)[..., None]
+        return orb - sw_fil + orb.mean(axis=axis, keepdims=True)
 
     @staticmethod
     def filter_switching_fofb_like(orb):
