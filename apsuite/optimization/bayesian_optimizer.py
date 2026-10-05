@@ -6,18 +6,27 @@ import GPy as _GPy
 from scipy.optimize import minimize as _minimize
 from scipy.stats import norm as _norm
 
+from mathphys.functions import get_namedtuple as _get_namedtuple
 from .base import Optimize as _Optimize, OptimizeParams as _OptimizeParams
 
 
 class BayesianOptimizerGPyParams(_OptimizeParams):
     """."""
 
+    AcqFuncType = _get_namedtuple(
+        'AcqFuncType', ('UpperConfidenceBound', 'ExpectedImprovement')
+    )
+
     def __init__(self):
         """."""
         super().__init__()
         self.num_init_random_pts = 5  # random points for initial sampling
-        self.xi = 0.01  # Expected Improvement exploitation/exploration
-        self.ard = True  # length-scale for each knob
+        self.acq_func_type = self.AcqFuncType.UpperConfidenceBound
+        self.xi_param = 0.01  # Expected Improvement exploitation/exploration
+        self.beta_param = 0.01  # UCB exploitation/exploration trade-off
+        self.automatic_relevance_determination = (
+            True  # independent length-scale for each knob
+        )
         self.num_restarts_gp = 2  # GP hyperparams fit restarts
         self.num_restarts_acq = 2  # Acq. func. optimization restarts
         self.seed = 0
@@ -27,18 +36,28 @@ class BayesianOptimizerGPyParams(_OptimizeParams):
         stg = super().__str__()
         stg += '\n'
         stg += self._TMPD('num_init_random_pts', self.num_init_random_pts, '')
-        stg += self._TMPF('xi', self.xi, '')
-        stg += self._TMPS('ard', str(self.ard), '')
+        stg += self._TMPS(
+            'acq_func_type', self.AcqFuncType._fields[self.acq_func_type], ''
+        )
+        stg += self._TMPF('xi_param', self.xi_param, '')
+        stg += self._TMPF('beta_param', self.beta_param, '')
+        stg += self._TMPS(
+            'automatic_relevance_determination',
+            str(self.automatic_relevance_determination),
+            '',
+        )
         stg += self._TMPD('num_restarts_gp', self.num_restarts_gp, '')
         stg += self._TMPD('num_restarts_acq', self.num_restarts_acq, '')
+        stg += self._TMPD('seed', self.seed, '')
         return stg
 
 
 class BayesianOptimizerGPy(_Optimize):
-    """Bayesian Optimizer with GP surrogate (RBF kernel) and EI acq function.
+    """Bayesian Optimizer with GP surrogate (RBF kernel) and EI/UCB.
 
     Implements initial sampling, Gaussian Process (GP) fit and next point
-    selection via Expected Improvement (EI) maximization.
+    selection via Expected Improvement (EI) or Upper Confidence Bound (UCB)
+    maximization, according to `params.acq_func_type`.
     """
 
     def __init__(self, use_thread=True, isonline=True):
@@ -105,7 +124,9 @@ class BayesianOptimizerGPy(_Optimize):
         yn = (obj_eval - self._y_mean) / self._y_std  # normalize data
 
         dim = pos_eval_normalized.shape[-1]
-        kernel = _GPy.kern.RBF(input_dim=dim, ARD=self.params.ard)  # RBF + ARD
+        kernel = _GPy.kern.RBF(
+            input_dim=dim, ARD=self.params.automatic_relevance_determination
+        )  # RBF + ARD
         kernel += _GPy.kern.White(input_dim=dim)  # white noise kernel
 
         self._gp_model = _GPy.models.GPRegression(
@@ -128,23 +149,35 @@ class BayesianOptimizerGPy(_Optimize):
         sigma = max(sigma, 1e-9)
 
         y_best = _np.nanmin(self.objfuncs_evaluated)  # minimization
-        imp = y_best - mu - self.params.xi
+        imp = y_best - mu - self.params.xi_param
         z = imp / sigma
         ei = imp * _norm.cdf(z) + sigma * _norm.pdf(z)
-        return -ei  # minimze negative EI = maximize EI
+        return -ei  # minimize negative EI = maximize EI
+
+    def _upper_confidence_bound(self, pos_normalized):
+        mu, sigma = self._predict(pos_normalized)
+        sigma = max(sigma, 1e-9)
+
+        ucb = mu - _np.sqrt(self.params.beta_param) * sigma
+        # is actually Lower Confidence Bound (LCB)
+        return ucb
+
+    def _get_acquisition_function(self):
+        acq_func_type = self.params.acq_func_type
+        if acq_func_type == self.params.AcqFuncType.ExpectedImprovement:
+            return self._expected_improvement
+        if acq_func_type == self.params.AcqFuncType.UpperConfidenceBound:
+            return self._upper_confidence_bound
+        raise ValueError(f'Unknown acquisition function type: {acq_func_type}')
 
     def _propose_next(self, dim):
         best_npos, best_val = None, _np.inf
         bounds = [(0.0, 1.0)] * dim
+        acq_func = self._get_acquisition_function()
 
         for _ in range(self.params.num_restarts_acq + 1):
             x0 = self._rng.uniform(0.0, 1.0, size=dim)
-            res = _minimize(
-                self._expected_improvement,
-                x0=x0,
-                bounds=bounds,
-                method='L-BFGS-B',
-            )
+            res = _minimize(acq_func, x0=x0, bounds=bounds, method='L-BFGS-B')
             if res.fun < best_val:
                 best_val, best_npos = res.fun, res.x
 
