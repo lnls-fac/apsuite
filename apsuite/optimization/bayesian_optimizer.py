@@ -25,6 +25,10 @@ class BayesianOptimizerGPyParams(_OptimizeParams):
         'TrustRegionMode',
         ('NoTrustRegion', 'FixedTrustRegion', 'AdaptiveTrustRegion'),
     )
+    InitialSamplingMode = _get_namedtuple(
+        'InitialSamplingMode',
+        ('GlobalRandom', 'RestrictedRandom', 'ProvidedData'),
+    )
 
     def __init__(self):
         """."""
@@ -41,8 +45,9 @@ class BayesianOptimizerGPyParams(_OptimizeParams):
         self.seed = 0
         self.trust_region_mode = self.TrustRegionMode.NoTrustRegion
         self.trust_region_scale = 0.2  # relative radius in normalized
-        # [0,1]^dim space: used as a fixed radius in FixedTrustRegion, and as
-        # L0 (initial length) in AdaptiveTrustRegion
+        # [0,1]^dim space: used as a fixed radius in FixedTrustRegion, as L0
+        # (initial length) in AdaptiveTrustRegion, and as the max excursion
+        # radius for RestrictedRandom initial sampling
 
         # for the following params, refer to Appendix D of Ref. [1]
         self.trust_region_length_min = 0.5**7  # AdaptiveTrustRegion only:
@@ -55,6 +60,27 @@ class BayesianOptimizerGPyParams(_OptimizeParams):
         # consecutive failures required to halve  L;
         # None uses max(4, dim), the heuristic from the original TuRBO
         # paper
+
+        # --- initial sampling ---
+        self.initial_sampling_mode = self.InitialSamplingMode.GlobalRandom
+        # RestrictedRandom only: initial points are sampled uniformly
+        # within `trust_region_scale` (normalized) of `self.initial_position`
+        # instead of across the whole [0,1]^dim domain. `initial_position`
+        # is inherited from OptimizeParams, in real (denormalized) units.
+
+        # ProvidedData only: skip random initial sampling entirely and use
+        # pre-measured data as warm-start for the GP. Both arrays are in
+        # real (denormalized) units, same convention as
+        # limit_lower/limit_upper. These points are NOT counted as
+        # evaluations: they never touch num_objective_evals,
+        # positions_evaluated, objfuncs_evaluated, positions_best or
+        # objfuncs_best. Those remain reserved strictly for measurements
+        # this script performs during the optimization loop.
+        # initial_data_positions: ndarray, shape (n_points, dim)
+        # initial_data_objectives: ndarray, shape (n_points,), minimization
+        # convention (same sign as what objective_function returns)
+        self.initial_data_positions = None
+        self.initial_data_objectives = None
 
     def __str__(self):
         """."""
@@ -89,6 +115,11 @@ class BayesianOptimizerGPyParams(_OptimizeParams):
         stg += self._TMPD(
             'trust_region_success_tol', self.trust_region_success_tol, ''
         )
+        stg += self._TMPS(
+            'initial_sampling_mode',
+            self.InitialSamplingMode._fields[self.initial_sampling_mode],
+            '',
+        )
         return stg
 
 
@@ -104,6 +135,12 @@ class BayesianOptimizerGPy(_Optimize):
     an adaptive radius that expands/contracts and restarts on collapse
     (AdaptiveTrustRegion, TuRBO-1 style), according to
     `params.trust_region_mode`.
+
+    Initial sampling can be global random (GlobalRandom), random restricted
+    to a neighborhood of `params.initial_position` (RestrictedRandom), or
+    warm-started from pre-measured data supplied via
+    `params.initial_data_positions`/`params.initial_data_objectives`
+    (ProvidedData), according to `params.initial_sampling_mode`.
 
     Reference: Erikson D. et al, Scalable Global Optimization via Local
         Bayesian Optimization, 2019. https://arxiv.org/pdf/1910.01739.
@@ -121,6 +158,12 @@ class BayesianOptimizerGPy(_Optimize):
         self._y_mean = 0.0
         self._y_std = 1.0
 
+        # warm-start data (ProvidedData): kept separate from the real
+        # evaluation history on purpose
+        self._warm_start_positions = None
+        self._warm_start_objectives = None
+        self._cached_y_best = _np.inf
+
         # adaptive trust region state
         self._tr_length = self.params.trust_region_scale
         self._tr_center = None
@@ -132,13 +175,12 @@ class BayesianOptimizerGPy(_Optimize):
     def _optimize(self):
         dim = self.params.limit_lower.size
         TRM = self.params.TrustRegionMode
+        ISM = self.params.InitialSamplingMode
 
-        for _ in range(self.params.num_init_random_pts):
-            if self.num_objective_evals >= self.params.max_number_evals:
-                return
-            pos_normalized = self._rng.uniform(0.0, 1.0, size=dim)
-            pos = self.params.denormalize_positions(pos_normalized)
-            self._evaluate_and_register(pos)
+        if self.params.initial_sampling_mode == ISM.ProvidedData:
+            self._register_warm_start_data()
+        else:
+            self._run_initial_sampling(dim)
 
         if self.params.trust_region_mode == TRM.AdaptiveTrustRegion:
             self._init_trust_region(dim)
@@ -175,6 +217,109 @@ class BayesianOptimizerGPy(_Optimize):
             self.positions_best.append(self.positions_best[-1])
 
     # ------------------------------------------------------------------ #
+    # Initial sampling
+    # ------------------------------------------------------------------ #
+
+    def _run_initial_sampling(self, dim):
+        """Initial sampling for GP fitting.
+
+        GlobalRandom: uniform over [0,1]^dim.
+        RestrictedRandom: uniform within `trust_region_scale` (normalized)
+        of `initial_position`. Both count as real evaluations
+        (num_objective_evals increases).
+        """
+        ISM = self.params.InitialSamplingMode
+        restricted = (
+            self.params.initial_sampling_mode == ISM.RestrictedRandom
+        )
+
+        if restricted:
+            center = self.params.normalize_positions(
+                self.params.initial_position.reshape(1, -1)
+            )[0]
+            half_width = 0.5 * self.params.trust_region_scale
+            low = _np.clip(center - half_width, 0.0, 1.0)
+            high = _np.clip(center + half_width, 0.0, 1.0)
+
+        for _ in range(self.params.num_init_random_pts):
+            if self.num_objective_evals >= self.params.max_number_evals:
+                return
+            if restricted:
+                pos_normalized = self._rng.uniform(low, high)
+            else:
+                pos_normalized = self._rng.uniform(0.0, 1.0, size=dim)
+            pos = self.params.denormalize_positions(pos_normalized)
+            self._evaluate_and_register(pos)
+
+    def _register_warm_start_data(self):
+        """Register and validate provided data for warm-start.
+
+        ProvidedData: validate and store pre-measured (position,
+        objective) pairs as warm-start data for the GP fit and
+        best-tracking helpers.
+
+        Does NOT count as an evaluation: num_objective_evals,
+        positions_evaluated, objfuncs_evaluated, positions_best and
+        objfuncs_best are all left untouched. Those are reserved strictly
+        for measurements performed by `_objective_func` during this run.
+        """
+        positions = self.params.initial_data_positions
+        objectives = self.params.initial_data_objectives
+        if positions is None or objectives is None:
+            raise ValueError(
+                'InitialSamplingMode.ProvidedData requires both '
+                'initial_data_positions and initial_data_objectives to be '
+                'set.'
+            )
+
+        positions = _np.atleast_2d(positions)
+        objectives = _np.atleast_1d(objectives).astype(float)
+        if positions.shape[0] != objectives.shape[0]:
+            raise ValueError(
+                'initial_data_positions and initial_data_objectives must '
+                'have the same number of rows '
+                f'(got {positions.shape[0]} and {objectives.shape[0]}).'
+            )
+        if positions.shape[0] == 0:
+            raise ValueError(
+                'initial_data_positions/initial_data_objectives are empty.'
+            )
+
+        out_of_bounds = (
+            (positions < self.params.limit_lower).any(axis=1)
+            | (positions > self.params.limit_upper).any(axis=1)
+        )
+        if out_of_bounds.any():
+            raise ValueError(
+                f'{int(out_of_bounds.sum())} warm-start point(s) fall '
+                'outside limit_lower/limit_upper.'
+            )
+
+        self._warm_start_positions = positions
+        self._warm_start_objectives = objectives
+
+    def _get_evals_history(self, dim):
+        """Get evaluation history (warm-start + evaluations).
+
+        Real evaluation history concatenated with warm-start data (if
+        any), in real (denormalized) units. Used internally by the GP fit
+        and by every "best known point" computation
+        """
+        real_pos = _np.array(self.positions_evaluated).reshape(-1, dim)
+        real_obj = _np.array(
+            self.objfuncs_evaluated, dtype=float
+        ).reshape(-1)
+
+        if self._warm_start_positions is None:
+            return real_pos, real_obj
+
+        warm_pos = self._warm_start_positions.reshape(-1, dim)
+        warm_obj = self._warm_start_objectives.reshape(-1)
+        pos = _np.concatenate([warm_pos, real_pos], axis=0)
+        obj = _np.concatenate([warm_obj, real_obj], axis=0)
+        return pos, obj
+
+    # ------------------------------------------------------------------ #
     # Trust region
     # ------------------------------------------------------------------ #
 
@@ -188,12 +333,11 @@ class BayesianOptimizerGPy(_Optimize):
             else max(4, dim)
         )
 
-        obj_eval = _np.array(self.objfuncs_evaluated, dtype=float)
+        pos_eval, obj_eval = self._get_evals_history(dim)
         if obj_eval.size and not _np.isnan(obj_eval).all():
             best_idx = _np.nanargmin(obj_eval)
-            best_pos = _np.array(self.positions_evaluated)[best_idx]
             self._tr_center = self.params.normalize_positions(
-                best_pos.reshape(1, -1)
+                pos_eval[best_idx].reshape(1, -1)
             )[0]
             self._tr_best_obj = obj_eval[best_idx]
         else:
@@ -240,21 +384,20 @@ class BayesianOptimizerGPy(_Optimize):
                 self._tr_center = pos_normalized
 
     def _get_global_best_normalized(self, dim):
-        obj_eval = _np.array(self.objfuncs_evaluated, dtype=float)
+        pos_eval, obj_eval = self._get_evals_history(dim)
         if obj_eval.size == 0 or _np.isnan(obj_eval).all():
             return _np.full(dim, 0.5)
         best_idx = _np.nanargmin(obj_eval)
-        best_pos = _np.array(self.positions_evaluated)[best_idx]
-        return self.params.normalize_positions(best_pos.reshape(1, -1))[0]
+        return self.params.normalize_positions(
+            pos_eval[best_idx].reshape(1, -1)
+        )[0]
 
     def _get_lengthscale_weights(self, dim):
         if self._gp_model is None:
             return _np.ones(dim)
-        # lengthscales = _np.atleast_1d(self._gp_model.rbf.lengthscale.values)
         lengthscales = _np.atleast_1d(
             self._gp_model.kern.parts[0].lengthscale.values
         )
-
         if lengthscales.size != dim:
             lengthscales = _np.full(dim, lengthscales[0])
         geo_mean = _np.exp(_np.mean(_np.log(lengthscales)))
@@ -280,16 +423,20 @@ class BayesianOptimizerGPy(_Optimize):
         upper = _np.clip(center + half_widths, 0.0, 1.0)
         return list(zip(lower, upper))
 
+    # ------------------------------------------------------------------ #
+    # Gaussian Process model (GPy, RBF kernel)
+    # ------------------------------------------------------------------ #
+
     def _fit_gp(self):
-        pos_eval = _np.array(self.positions_evaluated)
-        obj_eval = _np.array(self.objfuncs_evaluated).reshape(-1, 1)
+        dim = self.params.limit_lower.size
+        pos_eval, obj_eval = self._get_evals_history(dim)
+        obj_eval = obj_eval.reshape(-1, 1)
 
         valid = ~_np.isnan(obj_eval).ravel()
         pos_eval = pos_eval[valid]
         obj_eval = obj_eval[valid]
 
         pos_eval_normalized = self.params.normalize_positions(pos_eval)
-        dim = pos_eval_normalized.shape[-1]
 
         if self.params.trust_region_mode != (
             self.params.TrustRegionMode.NoTrustRegion
@@ -336,7 +483,7 @@ class BayesianOptimizerGPy(_Optimize):
         mu, sigma = self._predict(pos_normalized)
         sigma = max(sigma, 1e-9)
 
-        y_best = _np.nanmin(self.objfuncs_evaluated)  # minimization
+        y_best = self._cached_y_best  # set once per _propose_next call
         imp = y_best - mu - self.params.xi_param
         z = imp / sigma
         ei = imp * _norm.cdf(z) + sigma * _norm.pdf(z)
@@ -359,6 +506,12 @@ class BayesianOptimizerGPy(_Optimize):
         raise ValueError(f'Unknown acquisition function type: {acq_func_type}')
 
     def _propose_next(self, dim):
+        _, obj_combined = self._get_evals_history(dim)
+        obj_combined = obj_combined[~_np.isnan(obj_combined)]
+        self._cached_y_best = (
+            _np.min(obj_combined) if obj_combined.size else _np.inf
+        )
+
         best_npos, best_val = None, _np.inf
         bounds = self._get_trust_region_bounds(dim)
         acq_func = self._get_acquisition_function()
