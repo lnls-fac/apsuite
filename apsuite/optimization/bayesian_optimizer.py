@@ -40,6 +40,7 @@ class BayesianOptimizerGPyParams(_OptimizeParams):
         self.automatic_relevance_determination = (
             True  # independent length-scale for each knob
         )
+        self.gp_optimize_every_n_iters = 1  # GP hyperparams fit frequency
         self.num_restarts_gp = 2  # GP hyperparams fit restarts
         self.num_restarts_acq = 2  # Acq. func. optimization restarts
         self.seed = 0
@@ -86,6 +87,11 @@ class BayesianOptimizerGPyParams(_OptimizeParams):
         """."""
         stg = super().__str__()
         stg += '\n'
+        stg += self._TMPS(
+            'initial_sampling_mode',
+            self.InitialSamplingMode._fields[self.initial_sampling_mode],
+            '',
+        )
         stg += self._TMPD('num_init_random_pts', self.num_init_random_pts, '')
         stg += self._TMPS(
             'acq_func_type', self.AcqFuncType._fields[self.acq_func_type], ''
@@ -96,6 +102,9 @@ class BayesianOptimizerGPyParams(_OptimizeParams):
             'automatic_relevance_determination',
             str(self.automatic_relevance_determination),
             '',
+        )
+        stg += self._TMPD(
+            'gp_optimize_every_n_iters', self.gp_optimize_every_n_iters, ''
         )
         stg += self._TMPD('num_restarts_gp', self.num_restarts_gp, '')
         stg += self._TMPD('num_restarts_acq', self.num_restarts_acq, '')
@@ -114,11 +123,6 @@ class BayesianOptimizerGPyParams(_OptimizeParams):
         )
         stg += self._TMPD(
             'trust_region_success_tol', self.trust_region_success_tol, ''
-        )
-        stg += self._TMPS(
-            'initial_sampling_mode',
-            self.InitialSamplingMode._fields[self.initial_sampling_mode],
-            '',
         )
         return stg
 
@@ -163,6 +167,9 @@ class BayesianOptimizerGPy(_Optimize):
         self._warm_start_positions = None
         self._warm_start_objectives = None
         self._cached_y_best = _np.inf
+
+        # GP optimization control
+        self._iters_since_gp_opt = 0
 
         # adaptive trust region state
         self._tr_length = self.params.trust_region_scale
@@ -229,9 +236,7 @@ class BayesianOptimizerGPy(_Optimize):
         (num_objective_evals increases).
         """
         ISM = self.params.InitialSamplingMode
-        restricted = (
-            self.params.initial_sampling_mode == ISM.RestrictedRandom
-        )
+        restricted = self.params.initial_sampling_mode == ISM.RestrictedRandom
 
         if restricted:
             center = self.params.normalize_positions(
@@ -285,10 +290,9 @@ class BayesianOptimizerGPy(_Optimize):
                 'initial_data_positions/initial_data_objectives are empty.'
             )
 
-        out_of_bounds = (
-            (positions < self.params.limit_lower).any(axis=1)
-            | (positions > self.params.limit_upper).any(axis=1)
-        )
+        out_of_bounds = (positions < self.params.limit_lower).any(axis=1) | (
+            positions > self.params.limit_upper
+        ).any(axis=1)
         if out_of_bounds.any():
             raise ValueError(
                 f'{int(out_of_bounds.sum())} warm-start point(s) fall '
@@ -306,9 +310,7 @@ class BayesianOptimizerGPy(_Optimize):
         and by every "best known point" computation
         """
         real_pos = _np.array(self.positions_evaluated).reshape(-1, dim)
-        real_obj = _np.array(
-            self.objfuncs_evaluated, dtype=float
-        ).reshape(-1)
+        real_obj = _np.array(self.objfuncs_evaluated, dtype=float).reshape(-1)
 
         if self._warm_start_positions is None:
             return real_pos, real_obj
@@ -413,11 +415,12 @@ class BayesianOptimizerGPy(_Optimize):
         if mode == TRM.FixedTrustRegion:
             center = self._get_global_best_normalized(dim)
             length = self.params.trust_region_scale
+            weights = _np.ones(dim)
         else:  # AdaptiveTrustRegion
             center = self._tr_center
             length = self._tr_length
+            weights = self._get_lengthscale_weights(dim)
 
-        weights = self._get_lengthscale_weights(dim)
         half_widths = 0.5 * length * weights
         lower = _np.clip(center - half_widths, 0.0, 1.0)
         upper = _np.clip(center + half_widths, 0.0, 1.0)
@@ -459,19 +462,33 @@ class BayesianOptimizerGPy(_Optimize):
         self._y_std = obj_eval.std() if obj_eval.std() > 1e-9 else 1.0
         yn = (obj_eval - self._y_mean) / self._y_std  # normalize data
 
-        kernel = _GPy.kern.RBF(
-            input_dim=dim, ARD=self.params.automatic_relevance_determination
-        )  # RBF + ARD
-        kernel += _GPy.kern.White(input_dim=dim)  # white noise kernel
-
-        self._gp_model = _GPy.models.GPRegression(
-            X=pos_eval_normalized, Y=yn, kernel=kernel
+        do_optimize = (
+            self._gp_model is None
+            or self._iters_since_gp_opt
+            >= self.params.gp_optimize_every_n_iters
         )
-        self._gp_model.optimize_restarts(
-            num_restarts=self.params.num_restarts_gp, verbose=False
-        )  # restarts of the GP hyperparams optimization
-        # if num_restarts_gp == 0, only a single optimization is done
-        # which is equivalent to _gp_model.optimize().
+
+        if self._gp_model is None:
+            kernel = _GPy.kern.RBF(
+                input_dim=dim,
+                ARD=self.params.automatic_relevance_determination,
+            )  # RBF w/ ARD
+            kernel += _GPy.kern.White(input_dim=dim)  # white noise kernel
+            self._gp_model = _GPy.models.GPRegression(
+                X=pos_eval_normalized, Y=yn, kernel=kernel
+            )
+        else:
+            self._gp_model.set_XY(X=pos_eval_normalized, Y=yn)
+
+        if do_optimize:
+            self._gp_model.optimize_restarts(
+                num_restarts=self.params.num_restarts_gp, verbose=False
+            )  # restarts of the GP hyperparams optimization
+            # if num_restarts_gp == 0, only a single optimization is done
+            # which is equivalent to _gp_model.optimize().
+            self._iters_since_gp_opt = 0
+        else:
+            self._iters_since_gp_opt += 1
 
     def _predict(self, pos_normalized):
         mu_n, var_n = self._gp_model.predict(pos_normalized.reshape(1, -1))
