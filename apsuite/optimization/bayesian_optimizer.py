@@ -466,6 +466,7 @@ class BayesianOptimizerGPy(_Optimize):
         self._y_std = obj_eval.std() if obj_eval.std() > 1e-9 else 1.0
         yn = (obj_eval - self._y_mean) / self._y_std  # normalize data
 
+        self._iters_since_gp_opt += 1
         do_optimize = (
             self._gp_model is None
             or self._iters_since_gp_opt
@@ -493,8 +494,6 @@ class BayesianOptimizerGPy(_Optimize):
             # if num_restarts_gp == 0, only a single optimization is done
             # which is equivalent to _gp_model.optimize().
             self._iters_since_gp_opt = 0
-        else:
-            self._iters_since_gp_opt += 1
 
     def _predict(self, pos_normalized):
         mu_n, var_n = self._gp_model.predict(pos_normalized.reshape(1, -1))
