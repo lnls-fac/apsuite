@@ -455,7 +455,7 @@ class MeasureRespMatTBBO(_BaseClass):
 
         normalization : str
             Response-matrix normalization strategy. Available options are:
-            'none', 'column_rms', 'plane_rms', 'block_rms'.
+            'none', 'column_rms', 'signature'.
 
         normalization_floor : float
             Minimum normalization scale. This prevents groups with very
@@ -539,9 +539,10 @@ class MeasureRespMatTBBO(_BaseClass):
         self._respmat_fit_target = target
         self._respmat_fit_mask = mask
         self._respmat_fit_weights = weights
+        self._respmat_fit_normalization = normalization.lower()
+        self._respmat_fit_normalization_floor = normalization_floor
         self._respmat_fit_matrix_corr_names = matrix_corr_names
         self._respmat_fit_corr_names = fit_corr_names
-
         self._respmat_fit_reference_gradients = reference_gradients
         self._respmat_fit_free_mask = free_mask
 
@@ -568,6 +569,7 @@ class MeasureRespMatTBBO(_BaseClass):
         result = least_squares(**kwargs)
 
         fitted_gradients = self._expand_free_septum_gradients(result.x)
+        self.set_septum_gradient(*fitted_gradients)
         parameter_names = np.array(['KxL', 'KyL', 'KsxL', 'KsyL'])
 
         result.free_gradients = result.x.copy()
@@ -617,7 +619,7 @@ class MeasureRespMatTBBO(_BaseClass):
         else:
             cov[:] = np.nan
 
-        return np.sqrt(np.diag(cov))
+        return np.sqrt(np.diag(cov)), cov
 
     # ---------------- Plot methods --------------------------
 
@@ -975,9 +977,20 @@ class MeasureRespMatTBBO(_BaseClass):
         matrix_corr_names : sequence of str
             Corrector names associated with the columns of target and mask.
 
-        normalization : str
-            Normalization strategy. Available options are:
-            'none', 'column_rms', 'plane_rms' and 'block_rms'.
+        normalization : {'none', 'column_rms', 'signature'}
+            Normalization strategy.
+
+            - 'none':
+            Compare model and measured response matrices directly.
+
+            - 'column_rms':
+            Divide the residual of each column by the RMS of the
+            corresponding measured column.
+
+            - 'signature':
+            Normalize model and measured columns independently by
+            their respective standard deviations. This normalization
+            is applied dynamically in the objective function.
 
         normalization_floor : float
             Minimum allowed normalization scale.
@@ -985,10 +998,10 @@ class MeasureRespMatTBBO(_BaseClass):
         Returns
         -------
         weights : numpy.ndarray
-            Deterministic fitting weights with the same shape as target.
+            Fitting weights with the same shape as target.
 
         scales : dict
-            Effective normalization scales used for each group.
+            Normalization scales used for each group.
         """
         matrix_corr_names = tuple(matrix_corr_names)
 
@@ -999,28 +1012,6 @@ class MeasureRespMatTBBO(_BaseClass):
         weights = np.ones_like(target, dtype=float)
         scales = dict()
 
-        def apply_rms(group_mask, group_name):
-            """Apply RMS normalization to one selected group."""
-            group_mask = np.asarray(group_mask, dtype=bool)
-            group_mask &= mask
-
-            if not np.any(group_mask):
-                scales[group_name] = np.nan
-                return
-
-            values = target[group_mask]
-            scale = np.sqrt(np.mean(values**2))
-
-            if not np.isfinite(scale):
-                raise ValueError(
-                    f'Non-finite normalization scale for group {group_name!r}.'
-                )
-
-            effective_scale = max(scale, normalization_floor)
-
-            weights[group_mask] = 1.0 / effective_scale
-            scales[group_name] = effective_scale
-
         if normalization == 'none':
             scales['global'] = 1.0
 
@@ -1028,56 +1019,28 @@ class MeasureRespMatTBBO(_BaseClass):
             selected_cols = np.nonzero(np.any(mask, axis=0))[0]
 
             for col in selected_cols:
-                col_mask = np.zeros_like(mask, dtype=bool)
-                col_mask[:, col] = True
+                col_mask = mask[:, col]
+                values = target[col_mask, col]
+
+                scale = np.sqrt(np.mean(values**2))
+                scale = max(scale, normalization_floor)
+
+                weights[col_mask, col] = 1.0 / scale
 
                 corr_name = matrix_corr_names[col]
+                scales[f'column:{corr_name}'] = scale
 
-                apply_rms(
-                    group_mask=col_mask, group_name=f'column:{corr_name}'
-                )
+        elif normalization == 'signature':
+            # The measured and model scales are calculated dynamically
+            # in _err_func_respmat. No fixed weights are applied here.
+            selected_cols = np.nonzero(np.any(mask, axis=0))[0]
 
-        elif normalization == 'plane_rms':
-            nbpms = len(self.model_bpms_idx)
-
-            x_mask = np.zeros_like(mask, dtype=bool)
-            y_mask = np.zeros_like(mask, dtype=bool)
-
-            x_mask[:nbpms, :] = True
-            y_mask[nbpms:, :] = True
-
-            apply_rms(x_mask, 'plane:x')
-            apply_rms(y_mask, 'plane:y')
-
-        elif normalization == 'block_rms':
-            nbpms = len(self.model_bpms_idx)
-
-            horizontal_cols = []
-            vertical_cols = []
-
-            for col, corr_name in enumerate(matrix_corr_names):
-                if 'CV' in corr_name:
-                    vertical_cols.append(col)
-                else:
-                    horizontal_cols.append(col)
-
-            xh_mask = np.zeros_like(mask, dtype=bool)
-            yh_mask = np.zeros_like(mask, dtype=bool)
-            xv_mask = np.zeros_like(mask, dtype=bool)
-            yv_mask = np.zeros_like(mask, dtype=bool)
-
-            xh_mask[:nbpms, horizontal_cols] = True
-            yh_mask[nbpms:, horizontal_cols] = True
-            xv_mask[:nbpms, vertical_cols] = True
-            yv_mask[nbpms:, vertical_cols] = True
-
-            apply_rms(xh_mask, 'block:x_from_h')
-            apply_rms(yh_mask, 'block:y_from_h')
-            apply_rms(xv_mask, 'block:x_from_v')
-            apply_rms(yv_mask, 'block:y_from_v')
+            for col in selected_cols:
+                corr_name = matrix_corr_names[col]
+                scales[f'column:{corr_name}'] = 'dynamic_std'
 
         else:
-            valid = ('none', 'column_rms', 'plane_rms', 'block_rms')
+            valid = ('none', 'column_rms', 'signature')
 
             raise ValueError(
                 f'Unknown normalization strategy: {normalization!r}. '
@@ -1098,6 +1061,12 @@ class MeasureRespMatTBBO(_BaseClass):
         target = self._respmat_fit_target
         mask = self._respmat_fit_mask
         weights = self._respmat_fit_weights
+        normalization = self._respmat_fit_normalization
+
+        if normalization == 'signature':
+            return self._calc_respmat_signature_residual(
+                respmat_model=respmat_model, respmat_meas=target, mask=mask
+            )
 
         residual = (respmat_model - target) * weights
 
@@ -1108,3 +1077,26 @@ class MeasureRespMatTBBO(_BaseClass):
         gradients = self._respmat_fit_reference_gradients.copy()
         gradients[self._respmat_fit_free_mask] = free_gradients
         return gradients
+
+    def _calc_respmat_signature_residual(
+        self, respmat_model, respmat_meas, mask
+    ):
+        floor = self._respmat_fit_normalization_floor
+        selected_cols = np.nonzero(np.any(mask, axis=0))[0]
+        residuals = []
+
+        for col in selected_cols:
+            col_mask = mask[:, col]
+
+            model_col = respmat_model[col_mask, col]
+            meas_col = respmat_meas[col_mask, col]
+
+            model_scale = max(np.std(model_col), floor)
+            meas_scale = max(np.std(meas_col), floor)
+
+            model_col = (model_col - np.mean(model_col)) / model_scale
+            meas_col = (meas_col - np.mean(meas_col)) / meas_scale
+
+            residuals.append(model_col - meas_col)
+
+        return np.concatenate(residuals)
