@@ -735,6 +735,144 @@ class MeasureRespMatTBBO(_BaseClass):
         fig.tight_layout()
         return fig, ax
 
+    def plot_respmat_all_cols(self, signature=False):
+        """Plot general figure showing all columns of response matrices."""
+        if not self.analysis:
+            raise ValueError(
+                'No analysis available. Run process_data() first.'
+            )
+
+        corr_names = tuple(self.analysis['corr_analysis'])
+        nr_corrs = len(corr_names)
+
+        mat_meas = self.analysis['respmat_meas']
+        mat_model = self.calc_model_respmat()
+
+        if signature:
+            mat_meas = (mat_meas - mat_meas.mean()) / mat_meas.std()
+            mat_model = (mat_model - mat_model.mean()) / mat_model.std()
+
+        nr_rows = (nr_corrs + 1) // 2
+
+        fig, axs = plt.subplots(
+            nr_rows, 2, figsize=(18, nr_rows * 2), sharex=True
+        )
+        axs = axs.ravel()
+
+        for i, corr_name in enumerate(corr_names):
+            ax = axs[i]
+            col_meas = mat_meas[:, i]
+            col_model = mat_model[:, i]
+
+            (l1,) = ax.plot(col_meas, '.-', lw=1.2, label='Measurement')
+            (l2,) = ax.plot(col_model, '.-', lw=1.2, label='Model')
+
+            ax.set_title(corr_name, fontsize=12, pad=3)
+            ax.tick_params(axis='both', labelsize=12)
+
+            ax.axvline(5.5, ls='--', c='k', lw=1)
+            ax.axvline(55.5, ls='-', c='k', lw=1)
+            ax.axvline(61.5, ls='--', c='k', lw=1)
+
+        for ax in axs[nr_corrs:]:
+            ax.remove()
+
+        fig.legend(
+            [l1, l2],
+            ['Measurement', 'Model'],
+            loc='lower center',
+            ncol=2,
+            fontsize=11,
+            frameon=True,
+        )
+        fig.tight_layout(rect=[0, 0.05, 1, 1])
+
+        return fig, axs
+
+    def plot_respmat_diff(self):
+        """."""
+        if not self.analysis:
+            raise ValueError(
+                'No analysis available. Run process_data() first.'
+            )
+
+        respmat_meas = self.analysis['respmat_meas']
+        respmat_model = self.calc_model_respmat()
+        delta = respmat_model - respmat_meas
+        corr_names = tuple(self.analysis['corr_analysis'])
+        nr_corrs = len(corr_names)
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        im = ax.imshow(delta, aspect='auto', cmap='RdBu_r')
+
+        cv_cols = [i for i, k in enumerate(corr_names) if 'CV' in k]
+        if cv_cols:
+            ax.axvline(cv_cols[0] - 0.5, color='k')
+
+        ax.axhline(55.5, color='k')
+        ax.axhline(5.5, color='k', linestyle='--', linewidth=1)
+        ax.axhline(61.5, color='k', linestyle='--', linewidth=1)
+
+        cbar = fig.colorbar(im, ax=ax)
+        cbar.set_label(r'$R_{\text{model}} - R_{\text{meas}}$')
+
+        ax.set_xticks(np.arange(nr_corrs), corr_names, rotation=25, ha='right')
+        ax.set_ylabel('BPM/Plane idx')
+        ax.set_title('Response Matrix Residue')
+
+        return fig, ax
+
+    def plot_residues_histogram(self, fit_results, ax=None):
+        """."""
+        if not self.analysis:
+            raise ValueError(
+                'No analysis available. Run process_data() first.'
+            )
+
+        if ax is None:
+            fig, ax = plt.subplots()
+        else:
+            fig = ax.figure
+
+        residue = fit_results.final_respmat - self.analysis['respmat_meas']
+        residue *= fit_results.fit_weights
+        mask = fit_results.fit_mask
+        residue = residue[mask]
+
+        ax.hist(residue, bins=50, edgecolor='k', linewidth=0.5)
+        ax.set_xlabel('Residues')
+        ax.set_ylabel('Counts')
+        ax.set_title('Residues Histogram')
+        return fig, ax
+
+    def plot_bpm_residues_rms(self, fit_results, ax=None):
+        """."""
+        if not self.analysis:
+            raise ValueError(
+                'No analysis available. Run process_data() first.'
+            )
+
+        respmat_meas = self.analysis['respmat_meas']
+        respmat_model = fit_results.final_respmat
+        delta = respmat_model - respmat_meas
+        rms_row = np.sqrt(np.mean(delta**2, axis=1))
+
+        if ax is None:
+            fig, ax = plt.subplots()
+        else:
+            fig = ax.figure
+
+        ax.plot(rms_row, '.-')
+        ax.set_xlabel('BPM idx')
+        ax.set_ylabel('RMS - residue')
+        ax.set_title('Residues RMS by BPM')
+        ax.axvline(5.5, linestyle='--', color='k')
+        ax.axvline(55.5, linestyle='-', color='k')
+        ax.axvline(61.5, linestyle='--', color='k')
+
+        return fig, ax
+
     # ---------------- Helper methods ------------------------
 
     def _process_data_corr(self, data, corr, fit_order=1):
