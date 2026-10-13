@@ -170,6 +170,8 @@ class BayesianOptimizerGPy(_Optimize):
 
         # GP optimization control
         self._iters_since_gp_opt = 0
+        self._force_gp_opt = False  # only used to force GP hyperparam
+        # fitting after trust region restart (if AdaptiveTrustRegion)
 
         # adaptive trust region state
         self._tr_length = self.params.trust_region_scale
@@ -374,6 +376,8 @@ class BayesianOptimizerGPy(_Optimize):
         self._tr_length = self.params.trust_region_scale
         self._tr_success_count = 0
         self._tr_failure_count = 0
+        self._force_gp_opt = True
+        self._tr_best_obj = _np.inf  # abandon previous TR's best
 
         for _ in range(self.params.num_init_random_pts):
             if self.num_objective_evals >= self.params.max_number_evals:
@@ -480,7 +484,9 @@ class BayesianOptimizerGPy(_Optimize):
         else:
             self._gp_model.set_XY(X=pos_eval_normalized, Y=yn)
 
-        if do_optimize:
+        if do_optimize or self._force_gp_opt:
+            self._force_gp_opt = False  # once optimized due to trust-region
+            # restart, reset the flag
             self._gp_model.optimize_restarts(
                 num_restarts=self.params.num_restarts_gp, verbose=False
             )  # restarts of the GP hyperparams optimization
