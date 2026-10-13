@@ -312,7 +312,7 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
             dic['ant_amax'] = ant_amax
             dic['ant_raw2'] = ant_raw2
 
-        of2 = ((blow - bhigh) // hnum) * nsamp_pturn + of1
+        of2 = int(abs(blow - bhigh) / hnum * nsamp_pturn) + of1
         slcs = [slice(of1 + winn, of1 + winp), slice(of2 + winn, of2 + winp)]
         for i in range(nbuc2proc):
             b_sigs = ant_raw2[..., slcs[i]].std(axis=-1)
