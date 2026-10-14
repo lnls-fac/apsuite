@@ -44,6 +44,7 @@ class Params(_ParamsBaseClass):
         self.wait_repeat = 1  # [s]
         self.bo_dip_energy = 0.144  # [GeV]
         self.screen_saturation = self.SATURATION_8BITS
+        self.screen_trigger = None
 
     def __str__(self):
         """."""
@@ -132,6 +133,11 @@ class MeasTomography(_BaseClass):
         """
         qf = self.devices['qf']
         curr0 = qf.current
+        trig0 = self.devices['li_trig'].delay_raw
+
+        if self.params.screen_trigger is not None:
+            if len(self.params.screen_trigger) != self.params.nr_points:
+                raise ValueError('screen_trigger length must match nr_points.')
 
         keys = [
             'timestamp',
@@ -156,43 +162,51 @@ class MeasTomography(_BaseClass):
                 for _ in range(self.params.nr_points)
             ]
 
-        doexit = False
-        for idx1, curr in enumerate(self.curr_range):
+        try:
+            doexit = False
+            for idx1, curr in enumerate(self.curr_range):
+                qf.set_current(
+                    value=curr,
+                    tol=0.01,
+                    timeout=self.params.wait_quad,
+                    wait_mon=True,
+                )
+                trig_val = self._set_screen_trigger(idx1)
+
+                print(f'Measuring {idx1 + 1:02d}/{self.params.nr_points:02d}')
+                print(f'QF current: {curr:.4f} A')
+                print(f'Screen Trigger Delay Raw: {trig_val:d}')
+
+                for idx2 in range(self.params.nr_repeat):
+                    doexit = self._pulse_evg()
+
+                    if not idx2 and doexit:
+                        print('Exiting...')
+                        break
+
+                    print(f'    repeat {idx2 + 1}/{self.params.nr_repeat}')
+                    data = self._get_single_data()
+
+                    for key in keys:
+                        self.data[key][idx1][idx2] = data[key]
+
+                    _time.sleep(self.params.wait_repeat)
+
+                print('..finished point\n')
+
+                # Meas loop is not broken during repetitions of same point.
+                # It measures all repetitions and then breaks.
+                if doexit:
+                    break
+        finally:
             qf.set_current(
-                value=curr,
+                value=curr0,
                 tol=0.01,
                 timeout=self.params.wait_quad,
                 wait_mon=True,
             )
+            self.devices['li_trig'].delay_raw = trig0
 
-            print(f'Measuring {idx1 + 1:02d}/{self.params.nr_points:02d}')
-            print(f'QF current: {curr:.4f} A')
-
-            for idx2 in range(self.params.nr_repeat):
-                doexit = self._pulse_evg()
-
-                if not idx2 and doexit:
-                    print('Exiting...')
-                    break
-
-                print(f'    repeat {idx2 + 1}/{self.params.nr_repeat}')
-                data = self._get_single_data()
-
-                for key in keys:
-                    self.data[key][idx1][idx2] = data[key]
-
-                _time.sleep(self.params.wait_repeat)
-
-            print('..finished point\n')
-
-            # Meas loop is not broken during repetitions of same point.
-            # It measures all repetitions and then breaks.
-            if doexit:
-                break
-
-        qf.set_current(
-            value=curr0, tol=0.01, timeout=self.params.wait_quad, wait_mon=True
-        )
         print('Finished measurement!')
 
     def process_data(
@@ -465,10 +479,18 @@ class MeasTomography(_BaseClass):
         xmax = x[-1] + delta / 2
         return _np.linspace(xmin, xmax, nr_points + 1)
 
+    def _set_screen_trigger(self, idx_meas):
+        if self.params.screen_trigger is None:
+            trig_val = self.devices['li_trig'].delay_raw
+        else:
+            trig_val = self.params.screen_trigger[idx_meas]
+            self.devices['li_trig'].delay_raw = trig_val
+        return trig_val
+
     def _pulse_evg(self):
         while True:
             self.devices['evg'].cmd_turn_on_injection()
-            print('Injection pulse triggered.')
+            print('Injection pulse triggered. Pulse again?')
             st = '[Y] pulse again  |'
             st += '  [N] continue measurement  |'
             st += '  [E] exit measurement'
