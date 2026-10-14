@@ -5,19 +5,24 @@ from multiprocessing import Pool as _Pool
 
 import matplotlib.pyplot as _plt
 import numpy as _np
-from mathphys.imgproc import Image2D_CMom as _Image2D_CMom, \
-    Image2D_Fit as _Image2D_Fit
+from mathphys.imgproc import (
+    Image2D_CMom as _Image2D_CMom,
+    Image2D_Fit as _Image2D_Fit,
+)
 from scipy.integrate import trapz as _trapezoid
 from scipy.interpolate import interp1d as _interp1d
 from scipy.ndimage import median_filter as _median_filter
 from siriuspy.devices import CurrInfoLinear, EVG, PowerSupply, Screen, Trigger
 from siriuspy.magnet.factory import NormalizerFactory as _Normalizer
 from skimage.morphology import reconstruction as _reconstruction
+from matplotlib.patches import Rectangle
 
 from apsuite.commisslib.tomography_linac import trans_matrices as _ment_mats
 
-from ...utils import MeasBaseClass as _BaseClass, \
-    ParamsBaseClass as _ParamsBaseClass
+from ...utils import (
+    MeasBaseClass as _BaseClass,
+    ParamsBaseClass as _ParamsBaseClass,
+)
 
 
 class Params(_ParamsBaseClass):
@@ -26,6 +31,7 @@ class Params(_ParamsBaseClass):
     DEFAULT_NR_POINTS = 16
     DEFAULT_QUAD_CURR_MIN = -4.5  # [A]
     DEFAULT_QUAD_CURR_MAX = 3.5  # [A]
+    SATURATION_8BITS = 2**8 - 1
 
     def __init__(self):
         """."""
@@ -37,18 +43,23 @@ class Params(_ParamsBaseClass):
         self.wait_quad = 2  # [s]
         self.wait_repeat = 1  # [s]
         self.bo_dip_energy = 0.144  # [GeV]
+        self.screen_saturation = self.SATURATION_8BITS
 
     def __str__(self):
         """."""
-        st = ''
-        st += f'nr_points = {self.nr_points:d}\n'
-        st += f'nr_repeat = {self.nr_repeat:d}\n'
-        st += f'quad_curr_min = {self.quad_curr_min:.2f}\n'
-        st += f'quad_curr_max = {self.quad_curr_max:.2f}\n'
-        st += f'wait_quad = {self.wait_quad:d}\n'
-        st += f'wait_repeat = {self.wait_repeat:d}\n'
-        st += f'bo_dip_energy = {self.bo_dip_energy:.3f}\n'
-        return st
+        ftmp = '{0:20s} = {1:9.3f}  {2:s}\n'.format
+        dtmp = '{0:20s} = {1:9d}  {2:s}\n'.format
+
+        stg = dtmp('nr_points', self.nr_points, '')
+        stg += dtmp('nr_repeat', self.nr_repeat, '')
+        stg += ftmp('quad_curr_min', self.quad_curr_min, '[A]')
+        stg += ftmp('quad_curr_max', self.quad_curr_max, '[A]')
+        stg += dtmp('wait_quad', self.wait_quad, '[s]')
+        stg += dtmp('wait_repeat', self.wait_repeat, '[s]')
+        stg += ftmp('bo_dip_energy', self.bo_dip_energy, '[GeV]')
+        stg += dtmp('screen_saturation', self.screen_saturation, '')
+
+        return stg.rstrip()
 
 
 class MeasTomography(_BaseClass):
@@ -413,17 +424,14 @@ class MeasTomography(_BaseClass):
     @staticmethod
     def remove_background(image):
         """Remove background from image using morphological reconstruction."""
-        # image = img_as_float(image)
+        image = _np.asarray(image, dtype=float)
         seed = _np.copy(image)
         seed[1:-1, 1:-1] = _np.min(image)
-        mask = image
 
-        dilated = _reconstruction(seed, mask, method='dilation')
-        image = image - dilated
-        mask = _np.log10(image) <= 0
-        image[mask] = 0
-
-        return image
+        dilated = _reconstruction(seed, image, method='dilation')
+        result = image - dilated
+        result[result <= 1] = 0
+        return result
 
     @staticmethod
     def normalize_projection(proj, bin_size):
@@ -693,7 +701,8 @@ class MeasTomography(_BaseClass):
         for ax, p in zip(axs, batch_indices):
             curr = self.data['quad_curr_rb'][p][repeat]
             img = self.data['image_raw'][p][repeat]
-            ax.imshow(img, cmap=cmap)
+            vmax = self.params.screen_saturation
+            ax.imshow(img, cmap=cmap, vmin=0, vmax=vmax)
             ax.text(
                 0.5,
                 0.92,
@@ -727,6 +736,7 @@ class MeasTomography(_BaseClass):
         total = len(indices)
         start = 0
         fig_idx = 1
+        global_limits = self._get_global_image_limits(indices, repeat)
 
         results = []
 
@@ -741,6 +751,7 @@ class MeasTomography(_BaseClass):
                 figsize=figsize,
                 page_idx=fig_idx,
                 suptitle=suptitle,
+                global_limits=global_limits,
             )
 
             results.append((fig, axs))
@@ -750,13 +761,38 @@ class MeasTomography(_BaseClass):
 
         return results
 
+    def _get_global_image_limits(self, indices, repeat):
+        xmin = _np.inf
+        xmax = -_np.inf
+        ymin = _np.inf
+        ymax = -_np.inf
+
+        for p in indices:
+            gridx = self.analysis['grid_x'][p][repeat]
+            gridy = self.analysis['grid_y'][p][repeat]
+
+            xmin = min(xmin, _np.min(gridx))
+            xmax = max(xmax, _np.max(gridx))
+            ymin = min(ymin, _np.min(gridy))
+            ymax = max(ymax, _np.max(gridy))
+
+        return xmin, xmax, ymin, ymax
+
     def _plot_cropped_images_page(
-        self, batch_indices, repeat, cmap, figsize, page_idx, suptitle
+        self,
+        batch_indices,
+        repeat,
+        cmap,
+        figsize,
+        page_idx,
+        suptitle,
+        global_limits,
     ):
         """Plot a single page of cropped images."""
         n_imgs = len(batch_indices)
         ncols = min(3, n_imgs)
         nrows = (n_imgs + ncols - 1) // ncols
+        xmin, xmax, ymin, ymax = global_limits
 
         fig, axs = _plt.subplots(
             nrows, ncols, figsize=figsize, sharex=False, sharey=False
@@ -768,6 +804,8 @@ class MeasTomography(_BaseClass):
             img = self.analysis['image_cropped'][p][repeat]
             gridx = self.analysis['grid_x'][p][repeat]
             gridy = self.analysis['grid_y'][p][repeat]
+            roi_xmin, roi_xmax = gridx.min(), gridx.max()
+            roi_ymin, roi_ymax = gridy.min(), gridy.max()
 
             ax.pcolormesh(gridx, gridy, img, cmap=cmap)
             ax.text(
@@ -781,6 +819,22 @@ class MeasTomography(_BaseClass):
                 transform=ax.transAxes,
             )
             ax.set_aspect('equal')
+            ax.set_xlim(xmin, xmax)
+            ax.set_ylim(ymin, ymax)
+            cmap = _plt.get_cmap(cmap)
+            ax.set_facecolor(cmap(0))
+
+            rect = Rectangle(
+                xy=(roi_xmin, roi_ymin),
+                width=roi_xmax - roi_xmin,
+                height=roi_ymax - roi_ymin,
+                linewidth=1,
+                linestyle='--',
+                edgecolor='w',
+                facecolor='none',
+            )
+
+            ax.add_patch(rect)
 
         for ax in axs[n_imgs:]:
             ax.axis('off')
