@@ -508,37 +508,67 @@ class QuadrupoleScan:
     # PLOT
     # ---------------------------------------------------------
 
-    def plot_fitting(self, ax=None):
+    def plot_fitting(self, ax=None, color=None):
         """."""
         if ax is None:
             fig, ax = plt.subplots(figsize=(6, 5))
         else:
             fig = ax.figure
 
+        if color is None:
+            color = 'C0'
+
         kls_mean = np.mean(self.kls, axis=1)
         sizes_data = self.sizes
-        sizes_mean = np.mean(sizes_data, axis=1)
-        sizes_std = np.std(sizes_data, axis=1, ddof=1)
+        sec_mon_data = sizes_data * sizes_data
+        sec_mon_mean = np.mean(sec_mon_data, axis=1)
+        sec_mon_std = np.std(sec_mon_data, axis=1, ddof=1)
 
         params = self.fit_params
         kls_plot = np.linspace(kls_mean.min(), kls_mean.max(), 1000)
 
         sec_mon_plot = self._parabola(kls_plot, *params)
-        sizes_plot = np.sqrt(sec_mon_plot)
 
         ax.errorbar(
             kls_mean,
-            sizes_mean * 1e3,
-            yerr=sizes_std * 1e3,
+            sec_mon_mean * 1e6,
+            yerr=sec_mon_std * 1e6,
             fmt='o',
             markersize=4,
             capsize=3,
-            color='C0',
-            label='Data',
+            color=color,
         )
-        ax.plot(kls_plot, sizes_plot * 1e3, '--', color='C0', label='Fit')
+        ax.plot(kls_plot, sec_mon_plot * 1e6, '--', color=color)
         ax.set_xlabel('Kl [1/m]')
-        ax.set_ylabel('Beam size [mm]')
-        ax.legend()
+        ax.set_ylabel('Beam Second Moment [mm²]')
+
+        emit, emit_err = self.emit
+        alpha, beta, gamma = self.twiss[0]
+        alpha_err, beta_err, gamma_err = self.twiss[1]
+
+        text_emit = self.format_value_error(emit * 1e9, emit_err * 1e9)
+        text_alpha = self.format_value_error(alpha, alpha_err)
+        text_beta = self.format_value_error(beta, beta_err)
+        text_gamma = self.format_value_error(gamma, gamma_err)
+
+        text = (
+            rf'$\epsilon$={text_emit} nm.rad'
+            '\n'
+            rf'$\alpha$={text_alpha}'
+            '\n'
+            rf'$\beta$={text_beta} m'
+            '\n'
+            rf'$\gamma$={text_gamma} 1/m'
+        )
+
+        ax.annotate(
+            text,
+            xy=(0.05, 0.95),
+            fontsize=12,
+            xycoords='axes fraction',
+            ha='left',
+            va='top',
+            color='k',
+        )
 
         return fig, ax
