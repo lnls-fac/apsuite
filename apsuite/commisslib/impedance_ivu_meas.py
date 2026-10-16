@@ -10,13 +10,20 @@ import pyaccel
 from pymodels import si
 from mathphys.functions import load
 from siriuspy.devices import SOFB, IVU
-from siriuspy.search import BPMSearch
 
 from apsuite.commisslib.meas_bpms_signals import (
     AcqBPMsSignals as _BaseAcq,
     AcqBPMsSignalsParams as _BaseParams,
 )
+from .bumps_scans import Bump as _Bump
 from apsuite.utils import ThreadedMeasBaseClass as _BaseThreaded
+
+
+class IterateImpMeas(_Bump):
+
+    def __init__(self, isonline=True):
+
+        super().__init__(isonline=isonline)
 
 
 class ImpedanceIVUMeasParams(_BaseParams):
