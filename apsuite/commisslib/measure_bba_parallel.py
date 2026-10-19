@@ -950,7 +950,7 @@ class DoParallelBBA(_BaseClass):
         info += ' ' if info else ''
         self._log(info + message)
 
-        self.set_quad_strengths(group_id, strengths, ignore_timeout=True)
+        self.set_quad_strengths(group_id, strengths, wait_refmon=False)
 
         bpms = self.data['groups2dopbba'][group_id]
         quad_names = self.data['quadnames']
