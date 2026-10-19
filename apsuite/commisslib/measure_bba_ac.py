@@ -785,6 +785,35 @@ class DoACBBA(_BaseClass):
         data["tuney"] = self.devices["tune"].tuney
         return data
 
+    def get_magnets_data(self, magnets):
+        """Get magnets related data.
+
+        Args:
+            magnets (list, tuple): magnets used in excitation
+
+        Returns:
+            dict: BPMs data.
+
+        """
+        data = dict()
+        for mag in magnets:
+            magnet = self.devices[mag]
+            conv = self.devices[mag + ':StrengthConv'].conv_current_2_strength
+            data[mag] = {
+                "cycle_num_cycles": magnet.cycle_num_cycles,
+                "cycle_ampl": magnet.cycle_ampl,
+                "cycle_ampl_strength": conv(magnet.cycle_ampl),
+                "cycle_type": magnet.cycle_type_str,
+                "cycle_freq": magnet.cycle_freq,
+                "cycle_offset": magnet.cycle_offset,
+                "cycle_aux_param": _dcopy(magnet.cycle_aux_param)
+            }
+        for trigname in ("trigcorrs", "trigquads", "trigskews"):
+            trig = self.devices[trigname]
+            data[trigname + "_delay_raw"] = trig.delay_raw
+            data[trigname + "_delta_delay_raw"] = trig.delta_delay_raw
+        return data
+
     # private
     def _get_acq_nr_points(self):
         freq = self.devices["rfgen"].frequency
@@ -874,6 +903,7 @@ class DoACBBA(_BaseClass):
         self._log(msg, end="", tab=tab)
         data = self.get_general_data()
         data.update(self.get_bpms_data())
+        data.update(self.get_magnets_data(magnets))
         msg = f"Done! ET: {_time.time() - t05:.2f}s"
         self._log(msg)
 
