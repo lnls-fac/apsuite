@@ -62,9 +62,9 @@ class ACBBAParams(_ParamsBaseClass):
 
         self.ch_kick = 5  # [urad]
         self.cv_kick = 5  # [urad]
-        # self.dorbx = 100.0  # [um]
-        # self.dorby = 100.0  # [um]
-        # self.use_normalized_kicks = False
+        self.dorbx = 100.0  # [um]
+        self.dorby = 100.0  # [um]
+        self.use_normalized_kicks = True
 
         self.measure_bpms_noise = True
         self.acq_rate = 'FAcq'
@@ -94,8 +94,9 @@ class ACBBAParams(_ParamsBaseClass):
         stg += ftmp('corrs_delay', self.corrs_delay, '[s]')
         stg += ftmp('ch_kick', self.ch_kick, '[urad]')
         stg += ftmp('cv_kick', self.cv_kick, '[urad]')
-        # stg += ftmp('dorbx', self.dorbx, '[um]')
-        # stg += ftmp('dorby', self.dorby, '[um]')
+        stg += ftmp('dorbx', self.dorbx, '[um]')
+        stg += ftmp('dorby', self.dorby, '[um]')
+        stg += stmp('use_normalized_kicks', self.use_normalized_kicks, '')
         stg += stmp('measure_bpms_noise', str(self.measure_bpms_noise), '')
         stg += stmp('acq_rate', self.acq_rate, '')
         stg += stmp('orm_name', self.orm_name, '')
@@ -638,20 +639,22 @@ class DoACBBA(_BaseClass):
         sofb = self.sofb_data
         bpmnames = self.data["bpmnames"]
 
-        if bpmname in self._bpms_corrs_mapping:
-            ch_name, cv_name = self._bpms_corrs_mapping[bpmname]
-            ch_idx = sofb.ch_names.index(ch_name)
-            cv_idx = sofb.cv_names.index(cv_name)
-            return ch_name, cv_name, ch_idx, cv_idx + sofb.nr_ch
+        if bpmname not in bpmnames:
+            raise ValueError("Invalid BPM! Check ACBBAParams.BPMNAMES")
+        bpm_idx = bpmnames.index(bpmname)
 
         if orm is None:
             orm = self._orm
         if orm is None:
             raise RuntimeError("Orbit Response Matrix not loaded.")
 
-        if bpmname not in bpmnames:
-            raise ValueError("Invalid BPM! Check ACBBAParams.BPMNAMES")
-        bpm_idx = bpmnames.index(bpmname)
+        if bpmname in self._bpms_corrs_mapping:
+            ch_name, cv_name = self._bpms_corrs_mapping[bpmname]
+            ch_idx = sofb.ch_names.index(ch_name)
+            cv_idx = sofb.cv_names.index(cv_name)
+            r_xx = orm[bpm_idx, ch_idx]
+            r_yy = orm[bpm_idx + sofb.nr_bpms, cv_idx + sofb.nr_ch]
+            return ch_name, cv_name, ch_idx, cv_idx + sofb.nr_ch, r_xx, r_yy
 
         orm_xx = orm[: sofb.nr_bpms, : sofb.nr_ch]
         orm_yy = orm[sofb.nr_bpms :, sofb.nr_ch : sofb.nr_chcv]
@@ -661,7 +664,10 @@ class DoACBBA(_BaseClass):
 
         ch_name = sofb.ch_names[ch_idx]
         cv_name = sofb.cv_names[cv_idx]
-        return ch_name, cv_name, ch_idx, cv_idx + sofb.nr_ch
+
+        r_xx = orm[bpm_idx, ch_idx]
+        r_yy = orm[bpm_idx + sofb.nr_bpms, cv_idx + sofb.nr_ch]
+        return ch_name, cv_name, ch_idx, cv_idx + sofb.nr_ch, r_xx, r_yy
 
     # ----- Config Magnets -----
     # private
@@ -827,9 +833,19 @@ class DoACBBA(_BaseClass):
     def _acquire_data(self, ch_name, cv_name, quad_name=None, **kw):
         """."""
         tab = kw.pop("tab", 0)
+        r_xx = kw.pop("r_xx", None)
+        r_yy = kw.pop("r_yy", None)
+
+        ch_kick, cv_kick = self.params.ch_kick, self.params.cv_kick
+
+        if r_xx is not None and self.params.use_normalized_kicks:
+            ch_kick = self.params.dorbx / abs(r_xx)
+
+        if r_yy is not None and self.params.use_normalized_kicks:
+            cv_kick = self.params.dorby / abs(r_yy)
 
         magnets = [ch_name, cv_name]
-        strengths = [self.params.ch_kick, self.params.cv_kick]
+        strengths = [ch_kick, cv_kick]
         excit_freqs = [self.params.ch_freq, self.params.cv_freq]
         excit_time = self.params.excit_time
         tout_bpms = self.params.timeout_bpms
@@ -1320,7 +1336,8 @@ class DoACBBA(_BaseClass):
         quadname = self.data["quadnames"][self.data["bpmnames"].index(bpmname)]
         quadmode = self.params.quad_modulation_mode
 
-        chname, cvname, *_ = self._get_correctors_for_bpm(bpmname, self._orm)
+        chname, cvname, _chi, _cvi, r_xx, r_yy = \
+            self._get_correctors_for_bpm(bpmname, self._orm)
 
         stren_ini = self.get_quad_strength(quadname)
         delta_kl = self.params.quad_delta_kl
@@ -1329,6 +1346,8 @@ class DoACBBA(_BaseClass):
             "quadname": quadname,
             "chname": chname,
             "cvname": cvname,
+            "r_xx": r_xx,
+            "r_yy": r_yy,
             "ch_freq": self.params.ch_freq,
             "cv_freq": self.params.cv_freq,
             "q_freq": self.params.q_freq,
@@ -1348,7 +1367,9 @@ class DoACBBA(_BaseClass):
                 cvname,
                 quad_name=quadname,
                 delta_kl=delta_kl,
-                tab=tab + 1
+                tab=tab + 1,
+                r_xx=r_xx,
+                r_yy=r_yy,
             )
             data["data_ac"] = data_ac
             if sts == self.STATUS.Fail:
@@ -1373,7 +1394,12 @@ class DoACBBA(_BaseClass):
                 return sts, data
             self._log("Done!")
 
-            sts, data_pos = self._acquire_data(chname, cvname, tab=tab + 1)
+            sts, data_pos = self._acquire_data(
+                chname, cvname,
+                tab=tab + 1,
+                r_xx=r_xx,
+                r_yy=r_yy
+            )
             data["pos"] = data_pos
             if sts == self.STATUS.Fail:
                 return sts, data
@@ -1393,7 +1419,13 @@ class DoACBBA(_BaseClass):
                 return sts, data
             self._log("Done!")
 
-            sts, data_neg = self._acquire_data(chname, cvname, tab=tab + 1)
+            sts, data_neg = self._acquire_data(
+                chname,
+                cvname,
+                tab=tab + 1,
+                r_xx=r_xx,
+                r_yy=r_yy,
+            )
             data["neg"] = data_neg
             if sts == self.STATUS.Fail:
                 return sts, data
