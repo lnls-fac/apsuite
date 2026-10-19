@@ -96,7 +96,7 @@ class ACBBAParams(_ParamsBaseClass):
         stg += ftmp('cv_kick', self.cv_kick, '[urad]')
         stg += ftmp('dorbx', self.dorbx, '[um]')
         stg += ftmp('dorby', self.dorby, '[um]')
-        stg += stmp('use_normalized_kicks', self.use_normalized_kicks, '')
+        stg += stmp('use_normalized_kicks', str(self.use_normalized_kicks), '')
         stg += stmp('measure_bpms_noise', str(self.measure_bpms_noise), '')
         stg += stmp('acq_rate', self.acq_rate, '')
         stg += stmp('orm_name', self.orm_name, '')
