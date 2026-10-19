@@ -184,7 +184,7 @@ class DoACBBA(_BaseClass):
             self.configdb_orm = _ConfigDBClient(config_type="si_orbcorr_respm")
             self._create_devices()
 
-        self.data["log"] = [(_time.time(), "Started.")]
+        self.data["log"] = list()
 
     # ----- Imported methods -----
 
@@ -1192,6 +1192,7 @@ class DoACBBA(_BaseClass):
             return
 
         # Initialize data
+        self.data["log"] = list()
         self.data["measure"] = dict()
         self._setup_orm()
 
