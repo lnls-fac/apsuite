@@ -739,6 +739,8 @@ class DoParallelBBA(_BaseClass):
 
     def _do_pbba(self):
         tini = _datetime.datetime.fromtimestamp(_time.time())
+        self.data['log'] = list()
+
         msg = 'Starting measurement at '
         self._log(msg + tini.strftime('%Y-%m-%d %Hh%Mm%Ss'))
 
