@@ -8,7 +8,7 @@ import pyaccel
 from . import OrbitCorr
 
 
-class SiCalcBumps:
+class SICalcBumps:
     """Class to calculate bumps and related tools."""
 
     SS_LENGTHS = {'SA': 7.0358, 'SB': 6.1758, 'SP': 6.1758}
@@ -212,7 +212,7 @@ class SiCalcBumps:
         idcs = _np.r_[idcs, idcs + 160]
         return idcs
 
-    def get_closest_bpms_indices(
+    def get_bpms_indices_to_remove(
         self, section_type=None, sidx=None, n_bpms_outx=None, n_bpms_outy=None
     ):
         """Get BPMs indices to remove from orbit correction.
@@ -377,7 +377,7 @@ class SiCalcBumps:
             n_bpms_outx = self.n_bpms_outx
         if n_bpms_outy is None:
             n_bpms_outy = self.n_bpms_outy
-        idcs_ignore = self.get_closest_bpms_indices(
+        idcs_ignore = self.get_bpms_indices_to_remove(
             section_type, sidx, n_bpms_outx, n_bpms_outy
         )
         if idcs_ignore.size != 0:
