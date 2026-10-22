@@ -312,7 +312,7 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
             dic['ant_amax'] = ant_amax
             dic['ant_raw2'] = ant_raw2
 
-        of2 = ((blow - bhigh) // hnum) * nsamp_pturn + of1
+        of2 = int(abs(blow - bhigh) / hnum * nsamp_pturn) + of1
         slcs = [slice(of1 + winn, of1 + winp), slice(of2 + winn, of2 + winp)]
         for i in range(nbuc2proc):
             b_sigs = ant_raw2[..., slcs[i]].std(axis=-1)
@@ -1748,9 +1748,7 @@ class ImpedanceIVUAnalysis:
             error_by_acq = None
 
         if ax is None:
-            fig, ax = plt.subplots(
-                figsize=(10, 5),
-            )
+            fig, ax = plt.subplots(figsize=(10, 5))
         else:
             fig = ax.figure
 
@@ -1884,9 +1882,7 @@ class ImpedanceIVUAnalysis:
             )
 
         if ax is None:
-            fig, ax = plt.subplots(
-                figsize=(10, 5),
-            )
+            fig, ax = plt.subplots(figsize=(10, 5))
         else:
             fig = ax.figure
 
@@ -2537,9 +2533,7 @@ class ImpedanceIVUAnalysis:
         delta_charge = fit['delta_charge']
 
         if ax is None:
-            fig, ax = plt.subplots(
-                figsize=(8, 5),
-            )
+            fig, ax = plt.subplots(figsize=(8, 5))
         else:
             fig = ax.figure
 
@@ -2832,9 +2826,7 @@ class ImpedanceIVUAnalysis:
         spos_cfg = np.asarray(self.spos_bpms)[bpm_indcs]
 
         if ax is None:
-            fig, ax = plt.subplots(
-                figsize=(10, 5),
-            )
+            fig, ax = plt.subplots(figsize=(10, 5))
         else:
             fig = ax.figure
 
@@ -2927,9 +2919,7 @@ class ImpedanceIVUAnalysis:
         kperp_err = np.asarray([fits[gap]['kperp_err'] for gap in gaps])
 
         if ax is None:
-            fig, ax = plt.subplots(
-                figsize=(8, 5),
-            )
+            fig, ax = plt.subplots(figsize=(8, 5))
         else:
             fig = ax.figure
 
