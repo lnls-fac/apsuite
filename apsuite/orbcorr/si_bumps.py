@@ -33,7 +33,7 @@ class SiCalcBumps:
 
     SS_NUMBERS = {
         'SA': _np.arange(1, 20, 4),
-        'SB': _np.arange(2, 22, 2),
+        'SB': _np.arange(2, 21, 2),
         'SP': _np.arange(3, 20, 4),
     }
 
@@ -208,25 +208,22 @@ class SiCalcBumps:
         bpm1_sec_index, bpm2_sec_index = self._get_sec_bpm_indices(
             section_type
         )
-        idlist = _np.arange(0, 160, 1)
-        idcs = _np.zeros(2, dtype=int)
-        idcs[0] = idlist[bpm1_sec_index + 8 * sidx]
-        idcs[1] = idlist[bpm2_sec_index + 8 * sidx]
-        idcs = _np.array(idcs)
-        idcs = _np.tile(idcs, 2)
-        idcs[2:] += 160
+        idcs = _np.array([bpm1_sec_index, bpm2_sec_index]) + 8 * sidx
+        idcs = _np.r_[idcs, idcs + 160]
         return idcs
 
     def get_closest_bpms_indices(
         self, section_type=None, sidx=None, n_bpms_outx=None, n_bpms_outy=None
     ):
-        """Get closest BPMs indices to remove from orbit correction.
+        """Get BPMs indices to remove from orbit correction.
 
         Args:
             section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
                 Defaults to 'C1'.
             sidx (int): Section indice. Defaults to None.
-            n_bpms_out (int): Nr of BPMs to remove from each side.
+            n_bpms_outx (int): Nr of BPMs to remove from each side.
+                Defaults to None.
+            n_bpms_outy (int): Nr of BPMs to remove from each side.
               Defaults to None.
 
         Returns:
@@ -240,22 +237,14 @@ class SiCalcBumps:
             n_bpms_outx = self.n_bpms_outx
         if n_bpms_outy is None:
             n_bpms_outy = self.n_bpms_outy
-        bpm1_sec_index, bpm2_sec_index = self._get_sec_bpm_indices(
-            section_type
-        )
-        idlist = _np.arange(0, 160, 1)
-        idcs_ignorex = list()
-        for i in _np.arange(n_bpms_outx):
-            idcs_ignorex.append(idlist[bpm1_sec_index + 8 * sidx - (i + 1)])
-            idcs_ignorex.append(idlist[bpm2_sec_index + 8 * sidx + (i + 1)])
-        idcs_ignorex = _np.array(idcs_ignorex)
-        idcs_ignorey = list()
-        for i in _np.arange(n_bpms_outy):
-            idcs_ignorey.append(idlist[bpm1_sec_index + 8 * sidx - (i + 1)])
-            idcs_ignorey.append(idlist[bpm2_sec_index + 8 * sidx + (i + 1)])
-        idcs_ignorey = _np.array(idcs_ignorey)
-        idcs_ignorey += 160
-        idcs_ignore = _np.concatenate((idcs_ignorex, idcs_ignorey))
+        idcs = self.get_bpm_indices(section_type, sidx)
+
+        idcs_ignorex = _np.arange(n_bpms_outx) + 1
+        idcs_ignorex = _np.r_[idcs[0] - idcs_ignorex, idcs[1] + idcs_ignorex]
+
+        idcs_ignorey = _np.arange(n_bpms_outy) + 1
+        idcs_ignorey = _np.r_[idcs[2] - idcs_ignorey, idcs[3] + idcs_ignorey]
+        idcs_ignore = _np.r_[idcs_ignorex, idcs_ignorey]
         return idcs_ignore
 
     def get_btwbpm_corrs_indices(self, section_type=None, sidx=None):
