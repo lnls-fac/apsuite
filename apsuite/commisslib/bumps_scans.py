@@ -11,7 +11,7 @@ from ..utils import (
 )
 
 
-class BumpParams(_ParamsBaseClass):
+class BumpScanParams(_ParamsBaseClass):
     """."""
     GRID_ORDER = ('psx', 'psy', 'agx', 'agy')
     _FMT = 'pts_{}'.format
@@ -102,7 +102,7 @@ class BumpParams(_ParamsBaseClass):
         Grid variables that are empty or `None` will be set to zero.
 
         Example:
-            >>> obj = BumpParams()
+            >>> obj = BumpScanParams()
             >>> obj.pts_psx = np.arange(4)
             >>> obj.pts_psy = np.arange(2)
             >>> obj.pts_agx = None
@@ -219,7 +219,7 @@ class BumpParams(_ParamsBaseClass):
         return [getattr(self, self._FMT(o)) for o in self.GRID_ORDER]
 
 
-class Bump(_BaseClass):
+class BumpScan(_BaseClass):
     """."""
 
     def __init__(
@@ -231,7 +231,10 @@ class Bump(_BaseClass):
     ):
         """."""
         _BaseClass.__init__(
-            self, params=BumpParams(), target=self._do_scan, isonline=isonline,
+            self,
+            params=BumpScanParams(),
+            target=self._do_scan,
+            isonline=isonline,
         )
         self.data = dict()
         self.bumptools = SICalcBumps()
