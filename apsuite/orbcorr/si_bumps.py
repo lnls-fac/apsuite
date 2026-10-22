@@ -224,7 +224,7 @@ class SICalcBumps:
             n_bpms_outx (int): Nr of BPMs to remove from each side.
                 Defaults to None.
             n_bpms_outy (int): Nr of BPMs to remove from each side.
-              Defaults to None.
+                Defaults to None.
 
         Returns:
             1d numpy array: Indices of the closest BPMS.
