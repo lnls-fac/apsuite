@@ -337,7 +337,10 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
 class ImpedanceIVUAnalysis:
     """Analyze IVU transverse impedance measurements."""
 
-    _SUPPORTED_IVUS = ('IVU18_SI08', 'IVU18_SI14')
+    _SUPPORTED_IVUS = (
+        'IVU18_SI08',
+        'IVU18_SI14',
+    )
 
     def __init__(self, data=None, beam_voltage=3.0e9):
         """Initialize IVU impedance analysis.
@@ -367,17 +370,32 @@ class ImpedanceIVUAnalysis:
         self.bump_info = None
 
         # Orbit analysis
-        self.delta_orbit = {'x': None, 'y': None}
+        self.delta_orbit = {
+            'x': None,
+            'y': None,
+        }
 
-        self.delta_orbit_stats = {'x': None, 'y': None}
+        self.delta_orbit_stats = {
+            'x': None,
+            'y': None,
+        }
 
         # IVU response matrix
-        self.M_ivu = {'x': None, 'y': None}
+        self.M_ivu = {
+            'x': None,
+            'y': None,
+        }
 
         # Fits
-        self.theta_fits = {'x': None, 'y': None}
+        self.theta_fits = {
+            'x': None,
+            'y': None,
+        }
 
-        self.kperp_fits = {'x': {}, 'y': {}}
+        self.kperp_fits = {
+            'x': {},
+            'y': {},
+        }
 
     # Accelerator-model utilities
 
@@ -390,10 +408,20 @@ class ImpedanceIVUAnalysis:
         """
         model = si.create_accelerator()
 
-        spos = pyaccel.lattice.find_spos(model, indices='open')
-        bpm_indices = pyaccel.lattice.find_indices(model, 'fam_name', 'BPM')
+        spos = pyaccel.lattice.find_spos(
+            model,
+            indices='open',
+        )
+        bpm_indices = pyaccel.lattice.find_indices(
+            model,
+            'fam_name',
+            'BPM',
+        )
 
-        spos_bpms = np.asarray(spos[bpm_indices], dtype=float)
+        spos_bpms = np.asarray(
+            spos[bpm_indices],
+            dtype=float,
+        )
 
         return spos_bpms
 
@@ -408,7 +436,7 @@ class ImpedanceIVUAnalysis:
         """
         for idx in ivu_indices:
             model[idx].pass_method = 'str_mpole_symplectic4_pass'
-            model[idx].vkick_polynom = vkick
+            model[idx].vkick_polynom = vkick / len(ivu_indices)
 
     @staticmethod
     def _calc_ivu_respmat(delta_vkick=5e-6, id_name='IVU18_SI08'):
@@ -446,10 +474,19 @@ class ImpedanceIVUAnalysis:
 
         model = si.create_accelerator()
 
-        spos = pyaccel.lattice.find_spos(model, indices='open')
-        bpm_indices = pyaccel.lattice.find_indices(model, 'fam_name', 'BPM')
+        spos = pyaccel.lattice.find_spos(
+            model,
+            indices='open',
+        )
+        bpm_indices = pyaccel.lattice.find_indices(
+            model,
+            'fam_name',
+            'BPM',
+        )
         ivu_indices_all = pyaccel.lattice.find_indices(
-            model, 'fam_name', 'IVU18'
+            model,
+            'fam_name',
+            'IVU18',
         )
 
         if len(ivu_indices_all) != 4:
@@ -474,21 +511,38 @@ class ImpedanceIVUAnalysis:
 
         try:
             ImpedanceIVUAnalysis._set_ivu_kick(
-                model, ivu_indices, +delta_vkick / 2
+                model,
+                ivu_indices,
+                +delta_vkick / 2,
             )
-            cod_pos = pyaccel.tracking.find_orbit4(model, indices='open')
+            cod_pos = pyaccel.tracking.find_orbit4(
+                model,
+                indices='open',
+            )
 
             ImpedanceIVUAnalysis._set_ivu_kick(
-                model, ivu_indices, -delta_vkick / 2
+                model,
+                ivu_indices,
+                -delta_vkick / 2,
             )
-            cod_neg = pyaccel.tracking.find_orbit4(model, indices='open')
+            cod_neg = pyaccel.tracking.find_orbit4(
+                model,
+                indices='open',
+            )
 
         finally:
-            ImpedanceIVUAnalysis._set_ivu_kick(model, ivu_indices, 0.0)
+            ImpedanceIVUAnalysis._set_ivu_kick(
+                model,
+                ivu_indices,
+                0.0,
+            )
 
         n_bpms = len(bpm_indices)
 
-        respmat = np.zeros(2 * n_bpms, dtype=float)
+        respmat = np.zeros(
+            2 * n_bpms,
+            dtype=float,
+        )
 
         orbit_difference = cod_pos[:, bpm_indices] - cod_neg[:, bpm_indices]
 
@@ -498,11 +552,23 @@ class ImpedanceIVUAnalysis:
         info = {
             'model': model,
             'spos': spos,
-            'spos_bpms': np.asarray(spos[bpm_indices], dtype=float),
-            'bpm_indices': np.asarray(bpm_indices, dtype=int),
+            'spos_bpms': np.asarray(
+                spos[bpm_indices],
+                dtype=float,
+            ),
+            'bpm_indices': np.asarray(
+                bpm_indices,
+                dtype=int,
+            ),
             'id_name': id_name,
-            'ivu_indices': np.asarray(ivu_indices, dtype=int),
-            'ivu_indices_all': np.asarray(ivu_indices_all, dtype=int),
+            'ivu_indices': np.asarray(
+                ivu_indices,
+                dtype=int,
+            ),
+            'ivu_indices_all': np.asarray(
+                ivu_indices_all,
+                dtype=int,
+            ),
             'delta_vkick': delta_vkick,
         }
 
@@ -698,7 +764,11 @@ class ImpedanceIVUAnalysis:
             RuntimeError: If required acquisition data are unavailable.
             ValueError: If the mean total sum signal is zero.
         """
-        required_keys = {'b1_sum', 'b2_sum', 'stored_current'}
+        required_keys = {
+            'b1_sum',
+            'b2_sum',
+            'stored_current',
+        }
 
         for i, data_i in enumerate(self.data):
             for acq, data_acq in enumerate(data_i['data']):
@@ -747,7 +817,10 @@ class ImpedanceIVUAnalysis:
 
         rev_frequency = light_speed / circumference  # [Hz]
 
-        required_keys = {'b1_curr', 'b2_curr'}
+        required_keys = {
+            'b1_curr',
+            'b2_curr',
+        }
 
         for i, data_i in enumerate(self.data):
             data_meas = data_i['data']
@@ -771,9 +844,9 @@ class ImpedanceIVUAnalysis:
                 data_acq['b2_charge'] = b2_charge
                 data_acq['delta_charge'] = b1_charge - b2_charge
 
-            delta_charge_mean = np.mean([
-                data_acq['delta_charge'] for data_acq in data_meas
-            ])  # Configuration mean delta charge [nC]
+            delta_charge_mean = np.mean(
+                [data_acq['delta_charge'] for data_acq in data_meas]
+            )  # Configuration mean delta charge [nC]
 
             for data_acq in data_meas:
                 data_acq['delta_charge_mean'] = float(delta_charge_mean)
@@ -793,13 +866,16 @@ class ImpedanceIVUAnalysis:
             y0 (numpy.ndarray): Vertical bump value for each measurement
                 configuration [mm].
         """
-        sofb_refs = np.asarray([
-            data_i['data'][0]['sofb_refy'] for data_i in self.data
-        ])
+        sofb_refs = np.asarray(
+            [data_i['data'][0]['sofb_refy'] for data_i in self.data]
+        )
 
         ref_diff = sofb_refs - sofb_refs[0]
 
-        ref_diff_mean = np.mean(np.abs(ref_diff), axis=0)
+        ref_diff_mean = np.mean(
+            np.abs(ref_diff),
+            axis=0,
+        )
 
         bump_bpm_indcs = np.argsort(ref_diff_mean)[-2:]
 
@@ -826,7 +902,13 @@ class ImpedanceIVUAnalysis:
         bump_orbits = sofb_orbits - sofb_orbits[reference_cfg]
 
         # SOFB orbit values are in micrometers; y0 is stored in millimeters.
-        y0 = np.mean(bump_orbits, axis=1) * 1e-3
+        y0 = (
+            np.mean(
+                bump_orbits,
+                axis=1,
+            )
+            * 1e-3
+        )
 
         # Before assigning the inferred values, check if any y0 values already
         # exist in the data.
@@ -855,7 +937,12 @@ class ImpedanceIVUAnalysis:
         return y0
 
     def _join_bpm_groups(
-        self, array1, array2, bpm_indcs1, bpm_indcs2, return_list=False
+        self,
+        array1,
+        array2,
+        bpm_indcs1,
+        bpm_indcs2,
+        return_list=False,
     ):
         """Join two BPM data groups using their global BPM indices.
 
@@ -966,7 +1053,10 @@ class ImpedanceIVUAnalysis:
                 data_joined.append(data_i)
                 continue
 
-            acq_strategy = params.get('acq_strategy', 'all')
+            acq_strategy = params.get(
+                'acq_strategy',
+                'all',
+            )
 
             # No joining is necessary for normal acquisitions.
             if not acq_strategy.startswith('odd'):
@@ -993,7 +1083,10 @@ class ImpedanceIVUAnalysis:
 
                 for key in bpm_acquisition_keys:
                     joined_acq[key] = self._join_bpm_groups(
-                        acq1[key], acq2[key], bpm_indcs1, bpm_indcs2
+                        acq1[key],
+                        acq2[key],
+                        bpm_indcs1,
+                        bpm_indcs2,
                     )
 
                 joined_acq['bpm_names'] = self._join_bpm_groups(
@@ -1005,7 +1098,12 @@ class ImpedanceIVUAnalysis:
                 )
 
                 joined_acq['bpm_indcs'] = np.sort(
-                    np.concatenate([bpm_indcs1, bpm_indcs2])
+                    np.concatenate(
+                        [
+                            bpm_indcs1,
+                            bpm_indcs2,
+                        ]
+                    )
                 )
 
                 for key in scalar_keys:
@@ -1121,27 +1219,29 @@ class ImpedanceIVUAnalysis:
 
             b2_curr = np.mean([data_acq['b2_curr'] for data_acq in data_meas])
 
-            delta_curr = np.mean([
-                data_acq['delta_curr'] for data_acq in data_meas
-            ])
+            delta_curr = np.mean(
+                [data_acq['delta_curr'] for data_acq in data_meas]
+            )
 
-            delta_charge = np.mean([
-                data_acq['delta_charge'] for data_acq in data_meas
-            ])
+            delta_charge = np.mean(
+                [data_acq['delta_charge'] for data_acq in data_meas]
+            )
 
-            rows.append({
-                'cfg': i,
-                'gap': gap,
-                'y0': y0,
-                'parity': params.get('parity', 'all'),
-                'n_acq': n_acq,
-                'n_bpms': n_bpms,
-                'n_turns': n_turns,
-                'delta_charge': delta_charge,
-                'b1_curr': b1_curr,
-                'b2_curr': b2_curr,
-                'delta_curr': delta_curr,
-            })
+            rows.append(
+                {
+                    'cfg': i,
+                    'gap': gap,
+                    'y0': y0,
+                    'parity': params.get('parity', 'all'),
+                    'n_acq': n_acq,
+                    'n_bpms': n_bpms,
+                    'n_turns': n_turns,
+                    'delta_charge': delta_charge,
+                    'b1_curr': b1_curr,
+                    'b2_curr': b2_curr,
+                    'delta_curr': delta_curr,
+                }
+            )
 
         return pd.DataFrame(rows)
 
@@ -1183,12 +1283,19 @@ class ImpedanceIVUAnalysis:
         for i, data_i in enumerate(self.data):
             data_meas = data_i['data']
 
-            bpm_indcs_ref = np.asarray(data_meas[0]['bpm_indcs'], dtype=int)
+            bpm_indcs_ref = np.asarray(
+                data_meas[0]['bpm_indcs'],
+                dtype=int,
+            )
 
             delta_i = []
 
             for acq, data_acq in enumerate(data_meas):
-                missing_keys = {key1, key2, 'bpm_indcs'}.difference(data_acq)
+                missing_keys = {
+                    key1,
+                    key2,
+                    'bpm_indcs',
+                }.difference(data_acq)
 
                 if missing_keys:
                     missing = ', '.join(sorted(missing_keys))
@@ -1198,7 +1305,10 @@ class ImpedanceIVUAnalysis:
                         f'difference: {missing}.'
                     )
 
-                bpm_indcs = np.asarray(data_acq['bpm_indcs'], dtype=int)
+                bpm_indcs = np.asarray(
+                    data_acq['bpm_indcs'],
+                    dtype=int,
+                )
 
                 if not np.array_equal(bpm_indcs, bpm_indcs_ref):
                     raise ValueError(
@@ -1270,9 +1380,15 @@ class ImpedanceIVUAnalysis:
             n_acq, _, n_turns = delta_i.shape
             n_samples_i = n_acq * n_turns
 
-            mean_i = np.mean(delta_i, axis=(0, 2))
+            mean_i = np.mean(
+                delta_i,
+                axis=(0, 2),
+            )
 
-            std_i = np.std(delta_i, axis=(0, 2))
+            std_i = np.std(
+                delta_i,
+                axis=(0, 2),
+            )
 
             sem_i = std_i / np.sqrt(n_samples_i)
 
@@ -1318,7 +1434,10 @@ class ImpedanceIVUAnalysis:
             )
 
         zero_charge = np.isclose(
-            delta_charge, 0.0, rtol=0.0, atol=np.finfo(float).eps
+            delta_charge,
+            0.0,
+            rtol=0.0,
+            atol=np.finfo(float).eps,
         )
 
         if np.any(zero_charge):
@@ -1440,6 +1559,104 @@ class ImpedanceIVUAnalysis:
 
         return stats_norm
 
+    def plot_currents_vs_acquisition(self, cfgs=None, axes=None):
+        """Plot both mean bunch currents versus acquisition index.
+
+        Args:
+            cfgs (int or sequence of int, optional): Configuration indices.
+                If None, all configurations are plotted.
+            axes (sequence of matplotlib.axes.Axes, optional): Two axes
+                in which to draw. If None, a new figure is created.
+
+        Returns:
+            fig (matplotlib.figure.Figure): Plot figure.
+            axes (numpy.ndarray): Axes for bunches 1 and 2, respectively.
+
+        Raises:
+            RuntimeError: If measurement data have not been prepared.
+            IndexError: If a configuration index is outside the valid range.
+        """
+        if self.config_table is None:
+            raise RuntimeError(
+                'Prepare data before plotting bunch currents.'
+            )
+
+        n_configs = len(self.data)
+
+        if cfgs is None:
+            cfgs = range(n_configs)
+        elif np.isscalar(cfgs):
+            cfgs = [cfgs]
+        else:
+            cfgs = list(cfgs)
+
+        invalid_cfgs = [
+            i for i in cfgs
+            if not 0 <= i < n_configs
+        ]
+
+        if invalid_cfgs:
+            raise IndexError(
+                'Configuration indices outside the valid range: '
+                f'{invalid_cfgs}.'
+            )
+
+        if axes is None:
+            fig, axes = plt.subplots(
+                1,
+                2,
+                figsize=(13, 5),
+                sharex=True,
+            )
+        else:
+            axes = np.asarray(axes)
+            fig = axes[0].figure
+
+        for i in cfgs:
+            row = self.config_table.iloc[i]
+            data_meas = self.data[i]['data']
+
+            acq_indices = np.arange(len(data_meas))
+
+            label = (
+                f'gap = {row["gap"]:.2f} mm, '
+                rf'$y_0$ = {row["y0"]:.2f} mm'
+            )
+
+            color = None
+
+            for bunch, ax in enumerate(axes, start=1):
+                currents = np.asarray([
+                    data_acq[f'b{bunch}_curr']
+                    for data_acq in data_meas
+                ])
+
+                line, = ax.plot(
+                    acq_indices,
+                    currents,
+                    '.-',
+                    color=color,
+                    label=label,
+                )
+
+                # Use the same configuration color in both panels.
+                color = line.get_color()
+
+        for bunch, ax in enumerate(axes, start=1):
+            ax.set_title(f'Bunch {bunch}')
+            ax.set_xlabel('Acquisition index')
+            ax.set_ylabel('Current [mA]')
+            ax.grid(True)
+
+        fig.suptitle('Mean bunch currents per acquisition')
+
+        axes[1].legend(
+            loc='center left',
+            bbox_to_anchor=(1.02, 0.5),
+        )
+
+        return fig, axes
+
     def plot_acquisition_means(
         self,
         cfg=0,
@@ -1488,7 +1705,10 @@ class ImpedanceIVUAnalysis:
                 'Set BPM longitudinal positions before plotting orbit data.'
             )
 
-        delta_orbit = self.get_delta_orbit(plane=plane, normalized=normalized)
+        delta_orbit = self.get_delta_orbit(
+            plane=plane,
+            normalized=normalized,
+        )
 
         if not 0 <= cfg < len(delta_orbit):
             raise IndexError(
@@ -1513,7 +1733,8 @@ class ImpedanceIVUAnalysis:
             )
 
         bpm_indcs = np.asarray(
-            self.data[cfg]['data'][0]['bpm_indcs'], dtype=int
+            self.data[cfg]['data'][0]['bpm_indcs'],
+            dtype=int,
         )
         spos_i = np.asarray(self.spos_bpms)[bpm_indcs]
 
@@ -1527,7 +1748,9 @@ class ImpedanceIVUAnalysis:
             error_by_acq = None
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(10, 5), layout='constrained')
+            fig, ax = plt.subplots(
+                figsize=(10, 5),
+            )
         else:
             fig = ax.figure
 
@@ -1553,7 +1776,10 @@ class ImpedanceIVUAnalysis:
                 )
 
         row = self.config_table.iloc[cfg]
-        plane_name = {'x': 'Horizontal', 'y': 'Vertical'}[plane]
+        plane_name = {
+            'x': 'Horizontal',
+            'y': 'Vertical',
+        }[plane]
 
         if normalized:
             ylabel = (
@@ -1629,7 +1855,10 @@ class ImpedanceIVUAnalysis:
                 'Set BPM longitudinal positions before plotting orbit data.'
             )
 
-        stats = self.get_delta_orbit_stats(plane=plane, normalized=normalized)
+        stats = self.get_delta_orbit_stats(
+            plane=plane,
+            normalized=normalized,
+        )
 
         n_configs = len(stats['mean'])
 
@@ -1655,13 +1884,16 @@ class ImpedanceIVUAnalysis:
             )
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(10, 5), layout='constrained')
+            fig, ax = plt.subplots(
+                figsize=(10, 5),
+            )
         else:
             fig = ax.figure
 
         if ref_cfg is not None:
             ref_bpm_indcs = np.asarray(
-                self.data[ref_cfg]['data'][0]['bpm_indcs'], dtype=int
+                self.data[ref_cfg]['data'][0]['bpm_indcs'],
+                dtype=int,
             )
 
             ref_bpm_map = {
@@ -1678,7 +1910,8 @@ class ImpedanceIVUAnalysis:
 
         for i in cfgs:
             bpm_indcs = np.asarray(
-                self.data[i]['data'][0]['bpm_indcs'], dtype=int
+                self.data[i]['data'][0]['bpm_indcs'],
+                dtype=int,
             )
             spos_i = spos_bpms[bpm_indcs]
 
@@ -1701,9 +1934,9 @@ class ImpedanceIVUAnalysis:
                         f'{i}: {missing_bpms}.'
                     )
 
-                ref_local_indcs = np.asarray([
-                    ref_bpm_map[bpm_idx] for bpm_idx in bpm_indcs
-                ])
+                ref_local_indcs = np.asarray(
+                    [ref_bpm_map[bpm_idx] for bpm_idx in bpm_indcs]
+                )
 
                 mean_ref = mean_ref_full[ref_local_indcs]
                 mean_plot = mean_i - mean_ref
@@ -1730,7 +1963,13 @@ class ImpedanceIVUAnalysis:
             )
 
             if error is None:
-                ax.plot(spos_i, mean_plot, '.-', alpha=0.7, label=label)
+                ax.plot(
+                    spos_i,
+                    mean_plot,
+                    '.-',
+                    alpha=0.7,
+                    label=label,
+                )
             else:
                 ax.errorbar(
                     spos_i,
@@ -1743,7 +1982,10 @@ class ImpedanceIVUAnalysis:
                     label=label,
                 )
 
-        plane_name = {'x': 'Horizontal', 'y': 'Vertical'}[plane]
+        plane_name = {
+            'x': 'Horizontal',
+            'y': 'Vertical',
+        }[plane]
 
         if normalized:
             unit = r'$\mu$m/nC'
@@ -1798,15 +2040,25 @@ class ImpedanceIVUAnalysis:
                 or the IVU elements cannot be identified in the model.
         """
         resp_mat, info = self._calc_ivu_respmat(
-            delta_vkick=delta_vkick, id_name=id_name
+            delta_vkick=delta_vkick,
+            id_name=id_name,
         )
 
         self.id_name = id_name
         self.resp_mat = resp_mat
 
-        self.M_ivu = {'x': None, 'y': None}
-        self.theta_fits = {'x': None, 'y': None}
-        self.kperp_fits = {'x': {}, 'y': {}}
+        self.M_ivu = {
+            'x': None,
+            'y': None,
+        }
+        self.theta_fits = {
+            'x': None,
+            'y': None,
+        }
+        self.kperp_fits = {
+            'x': {},
+            'y': {},
+        }
 
         return resp_mat, info
 
@@ -1859,7 +2111,10 @@ class ImpedanceIVUAnalysis:
         m_ivu = []
 
         for data_i in self.data:
-            bpm_indcs = np.asarray(data_i['data'][0]['bpm_indcs'], dtype=int)
+            bpm_indcs = np.asarray(
+                data_i['data'][0]['bpm_indcs'],
+                dtype=int,
+            )
 
             m_ivu.append(m_full[bpm_indcs])
 
@@ -1918,6 +2173,7 @@ class ImpedanceIVUAnalysis:
             )
 
         theta = []
+        theta_err_propag = []
         theta_err = []
         model = []
         residual = []
@@ -1941,7 +2197,10 @@ class ImpedanceIVUAnalysis:
                 weights = np.ones_like(delta_i)
             else:
                 error_i = np.asarray(stats[error][i])
-                error_i = np.maximum(error_i, np.finfo(float).eps)
+                error_i = np.maximum(
+                    error_i,
+                    np.finfo(float).eps,
+                )
                 weights = 1.0 / error_i**2
 
             denominator = np.sum(weights * m_i**2)
@@ -1959,11 +2218,12 @@ class ImpedanceIVUAnalysis:
             residual_i = delta_i - model_i
 
             if error_i is None:
+                theta_err_propag_i = np.nan
                 theta_err_i = np.nan
                 chi2_i = np.nan
                 reduced_chi2_i = np.nan
             else:
-                theta_err_i = 1.0 / np.sqrt(denominator)
+                theta_err_propag_i = 1.0 / np.sqrt(denominator)
 
                 chi2_i = np.sum((residual_i / error_i) ** 2)
 
@@ -1971,11 +2231,19 @@ class ImpedanceIVUAnalysis:
 
                 if dof_i > 0:
                     reduced_chi2_i = chi2_i / dof_i
+
+                    # Account for the error coming from the lstsqrs, without
+                    # ever reducing the uncertainty propagated from the
+                    # measured orbit uncertainties
+                    theta_err_i = theta_err_propag_i * np.sqrt(
+                        max(1.0, reduced_chi2_i)
+                    )
                 else:
                     reduced_chi2_i = np.nan
 
             theta.append(theta_i)
             theta_err.append(theta_err_i)
+            theta_err_propag.append(theta_err_propag_i)
             model.append(model_i)
             residual.append(residual_i)
             residual_rms.append(np.sqrt(np.mean(residual_i**2)))
@@ -1985,6 +2253,7 @@ class ImpedanceIVUAnalysis:
         theta_fit = {
             'theta': np.asarray(theta),
             'theta_err': np.asarray(theta_err),
+            'theta_err_propag': np.asarray(theta_err_propag),
             'model': model,
             'residual': residual,
             'residual_rms': np.asarray(residual_rms),
@@ -2032,7 +2301,12 @@ class ImpedanceIVUAnalysis:
 
         gap_values = self.config_table['gap'].to_numpy(dtype=float)
 
-        mask = np.isclose(gap_values, gap, rtol=0.0, atol=1e-6)
+        mask = np.isclose(
+            gap_values,
+            gap,
+            rtol=0.0,
+            atol=1e-2,
+        )
         i_selected = np.where(mask)[0]
 
         if len(i_selected) < 2:
@@ -2058,7 +2332,12 @@ class ImpedanceIVUAnalysis:
             )
 
         if not np.all(np.isfinite(delta_charge)) or np.any(
-            np.isclose(delta_charge, 0.0, rtol=0.0, atol=np.finfo(float).eps)
+            np.isclose(
+                delta_charge,
+                0.0,
+                rtol=0.0,
+                atol=np.finfo(float).eps,
+            )
         ):
             raise ValueError('Charge differences must be finite and nonzero.')
 
@@ -2066,7 +2345,12 @@ class ImpedanceIVUAnalysis:
         theta_norm_err = theta_err / np.abs(delta_charge)
 
         # Model: theta / Delta q = b + a*y0.
-        design_matrix = np.column_stack([np.ones(len(y0)), y0])
+        design_matrix = np.column_stack(
+            [
+                np.ones(len(y0)),
+                y0,
+            ]
+        )
 
         weights_sqrt = 1.0 / theta_norm_err
 
@@ -2074,7 +2358,9 @@ class ImpedanceIVUAnalysis:
         theta_norm_weighted = theta_norm * weights_sqrt
 
         coefficients, _, _, _ = np.linalg.lstsq(
-            design_matrix_weighted, theta_norm_weighted, rcond=None
+            design_matrix_weighted,
+            theta_norm_weighted,
+            rcond=None,
         )
 
         b = coefficients[0]
@@ -2083,25 +2369,31 @@ class ImpedanceIVUAnalysis:
         theta_norm_model = design_matrix @ coefficients
         residual = theta_norm - theta_norm_model
 
-        covariance = np.linalg.pinv(
+        covariance_formal = np.linalg.pinv(
             design_matrix_weighted.T @ design_matrix_weighted
         )
-        coefficients_err = np.sqrt(np.diag(covariance))
-
-        b_err = coefficients_err[0]
-        a_err = coefficients_err[1]
 
         chi2 = np.sum((residual / theta_norm_err) ** 2)
-
         dof = len(y0) - len(coefficients)
 
         if dof > 0:
             reduced_chi2 = chi2 / dof
+            covariance = covariance_formal * max(1.0, reduced_chi2)
         else:
             reduced_chi2 = np.nan
+            covariance = covariance_formal.copy()
+
+        coefficients_err_propag = np.sqrt(np.diag(covariance_formal))
+        coefficients_err = np.sqrt(np.diag(covariance))
+
+        b_err = coefficients_err[0]
+        a_err = coefficients_err[1]
+        b_err_propag = coefficients_err_propag[0]
+        a_err_propag = coefficients_err_propag[1]
 
         kperp = 1e-6 * self.beam_voltage * a
         kperp_err = 1e-6 * self.beam_voltage * a_err
+        kperp_err_propag = 1e-6 * self.beam_voltage * a_err_propag
 
         kperp_fit = {
             'gap': float(gap),
@@ -2118,10 +2410,13 @@ class ImpedanceIVUAnalysis:
             'residual': residual,
             'b': b,
             'b_err': b_err,
+            'b_err_propag': b_err_propag,
             'a': a,
             'a_err': a_err,
+            'a_err_propag': a_err_propag,
             'kperp': kperp,
             'kperp_err': kperp_err,
+            'kperp_err_propag': kperp_err_propag,
             'dof': dof,
             'chi2': chi2,
             'reduced_chi2': reduced_chi2,
@@ -2166,19 +2461,30 @@ class ImpedanceIVUAnalysis:
                 else np.nan
             )
 
-            rows.append({
-                'gap [mm]': fit['gap'],
-                'kperp [V/(pC m)]': fit['kperp'],
-                'kperp error [V/(pC m)]': fit['kperp_err'],
-                'relative error [%]': 100.0 * relative_error,
-                'reduced chi2': fit['reduced_chi2'],
-                'dof': fit['dof'],
-                'n_configs': len(fit['config_indices']),
-            })
+            rows.append(
+                {
+                    'gap [mm]': fit['gap'],
+                    'kperp [V/(pC m)]': fit['kperp'],
+                    'kperp error [V/(pC m)]': fit['kperp_err'],
+                    'relative error [%]': 100.0 * relative_error,
+                    'kperp error (w/o chi2) [V/(pC m)]': fit[
+                        'kperp_err_propag'
+                    ],
+                    'reduced chi2': fit['reduced_chi2'],
+                    'dof': fit['dof'],
+                    'n_configs': len(fit['config_indices']),
+                }
+            )
 
         return pd.DataFrame(rows)
 
-    def plot_theta_fit(self, gap, plane='y', normalized=True, ax=None):
+    def plot_theta_fit(
+        self,
+        gap,
+        plane='y',
+        normalized=True,
+        ax=None,
+    ):
         """Plot projected kick angles and the fitted kick-factor model.
 
         Args:
@@ -2200,14 +2506,30 @@ class ImpedanceIVUAnalysis:
         if plane not in ('x', 'y'):
             raise ValueError("plane must be 'x' or 'y'.")
 
-        gap_key = float(gap)
+        gap = float(gap)
 
-        if gap_key not in self.kperp_fits[plane]:
+        matching_gaps = [
+            gap_key
+            for gap_key in self.kperp_fits[plane]
+            if np.isclose(
+                gap_key,
+                gap,
+                rtol=0.0,
+                atol=1e-6,
+            )
+        ]
+
+        if not matching_gaps:
             raise RuntimeError(
                 f'Fit the {plane}-plane kick factor at gap {gap:.3f} mm first.'
             )
 
-        fit = self.kperp_fits[plane][gap_key]
+        if len(matching_gaps) > 1:
+            raise ValueError(
+                f'Multiple kick-factor fits match gap {gap:.6f} mm.'
+            )
+
+        fit = self.kperp_fits[plane][matching_gaps[0]]
 
         y0 = fit['y0']
         theta = fit['theta']
@@ -2215,7 +2537,9 @@ class ImpedanceIVUAnalysis:
         delta_charge = fit['delta_charge']
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), layout='constrained')
+            fig, ax = plt.subplots(
+                figsize=(8, 5),
+            )
         else:
             fig = ax.figure
 
@@ -2223,7 +2547,11 @@ class ImpedanceIVUAnalysis:
             values = fit['theta_norm']
             values_err = fit['theta_norm_err']
 
-            y0_fit = np.linspace(np.min(y0), np.max(y0), 100)
+            y0_fit = np.linspace(
+                np.min(y0),
+                np.max(y0),
+                100,
+            )
             model_fit = fit['b'] + fit['a'] * y0_fit
 
             ylabel = (
@@ -2254,7 +2582,12 @@ class ImpedanceIVUAnalysis:
             label='Measurements',
         )
 
-        ax.plot(y0_fit, model_fit, '-', label='Weighted linear fit')
+        ax.plot(
+            y0_fit,
+            model_fit,
+            '-',
+            label='Weighted linear fit',
+        )
 
         id_label = self.id_name
 
@@ -2320,7 +2653,10 @@ class ImpedanceIVUAnalysis:
         if error not in ('std', 'sem'):
             raise ValueError("error must be 'std' or 'sem'.")
 
-        stats = self.get_delta_orbit_stats(plane=plane, normalized=False)
+        stats = self.get_delta_orbit_stats(
+            plane=plane,
+            normalized=False,
+        )
 
         n_configs = len(stats['mean'])
 
@@ -2350,10 +2686,12 @@ class ImpedanceIVUAnalysis:
         row_ref = self.config_table.iloc[ref_cfg]
 
         bpm_indcs = np.asarray(
-            self.data[cfg]['data'][0]['bpm_indcs'], dtype=int
+            self.data[cfg]['data'][0]['bpm_indcs'],
+            dtype=int,
         )
         ref_bpm_indcs = np.asarray(
-            self.data[ref_cfg]['data'][0]['bpm_indcs'], dtype=int
+            self.data[ref_cfg]['data'][0]['bpm_indcs'],
+            dtype=int,
         )
 
         ref_bpm_map = {
@@ -2372,9 +2710,9 @@ class ImpedanceIVUAnalysis:
                 f'{missing_bpms}.'
             )
 
-        ref_local_indcs = np.asarray([
-            ref_bpm_map[bpm_idx] for bpm_idx in bpm_indcs
-        ])
+        ref_local_indcs = np.asarray(
+            [ref_bpm_map[bpm_idx] for bpm_idx in bpm_indcs]
+        )
 
         delta_cfg = stats['mean'][cfg]
         delta_ref = stats['mean'][ref_cfg][ref_local_indcs]
@@ -2454,13 +2792,29 @@ class ImpedanceIVUAnalysis:
         else:
             gap = float(row['gap'])
 
-            if gap not in self.kperp_fits[plane]:
+            matching_gaps = [
+                gap_key
+                for gap_key in self.kperp_fits[plane]
+                if np.isclose(
+                    gap_key,
+                    gap,
+                    rtol=0.0,
+                    atol=1e-2,
+                )
+            ]
+
+            if not matching_gaps:
                 raise RuntimeError(
                     f'Fit the {plane}-plane kick factor at gap '
                     f'{gap:.3f} mm first.'
                 )
 
-            fit = self.kperp_fits[plane][gap]
+            if len(matching_gaps) > 1:
+                raise ValueError(
+                    f'Multiple kick-factor fits match gap {gap:.6f} mm.'
+                )
+
+            fit = self.kperp_fits[plane][matching_gaps[0]]
 
             delta_y0 = row['y0'] - row_ref['y0']
 
@@ -2478,7 +2832,9 @@ class ImpedanceIVUAnalysis:
         spos_cfg = np.asarray(self.spos_bpms)[bpm_indcs]
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(10, 5), layout='constrained')
+            fig, ax = plt.subplots(
+                figsize=(10, 5),
+            )
         else:
             fig = ax.figure
 
@@ -2506,9 +2862,17 @@ class ImpedanceIVUAnalysis:
             ),
         )
 
-        ax.axhline(0.0, color='black', linestyle='--', linewidth=1.0)
+        ax.axhline(
+            0.0,
+            color='black',
+            linestyle='--',
+            linewidth=1.0,
+        )
 
-        plane_name = {'x': 'Horizontal', 'y': 'Vertical'}[plane]
+        plane_name = {
+            'x': 'Horizontal',
+            'y': 'Vertical',
+        }[plane]
 
         id_label = self.id_name
 
@@ -2553,14 +2917,19 @@ class ImpedanceIVUAnalysis:
                 f'No {plane}-plane kick-factor fits are available.'
             )
 
-        gaps = np.asarray(sorted(fits), dtype=float)
+        gaps = np.asarray(
+            sorted(fits),
+            dtype=float,
+        )
 
         kperp = np.asarray([fits[gap]['kperp'] for gap in gaps])
 
         kperp_err = np.asarray([fits[gap]['kperp_err'] for gap in gaps])
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), layout='constrained')
+            fig, ax = plt.subplots(
+                figsize=(8, 5),
+            )
         else:
             fig = ax.figure
 
@@ -2574,7 +2943,10 @@ class ImpedanceIVUAnalysis:
             label='Measurement',
         )
 
-        plane_name = {'x': 'Horizontal', 'y': 'Vertical'}[plane]
+        plane_name = {
+            'x': 'Horizontal',
+            'y': 'Vertical',
+        }[plane]
 
         id_label = self.id_name
 
