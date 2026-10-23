@@ -701,7 +701,7 @@ class DoParallelBBA(_BaseClass):
                 'stdy0': stdy0,
             }
 
-    def get_pbba_results(self, error=False):
+    def get_pbba_results(self, return_error=False):
         """."""
         bpms = self.data['bpmnames']
         bbax = _np.zeros(len(bpms))
