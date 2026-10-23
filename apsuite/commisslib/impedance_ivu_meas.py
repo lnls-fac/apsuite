@@ -1,5 +1,6 @@
 """."""
 
+import time as _time
 import warnings as _warnings
 
 import numpy as _np
@@ -9,13 +10,102 @@ import matplotlib.pyplot as _plt
 import pyaccel
 from pymodels import si as _si
 from mathphys.functions import load as _load
-from siriuspy.devices import SOFB, IVU
+from siriuspy.devices import SOFB, IVU, InjCtrl, BunchbyBunch
 
 from apsuite.commisslib.meas_bpms_signals import (
     AcqBPMsSignals as _BaseAcq,
     AcqBPMsSignalsParams as _BaseParams,
 )
+from .bumps_scans import Bump as _Bump, BumpParams as _BumpParams
 from apsuite.utils import ThreadedMeasBaseClass as _BaseThreaded
+
+
+class ImpedanceIVUMeasAllBumpsParams(_BumpParams):
+    """."""
+
+    def __init__(self):
+        """."""
+        super().__init__()
+        self.max_bump_to_inject = 0.6  # [um]
+        self.target_curr = 1.4  # [mA]
+        self.timeout_waiting_injection = 120  # [s]
+
+    def __str__(self):
+        """."""
+        stg = super().__str__()
+        stg += f'max_bump_to_inject = {self.max_bump_to_inject} [um]\n'
+        stg += f'target_curr = {self.target_curr} [mA]\n'
+        stg += 'timeout_waiting_injection = '
+        stg += f'{self.timeout_waiting_injection} [s]\n'
+        return stg
+
+
+class ImpedanceIVUMeasAllBumps(_Bump):
+    """."""
+
+    def __init__(self, isonline=True):
+        """."""
+        super().__init__(
+            meas_func=self._do_meas,
+            isonline=isonline,
+            params=ImpedanceIVUMeasAllBumpsParams(),
+        )
+        self.ivu_imp_meas = ImpedanceIVUMeas(isonline=isonline)
+
+    def _create_devices(self):
+        super()._create_devices()
+        self.devices['injctrl'] = InjCtrl()
+        self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
+
+    def _do_meas(self, **bump):
+        if abs(bump['psx']) <= self.params.max_bump_to_inject:
+            print('Injecting...')
+            if not self._inject():
+                print('Injection Failed.')
+            else:
+                print('Injection Finished.')
+
+        self.ivu_imp_meas.start()
+        while True:
+            if self._stopevt.is_set():
+                self.ivu_imp_meas.stop()
+            if self.ivu_imp_meas.wait_measurement(timeout=0.5):
+                break
+        return self.ivu_imp_meas.to_dict()
+
+    def _inject(self):
+        injctrl = self.devices['injctrl']
+        dic = {'timeout': self.params.timeout_waiting_injection}
+
+        injctrl.target_current = self.params.target_curr
+        injctrl.accum_state = True
+        if not self._call_and_wait(injctrl.wait_accum_start, **dic):
+            return False
+        if not self._call_and_wait(injctrl.wait_accum_finish, **dic):
+            injctrl.accum_state = False
+            self._call_and_wait(injctrl.wait_accum_finish, **dic)
+            return False
+
+        # Do bunch cleaning
+        bbbv = self.devices['bbbv']
+        bbbv.bunch_clean.state = True
+        _time.sleep(2)
+        bbbv.bunch_clean.state = False
+        return True
+
+    def _call_meas_func(self, **bump):
+        """."""
+        return self.meas_func(**bump)
+
+    def _call_and_wait(self, func, timeout=None):
+        """."""
+        t0_ = _time.time()
+        while _time.time() - t0_ < timeout:
+            if self._stopevt.is_set():
+                return False
+            if func(timeout=0.5):
+                return True
+        return False
 
 
 class ImpedanceIVUMeasParams(_BaseParams):
@@ -27,18 +117,19 @@ class ImpedanceIVUMeasParams(_BaseParams):
     def __init__(self):
         """."""
         super().__init__()
-        self.acq_strategy = 'all'  # 'all' or 'odd/even'
+        self.acq_strategy = 'odd/even'  # 'all' or 'odd/even'
         self.num_acquisitions = 10
         self.save_raw_data = False
         self.num_buckets_to_process = 2
         self._nrturns = 0
-        self.nrturns = 500
+        self.nrturns = 1000
         self.bucket_hi_charge = 1
         self.bucket_lo_charge = 530
         self.acq_rate = 'ADCSwp'
         self.signals2acq = 'ABCD'
         self.timeout = 10
-        self.event_mode = 'Injection'
+        self.do_pulse_evg = True
+        self.event_mode = 'External'
         self.timing_event = 'Study'
 
     def __str__(self):
@@ -99,7 +190,9 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         data = super().get_data()
         data['bpm_names'] = [b.devname for b in self.devices['fambpms'].bpms]
         bns = self.devices['fambpms'].bpm_names
-        data['bpm_indcs'] = _np.array([bns.index(b) for b in data['bpm_names']])
+        data['bpm_indcs'] = _np.array([
+            bns.index(b) for b in data['bpm_names']
+        ])
         data['sofb_refx'] = self.devices['sofb'].refx
         data['sofb_refy'] = self.devices['sofb'].refy
         data['sofb_orbx'] = self.devices['sofb'].orbx
@@ -336,10 +429,7 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
 class ImpedanceIVUAnalysis:
     """Analyze IVU transverse impedance measurements."""
 
-    _SUPPORTED_IVUS = (
-        'IVU18_SI08',
-        'IVU18_SI14',
-    )
+    _SUPPORTED_IVUS = ('IVU18_SI08', 'IVU18_SI14')
 
     def __init__(self, data=None, beam_voltage=3.0e9):
         """Initialize IVU impedance analysis.
@@ -369,32 +459,15 @@ class ImpedanceIVUAnalysis:
         self.bump_info = None
 
         # Orbit analysis
-        self.delta_orbit = {
-            'x': None,
-            'y': None,
-        }
-
-        self.delta_orbit_stats = {
-            'x': None,
-            'y': None,
-        }
+        self.delta_orbit = {'x': None, 'y': None}
+        self.delta_orbit_stats = {'x': None, 'y': None}
 
         # IVU response matrix
-        self.M_ivu = {
-            'x': None,
-            'y': None,
-        }
+        self.M_ivu = {'x': None, 'y': None}
 
         # Fits
-        self.theta_fits = {
-            'x': None,
-            'y': None,
-        }
-
-        self.kperp_fits = {
-            'x': {},
-            'y': {},
-        }
+        self.theta_fits = {'x': None, 'y': None}
+        self.kperp_fits = {'x': {}, 'y': {}}
 
     # Accelerator-model utilities
 
@@ -407,15 +480,8 @@ class ImpedanceIVUAnalysis:
         """
         model = _si.create_accelerator()
 
-        spos = pyaccel.lattice.find_spos(
-            model,
-            indices='open',
-        )
-        bpm_indices = pyaccel.lattice.find_indices(
-            model,
-            'fam_name',
-            'BPM',
-        )
+        spos = pyaccel.lattice.find_spos(model, indices='open')
+        bpm_indices = pyaccel.lattice.find_indices(model, 'fam_name', 'BPM')
 
         spos_bpms = _np.asarray(spos[bpm_indices], dtype=float)
 
@@ -470,19 +536,10 @@ class ImpedanceIVUAnalysis:
 
         model = _si.create_accelerator()
 
-        spos = pyaccel.lattice.find_spos(
-            model,
-            indices='open',
-        )
-        bpm_indices = pyaccel.lattice.find_indices(
-            model,
-            'fam_name',
-            'BPM',
-        )
+        spos = pyaccel.lattice.find_spos(model, indices='open')
+        bpm_indices = pyaccel.lattice.find_indices(model, 'fam_name', 'BPM')
         ivu_indices_all = pyaccel.lattice.find_indices(
-            model,
-            'fam_name',
-            'IVU18',
+            model, 'fam_name', 'IVU18'
         )
 
         if len(ivu_indices_all) != 4:
@@ -507,31 +564,17 @@ class ImpedanceIVUAnalysis:
 
         try:
             ImpedanceIVUAnalysis._set_ivu_kick(
-                model,
-                ivu_indices,
-                +delta_vkick / 2,
+                model, ivu_indices, +delta_vkick / 2
             )
-            cod_pos = pyaccel.tracking.find_orbit4(
-                model,
-                indices='open',
-            )
+            cod_pos = pyaccel.tracking.find_orbit4(model, indices='open')
 
             ImpedanceIVUAnalysis._set_ivu_kick(
-                model,
-                ivu_indices,
-                -delta_vkick / 2,
+                model, ivu_indices, -delta_vkick / 2
             )
-            cod_neg = pyaccel.tracking.find_orbit4(
-                model,
-                indices='open',
-            )
+            cod_neg = pyaccel.tracking.find_orbit4(model, indices='open')
 
         finally:
-            ImpedanceIVUAnalysis._set_ivu_kick(
-                model,
-                ivu_indices,
-                0.0,
-            )
+            ImpedanceIVUAnalysis._set_ivu_kick(model, ivu_indices, 0.0)
 
         n_bpms = len(bpm_indices)
 
@@ -745,11 +788,7 @@ class ImpedanceIVUAnalysis:
             RuntimeError: If required acquisition data are unavailable.
             ValueError: If the mean total sum signal is zero.
         """
-        required_keys = {
-            'b1_sum',
-            'b2_sum',
-            'stored_current',
-        }
+        required_keys = {'b1_sum', 'b2_sum', 'stored_current'}
 
         for i, data_i in enumerate(self.data):
             for acq, data_acq in enumerate(data_i['data']):
@@ -798,10 +837,7 @@ class ImpedanceIVUAnalysis:
 
         rev_frequency = light_speed / circumference  # [Hz]
 
-        required_keys = {
-            'b1_curr',
-            'b2_curr',
-        }
+        required_keys = {'b1_curr', 'b2_curr'}
 
         for i, data_i in enumerate(self.data):
             data_meas = data_i['data']
@@ -909,12 +945,7 @@ class ImpedanceIVUAnalysis:
         return y0
 
     def _join_bpm_groups(
-        self,
-        array1,
-        array2,
-        bpm_indcs1,
-        bpm_indcs2,
-        return_list=False,
+        self, array1, array2, bpm_indcs1, bpm_indcs2, return_list=False
     ):
         """Join two BPM data groups using their global BPM indices.
 
@@ -1025,10 +1056,7 @@ class ImpedanceIVUAnalysis:
                 data_joined.append(data_i)
                 continue
 
-            acq_strategy = params.get(
-                'acq_strategy',
-                'all',
-            )
+            acq_strategy = params.get('acq_strategy', 'all')
 
             # No joining is necessary for normal acquisitions.
             if not acq_strategy.startswith('odd'):
@@ -1055,10 +1083,7 @@ class ImpedanceIVUAnalysis:
 
                 for key in bpm_acquisition_keys:
                     joined_acq[key] = self._join_bpm_groups(
-                        acq1[key],
-                        acq2[key],
-                        bpm_indcs1,
-                        bpm_indcs2,
+                        acq1[key], acq2[key], bpm_indcs1, bpm_indcs2
                     )
 
                 joined_acq['bpm_names'] = self._join_bpm_groups(
@@ -1194,21 +1219,19 @@ class ImpedanceIVUAnalysis:
                 data_acq['delta_charge'] for data_acq in data_meas
             ])
 
-            rows.append(
-                {
-                    'cfg': i,
-                    'gap': gap,
-                    'y0': y0,
-                    'parity': params.get('parity', 'all'),
-                    'n_acq': n_acq,
-                    'n_bpms': n_bpms,
-                    'n_turns': n_turns,
-                    'delta_charge': delta_charge,
-                    'b1_curr': b1_curr,
-                    'b2_curr': b2_curr,
-                    'delta_curr': delta_curr,
-                }
-            )
+            rows.append({
+                'cfg': i,
+                'gap': gap,
+                'y0': y0,
+                'parity': params.get('parity', 'all'),
+                'n_acq': n_acq,
+                'n_bpms': n_bpms,
+                'n_turns': n_turns,
+                'delta_charge': delta_charge,
+                'b1_curr': b1_curr,
+                'b2_curr': b2_curr,
+                'delta_curr': delta_curr,
+            })
 
         return _pd.DataFrame(rows)
 
@@ -1255,11 +1278,7 @@ class ImpedanceIVUAnalysis:
             delta_i = []
 
             for acq, data_acq in enumerate(data_meas):
-                missing_keys = {
-                    key1,
-                    key2,
-                    'bpm_indcs',
-                }.difference(data_acq)
+                missing_keys = {key1, key2, 'bpm_indcs'}.difference(data_acq)
 
                 if missing_keys:
                     missing = ', '.join(sorted(missing_keys))
@@ -1529,23 +1548,18 @@ class ImpedanceIVUAnalysis:
             IndexError: If a configuration index is outside the valid range.
         """
         if self.config_table is None:
-            raise RuntimeError(
-                'Prepare data before plotting bunch currents.'
-            )
+            raise RuntimeError('Prepare data before plotting bunch currents.')
 
         n_configs = len(self.data)
 
         if cfgs is None:
             cfgs = range(n_configs)
-        elif np.isscalar(cfgs):
+        elif _np.isscalar(cfgs):
             cfgs = [cfgs]
         else:
             cfgs = list(cfgs)
 
-        invalid_cfgs = [
-            i for i in cfgs
-            if not 0 <= i < n_configs
-        ]
+        invalid_cfgs = [i for i in cfgs if not 0 <= i < n_configs]
 
         if invalid_cfgs:
             raise IndexError(
@@ -1554,21 +1568,16 @@ class ImpedanceIVUAnalysis:
             )
 
         if axes is None:
-            fig, axes = plt.subplots(
-                1,
-                2,
-                figsize=(13, 5),
-                sharex=True,
-            )
+            fig, axes = _plt.subplots(1, 2, figsize=(13, 5), sharex=True)
         else:
-            axes = np.asarray(axes)
+            axes = _np.asarray(axes)
             fig = axes[0].figure
 
         for i in cfgs:
             row = self.config_table.iloc[i]
             data_meas = self.data[i]['data']
 
-            acq_indices = np.arange(len(data_meas))
+            acq_indices = _np.arange(len(data_meas))
 
             label = (
                 f'gap = {row["gap"]:.2f} mm, '
@@ -1578,17 +1587,12 @@ class ImpedanceIVUAnalysis:
             color = None
 
             for bunch, ax in enumerate(axes, start=1):
-                currents = np.asarray([
-                    data_acq[f'b{bunch}_curr']
-                    for data_acq in data_meas
+                currents = _np.asarray([
+                    data_acq[f'b{bunch}_curr'] for data_acq in data_meas
                 ])
 
-                line, = ax.plot(
-                    acq_indices,
-                    currents,
-                    '.-',
-                    color=color,
-                    label=label,
+                (line,) = ax.plot(
+                    acq_indices, currents, '.-', color=color, label=label
                 )
 
                 # Use the same configuration color in both panels.
@@ -1602,10 +1606,7 @@ class ImpedanceIVUAnalysis:
 
         fig.suptitle('Mean bunch currents per acquisition')
 
-        axes[1].legend(
-            loc='center left',
-            bbox_to_anchor=(1.02, 0.5),
-        )
+        axes[1].legend(loc='center left', bbox_to_anchor=(1.02, 0.5))
 
         return fig, axes
 
@@ -1657,10 +1658,7 @@ class ImpedanceIVUAnalysis:
                 'Set BPM longitudinal positions before plotting orbit data.'
             )
 
-        delta_orbit = self.get_delta_orbit(
-            plane=plane,
-            normalized=normalized,
-        )
+        delta_orbit = self.get_delta_orbit(plane=plane, normalized=normalized)
 
         if not 0 <= cfg < len(delta_orbit):
             raise IndexError(
@@ -1694,7 +1692,9 @@ class ImpedanceIVUAnalysis:
         if error == 'std':
             error_by_acq = _np.std(delta_i, axis=2)
         elif error == 'sem':
-            error_by_acq = _np.std(delta_i, axis=2) / _np.sqrt(delta_i.shape[2])
+            error_by_acq = _np.std(delta_i, axis=2) / _np.sqrt(
+                delta_i.shape[2]
+            )
         else:
             error_by_acq = None
 
@@ -1725,10 +1725,7 @@ class ImpedanceIVUAnalysis:
                 )
 
         row = self.config_table.iloc[cfg]
-        plane_name = {
-            'x': 'Horizontal',
-            'y': 'Vertical',
-        }[plane]
+        plane_name = {'x': 'Horizontal', 'y': 'Vertical'}[plane]
 
         if normalized:
             ylabel = (
@@ -1804,10 +1801,7 @@ class ImpedanceIVUAnalysis:
                 'Set BPM longitudinal positions before plotting orbit data.'
             )
 
-        stats = self.get_delta_orbit_stats(
-            plane=plane,
-            normalized=normalized,
-        )
+        stats = self.get_delta_orbit_stats(plane=plane, normalized=normalized)
 
         n_configs = len(stats['mean'])
 
@@ -1908,13 +1902,7 @@ class ImpedanceIVUAnalysis:
             )
 
             if error is None:
-                ax.plot(
-                    spos_i,
-                    mean_plot,
-                    '.-',
-                    alpha=0.7,
-                    label=label,
-                )
+                ax.plot(spos_i, mean_plot, '.-', alpha=0.7, label=label)
             else:
                 ax.errorbar(
                     spos_i,
@@ -1927,10 +1915,7 @@ class ImpedanceIVUAnalysis:
                     label=label,
                 )
 
-        plane_name = {
-            'x': 'Horizontal',
-            'y': 'Vertical',
-        }[plane]
+        plane_name = {'x': 'Horizontal', 'y': 'Vertical'}[plane]
 
         if normalized:
             unit = r'$\mu$m/nC'
@@ -1985,25 +1970,15 @@ class ImpedanceIVUAnalysis:
                 or the IVU elements cannot be identified in the model.
         """
         resp_mat, info = self._calc_ivu_respmat(
-            delta_vkick=delta_vkick,
-            id_name=id_name,
+            delta_vkick=delta_vkick, id_name=id_name
         )
 
         self.id_name = id_name
         self.resp_mat = resp_mat
 
-        self.M_ivu = {
-            'x': None,
-            'y': None,
-        }
-        self.theta_fits = {
-            'x': None,
-            'y': None,
-        }
-        self.kperp_fits = {
-            'x': {},
-            'y': {},
-        }
+        self.M_ivu = {'x': None, 'y': None}
+        self.theta_fits = {'x': None, 'y': None}
+        self.kperp_fits = {'x': {}, 'y': {}}
 
         return resp_mat, info
 
@@ -2171,7 +2146,7 @@ class ImpedanceIVUAnalysis:
                     # Account for the error coming from the lstsqrs, without
                     # ever reducing the uncertainty propagated from the
                     # measured orbit uncertainties
-                    theta_err_i = theta_err_propag_i * np.sqrt(
+                    theta_err_i = theta_err_propag_i *_np.sqrt(
                         max(1.0, reduced_chi2_i)
                     )
                 else:
@@ -2375,30 +2350,20 @@ class ImpedanceIVUAnalysis:
                 else _np.nan
             )
 
-            rows.append(
-                {
-                    'gap [mm]': fit['gap'],
-                    'kperp [V/(pC m)]': fit['kperp'],
-                    'kperp error [V/(pC m)]': fit['kperp_err'],
-                    'relative error [%]': 100.0 * relative_error,
-                    'kperp error (w/o chi2) [V/(pC m)]': fit[
-                        'kperp_err_propag'
-                    ],
-                    'reduced chi2': fit['reduced_chi2'],
-                    'dof': fit['dof'],
-                    'n_configs': len(fit['config_indices']),
-                }
-            )
+            rows.append({
+                'gap [mm]': fit['gap'],
+                'kperp [V/(pC m)]': fit['kperp'],
+                'kperp error [V/(pC m)]': fit['kperp_err'],
+                'relative error [%]': 100.0 * relative_error,
+                'kperp error (w/o chi2) [V/(pC m)]': fit['kperp_err_propag'],
+                'reduced chi2': fit['reduced_chi2'],
+                'dof': fit['dof'],
+                'n_configs': len(fit['config_indices']),
+            })
 
         return _pd.DataFrame(rows)
 
-    def plot_theta_fit(
-        self,
-        gap,
-        plane='y',
-        normalized=True,
-        ax=None,
-    ):
+    def plot_theta_fit(self, gap, plane='y', normalized=True, ax=None):
         """Plot projected kick angles and the fitted kick-factor model.
 
         Args:
@@ -2425,12 +2390,7 @@ class ImpedanceIVUAnalysis:
         matching_gaps = [
             gap_key
             for gap_key in self.kperp_fits[plane]
-            if np.isclose(
-                gap_key,
-                gap,
-                rtol=0.0,
-                atol=1e-6,
-            )
+            if_np.isclose(gap_key, gap, rtol=0.0, atol=1e-6)
         ]
 
         if not matching_gaps:
@@ -2490,12 +2450,7 @@ class ImpedanceIVUAnalysis:
             label='Measurements',
         )
 
-        ax.plot(
-            y0_fit,
-            model_fit,
-            '-',
-            label='Weighted linear fit',
-        )
+        ax.plot(y0_fit, model_fit, '-', label='Weighted linear fit')
 
         id_label = self.id_name
 
@@ -2561,10 +2516,7 @@ class ImpedanceIVUAnalysis:
         if error not in ('std', 'sem'):
             raise ValueError("error must be 'std' or 'sem'.")
 
-        stats = self.get_delta_orbit_stats(
-            plane=plane,
-            normalized=False,
-        )
+        stats = self.get_delta_orbit_stats(plane=plane, normalized=False)
 
         n_configs = len(stats['mean'])
 
@@ -2701,12 +2653,7 @@ class ImpedanceIVUAnalysis:
             matching_gaps = [
                 gap_key
                 for gap_key in self.kperp_fits[plane]
-                if np.isclose(
-                    gap_key,
-                    gap,
-                    rtol=0.0,
-                    atol=1e-2,
-                )
+                if_np.isclose(gap_key, gap, rtol=0.0, atol=1e-2)
             ]
 
             if not matching_gaps:
@@ -2766,17 +2713,9 @@ class ImpedanceIVUAnalysis:
             ),
         )
 
-        ax.axhline(
-            0.0,
-            color='black',
-            linestyle='--',
-            linewidth=1.0,
-        )
+        ax.axhline(0.0, color='black', linestyle='--', linewidth=1.0)
 
-        plane_name = {
-            'x': 'Horizontal',
-            'y': 'Vertical',
-        }[plane]
+        plane_name = {'x': 'Horizontal', 'y': 'Vertical'}[plane]
 
         id_label = self.id_name
 
@@ -2842,10 +2781,7 @@ class ImpedanceIVUAnalysis:
             label='Measurement',
         )
 
-        plane_name = {
-            'x': 'Horizontal',
-            'y': 'Vertical',
-        }[plane]
+        plane_name = {'x': 'Horizontal', 'y': 'Vertical'}[plane]
 
         id_label = self.id_name
 
