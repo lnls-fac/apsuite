@@ -1,22 +1,108 @@
 """."""
 
-import warnings
+import time as _time
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 import pyaccel
-from pymodels import si
-from mathphys.functions import load
-from siriuspy.devices import SOFB, IVU
-from siriuspy.search import BPMSearch
+from siriuspy.devices import SOFB, IVU, InjCtrl, BunchbyBunch
 
 from apsuite.commisslib.meas_bpms_signals import (
     AcqBPMsSignals as _BaseAcq,
     AcqBPMsSignalsParams as _BaseParams,
 )
+from .bumps_scans import Bump as _Bump, BumpParams as _BumpParams
 from apsuite.utils import ThreadedMeasBaseClass as _BaseThreaded
+
+
+class ImpedanceIVUMeasAllBumpsParams(_BumpParams):
+    """."""
+
+    def __init__(self):
+        """."""
+        super().__init__()
+        self.max_bump_to_inject = 0.6  # [um]
+        self.target_curr = 1.4  # [mA]
+        self.timeout_waiting_injection = 120  # [s]
+
+    def __str__(self):
+        """."""
+        stg = super().__str__()
+        stg += f'max_bump_to_inject = {self.max_bump_to_inject} [um]\n'
+        stg += f'target_curr = {self.target_curr} [mA]\n'
+        stg += 'timeout_waiting_injection = '
+        stg += f'{self.timeout_waiting_injection} [s]\n'
+        return stg
+
+
+class ImpedanceIVUMeasAllBumps(_Bump):
+    """."""
+
+    def __init__(self, isonline=True):
+        """."""
+        super().__init__(
+            meas_func=self._do_meas,
+            isonline=isonline,
+            params=ImpedanceIVUMeasAllBumpsParams()
+        )
+        self.ivu_imp_meas = ImpedanceIVUMeas(isonline=isonline)
+
+    def _create_devices(self):
+        super()._create_devices()
+        self.devices['injctrl'] = InjCtrl()
+        self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
+
+    def _do_meas(self, **bump):
+        if abs(bump['psx']) <= self.params.max_bump_to_inject:
+            print('Injecting...')
+            if not self._inject():
+                print('Injection Failed.')
+            else:
+                print('Injection Finished.')
+
+        self.ivu_imp_meas.start()
+        while True:
+            if self._stopevt.is_set():
+                self.ivu_imp_meas.stop()
+            if self.ivu_imp_meas.wait_measurement(timeout=0.5):
+                break
+        return self.ivu_imp_meas.to_dict()
+
+    def _inject(self):
+        injctrl = self.devices['injctrl']
+        dic = {'timeout': self.params.timeout_waiting_injection}
+
+        injctrl.target_current = self.params.target_curr
+        injctrl.accum_state = True
+        if not self._call_and_wait(injctrl.wait_accum_start, **dic):
+            return False
+        if not self._call_and_wait(injctrl.wait_accum_finish, **dic):
+            injctrl.accum_state = False
+            self._call_and_wait(injctrl.wait_accum_finish, **dic)
+            return False
+
+        # Do bunch cleaning
+        bbbv = self.devices['bbbv']
+        bbbv.bunch_clean.state = True
+        _time.sleep(2)
+        bbbv.bunch_clean.state = False
+        return True
+
+    def _call_meas_func(self, **bump):
+        """."""
+        return self.meas_func(**bump)
+
+    def _call_and_wait(self, func, timeout=None):
+        """."""
+        t0_ = _time.time()
+        while _time.time()-t0_ < timeout:
+            if self._stopevt.is_set():
+                return False
+            if func(timeout=0.5):
+                return True
+        return False
 
 
 class ImpedanceIVUMeasParams(_BaseParams):
