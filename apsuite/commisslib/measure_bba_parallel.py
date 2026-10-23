@@ -526,11 +526,9 @@ class DoParallelBBA(_BaseClass):
         """."""
         delta_strens = self.data['delta_kl'][group_id]
 
+        strens_orig = init_strengths
         if init_strengths is None:
             strens_orig = self.get_quad_strengths(group_id)
-            _time.sleep(self.params.wait_quadrupole)
-        else:
-            strens_orig = init_strengths
 
         if not self.set_quad_strengths(
             group_id, strens_orig + delta_strens / 2
