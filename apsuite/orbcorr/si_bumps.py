@@ -40,7 +40,12 @@ class SICalcBumps:
     SECTION_TYPES = list(MARKER_NAMES.keys())
 
     def __init__(
-        self, model=None, section_type=None, section_nr=None, n_bpms_outx=None, n_bpms_outy=None
+        self,
+        model=None,
+        section_type=None,
+        section_nr=None,
+        n_bpms_outx=None,
+        n_bpms_outy=None
     ):
         """."""
         self._section_type = section_type
