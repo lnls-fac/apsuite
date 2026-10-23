@@ -2146,7 +2146,7 @@ class ImpedanceIVUAnalysis:
                     # Account for the error coming from the lstsqrs, without
                     # ever reducing the uncertainty propagated from the
                     # measured orbit uncertainties
-                    theta_err_i = theta_err_propag_i * np.sqrt(
+                    theta_err_i = theta_err_propag_i *_np.sqrt(
                         max(1.0, reduced_chi2_i)
                     )
                 else:
@@ -2390,7 +2390,7 @@ class ImpedanceIVUAnalysis:
         matching_gaps = [
             gap_key
             for gap_key in self.kperp_fits[plane]
-            if np.isclose(gap_key, gap, rtol=0.0, atol=1e-6)
+            if_np.isclose(gap_key, gap, rtol=0.0, atol=1e-6)
         ]
 
         if not matching_gaps:
@@ -2653,7 +2653,7 @@ class ImpedanceIVUAnalysis:
             matching_gaps = [
                 gap_key
                 for gap_key in self.kperp_fits[plane]
-                if np.isclose(gap_key, gap, rtol=0.0, atol=1e-2)
+                if_np.isclose(gap_key, gap, rtol=0.0, atol=1e-2)
             ]
 
             if not matching_gaps:
