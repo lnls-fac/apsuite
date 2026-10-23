@@ -508,6 +508,7 @@ class DoParallelBBA(_BaseClass):
             if clow > chigh:
                 self._log(f'ERR: {quadname}, dKL = {dkl:.3g} too high!')
                 valid[idx] = None
+                ok = False
             else:
                 valid[idx] = _np.clip(stren, clow, chigh)
             if valid[idx] != stren:
