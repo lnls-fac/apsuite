@@ -9,9 +9,9 @@ import pyaccel as _pyacc
 from mathphys.functions import get_namedtuple as _get_namedtuple
 from pymodels import si as _si
 from siriuspy.devices import (
+    SOFB as _SOFB,
     CurrInfoSI as _CurrInfoSI,
     PowerSupply as _PowerSupply,
-    SOFB as _SOFB,
 )
 from siriuspy.namesys import SiriusPVName as _PVName
 
@@ -20,7 +20,6 @@ from ..utils import (
     ParamsBaseClass as _ParamsBaseClass,
     ThreadedMeasBaseClass as _BaseClass,
 )
-
 from .measure_bba import BBAParams as _BBAParams
 
 
@@ -29,7 +28,7 @@ class ParallelBBAParams(_ParamsBaseClass):
 
     BPMNAMES = _BBAParams.BPMNAMES
     QUADNAMES = _BBAParams.QUADNAMES
-    METHODS = _get_namedtuple("Method", ["rms", "ptp"])
+    METHODS = _get_namedtuple('Method', ['rms', 'ptp'])
 
     def __init__(self):
         """."""
@@ -61,8 +60,7 @@ class ParallelBBAParams(_ParamsBaseClass):
         stg += f'timeout_wait_orbit = {self.timeout_wait_orbit:.3f}\n'
         stg += f'corr_max_nr_iters  = {self.corr_max_nr_iters:d}\n'
         stg += f'ios_conv_tol       = {self.ios_conv_tol:.2e}\n'
-        stg += 'conv_method        = ' + \
-            f'{self.METHODS._fields[self._conv_method]:s} (RMS or PTP)\n'
+        stg += f'conv_method        = {self.conv_method_str:s} (RMS or PTP)\n'
         stg += f'sofb_nrpoints      = {self.sofb_nrpoints:d}\n'
         stg += f'sofb_maxcorriter   = {self.sofb_maxcorriter:d}\n'
         stg += f'sofb_maxorberr     = {self.sofb_maxorberr:.3f}\n'
@@ -74,6 +72,16 @@ class ParallelBBAParams(_ParamsBaseClass):
         """."""
         return self._conv_method
 
+    @conv_method.setter
+    def conv_method(self, value):
+        if isinstance(value, str) and value.lower() in self.METHODS._fields:
+            self._conv_method = self.METHODS._fields.index(value.lower())
+        elif 0 <= value < len(self.METHODS._fields):
+            self._conv_method = int(value)
+        else:
+            msg = 'Invalid method! Select: (int) 0 or 1 | (str) "rms" or "ptp"'
+            raise ValueError(msg)
+
     @property
     def conv_method_str(self):
         """."""
@@ -83,17 +91,6 @@ class ParallelBBAParams(_ParamsBaseClass):
     def conv_method_str(self, value):
         """."""
         self.conv_method = value
-
-    @conv_method.setter
-    def conv_method(self, value):
-        if isinstance(value, str) and value.lower() in self.METHODS._fields:
-            self._conv_method = self.METHODS._fields.index(value.lower())
-        elif 0 <= value < len(self.METHODS._fields):
-            self._conv_method = int(value)
-        else:
-            raise ValueError(
-                'Invalid method! Select: (int) 0 or 1 | (str) "rms" or "ptp"'
-            )
 
     @staticmethod
     def get_default_groups(ngroups=8):
@@ -471,18 +468,21 @@ class DoParallelBBA(_BaseClass):
         bpm_names = self.data['bpmnames']
 
         bpms = (
-            bpm_names if group_id is None or group_id == 'All'
+            bpm_names
+            if group_id is None or group_id == 'All'
             else self.data['groups2dopbba'][group_id]
         )
 
         strengths = (
             self.get_quad_strengths(group_id)
-            if init_strengths is None else init_strengths
+            if init_strengths is None
+            else init_strengths
         )
 
         lims = (
             self.get_quad_strength_limits(group_id, margin=margin)
-            if strength_limits is None else strength_limits
+            if strength_limits is None
+            else strength_limits
         )
 
         if len(bpms) != len(strengths):
@@ -800,14 +800,14 @@ class DoParallelBBA(_BaseClass):
             'ios_iter': [],
             'dkicks_iter': [],
             'residue_iter': [],
-            'delta_kl': self.data['delta_kl'][group_id].copy()
+            'delta_kl': self.data['delta_kl'][group_id].copy(),
         }
 
         nr_iters = self.params.corr_max_nr_iters
         checks = (
             bool(self._do_cycling(group_id, strengths_init)),
             bool(not self._stopevt.is_set()),
-            bool(self.havebeam)
+            bool(self.havebeam),
         )
         if not all(checks):
             fail_idx = checks.index(False)
