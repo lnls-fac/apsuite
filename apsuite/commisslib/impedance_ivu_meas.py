@@ -114,18 +114,19 @@ class ImpedanceIVUMeasParams(_BaseParams):
     def __init__(self):
         """."""
         super().__init__()
-        self.acq_strategy = 'all'  # 'all' or 'odd/even'
+        self.acq_strategy = 'odd/even'  # 'all' or 'odd/even'
         self.num_acquisitions = 10
         self.save_raw_data = False
         self.num_buckets_to_process = 2
         self._nrturns = 0
-        self.nrturns = 500
+        self.nrturns = 1000
         self.bucket_hi_charge = 1
         self.bucket_lo_charge = 530
         self.acq_rate = 'ADCSwp'
         self.signals2acq = 'ABCD'
         self.timeout = 10
-        self.event_mode = 'Injection'
+        self.do_pulse_evg = True
+        self.event_mode = 'External'
         self.timing_event = 'Study'
 
     def __str__(self):
