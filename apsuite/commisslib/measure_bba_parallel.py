@@ -785,6 +785,11 @@ class DoParallelBBA(_BaseClass):
         jac = (self.data['jacobians'][group_id])[enblbpm, :]
         inv_jac = self._calc_inverse_jacobian(jac, group_id)
 
+        tolerance = self.params.ios_conv_tol
+        use_ptp = self.params.conv_method == self.params.METHODS.ptp
+        comp_func = _np.ptp if use_ptp else _np.std
+        meth_str = self.params.conv_method_str
+
         strengths_init = self.get_quad_strengths(group_id)
         group_data = {
             'bpms': self.data['groups2dopbba'][group_id],
@@ -792,102 +797,102 @@ class DoParallelBBA(_BaseClass):
             'orbit_init': self.get_orbit(),
             'kicks_init': self.get_kicks(),
             'enbllistbpm': enblbpm.copy(),
+            'ios_iter': [],
+            'dkicks_iter': [],
+            'residue_iter': [],
+            'delta_kl': self.data['delta_kl'][group_id].copy()
         }
 
-        sts = self._do_cycling(group_id, strengths_init)
         nr_iters = self.params.corr_max_nr_iters
-        if not sts:
+        checks = (
+            bool(self._do_cycling(group_id, strengths_init)),
+            bool(not self._stopevt.is_set()),
+            bool(self.havebeam)
+        )
+        if not all(checks):
+            fail_idx = checks.index(False)
+            msg = (
+                'Error: Failed during cycling.',
+                'Measurement stopped.',
+                'Error: dont have beam.',
+            )[fail_idx]
+            self._restore_conditions(group_id, strengths_init, msg)
+            sts = DoParallelBBA.STATUS.Fail
             nr_iters = 0
-            self._restore_conditions(
-                group_id, strengths_init, 'Error: Failed during cycling'
-            )
-        else:  # proceed to IOS correction
-            self._log('Correcting IOS:', tab=1)
-
-        ios_iter, dkicks_iter, residue_iter = [], [], []
-
-        converged = False
-        increased = 0
-        tolerance = self.params.ios_conv_tol
-        comp_func = _np.ptp \
-            if self.params.conv_method == self.params.METHODS.ptp else _np.std
-
-        for i in range(nr_iters):
-            self._log(f'{i + 1:02d}/{nr_iters:02d} --> ', tab=2, end='')
-            if self._stopevt.is_set():
-                self._restore_conditions(
-                    group_id, strengths_init, 'Measurement stopped.'
-                )
-                sts = DoParallelBBA.STATUS.Fail
-                break
-            if not self.havebeam:
-                self._restore_conditions(
-                    group_id, strengths_init, 'Error: dont have beam.'
-                )
-                sts = DoParallelBBA.STATUS.Fail
-                break
+        else:
+            self._log('Measuring initial IOS:', tab=1)
             ios, sts = self.meas_ios(group_id, strengths_init)
             if not sts:
-                self._restore_conditions(
-                    group_id, strengths_init, 'Fail while measuring IOS.'
-                )
+                msg = 'Fail while measuring initial IOS.'
+                self._restore_conditions(group_id, strengths_init, msg)
+                nr_iters = 0
+            else:
+                group_data['ios_iter'].append(ios)
+                residue = comp_func(ios[enblbpm])  # use only enabled bpms
+                group_data['residue_iter'].append(residue)
+
+        if nr_iters > 0 and residue < tolerance:
+            msg = f'IOS ({meth_str}) within tolerance: {residue:.3f} [um]!'
+            self._log(msg, tab=1)
+            nr_iters = 0
+
+        converged = False
+        increased = False
+        ios_raise_cnt = 0
+        _iter = 0
+        if nr_iters > 0:
+            self._log('Correcting IOS:', tab=1)
+        for i in range(nr_iters):
+            self._log(f'{i + 1:02d}/{nr_iters:02d} --> ', tab=2, end='')
+
+            checks = (not self._stopevt.is_set(), self.havebeam)
+            if not all(checks):
+                fidx = checks.index(False)
+                msg = ('Measurement stopped.', 'Error: dont have beam.')[fidx]
+                self._restore_conditions(group_id, strengths_init, msg)
+                sts = DoParallelBBA.STATUS.Fail
                 break
 
-            ios_iter.append(ios)  # save ios (all bpms)
-            ios = ios[enblbpm]  # use only enabled bpms for correction
-            residue = comp_func(ios)
-            residue_iter.append(residue)
-            msg = ' IOS (' + ('ptp'
-                if self.params.conv_method == self.params.METHODS.ptp
-                else 'rms') + '): '
-            msg += f'{residue:.3f} [um] --> '
-            self._log(msg, end='')
+            dkicks = -1 * _np.dot(inv_jac, ios[enblbpm])
+            group_data['dkicks_iter'].append(dkicks)
+            self.set_delta_kicks(dkicks)
+
+            ios, sts = self.meas_ios(group_id, strengths_init)
+            if not sts:
+                msg = 'Fail while measuring IOS.'
+                self._restore_conditions(group_id, strengths_init, msg)
+                break
+
+            _iter += 1
+            group_data['ios_iter'].append(ios)
+            residue = comp_func(ios[enblbpm])  # use only enabled bpms
+            group_data['residue_iter'].append(residue)
+            self._log(f' IOS ({meth_str}): {residue:.3f} [um] --> ', end='')
 
             if residue < tolerance:
                 converged = True
                 break
-            elif i > 0 and residue > residue_iter[-2]:
-                increased += 1
-                if increased > self.params.ios_raise_cnt_limit:
-                    self.set_delta_kicks(-dkicks_iter[-1])
+            elif residue > group_data['residue_iter'][-2]:
+                ios_raise_cnt += 1
+                if ios_raise_cnt > self.params.ios_raise_cnt_limit:
+                    increased = True
+                    self.set_delta_kicks(-group_data['dkicks_iter'][-1])
                     break
 
-            dkicks = -1 * _np.dot(inv_jac, ios)
-            dkicks_iter.append(dkicks)
-            self.set_delta_kicks(dkicks)
             self._log('Done.')
 
         if sts and converged:
-            self._log(f'IOS converged ({i:d} iterations).')
+            self._log(f'IOS converged ({_iter:d} iterations).')
 
         elif sts and increased:
-            self._log(f'IOS increased ({i:d} iterations).')
+            self._log(f'IOS increased ({_iter:d} iterations).')
             self._log('Kicks were restored to the last valid values.')
 
-        elif sts and not converged and not increased:
-            ios, sts = self.meas_ios(group_id, strengths_init)
-            if not sts:
-                self._restore_conditions(
-                    group_id, strengths_init, 'Fail while measuring IOS.'
-                )
-            else:
-                ios_iter.append(ios)
-                residue = comp_func(ios[enblbpm])
-                residue_iter.append(residue)
-                msg = f'Max iterations reached ({i + 1:d})'
-                if residue < tolerance:
-                    msg += ', but IOS converged'
-                elif residue > residue_iter[-2]:
-                    msg += ', and IOS increased'
-                    self.set_delta_kicks(-dkicks_iter[-1])
-                self._log(msg + '.')
+        elif sts and not converged and not increased and _iter > 0:
+            self._log(f'Max iterations reached ({_iter:d})')
 
         group_data['kicks_end'] = self.get_kicks()
-        group_data['ios_iter'] = ios_iter
-        group_data['dkicks_iter'] = dkicks_iter
-        group_data['residue_iter'] = residue_iter
         group_data['orbit_end'] = self.get_orbit()
-        group_data['delta_kl'] = self.data['delta_kl'][group_id]
         self.data['measure'].append(group_data)
 
         self.correct_orbit()
