@@ -227,14 +227,13 @@ class BumpScan(_BaseClass):
         meas_func=None,
         meas_func_args=None,
         meas_func_kwargs=None,
-        isonline=True
+        isonline=True,
+        params=None,
     ):
         """."""
+        params = BumpScanParams() if params is None else params
         _BaseClass.__init__(
-            self,
-            params=BumpScanParams(),
-            target=self._do_scan,
-            isonline=isonline,
+            self, params=params, target=self._do_scan, isonline=isonline,
         )
         self.data = dict()
         self.bumptools = SICalcBumps()
@@ -322,6 +321,7 @@ class BumpScan(_BaseClass):
 
         print('Getting initial state')
         state = self.get_state()
+        self.data = dict()
         self.data['initial_state'] = state
         refx = state['sofb_refx']
         refy = state['sofb_refy']
@@ -346,30 +346,38 @@ class BumpScan(_BaseClass):
         })
 
         print('Starting bumps scan...')
-        data = list()
+        self.data['bumps_data'] = list()
         for i in range(prms.pts_psx.size):
             if not self._is_beam_alive():
                 self.restore_initial_state()
                 break
-            psx = prms.pts_psx[i]
-            psy = prms.pts_psy[i]
-            agx = prms.pts_agx[i]
-            agy = prms.pts_agy[i]
-            self._implement_bump(
-                refx=refx, refy=refy, psx=psx, psy=psy, agx=agx, agy=agy
+            bump = dict(
+                psx=prms.pts_psx[i],
+                psy=prms.pts_psy[i],
+                agx=prms.pts_agx[i],
+                agy=prms.pts_agy[i],
             )
 
+            self._implement_bump(refx=refx, refy=refy, **bump)
+
             _time.sleep(prms.wait_meas)
-            data.append(self._call_meas_func())
-            fstr = f'(x, y) = ({psx:6.1f}, {psy:6.1f}) um  and  '
-            fstr += f"(x', y') = ({agx:6.1f}, {agy:6.1f}) urad"
+            fstr = f'(x, y) = ({bump["psx"]:6.1f}, {bump["psy"]:6.1f}) um'
+            fstr += '  and  '
+            fstr += f"(x', y') = ({bump['agx']:6.1f}, {bump['agy']:6.1f}) urad"
             print(fstr)
-            data[-1]['bump'] = (psx, psy, agx, agy)
-            data[-1]['refx'] = self.devices['sofb'].refx
-            data[-1]['refy'] = self.devices['sofb'].refy
-            data[-1]['orbx'] = self.devices['sofb'].orbx
-            data[-1]['orby'] = self.devices['sofb'].orby
-            self.data['bumps_data'] = data
+            print('    Starting measurement...')
+            datum = dict()
+            datum['bump'] = bump
+            datum['refx'] = self.devices['sofb'].refx
+            datum['refy'] = self.devices['sofb'].refy
+            datum['orbx'] = self.devices['sofb'].orbx
+            datum['orby'] = self.devices['sofb'].orby
+            datum['timestamp'] = _time.time()
+            datum['stored_current'] = self.devices['currinfo'].current
+            datum['meas_data'] = self._call_meas_func(**bump)
+            self.data['bumps_data'].append(datum)
+            print('    Measurement finished!')
+
             if self._stopevt.is_set():
                 print('Stopping...')
                 break
@@ -525,18 +533,14 @@ class BumpScan(_BaseClass):
         dorb = (orb - ref)[idx] ** 2
         return _np.sqrt(dorb.sum() / dorb.size)
 
-    def _call_meas_func(self):
+    def _call_meas_func(self, **bump):
         """."""
         if self.meas_func is None or not callable(self.meas_func):
             print('Measurement function not defined. Skipping ...')
             return
-        return {
-            'timestamp': _time.time(),
-            'stored_current': self.devices['currinfo'].current,
-            'measurements': self.meas_func(
-                *self.meas_func_args, **self.meas_func_kwargs
-            ),
-        }
+        return self.meas_func(
+            *self.meas_func_args, **self.meas_func_kwargs
+        )
 
     @staticmethod
     def _subsec_2_sectype_nr(subsec):
