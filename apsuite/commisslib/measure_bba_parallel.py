@@ -689,38 +689,34 @@ class DoParallelBBA(_BaseClass):
         nbpms = len(bpmnames)
         orbit = meas_data['orbit_end']
 
-        stdx0 = 0.0
-        stdy0 = 0.0
+        idcs = _np.array([bpmnames.index(b) for b in meas_data['bpms']])
 
-        for bpm in meas_data['bpms']:
-            bpm_idx = bpmnames.index(bpm)
-            self.analysis[bpm] = {
-                'x0': orbit[bpm_idx],
-                'y0': orbit[bpm_idx + nbpms],
-                'stdx0': stdx0,
-                'stdy0': stdy0,
-            }
+        if 'orbx' not in self.analysis:
+            self.analysis['orbx'] = _np.zeros(nbpms)
+            self.analysis['orby'] = self.analysis['orbx'].copy()
+
+        if 'stdx' not in self.analysis:
+            self.analysis['stdx'] = _np.zeros(nbpms)
+            self.analysis['stdy'] = self.analysis['stdx'].copy()
+
+        self.analysis['orbx'][idcs] = orbit[idcs]
+        self.analysis['orby'][idcs] = orbit[idcs + nbpms]
+
+        # TODO: error estimation
+        residue = _np.zeros_like(orbit)
+        self.analysis['stdx'][idcs] = residue[idcs]
+        self.analysis['stdy'][idcs] = residue[idcs + nbpms]
 
     def get_pbba_results(self, return_error=False):
         """."""
-        bpms = self.data['bpmnames']
-        bbax = _np.zeros(len(bpms))
-        bbay = _np.zeros(len(bpms))
-        if error:
-            bbaxerr = _np.zeros(len(bpms))
-            bbayerr = _np.zeros(len(bpms))
-        for idx, bpm in enumerate(bpms):
-            res = self.analysis.get(bpm)
-            if not res:
-                continue
-            bbax[idx] = res['x0']
-            bbay[idx] = res['y0']
-            if error and 'stdx0' in res:
-                bbaxerr[idx] = res['stdx0']
-                bbayerr[idx] = res['stdy0']
-        if error:
-            return bbax, bbay, bbaxerr, bbayerr
-        return bbax, bbay
+        zero = _np.zeros(len(self.data['bpmnames']))
+        orbx = self.analysis.get('orbx', zero.copy())
+        orby = self.analysis.get('orby', zero.copy())
+        if return_error:
+            stdx = self.analysis.get('stdx', zero.copy())
+            stdy = self.analysis.get('stdy', zero.copy())
+            return orbx, orby, stdx, stdy
+        return orbx, orby
 
     # #### private methods ####
     def _get_quads_indices_in_model(self, quadnames):
