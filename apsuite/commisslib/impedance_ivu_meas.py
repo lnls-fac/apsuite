@@ -1628,7 +1628,7 @@ class ImpedanceIVUAnalysis:
 
         if cfgs is None:
             cfgs = range(n_configs)
-        elif np.isscalar(cfgs):
+        elif _np.isscalar(cfgs):
             cfgs = [cfgs]
         else:
             cfgs = list(cfgs)
@@ -1645,21 +1645,21 @@ class ImpedanceIVUAnalysis:
             )
 
         if axes is None:
-            fig, axes = plt.subplots(
+            fig, axes = _plt.subplots(
                 1,
                 2,
                 figsize=(13, 5),
                 sharex=True,
             )
         else:
-            axes = np.asarray(axes)
+            axes = _np.asarray(axes)
             fig = axes[0].figure
 
         for i in cfgs:
             row = self.config_table.iloc[i]
             data_meas = self.data[i]['data']
 
-            acq_indices = np.arange(len(data_meas))
+            acq_indices = _np.arange(len(data_meas))
 
             label = (
                 f'gap = {row["gap"]:.2f} mm, '
@@ -1669,7 +1669,7 @@ class ImpedanceIVUAnalysis:
             color = None
 
             for bunch, ax in enumerate(axes, start=1):
-                currents = np.asarray([
+                currents = _np.asarray([
                     data_acq[f'b{bunch}_curr']
                     for data_acq in data_meas
                 ])
