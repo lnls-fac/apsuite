@@ -51,6 +51,16 @@ class ImpedanceIVUMeasAllBumps(_Bump):
             params=ImpedanceIVUMeasAllBumpsParams(),
         )
         self.ivu_imp_meas = ImpedanceIVUMeas(isonline=isonline)
+    def __str__(self):
+        """."""
+        prm = str(self.params)
+        stg = 'ImpedanceIVUMeasAllBumpsParams:\n'
+        stg += ''.join([f'    {lin}\n' for lin in prm.splitlines()])
+        prm = str(self.ivu_imp_meas.params)
+        stg += '\nImpedanceIVUMeasParams:\n'
+        stg += ''.join([f'    {lin}\n' for lin in prm.splitlines()])
+        return stg
+
 
     def do_inject(self):
         """."""
