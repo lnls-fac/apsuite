@@ -355,6 +355,9 @@ class BumpScan(_BaseClass):
             )
 
             self._implement_bump(refx=refx, refy=refy, **bump)
+            if self._stopevt.is_set():
+                print('Stopping...')
+                break
 
             fstr = f'(x, y) = ({bump["psx"]:6.1f}, {bump["psy"]:6.1f}) um'
             fstr += '  and  '
@@ -425,6 +428,8 @@ class BumpScan(_BaseClass):
 
         print('Waiting orbit...')
         for _ in _np.arange(nr_iters):
+            if self._stopevt.is_set():
+                return False
             if self.params.sofb_closed_loop:
                 _time.sleep(1 / sofb.loop_freq * 1.1)
             else:
