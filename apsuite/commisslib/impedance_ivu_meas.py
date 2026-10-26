@@ -387,8 +387,7 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         ant_raw = ant_raw.swapaxes(1, 2)
         curr = data['stored_current']
 
-        ant_abs = _np.abs(ant_raw)
-        ant_amax = ant_abs[..., :nsamp_pturn].argmax(axis=-1)
+        ant_amax = _np.abs(ant_raw[..., :nsamp_pturn]).argmax(axis=-1)
 
         nsamp2keep = ant_raw.shape[-1]
         nturn2keep = nsamp2keep // nsamp_pturn
