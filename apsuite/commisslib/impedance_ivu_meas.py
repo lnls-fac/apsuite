@@ -2124,11 +2124,12 @@ class ImpedanceIVUAnalysis:
             residual_i = delta_i - model_i
 
             if error_i is None:
+                theta_err_propag_i = _np.nan
                 theta_err_i = _np.nan
                 chi2_i = _np.nan
                 reduced_chi2_i = _np.nan
             else:
-                theta_err_i = 1.0 / _np.sqrt(denominator)
+                theta_err_propag_i = 1.0 / _np.sqrt(denominator)
                 chi2_i = _np.sum((residual_i / error_i) ** 2)
                 dof_i = len(delta_i) - 1
 
@@ -2138,7 +2139,7 @@ class ImpedanceIVUAnalysis:
                     # Account for the error coming from the lstsqrs, without
                     # ever reducing the uncertainty propagated from the
                     # measured orbit uncertainties
-                    theta_err_i = theta_err_propag_i *_np.sqrt(
+                    theta_err_i = theta_err_propag_i * _np.sqrt(
                         max(1.0, reduced_chi2_i)
                     )
                 else:
@@ -2254,16 +2255,11 @@ class ImpedanceIVUAnalysis:
         theta_norm_model = design_matrix @ coefficients
         residual = theta_norm - theta_norm_model
 
-        covariance = _np.linalg.pinv(
+        covariance_formal = _np.linalg.pinv(
             design_matrix_weighted.T @ design_matrix_weighted
         )
-        coefficients_err = _np.sqrt(_np.diag(covariance))
-
-        b_err = coefficients_err[0]
-        a_err = coefficients_err[1]
 
         chi2 = _np.sum((residual / theta_norm_err) ** 2)
-
         dof = len(y0) - len(coefficients)
 
         if dof > 0:
@@ -2271,6 +2267,15 @@ class ImpedanceIVUAnalysis:
             covariance = covariance_formal * max(1.0, reduced_chi2)
         else:
             reduced_chi2 = _np.nan
+            covariance = covariance_formal.copy()
+
+        coefficients_err_propag = _np.sqrt(_np.diag(covariance_formal))
+        coefficients_err = _np.sqrt(_np.diag(covariance))
+
+        b_err = coefficients_err[0]
+        a_err = coefficients_err[1]
+        b_err_propag = coefficients_err_propag[0]
+        a_err_propag = coefficients_err_propag[1]
 
         kperp = 1e-6 * self.beam_voltage * a
         kperp_err = 1e-6 * self.beam_voltage * a_err
@@ -2382,7 +2387,7 @@ class ImpedanceIVUAnalysis:
         matching_gaps = [
             gap_key
             for gap_key in self.kperp_fits[plane]
-            if_np.isclose(gap_key, gap, rtol=0.0, atol=1e-6)
+            if _np.isclose(gap_key, gap, rtol=0.0, atol=1e-6)
         ]
 
         if not matching_gaps:
@@ -2645,7 +2650,7 @@ class ImpedanceIVUAnalysis:
             matching_gaps = [
                 gap_key
                 for gap_key in self.kperp_fits[plane]
-                if_np.isclose(gap_key, gap, rtol=0.0, atol=1e-2)
+                if _np.isclose(gap_key, gap, rtol=0.0, atol=1e-2)
             ]
 
             if not matching_gaps:
