@@ -10,6 +10,7 @@ import matplotlib.pyplot as _plt
 import pyaccel
 from pymodels import si as _si
 from mathphys.functions import load as _load
+from siriuspy.epics import CAThread as _Thread
 from siriuspy.devices import SOFB, IVU, InjCtrl, BunchbyBunch
 
 from apsuite.commisslib.meas_bpms_signals import (
@@ -51,6 +52,9 @@ class ImpedanceIVUMeasAllBumps(_Bump):
             params=ImpedanceIVUMeasAllBumpsParams(),
         )
         self.ivu_imp_meas = ImpedanceIVUMeas(isonline=isonline)
+        self._thread_loop = None
+        self._stop_loop = False
+
     def __str__(self):
         """."""
         prm = str(self.params)
@@ -61,6 +65,10 @@ class ImpedanceIVUMeasAllBumps(_Bump):
         stg += ''.join([f'    {lin}\n' for lin in prm.splitlines()])
         return stg
 
+    def stop(self):
+        """."""
+        super().stop()
+        self._stop_loop = True
 
     def do_inject(self):
         """."""
@@ -83,6 +91,74 @@ class ImpedanceIVUMeasAllBumps(_Bump):
         _time.sleep(2)
         bbbv.bunch_clean.state = False
         return True
+
+    def loop_over_gaps(
+        self, gaps, fname_fmt=None, ivu_name='ivu18_08', timeout_move_gap=30
+    ):
+        """Make measurements for several IVU gaps.
+
+        Args:
+            gaps (list|numpy.ndarray, (N, )): gaps for which measurements will
+                be made.
+            fname_fmt (str, optional): String format for the file name. Should
+                be a callable that accepts two strings, the `ivu_name` and a
+                string representation of the gap, as arguments and returns a
+                string. Defaults to `None`. A value of `None` means
+                    :func:`'{:s}_gap_{:s}.pickle'.format`.
+            ivu_name (str, optional): Name of the IVU. Defaults to 'ivu18_08'.
+            timeout_move_gap (float, optional): Timeout for waiting for the
+                IVU to reach the desired gap. Defaults to 30 seconds.
+        """
+        fname_fmt = fname_fmt or '{:s}_gap_{:s}.pickle'.format
+        if not callable(fname_fmt):
+            raise TypeError('`fname_fmt` is not callable.')
+        if ivu_name not in self.ivu_imp_meas.devices:
+            raise ValueError(
+                "Invalid IVU name. Valid names: 'ivu18_08', 'ivu18_14'."
+            )
+        if self._thread_loop is None or not self._thread_loop.is_alive():
+            self._thread_loop = _Thread(
+                target=self._loop_over_gaps_thread,
+                args=(gaps, fname_fmt, ivu_name, timeout_move_gap),
+                daemon=True,
+            )
+            self._thread_loop.start()
+        else:
+            raise RuntimeError('A measurement is already in progress.')
+
+    def _loop_over_gaps_thread(
+        self, gaps, fname_fmt, ivu_name, timeout_move_gap
+    ):
+        ivu = self.ivu_imp_meas.devices[ivu_name]
+        sofb = self.devices['sofb']
+        for i, gap in enumerate(gaps):
+            print('#' * 70)
+            print(f'{i+1:02d}/{len(gaps):02d} Gap: {gap:.3f}')
+            print('    Moving IVU...')
+            ivu.set_gap(gap)
+            ivu.cmd_move_start()
+            ivu.wait_move_start(timeout=3)
+            if not ivu.wait_move_finish(timeout=timeout_move_gap):
+                print('Error: IVU did not reach the desired gap.')
+                return
+            print('    IVU reached the desired gap.')
+            print('    Injecting ...')
+            self.do_inject()
+            print('    Done! Correcting Orbit...')
+            sofb.correct_orbit_manually(nr_iters=5, residue=4)
+            print('    Done! Starting measurement...')
+            self.start()
+            while True:
+                if self.wait_measurement(0.5):
+                    if self._stop_loop:
+                        self._stop_loop = False
+                        print('    User Interruption. Exiting.')
+                        return
+                    break
+            print('    Done! Saving file ...')
+            gap_stg = f'{gap:.3f}'.replace('.', 'p')
+            self.save_data(fname_fmt(ivu_name, gap_stg), overwrite=True)
+            print('#' * 70)
 
     # ---------------------- auxiliary methods ----------------------
 
