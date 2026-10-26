@@ -52,32 +52,8 @@ class ImpedanceIVUMeasAllBumps(_Bump):
         )
         self.ivu_imp_meas = ImpedanceIVUMeas(isonline=isonline)
 
-    def _create_devices(self):
-        super()._create_devices()
-        self.devices['injctrl'] = InjCtrl()
-        self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
-
-    def _do_meas(self, **bump):
-        if self._stopevt.is_set():
-            return dict()
-        if abs(bump['psy']) <= self.params.max_bump_to_inject:
-            print('Injecting...')
-            if not self._inject():
-                print('Injection Failed.')
-            else:
-                print('Injection Finished.')
-        else:
-            print('Bump too high. Skipping injection.')
-
-        self.ivu_imp_meas.start()
-        while True:
-            if self._stopevt.is_set():
-                self.ivu_imp_meas.stop()
-            if self.ivu_imp_meas.wait_measurement(timeout=0.5):
-                break
-        return self.ivu_imp_meas.to_dict()
-
-    def _inject(self):
+    def do_inject(self):
+        """."""
         injctrl = self.devices['injctrl']
         dic = {'timeout': self.params.timeout_waiting_injection}
 
@@ -97,6 +73,33 @@ class ImpedanceIVUMeasAllBumps(_Bump):
         _time.sleep(2)
         bbbv.bunch_clean.state = False
         return True
+
+    # ---------------------- auxiliary methods ----------------------
+
+    def _create_devices(self):
+        super()._create_devices()
+        self.devices['injctrl'] = InjCtrl()
+        self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
+
+    def _do_meas(self, **bump):
+        if self._stopevt.is_set():
+            return dict()
+        if abs(bump['psy']) <= self.params.max_bump_to_inject:
+            print('Injecting...')
+            if not self.do_inject():
+                print('Injection Failed.')
+            else:
+                print('Injection Finished.')
+        else:
+            print('Bump too high. Skipping injection.')
+
+        self.ivu_imp_meas.start()
+        while True:
+            if self._stopevt.is_set():
+                self.ivu_imp_meas.stop()
+            if self.ivu_imp_meas.wait_measurement(timeout=0.5):
+                break
+        return self.ivu_imp_meas.to_dict()
 
     def _call_meas_func(self, **bump):
         """."""
