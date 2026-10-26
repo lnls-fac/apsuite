@@ -658,18 +658,20 @@ class ImpedanceIVUAnalysis:
         self.data = list(data)
         self._reset_analysis_results()
 
-    def load_data(self, file_paths, y0=None):
-        """Load measurement data from files.
+    def load_data(self, file_paths, multi_bump=False):
+        """Load measurement configurations from files.
 
         Args:
             file_paths (str or sequence of str): Measurement file path(s).
-            y0 (float or sequence of float, optional): Vertical bump value
-                for each measurement [mm].
+            multi_bump (bool): Whether each file contains multiple bump
+                configurations under 'bumps_data'. Prescribed bump settings
+                are stored in each configuration's params['bump_info'].
+                Defaults to False.
 
         Raises:
             TypeError: If file_paths has an unsupported type.
-            ValueError: If no paths are provided or file_paths and y0 have
-                incompatible lengths.
+            ValueError: If no file paths or measurement configurations
+                are provided.
         """
         if isinstance(file_paths, str):
             file_paths = [file_paths]
@@ -680,36 +682,26 @@ class ImpedanceIVUAnalysis:
             )
 
         if len(file_paths) == 0:
-            raise ValueError('file_paths must contain at least one file path.')
-
-        # Prepare y0 values.
-        if y0 is None:  # y0 values to be obtained from the measurement files
-            y0_values = [None] * len(file_paths)
-
-        elif _np.isscalar(y0):
-            if len(file_paths) != 1:
-                raise ValueError(
-                    'A single y0 value can only be used with one file.'
-                )
-            y0_values = [float(y0)]
-
-        else:
-            y0_values = list(y0)
-
-            if len(y0_values) != len(file_paths):
-                raise ValueError(
-                    'file_paths and y0 must have the same length.'
-                )
+            raise ValueError(
+                'file_paths must contain at least one file path.'
+            )
 
         data = []
 
-        for file_path, y0_i in zip(file_paths, y0_values):
-            data_i = _load(file_path)
+        for file_path in file_paths:
+            loaded_data = load(file_path)
 
-            if y0_i is not None:
-                data_i['params']['y0'] = float(y0_i)
+            if multi_bump:
+                for bump_i in loaded_data['bumps_data']:
+                    data_i = bump_i['meas_data']
 
-            data.append(data_i)
+                    data_i['params']['bump'] = (
+                        bump_i['bump'].copy()
+                    )
+
+                    data.append(data_i)
+            else:
+                data.append(loaded_data)
 
         self.set_data(data)
 
