@@ -32,11 +32,11 @@ class ImpedanceIVUMeasAllBumpsParams(_BumpParams):
 
     def __str__(self):
         """."""
-        stg = super().__str__()
-        stg += f'max_bump_to_inject = {self.max_bump_to_inject} [um]\n'
+        stg = f'max_bump_to_inject = {self.max_bump_to_inject} [um]\n'
         stg += f'target_curr = {self.target_curr} [mA]\n'
         stg += 'timeout_waiting_injection = '
         stg += f'{self.timeout_waiting_injection} [s]\n'
+        stg += super().__str__()
         return stg
 
 
