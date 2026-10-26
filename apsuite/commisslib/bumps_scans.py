@@ -354,7 +354,7 @@ class BumpScan(_BaseClass):
                 agy=prms.pts_agy[i],
             )
 
-            self._implement_bump(refx=refx, refy=refy, **bump)
+            self._implement_bump(refx, refy, **bump)
             if self._stopevt.is_set():
                 print('Stopping...')
                 break
@@ -380,6 +380,7 @@ class BumpScan(_BaseClass):
                 print('Stopping...')
                 break
 
+        self._implement_bump(refx, refy)
         self.set_state(state)
         print('Finished!')
 
