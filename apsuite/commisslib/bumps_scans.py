@@ -32,13 +32,11 @@ class BumpScanParams(_ParamsBaseClass):
         self.fofb_min_kick = 2  # [urad]
 
         self.buffer_sloworb = 20
-        self.wait_meas = 2  # [s]
         self.orbcorr_nr_iters = 10
 
         self.sofb_closed_loop = False
         self.fofb_closed_loop = False
         self.timeout_fofb_ramp = 15.0  # [s]
-        self.sleep_time = 0.5  # [s]
 
     def __str__(self):
         """."""
@@ -53,13 +51,11 @@ class BumpScanParams(_ParamsBaseClass):
         stg += ftmp('fofb_min_kick', self.fofb_min_kick, '[urad]')
 
         stg += dtmp('buffer_sloworb', self.buffer_sloworb, '')
-        stg += ftmp('wait_meas', self.wait_meas, '[s]')
         stg += dtmp('orbcorr_nr_iters', self.orbcorr_nr_iters)
 
         stg += dtmp('sofb_closed_loop', self.sofb_closed_loop)
         stg += dtmp('fofb_closed_loop', self.fofb_closed_loop)
         stg += ftmp('timeout_fofb_ramp', self.timeout_fofb_ramp, '')
-        stg += ftmp('sleep_time', self.sleep_time, '')
 
         if not self.is_standard_grid:
             stg += '\n\n' + '#' * 70 + '\n'
@@ -359,8 +355,10 @@ class BumpScan(_BaseClass):
             )
 
             self._implement_bump(refx=refx, refy=refy, **bump)
+            if self._stopevt.is_set():
+                print('Stopping...')
+                break
 
-            _time.sleep(prms.wait_meas)
             fstr = f'(x, y) = ({bump["psx"]:6.1f}, {bump["psy"]:6.1f}) um'
             fstr += '  and  '
             fstr += f"(x', y') = ({bump['agx']:6.1f}, {bump['agy']:6.1f}) urad"
@@ -430,6 +428,8 @@ class BumpScan(_BaseClass):
 
         print('Waiting orbit...')
         for _ in _np.arange(nr_iters):
+            if self._stopevt.is_set():
+                return False
             if self.params.sofb_closed_loop:
                 _time.sleep(1 / sofb.loop_freq * 1.1)
             else:
