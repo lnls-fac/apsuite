@@ -16,7 +16,7 @@ from apsuite.commisslib.meas_bpms_signals import (
     AcqBPMsSignals as _BaseAcq,
     AcqBPMsSignalsParams as _BaseParams,
 )
-from .bumps_scans import Bump as _Bump, BumpParams as _BumpParams
+from .bumps_scans import BumpScan as _Bump, BumpScanParams as _BumpParams
 from apsuite.utils import ThreadedMeasBaseClass as _BaseThreaded
 
 
@@ -26,7 +26,7 @@ class ImpedanceIVUMeasAllBumpsParams(_BumpParams):
     def __init__(self):
         """."""
         super().__init__()
-        self.max_bump_to_inject = 0.6  # [um]
+        self.max_bump_to_inject = 600  # [um]
         self.target_curr = 1.4  # [mA]
         self.timeout_waiting_injection = 120  # [s]
 
@@ -58,12 +58,16 @@ class ImpedanceIVUMeasAllBumps(_Bump):
         self.devices['bbbv'] = BunchbyBunch(BunchbyBunch.DEVICES.V)
 
     def _do_meas(self, **bump):
-        if abs(bump['psx']) <= self.params.max_bump_to_inject:
+        if self._stopevt.is_set():
+            return dict()
+        if abs(bump['psy']) <= self.params.max_bump_to_inject:
             print('Injecting...')
             if not self._inject():
                 print('Injection Failed.')
             else:
                 print('Injection Finished.')
+        else:
+            print('Bump too high. Skipping injection.')
 
         self.ivu_imp_meas.start()
         while True:
@@ -80,6 +84,7 @@ class ImpedanceIVUMeasAllBumps(_Bump):
         injctrl.target_current = self.params.target_curr
         injctrl.accum_state = True
         if not self._call_and_wait(injctrl.wait_accum_start, **dic):
+            injctrl.accum_state = False
             return False
         if not self._call_and_wait(injctrl.wait_accum_finish, **dic):
             injctrl.accum_state = False
@@ -688,7 +693,7 @@ class ImpedanceIVUAnalysis:
         data = []
 
         for file_path in file_paths:
-            loaded_data = load(file_path)
+            loaded_data = _load(file_path)
 
             if multi_bump:
                 for bump_i in loaded_data['bumps_data']:
