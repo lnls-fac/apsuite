@@ -221,47 +221,6 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
 
     load_and_apply.__doc__ = _BaseThreaded.load_and_apply.__doc__
 
-    def _measure(self):
-        data = []
-        fambpms = self.devices['fambpms']
-        bpms = fambpms.bpms
-        grp_slcs = [slice(None, None)]
-        if self.params.acq_strategy.startswith('odd'):
-            print(
-                "Acquisition strategy 'odd/even' identified. "
-                'Breaking BPMs in two groups.'
-            )
-            grp_slcs = [slice(0, None, 2), slice(1, None, 2)]
-        try:
-            for i in range(self.params.num_acquisitions):
-                print(
-                    f'Acquisition {i + 1:02d}/{self.params.num_acquisitions:02d}'
-                )
-                dt = []
-                if self._stopevt.is_set():
-                    break
-                for grp, slc in enumerate(grp_slcs):
-                    if len(grp_slcs) > 1:
-                        print(f'    acquiring BPMs group {grp}...')
-                    fambpms.bpms = bpms[slc]
-                    if self._stopevt.is_set():
-                        break
-                    self.acquire_data()
-                    self.data['acq_group'] = grp
-                    dt.append(self.data)
-                else:
-                    data.extend(dt)
-        except Exception:
-            fambpms.bpms = bpms
-            print('Problem with acquisition. Interrupting!')
-            return
-        fambpms.bpms = bpms
-        print('Acquisitions ended. Processing data...')
-        self.data = data
-        self.process_data()
-        self._filter_data_to_save()
-        print('Finished!')
-
     def process_data(self, idcs_to_discard=None, return_all=False):
         """."""
         idcs_to_discard = idcs_to_discard or []
@@ -373,6 +332,49 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         for dt in self.data:
             orb.append(_np.hstack([dt[prop + 'x'], dt[prop + 'y']]))
         return _np.vstack(orb).T
+
+    # ---------------------- private methods ----------------------
+
+    def _measure(self):
+        data = []
+        fambpms = self.devices['fambpms']
+        bpms = fambpms.bpms
+        grp_slcs = [slice(None, None)]
+        if self.params.acq_strategy.startswith('odd'):
+            print(
+                "Acquisition strategy 'odd/even' identified. "
+                'Breaking BPMs in two groups.'
+            )
+            grp_slcs = [slice(0, None, 2), slice(1, None, 2)]
+        try:
+            for i in range(self.params.num_acquisitions):
+                print(
+                    f'Acquisition {i + 1:02d}/{self.params.num_acquisitions:02d}'
+                )
+                dt = []
+                if self._stopevt.is_set():
+                    break
+                for grp, slc in enumerate(grp_slcs):
+                    if len(grp_slcs) > 1:
+                        print(f'    acquiring BPMs group {grp}...')
+                    fambpms.bpms = bpms[slc]
+                    if self._stopevt.is_set():
+                        break
+                    self.acquire_data()
+                    self.data['acq_group'] = grp
+                    dt.append(self.data)
+                else:
+                    data.extend(dt)
+        except Exception:
+            fambpms.bpms = bpms
+            print('Problem with acquisition. Interrupting!')
+            return
+        fambpms.bpms = bpms
+        print('Acquisitions ended. Processing data...')
+        self.data = data
+        self.process_data()
+        self._filter_data_to_save()
+        print('Finished!')
 
     def _filter_data_to_save(self):
         if self.params.save_raw_data:
