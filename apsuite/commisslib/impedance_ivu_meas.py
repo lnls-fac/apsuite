@@ -466,7 +466,6 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         self._data_to_proc.put(None)
         self._thread_proc_data.join()
         self.data = self._data_processed
-        self.process_data()
         print('Finished!')
 
     def _process_data_in_thread(self):
