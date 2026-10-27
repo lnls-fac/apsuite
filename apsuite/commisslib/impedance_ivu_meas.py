@@ -524,10 +524,8 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
                 _np.remainder(sample_idx, nsamp2keep, out=sample_idx)
                 sigs.append(raw[sample_idx, bpm_idx].std(axis=-1))
 
-
         dic = {}
         bucket_sums = []
-
         for i, sigs in enumerate(bucket_sigs, start=1):
             # Shape: (4, BPMs, turns).
             b_sigs = _np.stack(sigs, axis=0)
