@@ -769,7 +769,7 @@ class ImpedanceIVUAnalysis:
         self.data = list(data)
         self._reset_analysis_results()
 
-    def load_data(self, file_paths, multi_bump=False):
+    def load_data(self, file_paths, multi_bump=False, append=False):
         """Load measurement configurations from files.
 
         Args:
@@ -778,6 +778,8 @@ class ImpedanceIVUAnalysis:
                 configurations under 'bumps_data'. Prescribed bump settings
                 are stored in each configuration's params['bump_info'].
                 Defaults to False.
+            append (bool): Whether to retain previously loaded configurations.
+                Defalts to False.
 
         Raises:
             TypeError: If file_paths has an unsupported type.
@@ -803,7 +805,7 @@ class ImpedanceIVUAnalysis:
             loaded_data = _load(file_path)
 
             if multi_bump:
-                for bump_i in loaded_data['bumps_data']:
+                for bump_i in loaded_data['data']['bumps_data']:
                     data_i = bump_i['meas_data']
 
                     data_i['params']['bump'] = (
@@ -813,6 +815,9 @@ class ImpedanceIVUAnalysis:
                     data.append(data_i)
             else:
                 data.append(loaded_data)
+
+        if append and self.data is not None:
+            data = self.data + data
 
         self.set_data(data)
 
