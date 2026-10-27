@@ -1,5 +1,6 @@
 """."""
 
+from queue import Queue as _Queue
 import time as _time
 import warnings as _warnings
 
@@ -271,6 +272,9 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         _BaseThreaded.__init__(self, isonline=isonline, target=self._measure)
         _BaseAcq.__init__(self, isonline=self.isonline)
         self.params = ImpedanceIVUMeasParams()
+        self._data_to_proc = _Queue()
+        self._data_processed = []
+        self._thread_proc_data = None
 
     def create_devices(self, bpmnames=None):
         """."""
@@ -422,7 +426,6 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
     # ---------------------- private methods ----------------------
 
     def _measure(self):
-        data = []
         fambpms = self.devices['fambpms']
         bpms = fambpms.bpms
         grp_slcs = [slice(None, None)]
@@ -432,12 +435,17 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
                 'Breaking BPMs in two groups.'
             )
             grp_slcs = [slice(0, None, 2), slice(1, None, 2)]
+
+        self._thread_proc_data = _Thread(
+            target=self._process_data_in_thread, daemon=True
+        )
+        self._thread_proc_data.start()
+
         try:
             for i in range(self.params.num_acquisitions):
                 print(
                     f'Acquisition {i + 1:02d}/{self.params.num_acquisitions:02d}'
                 )
-                dt = []
                 if self._stopevt.is_set():
                     break
                 for grp, slc in enumerate(grp_slcs):
@@ -448,26 +456,34 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
                         break
                     self.acquire_data()
                     self.data['acq_group'] = grp
-                    dt.append(self.data)
-                else:
-                    data.extend(dt)
+                    self._data_to_proc.put(self.data)
         except Exception:
             fambpms.bpms = bpms
             print('Problem with acquisition. Interrupting!')
             return
         fambpms.bpms = bpms
         print('Acquisitions ended. Processing data...')
-        self.data = data
+        self._data_to_proc.put(None)
+        self._thread_proc_data.join()
+        self.data = self._data_processed
         self.process_data()
-        self._filter_data_to_save()
         print('Finished!')
 
-    def _filter_data_to_save(self):
+    def _process_data_in_thread(self):
+        while not self._stopevt.is_set():
+            dtm = self._data_to_proc.get()
+            if not dtm:
+                break
+            prc = self._proc_single_data(dtm)
+            self._filter_data_to_save(dtm)
+            dtm.update(prc)
+            self._data_processed.append(dtm)
+
+    def _filter_data_to_save(self, dtm):
         if self.params.save_raw_data:
             return
-        for dt in self.data:
-            for ant in 'abcd':
-                dt.pop('ampl' + ant)
+        for ant in 'abcd':
+            dtm.pop('ampl' + ant)
 
     def _proc_single_data(self, data, return_all=False):
         of1 = self.BUN1_OFFSET
