@@ -311,7 +311,7 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
 
     load_and_apply.__doc__ = _BaseThreaded.load_and_apply.__doc__
 
-    def process_data(self, idcs_to_discard=None, return_all=False):
+    def process_data(self, idcs_to_discard=None):
         """."""
         idcs_to_discard = idcs_to_discard or []
         data = self.data
@@ -320,7 +320,7 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         for i, dt in enumerate(data):
             if i in idcs_to_discard:
                 continue
-            dic = self._proc_single_data(dt, return_all=return_all)
+            dic = self._proc_single_data(dt)
             dt.update(dic)
 
     def calc_delta_orbit_2_bunches(self):
@@ -484,7 +484,8 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         for ant in 'abcd':
             dtm.pop('ampl' + ant)
 
-    def _proc_single_data(self, data, return_all=False):
+    def _proc_single_data(self, data):
+        """."""
         of1 = self.BUN1_OFFSET
         winn, winp = self.WINDOW_RMS
         nbuc2proc = self.params.num_buckets_to_process
@@ -493,45 +494,61 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         nsamp_pturn = ImpedanceIVUMeasParams.ADC_NSAMPLES_PER_TURN
         hnum = ImpedanceIVUMeasParams.HARM_NUM
 
-        ant_raw = _np.array([data['ampl' + ant] for ant in 'abcd'])
-        # [4, 382 * N, 160] --> [4, 160, 382 * N]
-        ant_raw = ant_raw.swapaxes(1, 2)
-        curr = data['stored_current']
-
-        ant_amax = _np.abs(ant_raw[..., :nsamp_pturn]).argmax(axis=-1)
-
-        nsamp2keep = ant_raw.shape[-1]
-        nturn2keep = nsamp2keep // nsamp_pturn
-        idx = _np.arange(nsamp2keep)
-        old_idx = (idx - of1 + ant_amax[..., None]) % nsamp2keep
-
-        ant_raw2 = _np.take_along_axis(ant_raw, old_idx, axis=-1)
-        ant_raw2 = ant_raw2.reshape(ant_raw2.shape[:2] + (nturn2keep, -1))
-
-        dic = {}
-        if return_all:
-            dic['ant_raw'] = ant_raw
-            dic['ant_amax'] = ant_amax
-            dic['ant_raw2'] = ant_raw2
-
         of2 = int(abs(blow - bhigh) / hnum * nsamp_pturn) + of1
         slcs = [slice(of1 + winn, of1 + winp), slice(of2 + winn, of2 + winp)]
-        for i in range(nbuc2proc):
-            b_sigs = ant_raw2[..., slcs[i]].std(axis=-1)
+
+        raw_arrays = [data[f"ampl{ant}"] for ant in "abcd"]
+
+        nsamp2keep, nbpms = raw_arrays[0].shape
+        nturns, _ = divmod(nsamp2keep, nsamp_pturn)
+        turn_start = _np.arange(nturns, dtype=_np.intp) * nsamp_pturn
+
+        # Create the bases of the windows to select data.
+        window_bases = []
+        for slc in slcs[:nbuc2proc]:
+            window_pos = _np.arange(*slc.indices(nsamp_pturn), dtype=_np.intp)
+            window_bases.append(turn_start[:, None] + window_pos[None, :])
+
+        bpm_idx = _np.arange(nbpms)[..., None, None]
+        bucket_sigs = [[] for _ in range(nbuc2proc)]
+
+        for raw in raw_arrays:
+            # raw has shape (samples, BPMs).
+            ant_amax = _np.abs(raw[:nsamp_pturn]).argmax(axis=0)
+            shift = ant_amax.astype(_np.intp, copy=False) - of1
+
+            for sigs, base in zip(bucket_sigs, window_bases):
+                # Shape: (BPMs, turns, window_size).
+                sample_idx = base[None, :, :] + shift[:, None, None]
+                # in-place to avoid extra array of indices.
+                _np.remainder(sample_idx, nsamp2keep, out=sample_idx)
+                sigs.append(raw[sample_idx, bpm_idx].std(axis=-1))
+
+
+        dic = {}
+        bucket_sums = []
+
+        for i, sigs in enumerate(bucket_sigs, start=1):
+            # Shape: (4, BPMs, turns).
+            b_sigs = _np.stack(sigs, axis=0)
+
             b_posx, b_posy = ImpedanceIVUMeas.calc_positions_from_amplitudes(
                 b_sigs, is_adcswap_rate=True
             )
             b_sum = b_sigs.sum(axis=0)
 
-            dic[f'b{i + 1}_posx'] = b_posx
-            dic[f'b{i + 1}_posy'] = b_posy
-            dic[f'b{i + 1}_sum'] = b_sum
-            dic[f'b{i + 1}_sigs'] = b_sigs
+            dic[f"b{i}_posx"] = b_posx
+            dic[f"b{i}_posy"] = b_posy
+            dic[f"b{i}_sum"] = b_sum
+            dic[f"b{i}_sigs"] = b_sigs
+            bucket_sums.append(b_sum)
 
-        bt_sum = sum([dic[f'b{i + 1}_sum'] for i in range(nbuc2proc)])
-        dic['bt_sum'] = bt_sum
-        for i in range(nbuc2proc):
-            dic[f'b{i + 1}_curr'] = dic[f'b{i + 1}_sum'] * curr / bt_sum
+        bt_sum = sum(bucket_sums)
+        dic["bt_sum"] = bt_sum
+
+        curr = data["stored_current"]
+        for i, b_sum in enumerate(bucket_sums, start=1):
+            dic[f"b{i}_curr"] = b_sum * curr / bt_sum
 
         return dic
 
