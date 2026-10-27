@@ -436,6 +436,7 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
             )
             grp_slcs = [slice(0, None, 2), slice(1, None, 2)]
 
+        self._data_processed = []
         self._thread_proc_data = _Thread(
             target=self._process_data_in_thread, daemon=True
         )
