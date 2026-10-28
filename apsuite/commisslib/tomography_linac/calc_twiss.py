@@ -187,13 +187,13 @@ class TwissFromDistribution:
     @classmethod
     def get_emit_from_params(cls, a, b, c):
         """."""
-        cov = np.array([[a, c], [a, b]]).transpose(2, 0, 1)
+        cov = np.array([[a, c], [c, b]]).transpose(2, 0, 1)
         return cls.get_emit_from_cov(cov)
 
     @classmethod
     def get_twiss_from_params(cls, a, b, c):
         """."""
-        cov = np.array([[a, c], [a, b]]).transpose(2, 0, 1)
+        cov = np.array([[a, c], [c, b]]).transpose(2, 0, 1)
         return cls.get_twiss_from_cov(cov)
 
     @property
