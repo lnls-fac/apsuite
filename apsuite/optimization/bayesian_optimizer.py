@@ -115,6 +115,10 @@ class BayesianOptimizerGPyParams(_OptimizeParams):
             '',
         )
         stg += self._TMPF('trust_region_scale', self.trust_region_scale, '')
+
+        if self.trust_region_mode != self.TrustRegionMode.AdaptiveTrustRegion:
+            return stg
+
         stg += self._TMPF(
             'trust_region_length_min', self.trust_region_length_min, ''
         )
@@ -150,10 +154,12 @@ class BayesianOptimizerGPy(_Optimize):
         Bayesian Optimization, 2019. https://arxiv.org/pdf/1910.01739.
     """
 
-    def __init__(self, use_thread=True, isonline=True):
+    def __init__(self, params=None, use_thread=True, isonline=True):
         """."""
         super().__init__(
-            params=BayesianOptimizerGPyParams(),
+            params=params
+            if params is not None
+            else BayesianOptimizerGPyParams(),
             use_thread=use_thread,
             isonline=isonline,
         )
