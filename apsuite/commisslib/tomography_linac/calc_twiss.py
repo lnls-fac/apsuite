@@ -26,10 +26,8 @@ class TwissFromDistribution:
         self.twiss = None
         self.fit_results = None
 
-        self._process()
-
-    def _process(self):
-
+    def process(self):
+        """."""
         gridx = self.rec.model_gridx  # [mm]
         gridy = self.rec.model_gridy  # [mrad]
 
@@ -341,15 +339,24 @@ class QuadrupoleScan:
         if self.sizes.shape != self.kls.shape:
             raise ValueError('Incompatible shape between kls and sizes.')
 
+        self.fit_params = None
+        self.fit_covariance = None
+        self.emit = None
+        self.twiss = None
+        self.second_moments = None
+
+    def process(self):
+        """."""
         popt, pcov = self._fit()
         self.fit_params = popt
         self.fit_covariance = pcov
 
         # Emittance and Twiss parameters - SI units
-        emit, twiss = self._calc_parameters()
-        emit_err, twiss_err = self._calc_errors()
+        emit, twiss, second_moments = self._calc_parameters()
+        emit_err, twiss_err, second_moments_err = self._calc_errors()
         self.emit = [emit, emit_err]
         self.twiss = [twiss, twiss_err]
+        self.second_moments = [second_moments, second_moments_err]
 
     @staticmethod
     def _parabola(kl, a, b, c):
@@ -381,7 +388,7 @@ class QuadrupoleScan:
 
         emit = self.calc_emit(*second_moments)
         twiss = self.calc_twiss(*second_moments)
-        return emit, twiss
+        return emit, twiss, second_moments
 
     def _calc_errors(self, nr_samples=100000, seed=None):
         """Propagate fit uncertainties using Monte Carlo sampling."""
@@ -398,10 +405,11 @@ class QuadrupoleScan:
         emit_samples = self.calc_emit(*sec_mom_samples)
         twiss_samples = self.calc_twiss(*sec_mom_samples)
 
+        sec_mom_err = np.std(sec_mom_samples, ddof=1)
         emit_err = np.std(emit_samples, ddof=1)
         twiss_err = np.std(twiss_samples, axis=1, ddof=1)
 
-        return emit_err, twiss_err
+        return emit_err, twiss_err, sec_mom_err
 
     @staticmethod
     def calc_second_moments(params):
