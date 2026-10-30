@@ -1869,7 +1869,12 @@ class ImpedanceIVUAnalysis:
         ax.set_xlabel('BPM longitudinal position [m]')
         ax.set_ylabel(ylabel)
         ax.grid(True)
-        ax.legend()
+        ax.legend(
+            loc='upper left',
+            bbox_to_anchor=(1.02, 1),
+            borderaxespad=0,
+        )
+        fig.tight_layout()
 
         return fig, ax
 
@@ -2066,7 +2071,12 @@ class ImpedanceIVUAnalysis:
         ax.set_xlabel('BPM longitudinal position [m]')
         ax.set_ylabel(ylabel)
         ax.grid(True)
-        ax.legend()
+        ax.legend(
+            loc='upper left',
+            bbox_to_anchor=(1.02, 1),
+            borderaxespad=0,
+        )
+        fig.tight_layout()
 
         return fig, ax
 
