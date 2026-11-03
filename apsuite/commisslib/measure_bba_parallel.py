@@ -752,7 +752,7 @@ class DoParallelBBA(_BaseClass):
 
         sofb = self.devices['sofb']
         if sofb.autocorrsts:
-            self._log('\nSOFB feedback is enabled. Please desable it first.')
+            self._log('\nSOFB feedback is enabled. Please disable it first.')
             return
 
         for gid, _ in enumerate(groups):
