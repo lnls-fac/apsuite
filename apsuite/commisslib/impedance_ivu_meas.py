@@ -134,7 +134,7 @@ class ImpedanceIVUMeasAllBumps(_Bump):
         sofb = self.devices['sofb']
         for i, gap in enumerate(gaps):
             print('#' * 70)
-            print(f'{i+1:02d}/{len(gaps):02d} Gap: {gap:.3f}')
+            print(f'{i + 1:02d}/{len(gaps):02d} Gap: {gap:.3f}')
             print('    Moving IVU...')
             ivu.set_gap(gap)
             ivu.cmd_move_start()
@@ -498,7 +498,7 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         of2 = int(abs(blow - bhigh) / hnum * nsamp_pturn) + of1
         slcs = [slice(of1 + winn, of1 + winp), slice(of2 + winn, of2 + winp)]
 
-        raw_arrays = [data[f"ampl{ant}"] for ant in "abcd"]
+        raw_arrays = [data[f'ampl{ant}'] for ant in 'abcd']
 
         nsamp2keep, nbpms = raw_arrays[0].shape
         nturns, _ = divmod(nsamp2keep, nsamp_pturn)
@@ -536,18 +536,18 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
             )
             b_sum = b_sigs.sum(axis=0)
 
-            dic[f"b{i}_posx"] = b_posx
-            dic[f"b{i}_posy"] = b_posy
-            dic[f"b{i}_sum"] = b_sum
-            dic[f"b{i}_sigs"] = b_sigs
+            dic[f'b{i}_posx'] = b_posx
+            dic[f'b{i}_posy'] = b_posy
+            dic[f'b{i}_sum'] = b_sum
+            dic[f'b{i}_sigs'] = b_sigs
             bucket_sums.append(b_sum)
 
         bt_sum = sum(bucket_sums)
-        dic["bt_sum"] = bt_sum
+        dic['bt_sum'] = bt_sum
 
-        curr = data["stored_current"]
+        curr = data['stored_current']
         for i, b_sum in enumerate(bucket_sums, start=1):
-            dic[f"b{i}_curr"] = b_sum * curr / bt_sum
+            dic[f'b{i}_curr'] = b_sum * curr / bt_sum
 
         return dic
 
@@ -556,6 +556,7 @@ class ImpedanceIVUAnalysis:
     """Analyze IVU transverse impedance measurements."""
 
     _SUPPORTED_IVUS = ('IVU18_SI08', 'IVU18_SI14')
+    _GAP_ATOL = 1e-3  # [mm]
 
     def __init__(self, data=None, beam_voltage=3.0e9):
         """Initialize IVU impedance analysis.
@@ -592,7 +593,7 @@ class ImpedanceIVUAnalysis:
         self.M_ivu = {'x': None, 'y': None}
 
         # Fits
-        self.theta_fits = {'x': None, 'y': None}
+        self.theta_fits = {'x': {}, 'y': {}}
         self.kperp_fits = {'x': {}, 'y': {}}
 
     # Accelerator-model utilities
@@ -810,9 +811,7 @@ class ImpedanceIVUAnalysis:
             )
 
         if len(file_paths) == 0:
-            raise ValueError(
-                'file_paths must contain at least one file path.'
-            )
+            raise ValueError('file_paths must contain at least one file path.')
 
         data = []
 
@@ -823,9 +822,7 @@ class ImpedanceIVUAnalysis:
                 for bump_i in loaded_data['data']['bumps_data']:
                     data_i = bump_i['meas_data']
 
-                    data_i['params']['bump'] = (
-                        bump_i['bump'].copy()
-                    )
+                    data_i['params']['bump'] = bump_i['bump'].copy()
 
                     data.append(data_i)
             else:
@@ -1328,7 +1325,9 @@ class ImpedanceIVUAnalysis:
 
             self._check_consistency(data_i, n_acq, n_bpms, n_turns)
 
-            gap = _np.mean([data_acq[gap_key] for data_acq in data_meas])
+            gap = round(
+                _np.mean([data_acq[gap_key] for data_acq in data_meas]), 3
+            )
 
             b1_curr = _np.mean([data_acq['b1_curr'] for data_acq in data_meas])
 
@@ -1436,7 +1435,7 @@ class ImpedanceIVUAnalysis:
 
         self.delta_orbit[plane] = delta_orbit
         self.delta_orbit_stats[plane] = None
-        self.theta_fits[plane] = None
+        self.theta_fits[plane] = {}
         self.kperp_fits[plane] = {}
 
         return delta_orbit
@@ -1502,7 +1501,7 @@ class ImpedanceIVUAnalysis:
         }
 
         self.delta_orbit_stats[plane] = stats
-        self.theta_fits[plane] = None
+        self.theta_fits[plane] = {}
         self.kperp_fits[plane] = {}
 
         return stats
@@ -1869,11 +1868,7 @@ class ImpedanceIVUAnalysis:
         ax.set_xlabel('BPM longitudinal position [m]')
         ax.set_ylabel(ylabel)
         ax.grid(True)
-        ax.legend(
-            loc='upper left',
-            bbox_to_anchor=(1.02, 1),
-            borderaxespad=0,
-        )
+        ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1), borderaxespad=0)
         fig.tight_layout()
 
         return fig, ax
@@ -2071,11 +2066,7 @@ class ImpedanceIVUAnalysis:
         ax.set_xlabel('BPM longitudinal position [m]')
         ax.set_ylabel(ylabel)
         ax.grid(True)
-        ax.legend(
-            loc='upper left',
-            bbox_to_anchor=(1.02, 1),
-            borderaxespad=0,
-        )
+        ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1), borderaxespad=0)
         fig.tight_layout()
 
         return fig, ax
@@ -2110,7 +2101,7 @@ class ImpedanceIVUAnalysis:
         self.resp_mat = resp_mat
 
         self.M_ivu = {'x': None, 'y': None}
-        self.theta_fits = {'x': None, 'y': None}
+        self.theta_fits = {'x': {}, 'y': {}}
         self.kperp_fits = {'x': {}, 'y': {}}
 
         return resp_mat, info
@@ -2169,295 +2160,603 @@ class ImpedanceIVUAnalysis:
             m_ivu.append(m_full[bpm_indcs])
 
         self.M_ivu[plane] = m_ivu
-        self.theta_fits[plane] = None
+        self.theta_fits[plane] = {}
         self.kperp_fits[plane] = {}
 
         return m_ivu
 
-    def fit_theta(self, plane='y', error='sem'):
-        """Fit the IVU kick angle for each measurement configuration.
+    def _prepare_gap_fit_data(
+        self, gap, plane='y', error='sem', config_indices=None, gap_atol=None
+    ):
+        """Prepare charge-normalized orbit data for one gap scan.
 
-        For each configuration, the mean orbit-difference profile is
-        projected onto the corresponding IVU response vector using weighted
-        least squares. The fitted model is Delta u = theta*M_IVU.
+        This method selects the desired configurations and organizes the
+        corresponding orbit means, uncertainties, IVU response, bump values
+        and charge differences into arrays used by the fitting methods.
 
         Args:
-            plane (str): Transverse plane, either "x" or 'y'.
-            error (str or None): Orbit uncertainty used in the fit. Use
-                'std', 'sem', or None for an unweighted fit.
+            gap (float): IVU gap [mm].
+            plane (str): Transverse plane, either 'x' or 'y'.
+            error (str): Orbit uncertainty, either 'std' or 'sem'.
+            config_indices (sequence of int, optional): Explicit configuration
+                indices belonging to the scan. If None, configurations are
+                selected according to the requested gap.
+            gap_atol (float): Absolute tolerance used to select configurations
+                by gap [mm].
 
         Returns:
-            theta_fit (dict): Fitted angles, uncertainties, orbit models,
-                residuals, and goodness-of-fit quantities.
+            fit_data (dict): Data and metadata needed by the free-kick and
+                kick-factor fits.
 
         Raises:
-            RuntimeError: If orbit statistics or IVU response vectors are
-                unavailable.
-            ValueError: If plane or error is invalid, or the orbit and
-                response vectors are incompatible.
+            RuntimeError: If required analysis results are unavailable.
+            ValueError: If the plane or error type is invalid, fewer than two
+                configurations are selected, or arrays contain invalid values.
+            IndexError: If a configuration index is outside the valid range.
         """
+        if gap_atol is None:
+            gap_atol = self._GAP_ATOL
+
         if plane not in ('x', 'y'):
             raise ValueError("plane must be 'x' or 'y'.")
 
-        if error not in (None, 'std', 'sem'):
-            raise ValueError("error must be None, 'std', or 'sem'.")
+        if error not in ('std', 'sem'):
+            raise ValueError("error must be 'std' or 'sem'.")
 
-        stats = self.delta_orbit_stats[plane]
+        if self.config_table is None:
+            raise RuntimeError('Prepare the measurement data first.')
 
-        if stats is None:
+        if self.delta_orbit_stats[plane] is None:
             raise RuntimeError(
                 f'Calculate the {plane}-plane orbit statistics first.'
             )
 
-        m_ivu = self.M_ivu[plane]
-
-        if m_ivu is None:
+        if self.M_ivu[plane] is None:
             raise RuntimeError(
                 f'Set the {plane}-plane IVU response matrix first.'
             )
 
-        if len(stats['mean']) != len(m_ivu):
-            raise ValueError(
-                'The numbers of orbit profiles and IVU response vectors '
-                'do not match.'
+        n_configs = len(self.config_table)
+
+        # -------------------------------------------------------------
+        # Select the configurations included in this fit.
+        #
+        # If explicit indices are passed, they define the scan.
+        # Otherwise, all configurations at the requested gap are used.
+        # -------------------------------------------------------------
+        if config_indices is None:
+            gap_values = self.config_table['gap'].to_numpy(dtype=float)
+
+            config_indices = _np.flatnonzero(
+                _np.isclose(gap_values, float(gap), rtol=0.0, atol=gap_atol)
             )
-
-        theta = []
-        theta_err_propag = []
-        theta_err = []
-        model = []
-        residual = []
-        residual_rms = []
-        chi2 = []
-        reduced_chi2 = []
-
-        for i, (delta_i, m_i) in enumerate(zip(stats['mean'], m_ivu)):
-            delta_i = _np.asarray(delta_i)
-            m_i = _np.asarray(m_i)
-
-            if delta_i.shape != m_i.shape:
-                raise ValueError(
-                    f'Configuration {i}: orbit and IVU response vectors '
-                    f'have incompatible shapes: {delta_i.shape} and '
-                    f'{m_i.shape}.'
-                )
-
-            if error is None:
-                error_i = None
-                weights = _np.ones_like(delta_i)
-            else:
-                error_i = _np.asarray(stats[error][i])
-                error_i = _np.maximum(error_i, _np.finfo(float).eps)
-                weights = 1.0 / error_i**2
-
-            denominator = _np.sum(weights * m_i**2)
-
-            if _np.isclose(denominator, 0.0):
-                raise ValueError(
-                    f'Configuration {i}: the IVU response does not allow '
-                    'the kick angle to be determined.'
-                )
-
-            numerator = _np.sum(weights * delta_i * m_i)
-
-            theta_i = numerator / denominator
-            model_i = theta_i * m_i
-            residual_i = delta_i - model_i
-
-            if error_i is None:
-                theta_err_propag_i = _np.nan
-                theta_err_i = _np.nan
-                chi2_i = _np.nan
-                reduced_chi2_i = _np.nan
-            else:
-                theta_err_propag_i = 1.0 / _np.sqrt(denominator)
-                chi2_i = _np.sum((residual_i / error_i) ** 2)
-                dof_i = len(delta_i) - 1
-
-                if dof_i > 0:
-                    reduced_chi2_i = chi2_i / dof_i
-
-                    # Account for the error coming from the lstsqrs, without
-                    # ever reducing the uncertainty propagated from the
-                    # measured orbit uncertainties
-                    theta_err_i = theta_err_propag_i * _np.sqrt(
-                        max(1.0, reduced_chi2_i)
-                    )
-                else:
-                    reduced_chi2_i = _np.nan
-
-            theta.append(theta_i)
-            theta_err.append(theta_err_i)
-            theta_err_propag.append(theta_err_propag_i)
-            model.append(model_i)
-            residual.append(residual_i)
-            residual_rms.append(_np.sqrt(_np.mean(residual_i**2)))
-            chi2.append(chi2_i)
-            reduced_chi2.append(reduced_chi2_i)
-
-        theta_fit = {
-            'theta': _np.asarray(theta),
-            'theta_err': _np.asarray(theta_err),
-            'model': model,
-            'residual': residual,
-            'residual_rms': _np.asarray(residual_rms),
-            'chi2': _np.asarray(chi2),
-            'reduced_chi2': _np.asarray(reduced_chi2),
-            'error': error,
-        }
-
-        self.theta_fits[plane] = theta_fit
-        self.kperp_fits[plane] = {}
-
-        return theta_fit
-
-    def fit_kperp(self, gap, plane='y'):
-        """Fit the transverse kick factor for one IVU gap.
-
-        The projected kick angles are normalized by the measured bunch
-        charge differences and fitted as a linear function of the orbit
-        bump:
-
-            theta / Delta q = b + a*y0
-
-        The transverse kick factor is calculated from the fitted slope.
-
-        Args:
-            gap (float): IVU gap to fit [mm].
-            plane (str): Transverse plane. Use "x" or "y".
-
-        Returns:
-            kperp_fit (dict): Linear-fit and kick-factor results.
-
-        Raises:
-            RuntimeError: If fitted kick angles or their uncertainties are
-                unavailable.
-            ValueError: If plane is invalid, fewer than two configurations are
-                available, or a selected charge difference is invalid.
-        """
-        if plane not in ('x', 'y'):
-            raise ValueError("plane must be 'x' or 'y'.")
-
-        theta_fit = self.theta_fits[plane]
-
-        if theta_fit is None:
-            raise RuntimeError(f'Fit the {plane}-plane kick angles first.')
-
-        gap_values = self.config_table['gap'].to_numpy(dtype=float)
-
-        mask = _np.isclose(gap_values, gap, rtol=0.0, atol=1e-6)
-        i_selected = _np.where(mask)[0]
-
-        if len(i_selected) < 2:
-            raise ValueError(
-                'At least two configurations are required to fit the '
-                f'kick factor at gap {gap:.3f} mm.'
-            )
-
-        y0 = self.config_table.iloc[i_selected]['y0'].to_numpy(dtype=float)
-
-        delta_charge = self.config_table.iloc[i_selected][
-            'delta_charge'
-        ].to_numpy(dtype=float)
-
-        theta = theta_fit['theta'][i_selected]
-        theta_err = theta_fit['theta_err'][i_selected]
-
-        if not _np.all(_np.isfinite(theta_err)) or _np.any(theta_err <= 0.0):
-            raise RuntimeError(
-                'Positive finite kick-angle uncertainties are required to fit '
-                "the kick factor. Fit the kick angles using error='std' or "
-                "error='sem'."
-            )
-
-        if not _np.all(_np.isfinite(delta_charge)) or _np.any(
-            _np.isclose(delta_charge, 0.0, rtol=0.0, atol=_np.finfo(float).eps)
-        ):
-            raise ValueError('Charge differences must be finite and nonzero.')
-
-        theta_norm = theta / delta_charge
-        theta_norm_err = theta_err / _np.abs(delta_charge)
-
-        # Model: theta / Delta q = b + a*y0.
-        design_matrix = _np.column_stack([_np.ones(len(y0)), y0])
-
-        weights_sqrt = 1.0 / theta_norm_err
-
-        design_matrix_weighted = design_matrix * weights_sqrt[:, None]
-        theta_norm_weighted = theta_norm * weights_sqrt
-
-        coefficients, _, _, _ = _np.linalg.lstsq(
-            design_matrix_weighted, theta_norm_weighted, rcond=None
-        )
-
-        b = coefficients[0]
-        a = coefficients[1]
-
-        theta_norm_model = design_matrix @ coefficients
-        residual = theta_norm - theta_norm_model
-
-        covariance_formal = _np.linalg.pinv(
-            design_matrix_weighted.T @ design_matrix_weighted
-        )
-
-        chi2 = _np.sum((residual / theta_norm_err) ** 2)
-        dof = len(y0) - len(coefficients)
-
-        if dof > 0:
-            reduced_chi2 = chi2 / dof
-            covariance = covariance_formal * max(1.0, reduced_chi2)
         else:
-            reduced_chi2 = _np.nan
-            covariance = covariance_formal.copy()
+            config_indices = _np.asarray(config_indices, dtype=int)
 
-        coefficients_err_propag = _np.sqrt(_np.diag(covariance_formal))
-        coefficients_err = _np.sqrt(_np.diag(covariance))
+        if len(config_indices) < 2:
+            raise ValueError(
+                'At least two configurations are required for the fit.'
+            )
 
-        b_err = coefficients_err[0]
-        a_err = coefficients_err[1]
-        b_err_propag = coefficients_err_propag[0]
-        a_err_propag = coefficients_err_propag[1]
+        invalid_indices = config_indices[
+            (config_indices < 0) | (config_indices >= n_configs)
+        ]
 
-        kperp = 1e-6 * self.beam_voltage * a
-        kperp_err = 1e-6 * self.beam_voltage * a_err
-        kperp_err_propag = 1e-6 * self.beam_voltage * a_err_propag
+        if len(invalid_indices) > 0:
+            raise IndexError(
+                'Configuration indices outside the valid range: '
+                f'{invalid_indices.tolist()}.'
+            )
 
-        kperp_fit = {
+        # -------------------------------------------------------------
+        # Obtain charge-normalized orbit statistics.
+        #
+        # The means and uncertainties returned here already have units:
+        #
+        #     orbit       -> um/nC
+        #     orbit_error -> um/nC
+        # -------------------------------------------------------------
+        stats = self.get_delta_orbit_stats(plane=plane, normalized=True)
+
+        orbit = _np.stack([stats['mean'][cfg] for cfg in config_indices])
+
+        orbit_error = _np.stack([stats[error][cfg] for cfg in config_indices])
+
+        # All configurations use the same BPMs and therefore the same
+        # IVU response vector. We can take it from the first selected
+        # configuration.
+        first_cfg = config_indices[0]
+
+        response = _np.asarray(self.M_ivu[plane][first_cfg], dtype=float)
+
+        bpm_indices = _np.asarray(
+            self.data[first_cfg]['data'][0]['bpm_indcs'], dtype=int
+        )
+
+        # np.stack already guarantees that all selected orbit arrays
+        # have the same shape. We only need to confirm compatibility
+        # between the orbit and response dimensions.
+        if orbit.shape[1] != len(response):
+            raise ValueError(
+                'The orbit data and IVU response contain different '
+                'numbers of BPMs.'
+            )
+
+        if len(bpm_indices) != len(response):
+            raise ValueError(
+                'The BPM-index array and IVU response contain different '
+                'numbers of BPMs.'
+            )
+
+        # -------------------------------------------------------------
+        # Validate numerical values.
+        # -------------------------------------------------------------
+        if not _np.all(_np.isfinite(orbit)):
+            raise ValueError('Orbit means must contain only finite values.')
+
+        if not _np.all(_np.isfinite(orbit_error)) or _np.any(
+            orbit_error <= 0.0
+        ):
+            raise ValueError(
+                'Orbit uncertainties must be finite and positive.'
+            )
+
+        if not _np.all(_np.isfinite(response)):
+            raise ValueError(
+                'The IVU response must contain only finite values.'
+            )
+
+        if _np.allclose(response, 0.0):
+            raise ValueError('The IVU response cannot be identically zero.')
+
+        # -------------------------------------------------------------
+        # Configuration-level quantities.
+        # -------------------------------------------------------------
+        selected_rows = self.config_table.iloc[config_indices]
+
+        y0 = selected_rows['y0'].to_numpy(dtype=float)
+
+        delta_charge = selected_rows['delta_charge'].to_numpy(dtype=float)
+
+        if not _np.all(_np.isfinite(y0)):
+            raise ValueError('Bump values must contain only finite values.')
+
+        if not _np.all(_np.isfinite(delta_charge)):
+            raise ValueError(
+                'Charge differences must contain only finite values.'
+            )
+
+        return {
             'gap': float(gap),
             'plane': plane,
-            'config_indices': i_selected,
+            'error': error,
+            'config_indices': config_indices,
+            'bpm_indices': bpm_indices,
+            'response': response,
+            'orbit': orbit,
+            'orbit_error': orbit_error,
             'y0': y0,
             'delta_charge': delta_charge,
-            'delta_charge_mean': _np.mean(delta_charge),
-            'theta': theta,
-            'theta_err': theta_err,
-            'theta_norm': theta_norm,
-            'theta_norm_err': theta_norm_err,
-            'theta_norm_model': theta_norm_model,
-            'residual': residual,
-            'b': b,
-            'b_err': b_err,
-            'b_err_propag': b_err_propag,
-            'a': a,
-            'a_err': a_err,
-            'a_err_propag': a_err_propag,
-            'kperp': kperp,
-            'kperp_err': kperp_err,
-            'kperp_err_propag': kperp_err_propag,
-            'dof': dof,
-            'chi2': chi2,
-            'reduced_chi2': reduced_chi2,
+            'n_bumps': len(config_indices),
+            'n_bpms': len(response),
         }
 
-        self.kperp_fits[plane][float(gap)] = kperp_fit
+    def fit_relative_kicks(
+        self, gap, plane='y', error='sem', config_indices=None, gap_atol=None
+    ):
+        """Fit the relative charge-normalized IVU kicks for one gap scan.
+
+        The charge-normalized orbit model is
+
+            y_i = M*theta_i + background + epsilon_i,
+
+        with the exact identification constraint
+
+            sum(theta_i) = 0.
+
+        The common BPM background and all relative kicks are estimated
+        simultaneously through equality-constrained weighted least squares.
+
+        Args:
+            gap (float): IVU gap [mm].
+            plane (str): Transverse plane, either 'x' or 'y'.
+            error (str): Orbit uncertainty, either 'std' or 'sem'.
+            config_indices (sequence of int, optional): Explicit configuration
+                indices belonging to the scan. If None, select by gap.
+            gap_atol (float): Absolute tolerance for gap selection [mm].
+
+        Returns:
+            kick_fit (dict): Relative kicks, background, covariances, residuals
+                and goodness-of-fit quantities.
+        """
+        if gap_atol is None:
+            gap_atol = self._GAP_ATOL
+
+        fit_data = self._prepare_gap_fit_data(
+            gap=gap,
+            plane=plane,
+            error=error,
+            config_indices=config_indices,
+            gap_atol=gap_atol,
+        )
+
+        orbit = fit_data['orbit']
+        orbit_error = fit_data['orbit_error']
+        response = fit_data['response']
+
+        n_bumps = fit_data['n_bumps']
+        n_bpms = fit_data['n_bpms']
+
+        # -------------------------------------------------------------
+        # Stack the orbit observations:
+        #
+        # y = [y_1, y_2, ..., y_N]
+        #
+        # Each y_i contains the n_bpms orbit values for bump i.
+        # -------------------------------------------------------------
+        values = orbit.ravel()
+        sigma = orbit_error.ravel()
+        weights = 1.0 / sigma**2
+
+        # -------------------------------------------------------------
+        # Construct the kick block:
+        #
+        # [ M  0  0 ... ]
+        # [ 0  M  0 ... ]
+        # [ 0  0  M ... ]
+        #
+        # Shape: (n_bumps*n_bpms, n_bumps)
+        # -------------------------------------------------------------
+        kick_block = _np.kron(_np.eye(n_bumps), response[:, None])
+
+        # -------------------------------------------------------------
+        # Construct the common-background block:
+        #
+        # [ I ]
+        # [ I ]
+        # [ I ]
+        #
+        # The same BPM-resolved background is present at every bump.
+        #
+        # Shape: (n_bumps*n_bpms, n_bpms)
+        # -------------------------------------------------------------
+        background_block = _np.tile(_np.eye(n_bpms), (n_bumps, 1))
+
+        # Parameter order:
+        #
+        # p = [theta_1, ..., theta_N, b_1, ..., b_B]
+        design_matrix = _np.column_stack([kick_block, background_block])
+
+        n_parameters = design_matrix.shape[1]
+
+        # -------------------------------------------------------------
+        # Exact identification constraint:
+        #
+        # theta_1 + ... + theta_N = 0
+        # -------------------------------------------------------------
+        constraint = _np.zeros((1, n_parameters))
+        constraint[0, :n_bumps] = 1.0
+
+        # Weighted normal equations, without explicitly creating the
+        # full diagonal weight matrix.
+        normal_matrix = design_matrix.T @ (weights[:, None] * design_matrix)
+
+        normal_vector = design_matrix.T @ (weights * values)
+
+        # -------------------------------------------------------------
+        # KKT system for equality-constrained least squares:
+        #
+        # [ A.T W A   L.T ] [p     ] = [A.T W y]
+        # [ L          0   ] [lambda]   [   0   ]
+        # -------------------------------------------------------------
+        kkt_matrix = _np.block([
+            [normal_matrix, constraint.T],
+            [constraint, _np.zeros((1, 1))],
+        ])
+
+        kkt_rhs = _np.concatenate([normal_vector, _np.zeros(1)])
+
+        solution = _np.linalg.solve(kkt_matrix, kkt_rhs)
+
+        parameters = solution[:-1]
+        lagrange_multiplier = solution[-1]
+
+        theta = parameters[:n_bumps]
+        background = parameters[n_bumps:]
+
+        if not _np.isclose(_np.sum(theta), 0.0, rtol=0.0, atol=1e-12):
+            raise RuntimeError(
+                'The fitted kicks do not satisfy the sum-zero constraint.'
+            )
+
+        # -------------------------------------------------------------
+        # Fitted orbit model and residuals.
+        # -------------------------------------------------------------
+        model = (design_matrix @ parameters).reshape(n_bumps, n_bpms)
+
+        residual = orbit - model
+
+        residual_rms = _np.sqrt(_np.mean(residual**2, axis=1))
+
+        # Individual chi-square contribution from each bump.
+        chi2_by_bump = _np.sum((residual / orbit_error) ** 2, axis=1)
+
+        chi2 = float(_np.sum(chi2_by_bump))
+
+        # Independent parameter count:
+        #
+        # n_bumps kicks + n_bpms backgrounds - one exact constraint.
+        n_independent_parameters = n_bumps + n_bpms - 1
+
+        dof = n_bumps * n_bpms - n_independent_parameters
+
+        reduced_chi2 = chi2 / dof if dof > 0 else _np.nan
+
+        # Diagnostic, uniform allocation of the global degrees of freedom
+        # among the bump configurations.
+        dof_per_bump = dof / n_bumps
+
+        reduced_chi2_by_bump = chi2_by_bump / dof_per_bump
+
+        # -------------------------------------------------------------
+        # Formal parameter covariance.
+        #
+        # For this equality-constrained problem, the upper-left block
+        # of KKT^{-1} is the parameter covariance when W is the inverse
+        # covariance of the observations.
+        # -------------------------------------------------------------
+        kkt_inverse = _np.linalg.inv(kkt_matrix)
+
+        covariance_formal = kkt_inverse[:n_parameters, :n_parameters]
+
+        theta_covariance_formal = covariance_formal[:n_bumps, :n_bumps]
+
+        theta_err_formal = _np.sqrt(
+            _np.maximum(0.0, _np.diag(theta_covariance_formal))
+        )
+
+        # -------------------------------------------------------------
+        # Diagnostic per-bump residual inflation policy.
+        #
+        # This is intentionally distinguished from the formal covariance.
+        # Each bump's marginal theta uncertainty is inflated according to
+        # how well its orbit is represented by the common-background model.
+        # -------------------------------------------------------------
+        inflation_by_bump = _np.sqrt(_np.maximum(1.0, reduced_chi2_by_bump))
+
+        theta_err = theta_err_formal * inflation_by_bump
+
+        # Preserve the formal correlation coefficients while replacing
+        # the marginal standard deviations by the inflated values.
+        #
+        # C_corrected = D * C_formal * D,
+        # where D contains the individual inflation factors.
+        inflation_matrix = _np.diag(inflation_by_bump)
+
+        theta_covariance = (
+            inflation_matrix @ theta_covariance_formal @ inflation_matrix
+        )
+
+        kick_fit = {
+            'gap': fit_data['gap'],
+            'plane': plane,
+            'error': error,
+            'config_indices': fit_data['config_indices'],
+            'bpm_indices': fit_data['bpm_indices'],
+            'y0': fit_data['y0'],
+            'delta_charge': fit_data['delta_charge'],
+            'response': response,
+            'orbit': orbit,
+            'orbit_error': orbit_error,
+            # Relative charge-normalized kicks [urad/nC].
+            'theta': theta,
+            'theta_err': theta_err,
+            'theta_err_formal': theta_err_formal,
+            'theta_covariance': theta_covariance,
+            'theta_covariance_formal': theta_covariance_formal,
+            # Charge-normalized BPM background [um/nC].
+            'background': background,
+            # Orbit model and residuals [um/nC].
+            'model': model,
+            'residual': residual,
+            'residual_rms': residual_rms,
+            # Goodness-of-fit information.
+            'chi2_by_bump': chi2_by_bump,
+            'dof_per_bump': dof_per_bump,
+            'reduced_chi2_by_bump': reduced_chi2_by_bump,
+            'inflation_by_bump': inflation_by_bump,
+            'chi2': chi2,
+            'dof': dof,
+            'reduced_chi2': reduced_chi2,
+            # Numerical/constraint information.
+            'lagrange_multiplier': lagrange_multiplier,
+            'constraint_residual': float(_np.sum(theta)),
+        }
+
+        gap_key = round(float(gap), 3)
+
+        self.theta_fits[plane][gap_key] = kick_fit
+
+        # The direct fit for this same gap must be recalculated.
+        self.kperp_fits[plane].pop(gap_key, None)
+
+        return kick_fit
+
+    def fit_kperp(
+        self, gap, plane='y', error='sem', config_indices=None, gap_atol=None
+    ):
+        """Fit the transverse kick factor directly from normalized orbit data.
+
+        The fitted model is
+
+            y_i = M*a*y0_i + background + epsilon_i,
+
+        where a is the charge-normalized kick slope versus vertical bump.
+
+        Args:
+            gap (float): IVU gap [mm].
+            plane (str): Transverse plane, either 'x' or 'y'.
+            error (str): Orbit uncertainty, either 'std' or 'sem'.
+            config_indices (sequence of int, optional): Explicit configuration
+                indices belonging to the scan.
+            gap_atol (float): Absolute tolerance for gap selection [mm].
+
+        Returns:
+            kperp_fit (dict): Direct slope and transverse kick-factor results.
+        """
+        if gap_atol is None:
+            gap_atol = self._GAP_ATOL
+
+        fit_data = self._prepare_gap_fit_data(
+            gap=gap,
+            plane=plane,
+            error=error,
+            config_indices=config_indices,
+            gap_atol=gap_atol,
+        )
+
+        orbit = fit_data['orbit']
+        orbit_error = fit_data['orbit_error']
+        response = fit_data['response']
+        y0 = fit_data['y0']
+
+        n_bumps = fit_data['n_bumps']
+        n_bpms = fit_data['n_bpms']
+
+        if _np.allclose(y0, y0[0], rtol=0.0, atol=_np.finfo(float).eps):
+            raise ValueError(
+                'The bump values must vary to determine the kick-factor slope.'
+            )
+
+        values = orbit.ravel()
+        sigma = orbit_error.ravel()
+        weights = 1.0 / sigma**2
+
+        # -------------------------------------------------------------
+        # First design-matrix column:
+        #
+        # [ y0_1*M ]
+        # [ y0_2*M ]
+        # [   ...  ]
+        #
+        # Its coefficient is the slope a.
+        # -------------------------------------------------------------
+        slope_column = (y0[:, None] * response[None, :]).ravel()
+
+        # Common BPM-resolved background.
+        background_block = _np.tile(_np.eye(n_bpms), (n_bumps, 1))
+
+        # Parameter order:
+        #
+        # p = [a, b_1, ..., b_B]
+        design_matrix = _np.column_stack([slope_column, background_block])
+
+        normal_matrix = design_matrix.T @ (weights[:, None] * design_matrix)
+
+        normal_vector = design_matrix.T @ (weights * values)
+
+        parameters = _np.linalg.solve(normal_matrix, normal_vector)
+
+        a = parameters[0]
+        background = parameters[1:]
+
+        model = (design_matrix @ parameters).reshape(n_bumps, n_bpms)
+
+        residual = orbit - model
+
+        residual_rms = _np.sqrt(_np.mean(residual**2, axis=1))
+
+        chi2_by_bump = _np.sum((residual / orbit_error) ** 2, axis=1)
+
+        chi2 = float(_np.sum(chi2_by_bump))
+
+        # Number of independent parameters:
+        #
+        # one slope + n_bpms background values.
+        n_parameters = n_bpms + 1
+
+        dof = n_bumps * n_bpms - n_parameters
+
+        reduced_chi2 = chi2 / dof if dof > 0 else _np.nan
+
+        # Formal covariance of [a, background].
+        covariance_formal = _np.linalg.inv(normal_matrix)
+
+        a_err_formal = _np.sqrt(max(0.0, covariance_formal[0, 0]))
+
+        # Global residual inflation for the final physical slope.
+        inflation = _np.sqrt(max(1.0, reduced_chi2)) if dof > 0 else 1.0
+
+        covariance = inflation**2 * covariance_formal
+
+        a_err = a_err_formal * inflation
+
+        kperp = 1e-6 * self.beam_voltage * a
+
+        kperp_err_formal = 1e-6 * self.beam_voltage * a_err_formal
+
+        kperp_err = 1e-6 * self.beam_voltage * a_err
+
+        # The line represented in the mean-zero convention used by
+        # fit_relative_kicks().
+        y0_centered = y0 - _np.mean(y0)
+
+        theta_relative_model = a * y0_centered
+
+        kperp_fit = {
+            'gap': fit_data['gap'],
+            'plane': plane,
+            'error': error,
+            'config_indices': fit_data['config_indices'],
+            'bpm_indices': fit_data['bpm_indices'],
+            'y0': y0,
+            'y0_centered': y0_centered,
+            'delta_charge': fit_data['delta_charge'],
+            'response': response,
+            'orbit': orbit,
+            'orbit_error': orbit_error,
+            # Slope [urad/(nC mm)].
+            'a': a,
+            'a_err': a_err,
+            'a_err_formal': a_err_formal,
+            # Relative kick line [urad/nC].
+            'theta_relative_model': theta_relative_model,
+            # Charge-normalized background [um/nC].
+            'background': background,
+            # Model and residuals [um/nC].
+            'model': model,
+            'residual': residual,
+            'residual_rms': residual_rms,
+            # Complete covariance of [a, background].
+            'covariance': covariance,
+            'covariance_formal': covariance_formal,
+            # Goodness of fit.
+            'chi2_by_bump': chi2_by_bump,
+            'chi2': chi2,
+            'dof': dof,
+            'reduced_chi2': reduced_chi2,
+            'inflation': inflation,
+            # Kick factor [V/(pC m)].
+            'kperp': kperp,
+            'kperp_err': kperp_err,
+            'kperp_err_formal': kperp_err_formal,
+        }
+
+        gap_key = round(float(gap), 3)
+
+        self.kperp_fits[plane][float(gap_key)] = kperp_fit
 
         return kperp_fit
 
     def get_kperp_results_table(self, plane='y'):
         """Create a summary table of the fitted transverse kick factors.
 
+        The table includes the kick factor and slope uncertainties both
+        before and after the global residual-based inflation applied by
+        fit_kperp().
+
         Args:
-            plane (str): Transverse plane, either "x" or "y".
+            plane (str): Transverse plane, either 'x' or 'y'.
 
         Returns:
             results (pandas.DataFrame): Fit results with one row per IVU gap.
@@ -2482,125 +2781,168 @@ class ImpedanceIVUAnalysis:
         for gap in sorted(fits):
             fit = fits[gap]
 
+            kperp = fit['kperp']
+            kperp_err = fit['kperp_err']
+
             relative_error = (
-                _np.abs(fit['kperp_err'] / fit['kperp'])
-                if not _np.isclose(fit['kperp'], 0.0)
+                _np.abs(kperp_err / kperp)
+                if not _np.isclose(kperp, 0.0)
                 else _np.nan
             )
 
             rows.append({
                 'gap [mm]': fit['gap'],
-                'kperp [V/(pC m)]': fit['kperp'],
-                'kperp error [V/(pC m)]': fit['kperp_err'],
-                'relative error [%]': 100.0 * relative_error,
-                'kperp error (w/o chi2) [V/(pC m)]': fit['kperp_err_propag'],
+                'kperp [V/(pC m)]': kperp,
+                'kperp error [V/(pC m)]': kperp_err,
+                'kperp formal error [V/(pC m)]': (fit['kperp_err_formal']),
+                'relative error [%]': (100.0 * relative_error),
+                'slope [urad/(nC mm)]': fit['a'],
+                'slope error [urad/(nC mm)]': fit['a_err'],
+                'slope formal error [urad/(nC mm)]': (fit['a_err_formal']),
+                'error inflation factor': fit['inflation'],
+                'chi2': fit['chi2'],
                 'reduced chi2': fit['reduced_chi2'],
                 'dof': fit['dof'],
-                'n_configs': len(fit['config_indices']),
+                'n_bumps': len(fit['config_indices']),
+                'n_bpms': len(fit['bpm_indices']),
             })
 
         return _pd.DataFrame(rows)
 
-    def plot_theta_fit(self, gap, plane='y', normalized=True, ax=None):
-        """Plot projected kick angles and the fitted kick-factor model.
+    def plot_theta_fit(self, gap, plane='y', ax=None):
+        """Plot relative kicks and the fitted kick-factor model.
+
+        The points are the relative charge-normalized kicks obtained from
+        fit_relative_kicks(). Their sum is constrained to zero.
+
+        The line is obtained from the direct background-plus-slope fit:
+
+            theta_model = a * (y0 - mean(y0)).
 
         Args:
-            gap (float): IVU gap corresponding to the kick-factor fit [mm].
-            plane (str): Transverse plane, either "x" or "y".
-            normalized (bool): Whether to plot theta/Delta q instead of theta.
-            ax (matplotlib.axes.Axes, optional): Axes in which to draw. If
-                None, a new figure and axes are created.
+            gap (float): IVU gap corresponding to the fits [mm].
+            plane (str): Transverse plane, either 'x' or 'y'.
+            ax (matplotlib.axes.Axes, optional): Axes in which to draw.
+                If None, a new figure and axes are created.
 
         Returns:
             fig (matplotlib.figure.Figure): Plot figure.
             ax (matplotlib.axes.Axes): Plot axes.
 
         Raises:
-            ValueError: If plane is invalid.
-            RuntimeError: If no kick-factor fit is available for the selected
-                plane and gap.
+            ValueError: If plane is invalid, the selected fits correspond
+                to different configurations, or multiple kick-factor fits
+                match the requested gap.
+            RuntimeError: If either the relative-kick fit or the direct
+                kick-factor fit is unavailable.
         """
         if plane not in ('x', 'y'):
             raise ValueError("plane must be 'x' or 'y'.")
 
-        gap = float(gap)
+        gap_key = round(float(gap), 3)
 
-        matching_gaps = [
-            gap_key
-            for gap_key in self.kperp_fits[plane]
-            if _np.isclose(gap_key, gap, rtol=0.0, atol=1e-6)
-        ]
-
-        if not matching_gaps:
+        if gap_key not in self.theta_fits[plane]:
             raise RuntimeError(
-                f'Fit the {plane}-plane kick factor at gap {gap:.3f} mm first.'
+                f'Fit the {plane}-plane relative kicks at gap '
+                f'{gap_key:.3f} mm first.'
             )
 
-        if len(matching_gaps) > 1:
+        if gap_key not in self.kperp_fits[plane]:
+            raise RuntimeError(
+                f'Fit the {plane}-plane kick factor at gap '
+                f'{gap_key:.3f} mm first.'
+            )
+
+        kick_fit = self.theta_fits[plane][gap_key]
+        kperp_fit = self.kperp_fits[plane][gap_key]
+
+        if not _np.array_equal(
+            kick_fit['config_indices'], kperp_fit['config_indices']
+        ):
             raise ValueError(
-                f'Multiple kick-factor fits match gap {gap:.6f} mm.'
+                'The relative-kick fit and the kick-factor fit use '
+                'different configurations.'
             )
 
-        fit = self.kperp_fits[plane][matching_gaps[0]]
+        y0 = _np.asarray(kick_fit['y0'], dtype=float)
+        theta = _np.asarray(kick_fit['theta'], dtype=float)
+        theta_err = _np.asarray(kick_fit['theta_err'], dtype=float)
 
-        y0 = fit['y0']
-        theta = fit['theta']
-        theta_err = fit['theta_err']
-        delta_charge = fit['delta_charge']
+        # The relative kicks obey sum(theta_i) = 0.
+        y0_mean = _np.mean(y0)
+
+        y0_fit = _np.linspace(_np.min(y0), _np.max(y0), 200)
+
+        y0_fit_centered = y0_fit - y0_mean
+
+        a = kperp_fit['a']
+        a_err = kperp_fit['a_err']
+
+        theta_model = a * y0_fit_centered
+
+        # Uncertainty of the line due only to the slope uncertainty.
+        theta_model_err = _np.abs(y0_fit_centered) * a_err
 
         if ax is None:
             fig, ax = _plt.subplots(figsize=(8, 5))
         else:
             fig = ax.figure
 
-        if normalized:
-            values = fit['theta_norm']
-            values_err = fit['theta_norm_err']
-
-            y0_fit = _np.linspace(_np.min(y0), _np.max(y0), 100)
-            model_fit = fit['b'] + fit['a'] * y0_fit
-
-            ylabel = (
-                rf'$\hat{{\theta}}_{plane}/\Delta q$ '
-                r'[$\mu$rad/nC]'
-            )
-        else:
-            values = theta
-            values_err = theta_err
-
-            order = _np.argsort(y0)
-            y0_fit = y0[order]
-            model_fit = delta_charge[order] * fit['theta_norm_model'][order]
-
-            ylabel = (
-                rf'$\hat{{\theta}}_{plane}$ '
-                r'[$\mu$rad]'
-            )
-
         ax.errorbar(
             y0,
-            values,
-            yerr=values_err,
+            theta,
+            yerr=theta_err,
             marker='o',
             linestyle='none',
             markersize=6,
             capsize=4,
-            label='Measurements',
+            label='Relative kick estimates',
         )
 
-        ax.plot(y0_fit, model_fit, '-', label='Weighted linear fit')
+        ax.plot(
+            y0_fit,
+            theta_model,
+            '-',
+            linewidth=1.8,
+            label='Direct background-plus-slope fit',
+        )
 
-        id_label = self.id_name
+        ax.fill_between(
+            y0_fit,
+            theta_model - theta_model_err,
+            theta_model + theta_model_err,
+            alpha=0.2,
+            label=r'Fit uncertainty ($1\sigma$)',
+        )
+
+        theta_mean = _np.mean(theta)
+
+        ax.axhline(
+            theta_mean,
+            color='black',
+            linestyle='--',
+            linewidth=1.0,
+            label=(
+                rf'Mean kick: '
+                rf'$\overline{{\theta}}={theta_mean:.2e}$ '
+                r'$\mu$rad/nC'
+            ),
+        )
 
         ax.set_title(
-            rf'Projected $\hat{{\theta}}_{plane}$ versus $y_0$ ({id_label})'
-            '\n'
-            f'Gap = {fit["gap"]:.2f} mm, '
-            rf'$k_\perp$ = {fit["kperp"]:.2f} '
-            rf'$\pm$ {fit["kperp_err"]:.2f} V/(pC m)'
+            rf'Relative projected $\hat{{\theta}}_{plane}$ versus $y_0$ '
+            f'({self.id_name})\n'
+            f'Gap = {kperp_fit["gap"]:.2f} mm, '
+            rf'$k_\perp$ = {kperp_fit["kperp"]:.2f}'
+            rf'$\pm$ {kperp_fit["kperp_err"]:.2f} V/(pC m)'
         )
-        ax.set_xlabel(r'$y_0$ [mm]')
-        ax.set_ylabel(ylabel)
+
+        ax.set_xlabel(r'$y_0$[mm]')
+        ax.set_ylabel(
+            rf'Relative $\hat{{\theta}}_{plane}$ '
+            r'[$\mu$rad/nC]'
+        )
+
         ax.grid(True)
         ax.legend()
 
@@ -2608,29 +2950,42 @@ class ImpedanceIVUAnalysis:
 
     def plot_ivu_projection(
         self,
-        cfg,
-        ref_cfg,
+        gap,
+        bump,
+        ref_bump,
         plane='y',
         normalized=True,
         model='global',
         error='sem',
+        bump_atol=0.05,
         ax=None,
     ):
         """Plot the reference-subtracted orbit and fitted IVU model.
 
-        The model can use either the independently projected kick angles or
-        the ones obtained from the global kick-factor fit for the selected
-        IVU gap.
+        The plotted and reference configurations are selected by the requested
+        IVU gap and their measured bump values.
+
+        The measured orbit can be compared with either:
+
+            - "individual": the difference between the relative kicks obtained
+            from fit_relative_kicks();
+            - "global": the kick difference predicted by the direct
+            kick-factor fit.
 
         Args:
-            cfg (int): Configuration to plot.
-            ref_cfg (int): Reference configuration to subtract.
-            plane (str): Transverse plane. Use "x" or "y".
-            normalized (bool): Whether to plot the orbit difference normalized
-                by the mean bunch charge difference.
+            gap (float): IVU gap [mm].
+            bump (float): Measured bump value of the configuration to plot
+                [mm].
+            ref_bump (float): Measured bump value of the reference
+                configuration [mm].
+            plane (str): Transverse plane, either "x" or "y".
+            normalized (bool): Whether to plot charge-normalized orbit
+                differences. If True, orbit units are micrometers per  nanocoulomb. Otherwise, orbit units are micrometers.
             model (str): Model used to predict the IVU orbit. Use
                 "individual" or "global".
             error (str): Error bars to display, either "std" or "sem".
+            bump_atol (float): Absolute tolerance used to associate the
+                requested bump values with the measured bump values [mm].
             ax (matplotlib.axes.Axes, optional): Axes in which to draw. If
                 None, a new figure and axes are created.
 
@@ -2639,11 +2994,10 @@ class ImpedanceIVUAnalysis:
             ax (matplotlib.axes.Axes): Plot axes.
 
         Raises:
-            RuntimeError: If required orbit, response, or fit results are
-                unavailable.
-            ValueError: If plane, model, or error is invalid, or the
-                reference configuration does not contain the required BPMs.
-            IndexError: If cfg or ref_cfg is outside the valid range.
+            RuntimeError: If orbit statistics, IVU response data or the
+                requested fit are unavailable.
+            ValueError: If plane, model, or error is invalid, or a unique
+                configuration cannot be identified for one of the requested bump values.
         """
         if plane not in ('x', 'y'):
             raise ValueError("plane must be 'x' or 'y'.")
@@ -2654,70 +3008,77 @@ class ImpedanceIVUAnalysis:
         if error not in ('std', 'sem'):
             raise ValueError("error must be 'std' or 'sem'.")
 
-        stats = self.get_delta_orbit_stats(plane=plane, normalized=False)
+        gap_key = round(float(gap), 3)
+        bump = float(bump)
+        ref_bump = float(ref_bump)
 
-        n_configs = len(stats['mean'])
+        # -------------------------------------------------------------
+        # Select all configurations belonging to the requested gap.
+        # -------------------------------------------------------------
+        gap_values = self.config_table['gap'].to_numpy(dtype=float)
+        y0_values = self.config_table['y0'].to_numpy(dtype=float)
 
-        if not 0 <= cfg < n_configs:
-            raise IndexError(
-                f'Configuration index {cfg} is outside the valid range.'
+        gap_indices = _np.flatnonzero(
+            _np.isclose(gap_values, gap_key, rtol=0.0, atol=self._GAP_ATOL)
+        )
+
+        if len(gap_indices) == 0:
+            raise ValueError(
+                f'No configurations were found at gap {gap:.3f} mm.'
             )
 
-        if not 0 <= ref_cfg < n_configs:
-            raise IndexError(
-                f'Reference configuration index {ref_cfg} is outside '
-                'the valid range.'
+        # -------------------------------------------------------------
+        # Select the plotted and reference configurations from their
+        # measured bump values.
+        # -------------------------------------------------------------
+        cfg_matches = gap_indices[
+            _np.isclose(y0_values[gap_indices], bump, rtol=0.0, atol=bump_atol)
+        ]
+
+        ref_matches = gap_indices[
+            _np.isclose(
+                y0_values[gap_indices], ref_bump, rtol=0.0, atol=bump_atol
+            )
+        ]
+
+        if len(cfg_matches) != 1:
+            raise ValueError(
+                f'Expected one configuration near y0={bump:.3f} mm '
+                f'at gap {gap:.3f} mm, but found {len(cfg_matches)}.'
             )
 
-        theta_fit = self.theta_fits[plane]
-        m_ivu = self.M_ivu[plane]
-
-        if theta_fit is None:
-            raise RuntimeError(f'Fit the {plane}-plane kick angles first.')
-
-        if m_ivu is None:
-            raise RuntimeError(
-                f'Set the {plane}-plane IVU response matrix first.'
+        if len(ref_matches) != 1:
+            raise ValueError(
+                f'Expected one reference configuration near '
+                f'y0={ref_bump:.3f} mm at gap {gap:.3f} mm, '
+                f'but found {len(ref_matches)}.'
             )
+
+        cfg = int(cfg_matches[0])
+        ref_cfg = int(ref_matches[0])
 
         row = self.config_table.iloc[cfg]
         row_ref = self.config_table.iloc[ref_cfg]
 
-        bpm_indcs = _np.asarray(
-            self.data[cfg]['data'][0]['bpm_indcs'], dtype=int
-        )
-        ref_bpm_indcs = _np.asarray(
-            self.data[ref_cfg]['data'][0]['bpm_indcs'], dtype=int
-        )
+        measured_bump = float(row['y0'])
+        measured_ref_bump = float(row_ref['y0'])
 
-        ref_bpm_map = {
-            bpm_idx: local_idx
-            for local_idx, bpm_idx in enumerate(ref_bpm_indcs)
-        }
+        # -------------------------------------------------------------
+        # Obtain the measured orbit means and uncertainties.
+        #
+        # All configurations contain the same BPMs in the same order,
+        # so no BPM-index remapping is necessary.
+        # -------------------------------------------------------------
+        stats = self.get_delta_orbit_stats(plane=plane, normalized=False)
 
-        missing_bpms = [
-            int(bpm_idx) for bpm_idx in bpm_indcs if bpm_idx not in ref_bpm_map
-        ]
+        delta_cfg = _np.asarray(stats['mean'][cfg], dtype=float)
+        delta_ref = _np.asarray(stats['mean'][ref_cfg], dtype=float)
 
-        if missing_bpms:
-            raise ValueError(
-                f'Reference configuration {ref_cfg} does not contain '
-                f'BPM indices required by configuration {cfg}: '
-                f'{missing_bpms}.'
-            )
+        error_cfg = _np.asarray(stats[error][cfg], dtype=float)
+        error_ref = _np.asarray(stats[error][ref_cfg], dtype=float)
 
-        ref_local_indcs = _np.asarray([
-            ref_bpm_map[bpm_idx] for bpm_idx in bpm_indcs
-        ])
-
-        delta_cfg = stats['mean'][cfg]
-        delta_ref = stats['mean'][ref_cfg][ref_local_indcs]
-
-        error_cfg = stats[error][cfg]
-        error_ref = stats[error][ref_cfg][ref_local_indcs]
-
-        q_cfg = row['delta_charge']
-        q_ref = row_ref['delta_charge']
+        q_cfg = float(row['delta_charge'])
+        q_ref = float(row_ref['delta_charge'])
 
         if (
             not _np.isfinite(q_cfg)
@@ -2730,6 +3091,9 @@ class ImpedanceIVUAnalysis:
                 'finite and nonzero.'
             )
 
+        # -------------------------------------------------------------
+        # Construct the measured reference-subtracted orbit.
+        # -------------------------------------------------------------
         if normalized:
             delta_plot = delta_cfg / q_cfg - delta_ref / q_ref
 
@@ -2744,6 +3108,8 @@ class ImpedanceIVUAnalysis:
             )
             theta_unit = r'$\mu$rad/nC'
         else:
+            # Scale the reference orbit considering the charge difference
+            # of both configurations.
             charge_scale = q_cfg / q_ref
 
             delta_plot = delta_cfg - charge_scale * delta_ref
@@ -2756,58 +3122,77 @@ class ImpedanceIVUAnalysis:
                 rf'Reference-subtracted $\Delta {plane}$ '
                 r'[$\mu$m]'
             )
+
             theta_unit = r'$\mu$rad'
 
-        m_cfg = m_ivu[cfg]
+        # The response vector is common to all selected configurations
+        m_cfg = _np.asarray(self.M_ivu[plane][cfg], dtype=float)
 
+        # ------------------------------------------------------------
+        # Calculate the model kick difference.
+        # ------------------------------------------------------------
         if model == 'individual':
-            theta_cfg = theta_fit['theta'][cfg]
-            theta_ref = theta_fit['theta'][ref_cfg]
+            if gap_key not in self.theta_fits[plane]:
+                raise RuntimeError(
+                    f'Fit the {plane}-plane relative kicks at gap '
+                    f'{gap_key:.3f} mm first.'
+                )
 
-            theta_err_cfg = theta_fit['theta_err'][cfg]
-            theta_err_ref = theta_fit['theta_err'][ref_cfg]
+            theta_fit = self.theta_fits[plane][gap_key]
+
+            fit_config_indices = _np.asarray(
+                theta_fit['config_indices'], dtype=int
+            )
+
+            cfg_local = _np.flatnonzero(fit_config_indices == cfg)
+            ref_local = _np.flatnonzero(fit_config_indices == ref_cfg)
+
+            if len(cfg_local) != 1 or len(ref_local) != 1:
+                raise ValueError(
+                    'Configuration indices were not found in the'
+                    'relative-kick fit.'
+                )
+
+            cfg_local = int(cfg_local[0])
+            ref_local = int(ref_local[0])
+
+            theta = _np.asarray(theta_fit['theta'], dtype=float)
+
+            theta_covariance = _np.asarray(
+                theta_fit['theta_covariance'], dtype=float
+            )
+
+            # The fitted kicks are already normalized by charge.
+            theta_difference = theta[cfg_local] - theta[ref_local]
+
+            # Var(theta_i - theta_ref)
+            theta_difference_var = (
+                theta_covariance[cfg_local, cfg_local]
+                + theta_covariance[ref_local, ref_local]
+                - 2.0 * theta_covariance[cfg_local, ref_local]
+            )
+
+            theta_difference_err = _np.sqrt(max(0.0, theta_difference_var))
 
             if normalized:
-                theta_model = theta_cfg / q_cfg - theta_ref / q_ref
-
-                theta_model_err = _np.sqrt(
-                    (theta_err_cfg / _np.abs(q_cfg)) ** 2
-                    + (theta_err_ref / _np.abs(q_ref)) ** 2
-                )
+                theta_model = theta_difference
+                theta_model_err = theta_difference_err
             else:
-                charge_scale = q_cfg / q_ref
+                theta_model = q_cfg * theta_difference
+                theta_model_err = _np.abs(q_cfg) * theta_difference_err
 
-                theta_model = theta_cfg - charge_scale * theta_ref
-
-                theta_model_err = _np.sqrt(
-                    theta_err_cfg**2 + (charge_scale * theta_err_ref) ** 2
-                )
-
-            model_label = 'Individual theta projection'
+            model_label = 'Relative-kick model'
 
         else:
-            gap = float(row['gap'])
-
-            matching_gaps = [
-                gap_key
-                for gap_key in self.kperp_fits[plane]
-                if _np.isclose(gap_key, gap, rtol=0.0, atol=1e-2)
-            ]
-
-            if not matching_gaps:
+            if gap_key not in self.kperp_fits[plane]:
                 raise RuntimeError(
                     f'Fit the {plane}-plane kick factor at gap '
-                    f'{gap:.3f} mm first.'
+                    f'{gap_key:.3f} mm first.'
                 )
 
-            if len(matching_gaps) > 1:
-                raise ValueError(
-                    f'Multiple kick-factor fits match gap {gap:.6f} mm.'
-                )
+            fit = self.kperp_fits[plane][gap_key]
 
-            fit = self.kperp_fits[plane][matching_gaps[0]]
-
-            delta_y0 = row['y0'] - row_ref['y0']
+            delta_y0 = measured_bump - measured_ref_bump
 
             if normalized:
                 theta_model = fit['a'] * delta_y0
@@ -2816,11 +3201,21 @@ class ImpedanceIVUAnalysis:
                 theta_model = q_cfg * fit['a'] * delta_y0
                 theta_model_err = _np.abs(q_cfg * delta_y0) * fit['a_err']
 
-            model_label = 'Global kick-factor model'
+            model_label = 'Direct kick-factor model'
 
         orbit_model = theta_model * m_cfg
 
-        spos_cfg = _np.asarray(self.spos_bpms)[bpm_indcs]
+        # -------------------------------------------------------------
+        # Plot.
+        # -------------------------------------------------------------
+        bpm_indices = _np.asarray(
+            self.data[cfg]['data'][0]['bpm_indcs'],
+            dtype=int,
+        )
+
+        spos = _np.asarray(
+            self.spos_bpms
+        )[bpm_indices]
 
         if ax is None:
             fig, ax = _plt.subplots(figsize=(10, 5))
@@ -2828,7 +3223,7 @@ class ImpedanceIVUAnalysis:
             fig = ax.figure
 
         ax.errorbar(
-            spos_cfg,
+            spos,
             delta_plot,
             yerr=error_plot,
             marker='.',
@@ -2839,15 +3234,13 @@ class ImpedanceIVUAnalysis:
         )
 
         ax.plot(
-            spos_cfg,
+            spos,
             orbit_model,
             '-',
             linewidth=1.8,
             label=(
-                f'{model_label}: '
-                rf'$\theta={theta_model:.3f}'
-                rf'\pm{theta_model_err:.3f}$ '
-                f'{theta_unit}'
+                rf'{model_label}: $\Delta\theta={theta_model:.3f}'
+                rf'\pm{theta_model_err:.3f}$ {theta_unit}'
             ),
         )
 
@@ -2855,17 +3248,17 @@ class ImpedanceIVUAnalysis:
 
         plane_name = {'x': 'Horizontal', 'y': 'Vertical'}[plane]
 
-        id_label = self.id_name
-
         ax.set_title(
-            f'{plane_name} orbit distortion ({id_label})\n'
-            f'Gap = {row["gap"]:.2f} mm, '
-            rf'$y_0$ = {row["y0"]:.2f} mm, '
+            f'{plane_name} orbit distortion ({self.id_name})\n'
+            f'Gap = {gap_key:.2f} mm, '
+            rf'$y_0$ = {measured_bump:.3f} mm, '
             rf'$y_{{0,\mathrm{{ref}}}}$ = '
-            f'{row_ref["y0"]:.2f} mm'
+            f'{measured_ref_bump:.3f} mm'
         )
+
         ax.set_xlabel('BPM longitudinal position [m]')
         ax.set_ylabel(ylabel)
+
         ax.grid(True)
         ax.legend()
 
