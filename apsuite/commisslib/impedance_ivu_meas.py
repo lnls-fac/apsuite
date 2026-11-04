@@ -445,7 +445,8 @@ class ImpedanceIVUMeas(_BaseThreaded, _BaseAcq):
         try:
             for i in range(self.params.num_acquisitions):
                 print(
-                    f'Acquisition {i + 1:02d}/{self.params.num_acquisitions:02d}'
+                    'Acquisition '
+                    f'{i + 1:02d}/{self.params.num_acquisitions:02d}'
                 )
                 if self._stopevt.is_set():
                     break
@@ -2980,7 +2981,8 @@ class ImpedanceIVUAnalysis:
                 configuration [mm].
             plane (str): Transverse plane, either "x" or "y".
             normalized (bool): Whether to plot charge-normalized orbit
-                differences. If True, orbit units are micrometers per  nanocoulomb. Otherwise, orbit units are micrometers.
+                differences. If True, orbit units are micrometers per
+                nanocoulomb. Otherwise, orbit units are micrometers.
             model (str): Model used to predict the IVU orbit. Use
                 "individual" or "global".
             error (str): Error bars to display, either "std" or "sem".
@@ -2997,7 +2999,8 @@ class ImpedanceIVUAnalysis:
             RuntimeError: If orbit statistics, IVU response data or the
                 requested fit are unavailable.
             ValueError: If plane, model, or error is invalid, or a unique
-                configuration cannot be identified for one of the requested bump values.
+                configuration cannot be identified for one of the requested
+                bump values.
         """
         if plane not in ('x', 'y'):
             raise ValueError("plane must be 'x' or 'y'.")
@@ -3209,13 +3212,10 @@ class ImpedanceIVUAnalysis:
         # Plot.
         # -------------------------------------------------------------
         bpm_indices = _np.asarray(
-            self.data[cfg]['data'][0]['bpm_indcs'],
-            dtype=int,
+            self.data[cfg]['data'][0]['bpm_indcs'], dtype=int
         )
 
-        spos = _np.asarray(
-            self.spos_bpms
-        )[bpm_indices]
+        spos = _np.asarray(self.spos_bpms)[bpm_indices]
 
         if ax is None:
             fig, ax = _plt.subplots(figsize=(10, 5))
