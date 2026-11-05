@@ -432,7 +432,7 @@ class DoParallelBBA(_BaseClass):
 
         return _np.array(strengths, dtype=float)
 
-    def get_quad_strength_limits(self, group_id, margin=0.0005):
+    def get_quad_strength_limits(self, group_id):
         """."""
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
@@ -449,8 +449,8 @@ class DoParallelBBA(_BaseClass):
             upp = pv.upper_disp_limit
             low = pv.lower_disp_limit
             # Limits are interchanged in some quads:
-            lolim = min(upp, low) + margin
-            hilim = max(upp, low) - margin
+            lolim = min(upp, low)
+            hilim = max(upp, low)
             limits.append([lolim, hilim])
 
         return _np.array(limits, dtype=float)
@@ -460,10 +460,14 @@ class DoParallelBBA(_BaseClass):
         group_id,
         init_strengths=None,
         strength_limits=None,
-        margin=0.0005,
+        margin=0.00025,  # 5% of the default dKL/2
         return_valid=False,
     ):
         """."""
+        if margin <= 0 or margin > 0.0005:  # 10% of the default dKL/2
+            msg = 'Invalid "margin". Must satisfy 0.0 < margin <= 0.0005 !'
+            raise ValueError(msg)
+
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
 
@@ -473,14 +477,14 @@ class DoParallelBBA(_BaseClass):
             else self.data['groups2dopbba'][group_id]
         )
 
-        strengths = (
+        strengths = _np.asarray(
             self.get_quad_strengths(group_id)
             if init_strengths is None
             else init_strengths
         )
 
-        lims = (
-            self.get_quad_strength_limits(group_id, margin=margin)
+        lims = _np.asarray(
+            self.get_quad_strength_limits(group_id)
             if strength_limits is None
             else strength_limits
         )
@@ -495,7 +499,7 @@ class DoParallelBBA(_BaseClass):
             msg += f'{len(strengths)} != {len(lims)}!'
             raise ValueError(msg)
 
-        ok = True
+        ok = []
         valid = strengths.copy()
         for idx, bpm in enumerate(bpms):
             quadname = quad_names[bpm_names.index(bpm)]
@@ -505,23 +509,29 @@ class DoParallelBBA(_BaseClass):
             dkl = abs(self.data['delta_kl'][_gid][_gp.index(bpm)])
             lolim, hilim = lims[idx]
             clow, chigh = lolim + dkl / 2, hilim - dkl / 2
-            if clow > chigh:
-                self._log(f'ERR: {quadname}, dKL = {dkl:.3g} too high!')
+            _ok = False
+            if clow >= chigh:
+                self._log(f'ERR: {quadname}, dKL = {dkl} too high!')
                 valid[idx] = None
-                ok = False
             else:
                 valid[idx] = _np.clip(stren, clow, chigh)
-            if valid[idx] != stren:
+                if valid[idx] <= clow:
+                    valid[idx] = clow + margin
+                elif valid[idx] >= chigh:
+                    valid[idx] = chigh - margin
+                else:
+                    _ok = True
+            ok += [_ok]
+            if not _ok:
                 msg = f'WARN: {quadname}, '
-                msg += f'KL = {stren:.3g}, '
-                msg += f'dKL = {dkl:.3g}, '
-                msg += f'limits = ({lolim:.3g}, {hilim:.3g}). '
-                msg += f'Change KL to: {valid[idx]}'
+                msg += f'KL = {stren}, '
+                msg += f'dKL = {dkl:g}, '
+                msg += f'Limits = ({lolim:g}, {hilim:g}). '
+                msg += f'Change KL to: {valid[idx]}!'
                 self._log(msg)
-                ok = False
         if return_valid:
-            return ok, valid
-        return ok
+            return all(ok), valid
+        return all(ok)
 
     def meas_ios(self, group_id, init_strengths=None):
         """."""
