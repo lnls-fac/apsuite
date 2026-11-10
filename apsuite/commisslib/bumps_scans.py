@@ -24,7 +24,7 @@ class BumpScanParams(_ParamsBaseClass):
         self.pts_psy = _np.array([])  # 1d numpy array [um]
         self.pts_agx = _np.array([])  # 1d numpy array [urad]
         self.pts_agy = _np.array([])  # 1d numpy array [urad]
-        self.subsec = '01SA'
+        self._subsec = '01SA'
 
         self.bump_n_bpms_outx = 3
         self.bump_n_bpms_outy = 3
@@ -35,9 +35,13 @@ class BumpScanParams(_ParamsBaseClass):
         self.buffer_sloworb = 20
         self.orbcorr_nr_iters = 10
 
+        self.use_ss_tfm = False
         self.sofb_closed_loop = False
         self.fofb_closed_loop = False
         self.timeout_fofb_ramp = 15.0  # [s]
+
+        self._section_nr = None
+        self._section_type = None
 
     def __str__(self):
         """."""
@@ -54,6 +58,7 @@ class BumpScanParams(_ParamsBaseClass):
         stg += dtmp('buffer_sloworb', self.buffer_sloworb, '')
         stg += dtmp('orbcorr_nr_iters', self.orbcorr_nr_iters)
 
+        stg += dtmp('use_ss_tfm', self.use_ss_tfm)
         stg += dtmp('sofb_closed_loop', self.sofb_closed_loop)
         stg += dtmp('fofb_closed_loop', self.fofb_closed_loop)
         stg += ftmp('timeout_fofb_ramp', self.timeout_fofb_ramp, '')
@@ -141,6 +146,33 @@ class BumpScanParams(_ParamsBaseClass):
     def _get_grid(self):
         return [getattr(self, self._FMT(o)) for o in self.GRID_ORDER]
 
+    @property
+    def subsec(self):
+        """Subsection name."""
+        return self._subsec
+
+    @subsec.setter
+    def subsec(self, value):
+        """Set subsection name."""
+        if not isinstance(value, str):
+            raise ValueError('Subsection must be a string.')
+        self._subsec = value
+        section_nr = int(value[:2])
+        if not 1 <= section_nr <= 20:
+            raise ValueError('Section must be between 01..20.')
+        self._section_nr = section_nr
+        self._section_type = value[2:]
+
+    @property
+    def section_nr(self):
+        """Section number."""
+        return self._section_nr
+
+    @property
+    def section_type(self):
+        """Section type."""
+        return self._section_type
+
 
 class BumpScan(_BaseClass):
     """."""
@@ -165,6 +197,16 @@ class BumpScan(_BaseClass):
         self.meas_func_kwargs = meas_func_kwargs or dict()
         if self.isonline:
             self._create_devices()
+
+    def calc_bump_matrices(self):
+
+        _, _, mat_s2r = self.bumptools.calc_matrices(
+            section_type=self.params.section_type,
+            section_nr=self.params.section_nr,
+            n_bpms_outx=self.params.bump_n_bpms_outx,
+            n_bpms_outy=self.params.bump_n_bpms_outy,
+            use_ss_tfm=self.params.use_ss_tfm,
+            minsingval=self.params.bump_minsingval)
 
     def get_state(self):
         """Get initial state of SOFB and FOFB."""
@@ -347,7 +389,7 @@ class BumpScan(_BaseClass):
 
         section_type, section_nr = self._subsec_2_sectype_nr(subsec)
         idcs_bpm = self.bumptools.get_bpm_indices(
-            section_type=section_type, sidx=section_nr - 1
+            section_type=section_type, section_nr=section_nr
         )
 
         # Verify orbit correction
@@ -394,7 +436,7 @@ class BumpScan(_BaseClass):
 
         idcs_out = self.bumptools.get_bpms_indices_to_remove(
             section_type=section_type,
-            sidx=section_nr - 1,
+            section_nr=section_nr,
             n_bpms_outx=n_bpms_outx,
             n_bpms_outy=n_bpms_outy,
         )
