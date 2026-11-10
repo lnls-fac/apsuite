@@ -1248,13 +1248,18 @@ class DoACBBA(_BaseClass):
         self._log("\n" + msg)
 
         sofb = self.devices['sofb']
-        if sofb.autocorrsts:
-            msg = "SOFB feedback is enabled. Please disable it first."
-            self._log(msg)
-            return self.STATUS.Fail
-
-        if sofb.synckicksts != sofb._data.CorrSync.Off:
-            msg = "SOFB correctors synchronization is On. Please turn it Off."
+        sofb_checks = (
+            bool(sofb.autocorrsts),
+            sofb.synckicksts not in [
+                sofb._data.CorrSync.Off,
+                sofb._data.CorrSync.RmpBO
+            ],
+        )
+        if any(sofb_checks):
+            msg = (
+                "SOFB feedback is enabled. Please disable it.",
+                "SOFB Corr. Sync. must be Off or RmpBO."
+            )[sofb_checks.index(True)]
             self._log(msg)
             return self.STATUS.Fail
 
@@ -1372,8 +1377,7 @@ class DoACBBA(_BaseClass):
                 r_yy=r_yy,
             )
             data["data_ac"] = data_ac
-            if sts == self.STATUS.Fail:
-                return sts, data
+            return sts, data
 
         elif quadmode == self.params.QUAD_MODULATION_MODE.DC:
             msg = "Setup: Quadrupole modulation mode: DC."
@@ -1443,12 +1447,12 @@ class DoACBBA(_BaseClass):
                 return sts, data
             self._log("Done!")
 
+            return sts, data
+
         else:
             msg = "Invalid Quadrupole modulation mode. Skipping..."
             self._log(msg, tab=tab)
             return self.STATUS.Fail, data
-
-        return self.STATUS.Success, data
 
     # ----- Logging -----
     # private
