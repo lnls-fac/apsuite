@@ -197,9 +197,10 @@ class BumpScan(_BaseClass):
         self.meas_func_kwargs = meas_func_kwargs or dict()
         if self.isonline:
             self._create_devices()
+        self.calc_bump_matrices()
 
     def calc_bump_matrices(self):
-
+        print('Calculating bump matrices...')
         _, _, mat_s2r = self.bumptools.calc_matrices(
             section_type=self.params.section_type,
             section_nr=self.params.section_nr,
@@ -207,6 +208,8 @@ class BumpScan(_BaseClass):
             n_bpms_outy=self.params.bump_n_bpms_outy,
             use_ss_tfm=self.params.use_ss_tfm,
             minsingval=self.params.bump_minsingval)
+        self.bump_mat = mat_s2r
+        print('Done!')
 
     def get_state(self):
         """Get initial state of SOFB and FOFB."""
@@ -368,9 +371,7 @@ class BumpScan(_BaseClass):
             agy=agy,
             psx=psx,
             psy=psy,
-            n_bpms_outx=self.params.bump_n_bpms_outx,
-            n_bpms_outy=self.params.bump_n_bpms_outy,
-            minsingval=self.params.bump_minsingval,
+            bump_mat=self.bump_mat,
         )
 
         state = {
