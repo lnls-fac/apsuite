@@ -188,13 +188,13 @@ class DoACBBA(_BaseClass):
         self.data["log"] = list()
 
     # ----- Imported methods -----
-
+    # public
     fitting_matrix = staticmethod(_MeasACORM.fitting_matrix)
     fit_fourier_components = _MeasACORM.fit_fourier_components
     fit_calc_amp_and_phase = staticmethod(_MeasACORM.fit_calc_amp_and_phase)
 
     # ----- Properties -----
-
+    # public
     @property
     def bpms2dobba(self):
         """List of BPMs to perform BBA."""
@@ -234,7 +234,7 @@ class DoACBBA(_BaseClass):
         return cinfo.connected and cinfo.storedbeam
 
     # ----- Setup devices -----
-
+    # private
     def _create_devices(self):
         """Create and connect to devices."""
         # BPMs
@@ -349,7 +349,7 @@ class DoACBBA(_BaseClass):
         self._orm = _np.array(self.configdb_orm.get_config_value(name))
 
     # ----- SOFB utils -----
-
+    # public
     def correct_orbit(self):
         """."""
         if not self.havebeam:
@@ -361,7 +361,7 @@ class DoACBBA(_BaseClass):
         )
 
     # ----- Quadrupole utils -----
-
+    # public
     def get_quad_strength(self, quadname):
         """."""
         if quadname not in self.data["quadnames"]:
@@ -992,7 +992,7 @@ class DoACBBA(_BaseClass):
         return stsok, data
 
     # ----- Process data -----
-
+    # private
     def _process_data_single_bpm(self, bpmname, phase_adjust=0):
         if bpmname not in self.data["measure"]:
             return
@@ -1229,7 +1229,7 @@ class DoACBBA(_BaseClass):
             raise ValueError(msg)
 
     # ----- Do AC-BBA -----
-
+    # private
     def _do_acbba(self):
         """."""
         # Initial checkings
