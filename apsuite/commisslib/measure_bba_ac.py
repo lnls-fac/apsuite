@@ -1,17 +1,13 @@
 """Main module."""
 
 import datetime as _datetime
-import operator as _opr
+# import operator as _opr  # unused (temporary?)
 import time as _time
 from copy import deepcopy as _dcopy
-from functools import reduce as _red
+# from functools import reduce as _red  # unused (temporary?)
 
 import numpy as _np
-from mathphys.functions import (
-    get_namedtuple as _get_namedtuple,
-    load as _load,
-    save as _save,
-)
+from mathphys.functions import get_namedtuple as _get_namedtuple
 from siriuspy.clientconfigdb import ConfigDBClient as _ConfigDBClient
 from siriuspy.devices import (
     EVG as _EVG,
@@ -25,7 +21,7 @@ from siriuspy.devices import (
     Trigger as _Trigger,
     Tune as _Tune,
 )
-from siriuspy.search import LLTimeSearch as _LLTime
+# from siriuspy.search import LLTimeSearch as _LLTime  # unused (temporary?)
 from siriuspy.sofb.csdev import SOFBFactory as _SOFBFactory
 
 from apsuite.commisslib.meas_ac_orm import MeasACORM as _MeasACORM
@@ -533,10 +529,12 @@ class DoACBBA(_BaseClass):
         state["trigquads_delay_raw"] = 0
         state["trigskews_delay_raw"] = 0
         # nr_runs = len(chs)
-        # # Calculate delta_delay for correctors to be as close as possible to a
-        # # multiple of the the sampling period to ensure repeatability of
+        # # Calculate delta_delay for correctors to be as close as possible to
+        # # a multiple of the the sampling period to ensure repeatability of
         # # experiment along runs excited during single acquisition:
-        # fsamp = self.bpms.get_sampling_frequency(rf_freq, self.params.acq_rate)
+        # fsamp = self.bpms.get_sampling_frequency(
+        #     rf_freq, self.params.acq_rate
+        # )
         # runs_delta_dly = _np.arange(nr_runs, dtype=float)
         # runs_delta_dly *= nr_points / fsamp
         # runs_delta_dlyr = _np.round(runs_delta_dly * ftim)
@@ -571,7 +569,8 @@ class DoACBBA(_BaseClass):
         # for ll_trigs in [ll_trigs_corrs, ll_trigs_quads, ll_trigs_skews]:
         #     if len(_red(_opr.or_, ll_trigs)) != \
         #         _red(_opr.add, map(len, ll_trigs)):
-        #         raise ValueError("Impossible trigger configuration requested.")
+        #         msg = "Impossible trigger configuration requested."
+        #         raise ValueError(msg)
 
         # for trig_type, ll_trigs in zip(  # noqa: B905
         #     ["trigcorrs", "trigquads", "trigskews"],
@@ -993,240 +992,278 @@ class DoACBBA(_BaseClass):
 
     # ----- Process data -----
     # private
-    def _process_data_single_bpm(self, bpmname, phase_adjust=0):
-        if bpmname not in self.data["measure"]:
-            return
+    @staticmethod
+    def _process_excit(
+        orb_data, excit_time=0, idx_lim=(0, -1)
+    ):
+        """Process orbit excitation data for AC-BBA analysis.
 
-        meas = self.data["measure"][bpmname]
-        quadmode = meas["quadmode"]
+        Args:
+            orb_data (dict): Acquired orbit data.
+            fh (float): CH excitation frequency [Hz].
+            fv (float): CV excitation frequency [Hz].
+            fq (float): quadrupole excitation frequency [Hz].
+            fs (float): orbit sampling frequency [Hz].
+            excit_time (float, int): excitation period [s].
+            idx_lim (tuple, optional): Index limits for data slicing.
+                Defaults to (0, -1).
 
-        bpmnames = self.data["bpmnames"]
-        bpmidx = bpmnames.index(bpmname)
+        Returns:
+            dict: Processed excitation data containing orbit, DC,
+                amplitude, phase, and frequencies.
 
-        if quadmode == self.params.QUAD_MODULATION_MODE.DC:
+        Raises:
+            ValueError: If any of the excitation frequencies are zero.
 
-            data_pos = meas["pos"]
-            data_neg = meas["neg"]
+        """
+        fh, fv, fq = 0.0, 0.0, None
+        for key in orb_data:
+            if isinstance(key, str) and 'PS' in key:
+                freq = orb_data[key]['cycle_freq']
+                if 'CH' in key:
+                    fh = freq
+                elif 'CV' in key:
+                    fv = freq
+                else:
+                    fq = freq
+        freqs = [fh, fv]
+        if fq is not None:
+            freqs += [fq, fh + fq, fh - fq, fv + fq, fv - fq]
+        freqs = _np.asarray(freqs, dtype=float)
 
-            if data_pos is None or data_neg is None:
-                return
+        if _np.any(freqs == 0):
+            raise ValueError('Invalid freq!')
 
-            fs = float(data_pos["sampling_frequency"])
-            dt = 1.0 / fs
-            fh = float(data_pos.get("ch_freq", self.params.ch_freq))
-            fv = float(data_pos.get("cv_freq", self.params.cv_freq))
+        orbx = _np.asarray(orb_data['orbx'], dtype=float)[slice(*idx_lim), :]
+        orby = _np.asarray(orb_data['orby'], dtype=float)[slice(*idx_lim), :]
 
-            freqs = _np.array([fh, fv], dtype=float)
+        dcx = _np.mean(orbx, axis=0)
+        dcy = _np.mean(orby, axis=0)
 
-            orbx_pos = _np.asarray(data_pos["orbx"], dtype=float)
-            orby_pos = _np.asarray(data_pos["orby"], dtype=float)
-            orbx_neg = _np.asarray(data_neg["orbx"], dtype=float)
-            orby_neg = _np.asarray(data_neg["orby"], dtype=float)
+        fs = orb_data.get('sampling_frequency', orbx.shape[0] / excit_time)
+        dt = 1.0 / fs
+        npts = orbx.shape[0]
+        tim = _np.arange(npts) * dt
+        nr_cycles = _np.asarray(
+            [round(excit_time * f) for f in freqs], dtype=int)
 
-            npts = orbx_pos.shape[0]
-            tim = _np.arange(npts) * dt
+        mat = _MeasACORM.fitting_matrix(tim, freqs, num_cycles=nr_cycles)
+        u, s, vt = _np.linalg.svd(mat, full_matrices=False)
+        pinv = vt.T / s @ u.T
 
-            nr_cycles = _np.array(
-                [
-                    int(round(self.params.excit_time * fh)),
-                    int(round(self.params.excit_time * fv)),
-                ],
-                dtype=int,
+        cosx, sinx, _ = _MeasACORM.fit_fourier_components(
+            orbx - dcx, freqs, dt, pinv=pinv
+        )
+        cosy, siny, _ = _MeasACORM.fit_fourier_components(
+            orby - dcy, freqs, dt, pinv=pinv
+        )
+
+        amp_x, ph_x = _MeasACORM.fit_calc_amp_and_phase(cosx, sinx)
+        amp_y, ph_y = _MeasACORM.fit_calc_amp_and_phase(cosy, siny)
+
+        return {
+            'orb': _np.array([orbx, orby]),
+            'dc': _np.array([dcx, dcy]),
+            'amp': _np.array([amp_x, amp_y]),
+            'phi': _np.array([ph_x, ph_y]),
+            'freqs': freqs,
+        }
+
+    @staticmethod
+    def _get_m_coefs(d_x, d_y, d_xh, d_yh, d_xv, d_yv):
+        y_h = d_xv * d_y - d_yv * d_x
+        y_v = d_yh * d_x - d_xh * d_y
+        x_ = d_xh * d_yv - d_xv * d_yh
+
+        m_v = _np.polyfit(x_, y_v, 1)[0]
+        m_h = _np.polyfit(x_, y_h, 1)[0]
+
+        return _np.vstack((m_h, m_v))
+
+    @staticmethod
+    def _find_intersec(data, bpmidx, idx_lim=(0, -1)):
+        """Find the intersection of orbits at two quadrupole states (pos, neg).
+
+        Args:
+            data (dict): Orbit data for both quadrupole states.
+            bpmidx (int): Index of the BPM for which to find the intersection.
+            idx_lim (tuple, optional): Index limits for data slicing.
+                Defaults to (0, -1).
+
+        Returns:
+            np.ndarray: Intersection points.
+
+        """
+        quadname = data['quadname']
+        op = _np.array([
+            _np.asarray(data['data_dc_kl_pos']['orbx'], dtype=float)[slice(*idx_lim), :],
+            _np.asarray(data['data_dc_kl_pos']['orby'], dtype=float)[slice(*idx_lim), :],
+        ])
+        on = _np.array([
+            _np.asarray(data['data_dc_kl_neg']['orbx'], dtype=float)[slice(*idx_lim), :],
+            _np.asarray(data['data_dc_kl_neg']['orby'], dtype=float)[slice(*idx_lim), :],
+        ])
+        offs = []
+        arrs = []
+        idcs = _np.full((160,), True)
+        idcs[bpmidx] = False
+        for pl in [0, 1]:
+            x = _np.array([op[pl, :, bpmidx], on[pl, :, bpmidx]])
+            y = _np.array([op[pl, :, idcs], on[pl, :, idcs]])
+            if quadname.dev == 'QS':
+                y = _np.array([op[pl - 1, :, idcs], on[pl - 1, :, idcs]])
+
+            a1, b1 = _np.polyfit(x[0, :], y[0, :, :].T, 1)
+            a2, b2 = _np.polyfit(x[1, :], y[1, :, :].T, 1)
+            da = a1 - a2
+            db = b1 - b2
+            offs.append(_np.dot(da, -db) / _np.dot(da, da))
+            arrs.append(-db / da)
+        return _np.asarray(offs)
+
+    def _process_data_single_bpm(
+            self, bpmname, idx_lim=(0, -1), calc_mode='old'
+        ):
+        """Process AC-BBA acquired orbit data for a given BPM.
+
+        Args:
+            data (dict): Acquired orbit data.
+            bpmname (str): Name of the BPM.
+            idx_lim (tuple, optional): Index limits for data slicing.
+                Defaults to (0, -1).
+            calc_mode (str, optional): AC mode calculation method.
+                Defaults to 'old'.
+
+        Returns:
+            dict: Processed data for the specified BPM, including the 
+                calculated offsets.
+        """
+        idx = self.data['bpmnames'].index(bpmname)
+        data = self.data['measure'][bpmname]
+        mode = data['quadmode']
+        excit_time = data.get('excit_time', self.params.excit_time)
+
+        if mode == self.params.QUAD_MODULATION_MODE.DC:
+            f_h = data.get('ch_freq', 0)
+            f_v = data.get('cv_freq', 0)
+            if f_h != f_v:
+                r_pos = DoACBBA._process_excit(
+                    data['data_dc_kl_pos'], excit_time, idx_lim
+                )
+                r_neg = DoACBBA._process_excit(
+                    data['data_dc_kl_neg'], excit_time, idx_lim
+                )
+                dc_pos = r_pos['dc']
+                dc_neg = r_neg['dc']
+                projs_pos = r_pos['amp']
+                projs_neg = r_neg['amp']
+                projs_pos *= _np.sign(_np.cos(r_pos['phi']))
+                projs_neg *= _np.sign(_np.cos(r_neg['phi']))
+                d_x, d_y = dc_pos - dc_neg
+                (d_xh, d_xv), (d_yh, d_yv) = projs_pos - projs_neg
+                m_ = DoACBBA._get_m_coefs(d_x, d_y, d_xh, d_yh, d_xv, d_yv)
+                offset_pos = (
+                    dc_pos[:, idx].reshape(2, 1) + projs_pos[:, :, idx] @ m_
+                ).ravel()
+                offset_neg = (
+                    dc_neg[:, idx].reshape(2, 1) + projs_neg[:, :, idx] @ m_
+                ).ravel()
+                offset = 0.5 * (offset_pos + offset_neg)
+            else:
+                offset = DoACBBA._find_intersec(data, idx, idx_lim)
+
+        elif mode == self.params.QUAD_MODULATION_MODE.AC:
+            r = DoACBBA._process_excit(
+                data['data_ac'], excit_time, mode, idx_lim
             )
+            dc = r['dc']
+            projs = r['amp']
+            projs *= _np.sign(_np.cos(r['phi']))
+            d_x = projs[0, 2, :]  # 2 = fq
+            d_y = projs[1, 2, :]  # 2 = fq
 
-            mat = self.fitting_matrix(tim, freqs, num_cycles=nr_cycles)
-            u, s, vt = _np.linalg.svd(mat, full_matrices=False)
-            pinv = vt.T / s @ u.T
+            # Old calc
+            if calc_mode == 'old':
+                d_xh = _np.sum(
+                    projs[0, [3, 4], :], axis=0
+                )  # 3: fh + fq, 4: fh - fq
+                d_xv = _np.sum(
+                    projs[0, [5, 6], :], axis=0
+                )  # 5: fv + fq, 6: fv - fq
+                d_yh = _np.sum(
+                    projs[1, [3, 4], :], axis=0
+                )  # 3: fh + fq, 4: fh - fq
+                d_yv = _np.sum(
+                    projs[1, [5, 6], :], axis=0
+                )  # 5: fv + fq, 6: fv - fq
 
-            dcx_pos = _np.mean(orbx_pos, axis=0)
-            dcy_pos = _np.mean(orby_pos, axis=0)
-            dcx_neg = _np.mean(orbx_neg, axis=0)
-            dcy_neg = _np.mean(orby_neg, axis=0)
+            # New calc
+            else:
+                d_xh = (
+                    2 * _np.take_along_axis(
+                        projs[0, [3, 4], :],
+                        _np.argmax(
+                            _np.abs(projs[0, [3, 4], :]), axis=0, keepdims=True
+                        ),
+                        axis=0,
+                    )[0]
+                )  # 3 = fh + fq, 4 = fh - fq
+                d_xv = (
+                    2 * _np.take_along_axis(
+                        projs[0, [5, 6], :],
+                        _np.argmax(
+                            _np.abs(projs[0, [5, 6], :]), axis=0, keepdims=True
+                        ),
+                        axis=0,
+                    )[0]
+                )  # 5 = fv + fq, 6 = fv - fq
+                d_yh = (
+                    2 * _np.take_along_axis(
+                        projs[1, [3, 4], :],
+                        _np.argmax(
+                            _np.abs(projs[1, [3, 4], :]), axis=0, keepdims=True
+                        ),
+                        axis=0,
+                    )[0]
+                )  # 3 = fh + fq, 4 = fh - fq
+                d_yv = (
+                    2 * _np.take_along_axis(
+                        projs[1, [5, 6], :],
+                        _np.argmax(
+                            _np.abs(projs[1, [5, 6], :]), axis=0, keepdims=True
+                        ),
+                        axis=0,
+                    )[0]
+                )  # 5 = fv + fq, 6 = fv - fq
 
-            cosx_pos, sinx_pos, _ = self.fit_fourier_components(
-                orbx_pos - dcx_pos, freqs, dt, pinv=pinv
+            m_ = DoACBBA._get_m_coefs(d_x, d_y, d_xh, d_yh, d_xv, d_yv)
+            offset = (
+                dc[:, idx].reshape(2, 1)
+                + projs[:, [0, 1], idx] @ m_  # 0 = fh, 1 = fv
+            ).ravel()
+
+        return offset
+
+    # public
+    def process_data(self, idx_lim=(0, -1), calc_mode='old'):
+        """Process data and calculate all BPMs "BPM-to-quadrupole" offsets.
+
+        Args:
+            idx_lim (tuple, optional): _description_. Defaults to (0, -1).
+            calc_mode (str, optional): _description_. Defaults to 'old'.
+        """
+        nbpms = len(_BBAParams.BPMNAMES)
+        if 'orbx' not in self.analysis:
+            self.analysis['orbx'] = _np.zeros(nbpms)
+            self.analysis['orby'] = self.analysis['orbx'].copy()
+
+        for bpm in self.data['measure']:
+            idx = _BBAParams.BPMNAMES.index(bpm)
+            x0, y0 = self._process_data_single_bpm(
+                bpm, idx_lim=idx_lim, calc_mode=calc_mode
             )
-            cosy_pos, siny_pos, _ = self.fit_fourier_components(
-                orby_pos - dcy_pos, freqs, dt, pinv=pinv
-            )
-            cosx_neg, sinx_neg, _ = self.fit_fourier_components(
-                orbx_neg - dcx_neg, freqs, dt, pinv=pinv
-            )
-            cosy_neg, siny_neg, _ = self.fit_fourier_components(
-                orby_neg - dcy_neg, freqs, dt, pinv=pinv
-            )
-
-            amp_x_pos, ph_x_pos = self.fit_calc_amp_and_phase(cosx_pos, sinx_pos)
-            amp_x_neg, ph_x_neg = self.fit_calc_amp_and_phase(cosx_neg, sinx_neg)
-
-            amp_y_pos, ph_y_pos = self.fit_calc_amp_and_phase(cosy_pos, siny_pos)
-            amp_y_neg, ph_y_neg = self.fit_calc_amp_and_phase(cosy_neg, siny_neg)
-
-            phref_h_pos = ph_x_pos[:, bpmidx]
-            phref_h_neg = ph_x_neg[:, bpmidx]
-            phref_v_pos = ph_y_pos[:, bpmidx]
-            phref_v_neg = ph_y_neg[:, bpmidx]
-
-            f = phase_adjust
-            sgn_xh_pos = _np.sign(_np.cos(ph_x_pos[0] - phref_h_pos[0] * f))
-            sgn_xv_pos = _np.sign(_np.cos(ph_x_pos[1] - phref_v_pos[1] * f))
-            sgn_xh_neg = _np.sign(_np.cos(ph_x_neg[0] - phref_h_neg[0] * f))
-            sgn_xv_neg = _np.sign(_np.cos(ph_x_neg[1] - phref_v_neg[1] * f))
-            sgn_yh_pos = _np.sign(_np.cos(ph_y_pos[0] - phref_h_pos[0] * f))
-            sgn_yv_pos = _np.sign(_np.cos(ph_y_pos[1] - phref_v_pos[1] * f))
-            sgn_yh_neg = _np.sign(_np.cos(ph_y_neg[0] - phref_h_neg[0] * f))
-            sgn_yv_neg = _np.sign(_np.cos(ph_y_neg[1] - phref_v_neg[1] * f))
-
-            sgn_xh_pos[sgn_xh_pos == 0] = 1.0
-            sgn_xv_pos[sgn_xv_pos == 0] = 1.0
-            sgn_xh_neg[sgn_xh_neg == 0] = 1.0
-            sgn_xv_neg[sgn_xv_neg == 0] = 1.0
-
-            sgn_yh_pos[sgn_yh_pos == 0] = 1.0
-            sgn_yv_pos[sgn_yv_pos == 0] = 1.0
-            sgn_yh_neg[sgn_yh_neg == 0] = 1.0
-            sgn_yv_neg[sgn_yv_neg == 0] = 1.0
-
-            sxh_pos = amp_x_pos[0] * sgn_xh_pos
-            sxv_pos = amp_x_pos[1] * sgn_xv_pos
-            sxh_neg = amp_x_neg[0] * sgn_xh_neg
-            sxv_neg = amp_x_neg[1] * sgn_xv_neg
-
-            syh_pos = amp_y_pos[0] * sgn_yh_pos
-            syv_pos = amp_y_pos[1] * sgn_yv_pos
-            syh_neg = amp_y_neg[0] * sgn_yh_neg
-            syv_neg = amp_y_neg[1] * sgn_yv_neg
-
-            d_x = dcx_pos - dcx_neg
-            d_y = dcy_pos - dcy_neg
-            d_xh = sxh_pos - sxh_neg
-            d_yh = syh_pos - syh_neg
-            d_xv = sxv_pos - sxv_neg
-            d_yv = syv_pos - syv_neg
-
-            y_h = -(d_x * d_yv - d_xv * d_y)
-            y_v = -(d_xh * d_y - d_x * d_yh)
-            x_h = d_xh * d_yv - d_xv * d_yh
-            x_v = d_xh * d_yv - d_xv * d_yh
-
-            m_h = _np.polyfit(x_h, y_h, 1)[0]
-            m_v = _np.polyfit(x_v, y_v, 1)[0]
-
-            x0_pos = (
-                dcx_pos[bpmidx] + sxh_pos[bpmidx] * m_h + sxv_pos[bpmidx] * m_v
-            )
-            x0_neg = (
-                dcx_neg[bpmidx] + sxh_neg[bpmidx] * m_h + sxv_neg[bpmidx] * m_v
-            )
-
-            y0_pos = (
-                dcy_pos[bpmidx] + syv_pos[bpmidx] * m_v + syh_pos[bpmidx] * m_h
-            )
-            y0_neg = (
-                dcy_neg[bpmidx] + syv_neg[bpmidx] * m_v + syh_neg[bpmidx] * m_h
-            )
-
-            x0 = 0.5 * (x0_pos + x0_neg)
-            y0 = 0.5 * (y0_pos + y0_neg)
-
-            self.analysis[bpmname] = dict(
-                tim=tim,
-                x0=x0,
-                y0=y0,
-                x0pos=x0_pos,
-                x0neg=x0_neg,
-                y0pos=y0_pos,
-                y0neg=y0_neg,
-                dcx_pos=dcx_pos[bpmidx],
-                dcy_pos=dcy_pos[bpmidx],
-                dcx_neg=dcx_neg[bpmidx],
-                dcy_neg=dcy_neg[bpmidx],
-                sxh_pos=sxh_pos[bpmidx],
-                sxh_neg=sxh_neg[bpmidx],
-                sxv_pos=sxv_pos[bpmidx],
-                sxv_neg=sxv_neg[bpmidx],
-                syh_pos=syh_pos[bpmidx],
-                syh_neg=syh_neg[bpmidx],
-                syv_pos=syv_pos[bpmidx],
-                syv_neg=syv_neg[bpmidx],
-                m_h=m_h,
-                m_v=m_v,
-                d_x=d_x,
-                d_y=d_y,
-                d_xh=d_xh,
-                d_yh=d_yh,
-                d_xv=d_xv,
-                d_yv=d_yv,
-                amp_x_pos=amp_x_pos,
-                amp_y_pos=amp_y_pos,
-                amp_x_neg=amp_x_neg,
-                amp_y_neg=amp_y_neg,
-                ph_x_pos=ph_x_pos,
-                ph_y_pos=ph_y_pos,
-                ph_x_neg=ph_x_neg,
-                ph_y_neg=ph_y_neg,
-            )
-
-        elif quadmode == self.params.QUAD_MODULATION_MODE.AC:
-            data = meas["zer"]
-
-            if data is None:
-                return
-
-            fs = float(data["sampling_frequency"])
-            dt = 1.0 / fs
-            fh = float(data.get("ch_freq", self.params.ch_freq))
-            fv = float(data.get("cv_freq", self.params.cv_freq))
-            fq = float(data.get("q_freq", self.params.q_freq))
-
-            # freqs = _np.array([fh, fv, fq], dtype=float)
-            freqs = _np.array([fh - fq, fh + fq, fv - fq, fv + fq], dtype=float)
-
-            orbx = _np.asarray(data["orbx"], dtype=float)
-            orby = _np.asarray(data["orby"], dtype=float)
-
-            npts = orbx.shape[0]
-            tim = _np.arange(npts) * dt
-
-            nr_cycles = _np.array(
-                [
-                    int(round(self.params.excit_time * fh)),
-                    int(round(self.params.excit_time * fv)),
-                ],
-                dtype=int,
-            )
-
-            mat = self.fitting_matrix(tim, freqs, num_cycles=nr_cycles)
-            u, s, vt = _np.linalg.svd(mat, full_matrices=False)
-            pinv = vt.T / s @ u.T
-
-            dcx = _np.mean(orbx, axis=0)
-            dcy = _np.mean(orby, axis=0)
-
-            cosx, sinx, _ = self.fit_fourier_components(
-                orbx - dcx, freqs, dt, pinv=pinv
-            )
-            cosy, siny, _ = self.fit_fourier_components(
-                orby - dcy, freqs, dt, pinv=pinv
-            )
-
-            amp_x, ph_x = self.fit_calc_amp_and_phase(cosx, sinx)
-            amp_y, ph_y = self.fit_calc_amp_and_phase(cosy, siny)
-
-            self.analysis[bpmname] = dict(
-                tim=tim,
-                dcx=dcx,
-                dcy=dcy,
-                amp_x=amp_x,
-                amp_y=amp_y,
-                ph_x=ph_x,
-                ph_y=ph_y,
-            )
-
-        else:
-            quadmode_str = self.params.QUAD_MODULATION_MODE._field[quadmode]
-            msg = f"Invalid quadrupole modulation mode: {quadmode_str}"
-            raise ValueError(msg)
+            self.analysis['orbx'][idx] = x0
+            self.analysis['orby'][idx] = y0
 
     # ----- Do AC-BBA -----
     # private
@@ -1404,7 +1441,7 @@ class DoACBBA(_BaseClass):
                 r_xx=r_xx,
                 r_yy=r_yy
             )
-            data["pos"] = data_pos
+            data["data_dc_kl_pos"] = data_pos
             if sts == self.STATUS.Fail:
                 return sts, data
 
@@ -1430,7 +1467,7 @@ class DoACBBA(_BaseClass):
                 r_xx=r_xx,
                 r_yy=r_yy,
             )
-            data["neg"] = data_neg
+            data["data_dc_kl_neg"] = data_neg
             if sts == self.STATUS.Fail:
                 return sts, data
 
