@@ -6,6 +6,7 @@ import matplotlib.pyplot as _mplt
 from pymodels import si
 import pyaccel
 from . import OrbitCorr
+from siriuspy.sofb.utils import get_matrix_ss_section, get_bpm_indices
 
 
 class SICalcBumps:
@@ -45,7 +46,7 @@ class SICalcBumps:
         section_type=None,
         section_nr=None,
         n_bpms_outx=None,
-        n_bpms_outy=None
+        n_bpms_outy=None,
     ):
         """."""
         self._section_type = section_type
@@ -166,17 +167,6 @@ class SICalcBumps:
     def mat_s2r(self, value):
         self._mat_s2r = value
 
-    @staticmethod
-    def _get_matrix_ss_section(leng):
-        return _np.array(
-            [
-                [1, -leng / 2, 0, 0],
-                [1, leng / 2, 0, 0],
-                [0, 0, 1, -leng / 2],
-                [0, 0, 1, leng / 2],
-            ]
-        )
-
     def _get_sec_bpm_indices(self, section_type=None):
         if section_type is None:
             section_type = self.section_type
@@ -193,39 +183,19 @@ class SICalcBumps:
         print('SP:', end=' ')
         print(self.SS_NUMBERS['SP'])
 
-    def get_bpm_indices(self, section_type=None, sidx=None):
-        """Get BPMs indices to set orbit for bump.
-
-        Args:
-            section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
-                Defaults to None.
-            sidx (int): Section indice. Defaults to None.
-
-        Returns:
-            1d numpy array: Indices of the BPMs where orbit bump will
-              be applied.
-
-        """
-        if section_type is None:
-            section_type = self.section_type
-        if sidx is None:
-            sidx = self.section_nr - 1
-        bpm1_sec_index, bpm2_sec_index = self._get_sec_bpm_indices(
-            section_type
-        )
-        idcs = _np.array([bpm1_sec_index, bpm2_sec_index]) + 8 * sidx
-        idcs = _np.r_[idcs, idcs + 160]
-        return idcs
-
     def get_bpms_indices_to_remove(
-        self, section_type=None, sidx=None, n_bpms_outx=None, n_bpms_outy=None
+        self,
+        section_type=None,
+        section_nr=None,
+        n_bpms_outx=None,
+        n_bpms_outy=None,
     ):
         """Get BPMs indices to remove from orbit correction.
 
         Args:
             section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
                 Defaults to 'C1'.
-            sidx (int): Section indice. Defaults to None.
+            section_nr (int): Section number. Defaults to None.
             n_bpms_outx (int): Nr of BPMs to remove from each side.
                 Defaults to None.
             n_bpms_outy (int): Nr of BPMs to remove from each side.
@@ -236,13 +206,13 @@ class SICalcBumps:
         """
         if section_type is None:
             section_type = self.section_type
-        if sidx is None:
-            sidx = self.section_nr - 1
+        if section_nr is None:
+            section_nr = self.section_nr
         if n_bpms_outx is None:
             n_bpms_outx = self.n_bpms_outx
         if n_bpms_outy is None:
             n_bpms_outy = self.n_bpms_outy
-        idcs = self.get_bpm_indices(section_type, sidx)
+        idcs = get_bpm_indices(section_type, section_nr)
 
         idcs_ignorex = _np.arange(n_bpms_outx) + 1
         idcs_ignorex = _np.r_[idcs[0] - idcs_ignorex, idcs[1] + idcs_ignorex]
@@ -252,13 +222,13 @@ class SICalcBumps:
         idcs_ignore = _np.r_[idcs_ignorex, idcs_ignorey]
         return idcs_ignore
 
-    def get_btwbpm_corrs_indices(self, section_type=None, sidx=None):
+    def get_btwbpm_corrs_indices(self, section_type=None, section_nr=None):
         """Get correctors indices between BPMs and source.
 
         Args:
         section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
             Defaults to 'C1'.
-        sidx (int): Section indice. Defaults to 0.
+        section_nr (int): Section number. Defaults to None.
 
         Returns:
             1d numpy array: Indices of the corrector to be removed from
@@ -266,11 +236,11 @@ class SICalcBumps:
         """
         if section_type is None:
             section_type = self.section_type
-        if sidx is None:
-            sidx = self.section_nr - 1
+        if section_nr is None:
+            section_nr = self.section_nr - 1
         if 'S' in section_type:
             return [], []
-
+        sidx = section_nr - 1
         ch_idcs = dict()
         cv_idcs = dict()
         ch_idcs['C1'] = [sidx * 6 + 0, sidx * 6 + 1]
@@ -284,24 +254,27 @@ class SICalcBumps:
 
         return ch_idcs[section_type], cv_idcs[section_type]
 
-    def get_source_marker_idx(self, model=None, section_type=None, sidx=None):
+    def get_source_marker_idx(
+        self, model=None, section_type=None, section_nr=None
+    ):
         """Get source marker index in the model.
 
         Args:
             model (Pymodels object): SIRIUS model
             section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
                 Defaults to 'C1'.
-            sidx (int): Section indice. Defaults to 0.
+            section_nr (int): Section numer. Defaults to None.
 
         Returns:
             1d numpy array: Indice of source marker in the model.
         """
         if section_type is None:
             section_type = self.section_type
-        if sidx is None:
-            sidx = self.section_nr - 1
+        if section_nr is None:
+            section_nr = self.section_nr
         if model is None:
             model = self.model
+        sidx = section_nr - 1
         if 'S' not in section_type:
             nr = 1 if (section_type == 'BC') else 2
             marker = pyaccel.lattice.find_indices(
@@ -335,23 +308,25 @@ class SICalcBumps:
         marker = idcs[sidx]
         return marker
 
-    def remove_corrs_btwbpm(self, orbcorr, section_type=None, sidx=None):
+    def remove_corrs_btwbpm(self, orbcorr, section_type=None, section_nr=None):
         """Remove correctors between BPMs.
 
         Args:
             orbcorr (OrbCorr object): OrbCorr object
             section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
                 Defaults to None.
-            sidx (int): Section indice. Defaults to None.
+            section_nr (int): Section number. Defaults to None.
 
         Returns:
             orbcorr: OrbCorr object
         """
         if section_type is None:
             section_type = self.section_type
-        if sidx is None:
-            sidx = self.section_nr - 1
-        ch_idcs, cv_idcs = self.get_btwbpm_corrs_indices(section_type, sidx)
+        if section_nr is None:
+            section_nr = self.section_nr - 1
+        ch_idcs, cv_idcs = self.get_btwbpm_corrs_indices(
+            section_type, section_nr
+        )
         if len(ch_idcs) != 0:
             orbcorr.params.enbllistch[ch_idcs] = False
         if len(cv_idcs) != 0:
@@ -359,7 +334,12 @@ class SICalcBumps:
         return orbcorr
 
     def remove_closest_bpms(
-        self, orbcorr, section_type=None, sidx=None, n_bpms_outx=None, n_bpms_outy=None
+        self,
+        orbcorr,
+        section_type=None,
+        section_nr=None,
+        n_bpms_outx=None,
+        n_bpms_outy=None,
     ):
         """Remove closest BPMs form orbit correction.
 
@@ -367,7 +347,7 @@ class SICalcBumps:
             orbcorr (OrbCorr object): OrbCorr object
             section_type (str): Bump section (C1, C2, BC, SA, SB, SP).
                 Defaults to None.
-            sidx (int): Section indice. Defaults to None.
+            section_nr (int): Section number. Defaults to None.
             n_bpms_out (int): Nr of BPMs to remove from each side.
               Defaults to None.
 
@@ -376,14 +356,14 @@ class SICalcBumps:
         """
         if section_type is None:
             section_type = self.section_type
-        if sidx is None:
-            sidx = self.section_nr - 1
+        if section_nr is None:
+            section_nr = self.section_nr - 1
         if n_bpms_outx is None:
             n_bpms_outx = self.n_bpms_outx
         if n_bpms_outy is None:
             n_bpms_outy = self.n_bpms_outy
         idcs_ignore = self.get_bpms_indices_to_remove(
-            section_type, sidx, n_bpms_outx, n_bpms_outy
+            section_type, section_nr, n_bpms_outx, n_bpms_outy
         )
         if idcs_ignore.size != 0:
             orbcorr.params.enbllistbpm[idcs_ignore] = False
@@ -432,8 +412,7 @@ class SICalcBumps:
             n_bpms_outy = self.n_bpms_outy
 
         if 'S' in section_type and use_ss_tfm:
-            length = self.SS_LENGTHS[section_type]
-            mat_s2r = self._get_matrix_ss_section(length)
+            mat_s2r = get_matrix_ss_section(section_type)
             self.mat_s2r = mat_s2r
             return None, None, mat_s2r
 
@@ -451,24 +430,22 @@ class SICalcBumps:
         orbcorr.params.minsingval = minsingval
 
         # Get source marker idx
-        sidx = max(min(section_nr, 20), 1)
-        sidx -= 1
         marker = self.get_source_marker_idx(
-            orbcorr.respm.model, section_type, sidx
+            orbcorr.respm.model, section_type, section_nr
         )
 
         orb0 = orbcorr.get_orbit()
         kicks0 = orbcorr.get_kicks()
 
         # Get BPM indices
-        idcs = self.get_bpm_indices(section_type, sidx)
+        idcs = get_bpm_indices(section_type, section_nr)
 
         # remove corrs between BPMs
-        orbcorr = self.remove_corrs_btwbpm(orbcorr, section_type, sidx)
+        orbcorr = self.remove_corrs_btwbpm(orbcorr, section_type, section_nr)
 
         # remove closest BPMS
         orbcorr = self.remove_closest_bpms(
-            orbcorr, section_type, sidx, n_bpms_outx, n_bpms_outy
+            orbcorr, section_type, section_nr, n_bpms_outx, n_bpms_outy
         )
 
         mat_i2s = _np.zeros((4, 4), dtype=float)
@@ -569,7 +546,7 @@ class SICalcBumps:
         fig.tight_layout()
         return fig, (a_i2s, a_i2r, a_s2r)
 
-    def calculate_bumps(
+    def calculate_bumps_model(
         self,
         section_type=None,
         section_nr=None,
@@ -624,8 +601,6 @@ class SICalcBumps:
                 n_bpms_outy=n_bpms_outy,
                 use_ss_tfm=use_ss_tfm,
             )
-        sidx = max(min(section_nr, 20), 1)
-        sidx -= 1
         vec = _np.array([posx, angx, posy, angy])
 
         # Create accelerator and orbcorr
@@ -642,14 +617,14 @@ class SICalcBumps:
         orbcorr.params.minsingval = 0.2
 
         # Get BPM indices
-        idcs = self.get_bpm_indices(section_type, sidx)
+        idcs = get_bpm_indices(section_type, section_nr)
 
         # remove corrs between BPMs
-        orbcorr = self.remove_corrs_btwbpm(orbcorr, section_type, sidx)
+        orbcorr = self.remove_corrs_btwbpm(orbcorr, section_type, section_nr)
 
         # remove closest BPMS
         orbcorr = self.remove_closest_bpms(
-            orbcorr, section_type, sidx, n_bpms_outx, n_bpms_outy
+            orbcorr, section_type, section_nr, n_bpms_outx, n_bpms_outy
         )
 
         gorb = orbcorr.get_orbit()
@@ -703,10 +678,7 @@ class SICalcBumps:
         if n_bpms_outy is None:
             n_bpms_outy = self.n_bpms_outy
 
-        sidx = max(min(section_nr, 20), 1)
-        sidx -= 1
-
-        gorb, orbcorr = self.calculate_bumps(
+        gorb, orbcorr = self.calculate_bumps_model(
             section_type,
             section_nr,
             n_bpms_outx,
@@ -722,7 +694,7 @@ class SICalcBumps:
         vec = _np.array([posx, angx, posy, angy])
         orbcorr.correct_orbit(goal_orbit=gorb)
         marker = self.get_source_marker_idx(
-            orbcorr.respm.model, section_type, sidx
+            orbcorr.respm.model, section_type, section_nr
         )
         xres = pyaccel.tracking.find_orbit(
             orbcorr.respm.model, indices='open'
