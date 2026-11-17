@@ -784,6 +784,11 @@ class ImpedanceIVUAnalysis:
                     )
 
         self.data = list(data)
+
+        self.bpm_indices = None
+        self.bpm_names = None
+        self.spos_bpms = None
+
         self._reset_analysis_results()
 
     def load_data(self, file_paths, multi_bump=False, append=False):
@@ -834,39 +839,73 @@ class ImpedanceIVUAnalysis:
 
         self.set_data(data)
 
-    def set_spos_bpms(self):
-        """Set BPM longitudinal positions from the Sirius model.
+    def _set_bpm_metadata(self):
+        """Set and validate the common BPM information.
+
+        The BPM indices and names are obtained from the measurement data.
+        Their longitudinal positions are obtained from the Sirius model.
+
+        All prepared acquisitions are required to contain the same BPMs in
+        the same order.
 
         Returns:
-            spos_bpms (numpy.ndarray): BPM longitudinal positions [m].
+            bpm_indices (numpy.ndarray): Global BPM indices used in the
+                measurement.
+            spos_bpms (numpy.ndarray): Longitudinal positions of the
+                measurement BPMs [m].
 
         Raises:
-            ValueError: If no BPM positions are found or the measurement BPM
-                indices are incompatible with the model.
+            RuntimeError: If measurement data are unavailable.
+            ValueError: If BPM indices differ among acquisitions or are
+                incompatible with the Sirius model.
         """
-        spos_bpms = self.get_spos_bpms()
+        if self.data is None:
+            raise RuntimeError(
+                'Load and join measurement data before setting BPM metadata.'
+            )
 
-        if len(spos_bpms) == 0:
+        first_acq = self.data[0]['data'][0]
+
+        bpm_indices = _np.asarray(first_acq['bpm_indcs'], dtype=int)
+        bpm_names = list(first_acq['bpm_names'])
+
+        if len(bpm_indices) == 0:
             raise ValueError(
-                'No BPM longitudinal positions were found in the model.'
+                'No BPM indices were found in the measurement data.'
             )
 
-        if self.data is not None:
-            max_bpm_idx = max(
-                _np.max(data_acq['bpm_indcs'])
-                for data_i in self.data
-                for data_acq in data_i['data']
+        if len(bpm_names) != len(bpm_indices):
+            raise ValueError(
+                'The number of BPM names and BPM indices do not match.'
             )
 
-            if max_bpm_idx >= len(spos_bpms):
-                raise ValueError(
-                    'Measurement data contain a global BPM index unavailable '
-                    'in the accelerator model.'
-                )
+        # Validate the common BPM structure across all acquisitions.
+        for i, data_i in enumerate(self.data):
+            for acq, data_acq in enumerate(data_i['data']):
+                bpm_indices_acq = _np.asarray(data_acq['bpm_indcs'], dtype=int)
 
-        self.spos_bpms = spos_bpms
+                if not _np.array_equal(bpm_indices, bpm_indices_acq):
+                    raise ValueError(
+                        f'Configuration {i}, acquisition {acq}: '
+                        'BPM indices differ from the first acquisition.'
+                    )
 
-        return spos_bpms
+        # The model array contains positions for all Sirius BPMs.
+        model_spos_bpms = self.get_model_spos_bpms()
+
+        if _np.max(bpm_indices) >= len(model_spos_bpms):
+            raise ValueError(
+                'Measurement BPM indices are incompatible with the '
+                'Sirius model BPM list.'
+            )
+
+        self.bpm_indices = bpm_indices
+        self.bpm_names = bpm_names
+
+        # Store only the positions corresponding to the measured BPMs.
+        self.spos_bpms = model_spos_bpms[bpm_indices]
+
+        return self.bpm_indices, self.spos_bpms
 
     def prepare_data(self, gap_key='ivu18_08_gap', infer_y0=True):
         """Prepare loaded measurement data for analysis.
@@ -895,6 +934,9 @@ class ImpedanceIVUAnalysis:
             self._calculate_bump_values()
 
         self._join_odd_even_acquisitions()
+
+        # Define and validate the common BPM metadata for all acquisitions.
+        self._set_bpm_metadata()
 
         self.config_table = self._make_config_table(gap_key=gap_key)
 
@@ -1375,10 +1417,8 @@ class ImpedanceIVUAnalysis:
                 (n_acq, n_bpms, n_turns) and units of micrometers.
 
         Raises:
-            RuntimeError: If prepared measurement data or bunch-position
-                information are unavailable.
-            ValueError: If plane is invalid or the bunch-position data are
-                incompatible.
+            RuntimeError: If the measurement data have not been prepared.
+            ValueError: If plane is invalid.
         """
         if self.config_table is None:
             raise RuntimeError(
@@ -1393,46 +1433,18 @@ class ImpedanceIVUAnalysis:
 
         delta_orbit = []
 
-        for i, data_i in enumerate(self.data):
-            data_meas = data_i['data']
+        for data_i in self.data:
+            b1_pos = _np.stack([
+                data_acq[key1] for data_acq in data_i['data']
+            ])
 
-            bpm_indcs_ref = _np.asarray(data_meas[0]['bpm_indcs'], dtype=int)
+            b2_pos = _np.stack([
+                data_acq[key2] for data_acq in data_i['data']
+            ])
 
-            delta_i = []
-
-            for acq, data_acq in enumerate(data_meas):
-                missing_keys = {key1, key2, 'bpm_indcs'}.difference(data_acq)
-
-                if missing_keys:
-                    missing = ', '.join(sorted(missing_keys))
-                    raise RuntimeError(
-                        f'Configuration {i}, acquisition {acq}: '
-                        'missing data required to calculate the orbit '
-                        f'difference: {missing}.'
-                    )
-
-                bpm_indcs = _np.asarray(data_acq['bpm_indcs'], dtype=int)
-
-                if not _np.array_equal(bpm_indcs, bpm_indcs_ref):
-                    raise ValueError(
-                        f'Configuration {i}, acquisition {acq}: '
-                        'BPM indices differ from the first acquisition.'
-                    )
-
-                b1_pos = _np.asarray(data_acq[key1])
-                b2_pos = _np.asarray(data_acq[key2])
-
-                if b1_pos.shape != b2_pos.shape:
-                    raise ValueError(
-                        f'Configuration {i}, acquisition {acq}: '
-                        'bunch-position arrays must have the same shape, '
-                        f'but {key1} has shape {b1_pos.shape} and '
-                        f'{key2} has shape {b2_pos.shape}.'
-                    )
-
-                delta_i.append(b1_pos - b2_pos)
-
-            delta_orbit.append(_np.asarray(delta_i))
+            delta_orbit.append(
+                b1_pos - b2_pos
+            )
 
         self.delta_orbit[plane] = delta_orbit
         self.delta_orbit_stats[plane] = None
@@ -2108,57 +2120,51 @@ class ImpedanceIVUAnalysis:
         return resp_mat, info
 
     def set_ivu_respmat(self, plane='y'):
-        """Set the IVU response vector for each measurement configuration.
+        """Set the IVU response vector at the measurement BPMs.
 
-        The complete response matrix column is split into horizontal and
-        vertical components. The selected component is then restricted to the
-        global BPM indices used by each measurement configuration.
+        The full response column is split into horizontal and vertical
+        components. The selected component is then restricted to the common
+        BPM indices used by the measurements.
 
         Args:
             plane (str): Transverse plane. Use "x" or "y".
 
         Returns:
-            m_ivu (list): IVU response arrays, with one array per measurement
-                configuration. Each array contains the response values for
-                the BPMs used in that configuration [m/rad].
+            m_ivu (numpy.ndarray): IVU response at the measurement BPMs
+                [m/rad]. The array has one entry per BPM used in the measurement.
 
         Raises:
-            RuntimeError: If measurement data, BPM positions, or the IVU
-                response column are unavailable.
-            ValueError: If plane is invalid or the response-column size is
-                incompatible with the BPM model.
+            RuntimeError: If measurement BPM information or the complete
+                IVU response column is unavailable.
+            ValueError: If plane is invalid or the response dimensions are
+                incompatible.
         """
         if plane not in ('x', 'y'):
             raise ValueError("plane must be 'x' or 'y'.")
 
-        if self.data is None:
-            raise RuntimeError('Load or set measurement data first.')
-
-        if self.spos_bpms is None:
-            raise RuntimeError('Set BPM longitudinal positions first.')
+        if self.bpm_indices is None:
+            raise RuntimeError('Prepare the measurement BPM metadata first.')
 
         if self.resp_mat is None:
             raise RuntimeError('Calculate the IVU response matrix first.')
 
-        n_bpms = len(self.spos_bpms)
+        n_bpms_model = len(self.resp_mat) // 2
 
-        if len(self.resp_mat) != 2 * n_bpms:
+        if _np.max(self.bpm_indices) >= n_bpms_model:
             raise ValueError(
-                'The response matrix size is incompatible with the '
-                'number of BPMs.'
+                'Measurement BPM indices are incompatible with the '
+                'IVU response vector.'
             )
 
         if plane == 'x':
-            m_full = self.resp_mat[:n_bpms]
+            m_full = self.resp_mat[:n_bpms_model]
         else:
-            m_full = self.resp_mat[n_bpms:]
+            m_full = self.resp_mat[n_bpms_model:]
 
-        m_ivu = []
-
-        for data_i in self.data:
-            bpm_indcs = _np.asarray(data_i['data'][0]['bpm_indcs'], dtype=int)
-
-            m_ivu.append(m_full[bpm_indcs])
+        m_ivu = _np.asarray(
+            m_full[self.bpm_indices],
+            dtype=float,
+        )
 
         self.M_ivu[plane] = m_ivu
         self.theta_fits[plane] = {}
@@ -2169,7 +2175,7 @@ class ImpedanceIVUAnalysis:
     def _prepare_gap_fit_data(
         self, gap, plane='y', error='sem', config_indices=None, gap_atol=None
     ):
-        """Prepare charge-normalized orbit data for one gap scan.
+        """Collect the data required to fit one IVU gap.
 
         This method selects the desired configurations and organizes the
         corresponding orbit means, uncertainties, IVU response, bump values
@@ -2190,22 +2196,16 @@ class ImpedanceIVUAnalysis:
                 kick-factor fits.
 
         Raises:
-            RuntimeError: If required analysis results are unavailable.
-            ValueError: If the plane or error type is invalid, fewer than two
-                configurations are selected, or arrays contain invalid values.
-            IndexError: If a configuration index is outside the valid range.
+            RuntimeError: If orbit statistics or the IVU response are
+                unavailable.
+            ValueError: If the plane or error type is invalid, or fewer than
+                two configurations are selected.
         """
-        if gap_atol is None:
-            gap_atol = self._GAP_ATOL
-
         if plane not in ('x', 'y'):
             raise ValueError("plane must be 'x' or 'y'.")
 
         if error not in ('std', 'sem'):
             raise ValueError("error must be 'std' or 'sem'.")
-
-        if self.config_table is None:
-            raise RuntimeError('Prepare the measurement data first.')
 
         if self.delta_orbit_stats[plane] is None:
             raise RuntimeError(
@@ -2217,19 +2217,17 @@ class ImpedanceIVUAnalysis:
                 f'Set the {plane}-plane IVU response matrix first.'
             )
 
-        n_configs = len(self.config_table)
+        if gap_atol is None:
+            gap_atol = self._GAP_ATOL
 
-        # -------------------------------------------------------------
-        # Select the configurations included in this fit.
-        #
-        # If explicit indices are passed, they define the scan.
-        # Otherwise, all configurations at the requested gap are used.
-        # -------------------------------------------------------------
+        gap = round(float(gap), 3)
+
+        # Select all bump configurations measured at this gap.
         if config_indices is None:
             gap_values = self.config_table['gap'].to_numpy(dtype=float)
 
             config_indices = _np.flatnonzero(
-                _np.isclose(gap_values, float(gap), rtol=0.0, atol=gap_atol)
+                _np.isclose(gap_values, gap, rtol=0.0, atol=gap_atol)
             )
         else:
             config_indices = _np.asarray(config_indices, dtype=int)
@@ -2239,24 +2237,7 @@ class ImpedanceIVUAnalysis:
                 'At least two configurations are required for the fit.'
             )
 
-        invalid_indices = config_indices[
-            (config_indices < 0) | (config_indices >= n_configs)
-        ]
-
-        if len(invalid_indices) > 0:
-            raise IndexError(
-                'Configuration indices outside the valid range: '
-                f'{invalid_indices.tolist()}.'
-            )
-
-        # -------------------------------------------------------------
-        # Obtain charge-normalized orbit statistics.
-        #
-        # The means and uncertainties returned here already have units:
-        #
-        #     orbit       -> um/nC
-        #     orbit_error -> um/nC
-        # -------------------------------------------------------------
+        # The returned statistics are already divided by delta charge.
         stats = self.get_delta_orbit_stats(plane=plane, normalized=True)
 
         orbit = _np.stack([stats['mean'][cfg] for cfg in config_indices])
@@ -2319,27 +2300,19 @@ class ImpedanceIVUAnalysis:
 
         delta_charge = selected_rows['delta_charge'].to_numpy(dtype=float)
 
-        if not _np.all(_np.isfinite(y0)):
-            raise ValueError('Bump values must contain only finite values.')
-
-        if not _np.all(_np.isfinite(delta_charge)):
-            raise ValueError(
-                'Charge differences must contain only finite values.'
-            )
-
         return {
             'gap': float(gap),
             'plane': plane,
             'error': error,
             'config_indices': config_indices,
-            'bpm_indices': bpm_indices,
-            'response': response,
+            'bpm_indices': self.bpm_indices,
+            'response': self.M_ivu[plane],
             'orbit': orbit,
             'orbit_error': orbit_error,
             'y0': y0,
             'delta_charge': delta_charge,
             'n_bumps': len(config_indices),
-            'n_bpms': len(response),
+            'n_bpms': len(self.bpm_indices),
         }
 
     def fit_relative_kicks(
@@ -2745,7 +2718,7 @@ class ImpedanceIVUAnalysis:
 
         gap_key = round(float(gap), 3)
 
-        self.kperp_fits[plane][float(gap_key)] = kperp_fit
+        self.kperp_fits[plane][gap_key] = kperp_fit
 
         return kperp_fit
 
@@ -3129,7 +3102,7 @@ class ImpedanceIVUAnalysis:
             theta_unit = r'$\mu$rad'
 
         # The response vector is common to all selected configurations
-        m_cfg = _np.asarray(self.M_ivu[plane][cfg], dtype=float)
+        m_ivu = self.M_ivu[plane]
 
         # ------------------------------------------------------------
         # Calculate the model kick difference.
@@ -3152,7 +3125,7 @@ class ImpedanceIVUAnalysis:
 
             if len(cfg_local) != 1 or len(ref_local) != 1:
                 raise ValueError(
-                    'Configuration indices were not found in the'
+                    'Configuration indices were not found in the '
                     'relative-kick fit.'
                 )
 
@@ -3206,16 +3179,12 @@ class ImpedanceIVUAnalysis:
 
             model_label = 'Direct kick-factor model'
 
-        orbit_model = theta_model * m_cfg
+        orbit_model = theta_model * m_ivu
 
         # -------------------------------------------------------------
         # Plot.
         # -------------------------------------------------------------
-        bpm_indices = _np.asarray(
-            self.data[cfg]['data'][0]['bpm_indcs'], dtype=int
-        )
-
-        spos = _np.asarray(self.spos_bpms)[bpm_indices]
+        spos = self.spos_bpms
 
         if ax is None:
             fig, ax = _plt.subplots(figsize=(10, 5))
