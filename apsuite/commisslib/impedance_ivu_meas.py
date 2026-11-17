@@ -557,21 +557,25 @@ class ImpedanceIVUAnalysis:
     """Analyze IVU transverse impedance measurements."""
 
     _SUPPORTED_IVUS = ('IVU18_SI08', 'IVU18_SI14')
+    _BEAM_VOLTAGE = 3.0e9  # [V]
     _GAP_ATOL = 1e-3  # [mm]
 
-    def __init__(self, data=None, beam_voltage=3.0e9):
+    def __init__(self, data=None):
         """Initialize IVU impedance analysis.
 
         Args:
             data (list, optional): Measurement configurations to analyze.
-            beam_voltage (float): Beam energy divided by charge [V].
         """
-        self.beam_voltage = float(beam_voltage)
+        self.beam_voltage = float(self._BEAM_VOLTAGE)
 
         # Measurement and model data
         self.data = None
         self.id_name = None
         self.resp_mat = None
+
+        # Common BPM information used in every measurement
+        self.bpm_indices = None
+        self.bpm_names = None
         self.spos_bpms = None
 
         # Initialize quantities calculated in the analysis
@@ -600,7 +604,7 @@ class ImpedanceIVUAnalysis:
     # Accelerator-model utilities
 
     @staticmethod
-    def get_spos_bpms():
+    def get_model_spos_bpms():
         """Get the longitudinal positions of the BPMs in the Sirius model.
 
         Returns:
@@ -1665,140 +1669,256 @@ class ImpedanceIVUAnalysis:
 
         return stats_norm
 
-    def plot_currents_vs_acquisition(self, cfgs=None, axes=None):
+    def plot_currents_vs_acquisition(
+        self,
+        gap,
+        bumps=None,
+        bump_atol=0.05,
+        axes=None,
+    ):
         """Plot both mean bunch currents versus acquisition index.
 
+        The measurement configurations are selected by IVU gap and measured
+        vertical bump values.
+
         Args:
-            cfgs (int or sequence of int, optional): Configuration indices.
-                If None, all configurations are plotted.
-            axes (sequence of matplotlib.axes.Axes, optional): Two axes
-                in which to draw. If None, a new figure is created.
+            gap (float): IVU gap [mm].
+            bumps (float or sequence of float, optional): Measured bump values
+                to plot [mm]. If None, plot all bumps available at the
+                selected gap.
+            bump_atol (float): Absolute tolerance used to associate requested
+                bump values with measured bump values [mm].
+            axes (sequence of matplotlib.axes.Axes, optional): Two axes for
+                bunches 1 and 2. If None, create a new figure.
 
         Returns:
             fig (matplotlib.figure.Figure): Plot figure.
             axes (numpy.ndarray): Axes for bunches 1 and 2, respectively.
 
         Raises:
-            RuntimeError: If measurement data have not been prepared.
-            IndexError: If a configuration index is outside the valid range.
+            ValueError: If no configurations are available at the selected
+                gap, or a requested bump does not uniquely identify one
+                configuration.
         """
-        if self.config_table is None:
-            raise RuntimeError('Prepare data before plotting bunch currents.')
+        gap = round(float(gap), 3)
 
-        n_configs = len(self.data)
+        gap_values = self.config_table[
+            'gap'
+        ].to_numpy(dtype=float)
 
-        if cfgs is None:
-            cfgs = range(n_configs)
-        elif _np.isscalar(cfgs):
-            cfgs = [cfgs]
-        else:
-            cfgs = list(cfgs)
+        y0_values = self.config_table[
+            'y0'
+        ].to_numpy(dtype=float)
 
-        invalid_cfgs = [i for i in cfgs if not 0 <= i < n_configs]
+        # All configurations measured at the selected gap.
+        gap_cfgs = _np.flatnonzero(
+            _np.isclose(
+                gap_values,
+                gap,
+                rtol=0.0,
+                atol=self._GAP_ATOL,
+            )
+        )
 
-        if invalid_cfgs:
-            raise IndexError(
-                'Configuration indices outside the valid range: '
-                f'{invalid_cfgs}.'
+        if len(gap_cfgs) == 0:
+            raise ValueError(
+                f'No configurations were found at gap '
+                f'{gap:.3f} mm.'
             )
 
+        if bumps is None:
+            # Plot every bump, ordered by measured bump value.
+            cfgs = gap_cfgs[
+                _np.argsort(y0_values[gap_cfgs])
+            ]
+        else:
+            if _np.isscalar(bumps):
+                bumps = [float(bumps)]
+            else:
+                bumps = list(bumps)
+
+            cfgs = [
+                self._get_config_index(
+                    gap=gap,
+                    bump=bump,
+                    bump_atol=bump_atol,
+                )
+                for bump in bumps
+            ]
+
         if axes is None:
-            fig, axes = _plt.subplots(1, 2, figsize=(13, 5), sharex=True)
+            fig, axes = _plt.subplots(
+                1,
+                2,
+                figsize=(13, 5),
+                sharex=True,
+            )
         else:
             axes = _np.asarray(axes)
             fig = axes[0].figure
 
-        for i in cfgs:
-            row = self.config_table.iloc[i]
-            data_meas = self.data[i]['data']
-
+        for cfg in cfgs:
+            data_meas = self.data[cfg]['data']
             acq_indices = _np.arange(len(data_meas))
 
+            measured_bump = y0_values[cfg]
+
             label = (
-                f'gap = {row["gap"]:.2f} mm, '
-                rf'$y_0$ = {row["y0"]:.2f} mm'
+                rf'$y_0$ = {measured_bump:.3f} mm'
             )
 
             color = None
 
-            for bunch, ax in enumerate(axes, start=1):
+            for bunch, ax in enumerate(
+                axes,
+                start=1,
+            ):
                 currents = _np.asarray([
-                    data_acq[f'b{bunch}_curr'] for data_acq in data_meas
+                    data_acq[f'b{bunch}_curr']
+                    for data_acq in data_meas
                 ])
 
                 (line,) = ax.plot(
-                    acq_indices, currents, '.-', color=color, label=label
+                    acq_indices,
+                    currents,
+                    '.-',
+                    color=color,
+                    label=label,
                 )
 
-                # Use the same configuration color in both panels.
+                # Use the same color for this bump in both panels.
                 color = line.get_color()
 
-        for bunch, ax in enumerate(axes, start=1):
+        for bunch, ax in enumerate(
+            axes,
+            start=1,
+        ):
             ax.set_title(f'Bunch {bunch}')
             ax.set_xlabel('Acquisition index')
             ax.set_ylabel('Current [mA]')
             ax.grid(True)
 
-        fig.suptitle('Mean bunch currents per acquisition')
+        fig.suptitle(
+            f'Mean bunch currents per acquisition\n'
+            f'Gap = {gap:.3f} mm'
+        )
 
-        axes[1].legend(loc='center left', bbox_to_anchor=(1.02, 0.5))
+        axes[1].legend(
+            loc='center left',
+            bbox_to_anchor=(1.02, 0.5),
+        )
+
+        fig.tight_layout()
 
         return fig, axes
 
+    def _get_config_index(self, gap, bump, bump_atol=0.05):
+        """Get the configuration index for one gap and measured bump.
+
+        Args:
+            gap (float): IVU gap [mm].
+            bump (float): Measured vertical bump [mm].
+            bump_atol (float): Absolute bump-matching tolerance [mm].
+
+        Returns:
+            cfg (int): Configuration index in the analysis data.
+
+        Raises:
+            ValueError: If no unique configuration matches the requested
+                gap and bump.
+        """
+        gap = round(float(gap), 3)
+        bump = float(bump)
+
+        gap_values = self.config_table[
+            'gap'
+        ].to_numpy(dtype=float)
+
+        y0_values = self.config_table[
+            'y0'
+        ].to_numpy(dtype=float)
+
+        matches = _np.flatnonzero(
+            _np.isclose(
+                gap_values,
+                gap,
+                rtol=0.0,
+                atol=self._GAP_ATOL,
+            )
+            & _np.isclose(
+                y0_values,
+                bump,
+                rtol=0.0,
+                atol=bump_atol,
+            )
+        )
+
+        if len(matches) != 1:
+            raise ValueError(
+                f'Expected one configuration near gap={gap:.3f} mm '
+                f'and y0={bump:.3f} mm, but found {len(matches)}.'
+            )
+
+        return int(matches[0])
+
     def plot_acquisition_means(
         self,
-        cfg=0,
+        gap,
+        bump,
         acqs=None,
         plane='y',
         normalized=False,
         error='sem',
+        bump_atol=0.05,
         ax=None,
     ):
-        """Plot mean orbit-difference profiles for selected acquisitions.
+        """Plot acquisition-mean orbit profiles for one gap and bump.
 
         For each selected acquisition, the orbit difference is averaged over
         turns while preserving the BPM axis.
 
         Args:
-            cfg (int): Measurement configuration index.
+            gap (float): IVU gap [mm].
+            bump (float): Measured vertical bump value [mm].
             acqs (int or sequence of int, optional): Acquisition indices to
-                plot. If None, all acquisitions are plotted.
-            plane (str): Transverse plane. Use "x" or "y".
-            normalized (bool): Whether to normalize by the mean bunch charge
-                differences.
+                plot. If None, plot all acquisitions.
+            plane (str): Transverse plane, either "x" or "y".
+            normalized (bool): Whether to normalize the orbit difference by
+                the mean bunch charge difference.
             error (str, optional): Error bars to display. Use "std", "sem",
                 or None.
-            ax (matplotlib.axes.Axes, optional): Axes in which to draw. If
-                None, a new figure and axes are created.
+            bump_atol (float): Absolute tolerance used to associate the
+                requested bump with the measured bump value [mm].
+            ax (matplotlib.axes.Axes, optional): Axes in which to draw.
+                If None, create a new figure and axes.
 
         Returns:
             fig (matplotlib.figure.Figure): Plot figure.
             ax (matplotlib.axes.Axes): Plot axes.
 
         Raises:
-            RuntimeError: If BPM positions or orbit differences are
-                unavailable.
-            ValueError: If plane or error is invalid.
-            IndexError: If cfg or an acquisition index is outside the
-                valid range.
+            ValueError: If plane or error is invalid, or the requested gap
+                and bump do not identify one configuration.
+            IndexError: If an acquisition index is outside the valid range.
         """
         if plane not in ('x', 'y'):
             raise ValueError("plane must be 'x' or 'y'.")
 
         if error not in (None, 'std', 'sem'):
-            raise ValueError("error must be None, 'std', or 'sem'.")
-
-        if self.spos_bpms is None:
-            raise RuntimeError(
-                'Set BPM longitudinal positions before plotting orbit data.'
+            raise ValueError(
+                "error must be None, 'std', or 'sem'."
             )
 
-        delta_orbit = self.get_delta_orbit(plane=plane, normalized=normalized)
+        cfg = self._get_config_index(
+            gap=gap,
+            bump=bump,
+            bump_atol=bump_atol,
+        )
 
-        if not 0 <= cfg < len(delta_orbit):
-            raise IndexError(
-                f'Configuration index {cfg} is outside the valid range.'
-            )
+        delta_orbit = self.get_delta_orbit(
+            plane=plane,
+            normalized=normalized,
+        )
 
         delta_i = delta_orbit[cfg]
         n_acq = delta_i.shape[0]
@@ -1810,38 +1930,50 @@ class ImpedanceIVUAnalysis:
         else:
             acqs = list(acqs)
 
-        invalid_acqs = [acq for acq in acqs if not 0 <= acq < n_acq]
+        invalid_acqs = [
+            acq
+            for acq in acqs
+            if not 0 <= acq < n_acq
+        ]
 
         if invalid_acqs:
             raise IndexError(
-                f'Acquisition indices outside the valid range: {invalid_acqs}.'
+                'Acquisition indices outside the valid range: '
+                f'{invalid_acqs}.'
             )
 
-        bpm_indcs = _np.asarray(
-            self.data[cfg]['data'][0]['bpm_indcs'], dtype=int
+        # Average each acquisition over turns.
+        mean_by_acq = _np.mean(
+            delta_i,
+            axis=2,
         )
-        spos_i = _np.asarray(self.spos_bpms)[bpm_indcs]
-
-        mean_by_acq = _np.mean(delta_i, axis=2)
 
         if error == 'std':
-            error_by_acq = _np.std(delta_i, axis=2)
-        elif error == 'sem':
-            error_by_acq = _np.std(delta_i, axis=2) / _np.sqrt(
-                delta_i.shape[2]
+            error_by_acq = _np.std(
+                delta_i,
+                axis=2,
             )
+
+        elif error == 'sem':
+            error_by_acq = (
+                _np.std(delta_i, axis=2)
+                / _np.sqrt(delta_i.shape[2])
+            )
+
         else:
             error_by_acq = None
 
         if ax is None:
-            fig, ax = _plt.subplots(figsize=(10, 5))
+            fig, ax = _plt.subplots(
+                figsize=(10, 5),
+            )
         else:
             fig = ax.figure
 
         for acq in acqs:
             if error_by_acq is None:
                 ax.plot(
-                    spos_i,
+                    self.spos_bpms,
                     mean_by_acq[acq],
                     '.-',
                     alpha=0.6,
@@ -1849,7 +1981,7 @@ class ImpedanceIVUAnalysis:
                 )
             else:
                 ax.errorbar(
-                    spos_i,
+                    self.spos_bpms,
                     mean_by_acq[acq],
                     yerr=error_by_acq[acq],
                     marker='.',
@@ -1860,188 +1992,209 @@ class ImpedanceIVUAnalysis:
                 )
 
         row = self.config_table.iloc[cfg]
-        plane_name = {'x': 'Horizontal', 'y': 'Vertical'}[plane]
 
-        if normalized:
-            ylabel = (
-                rf'$\langle\Delta {plane}\rangle_{{\rm turns}}$ '
-                r'[$\mu$m/nC]'
-            )
-        else:
-            ylabel = (
-                rf'$\langle\Delta {plane}\rangle_{{\rm turns}}$ '
-                r'[$\mu$m]'
-            )
+        plane_name = {
+            'x': 'Horizontal',
+            'y': 'Vertical',
+        }[plane]
+
+        unit = (
+            r'$\mu$m/nC'
+            if normalized
+            else r'$\mu$m'
+        )
 
         ax.set_title(
-            f'{plane_name} orbit difference between bunches by acquisition\n'
-            f'Configuration {cfg}: gap = {row["gap"]:.2f} mm, '
-            rf'$y_0$ = {row["y0"]:.2f} mm'
+            f'{plane_name} orbit difference by acquisition\n'
+            f'Gap = {row["gap"]:.3f} mm, '
+            rf'$y_0$ = {row["y0"]:.3f} mm'
         )
-        ax.set_xlabel('BPM longitudinal position [m]')
-        ax.set_ylabel(ylabel)
+
+        ax.set_xlabel(
+            'BPM longitudinal position [m]'
+        )
+
+        ax.set_ylabel(
+            rf'$\langle\Delta {plane}\rangle_'
+            rf'{{\rm turns}}$ [{unit}]'
+        )
+
         ax.grid(True)
-        ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1), borderaxespad=0)
+
+        ax.legend(
+            loc='upper left',
+            bbox_to_anchor=(1.02, 1),
+            borderaxespad=0,
+        )
+
         fig.tight_layout()
 
         return fig, ax
 
     def plot_config_means(
         self,
-        cfgs=None,
-        ref_cfg=None,
+        gap,
+        bumps=None,
+        ref_bump=None,
         plane='y',
         normalized=False,
         error='sem',
+        bump_atol=0.05,
         ax=None,
     ):
-        """Plot mean orbit-difference profiles for selected configurations.
+        """Plot mean orbit profiles for selected bumps at one IVU gap.
 
-        The plotted profiles are averaged over acquisitions and turns. If a
-        reference configuration is provided, its profile is subtracted after
-        aligning both configurations through their global BPM indices.
+        Each profile is averaged over acquisitions and turns. If a reference
+        bump is provided, its profile is subtracted from every selected bump.
 
         Args:
-            cfgs (int or sequence of int, optional): Configuration indices to
-                plot. If None, all configurations are plotted.
-            ref_cfg (int, optional): Reference configuration to subtract.
-                If None, absolute orbit-difference profiles are plotted.
+            gap (float): IVU gap [mm].
+            bumps (float or sequence of float, optional): Measured bump values
+                to plot [mm]. If None, plot every bump available at the
+                selected gap.
+            ref_bump (float, optional): Measured bump value of the reference
+                configuration [mm]. If None, plot the absolute mean profiles.
             plane (str): Transverse plane, either "x" or "y".
-            normalized (bool): Whether to normalize by the mean bunch charge
-                differences.
+            normalized (bool): Whether to normalize the orbit statistics by
+                the mean bunch charge differences.
             error (str, optional): Error bars to display. Use "std", "sem",
                 or None.
-            ax (matplotlib.axes.Axes, optional): Axes in which to draw. If
-                None, a new figure and axes are created.
+            bump_atol (float): Absolute tolerance used to associate requested
+                bump values with measured bump values [mm].
+            ax (matplotlib.axes.Axes, optional): Axes in which to draw.
+                If None, create a new figure and axes.
 
         Returns:
             fig (matplotlib.figure.Figure): Plot figure.
             ax (matplotlib.axes.Axes): Plot axes.
 
         Raises:
-            RuntimeError: If BPM positions or orbit statistics are
-                unavailable.
-            ValueError: If plane or error is invalid, or the reference
-                configuration does not contain the required BPMs.
-            IndexError: If a configuration index is outside the valid
-                range.
+            ValueError: If plane or error is invalid, or a requested bump
+                does not identify one unique configuration.
         """
         if plane not in ('x', 'y'):
             raise ValueError("plane must be 'x' or 'y'.")
 
         if error not in (None, 'std', 'sem'):
-            raise ValueError("error must be None, 'std', or 'sem'.")
-
-        if self.spos_bpms is None:
-            raise RuntimeError(
-                'Set BPM longitudinal positions before plotting orbit data.'
+            raise ValueError(
+                "error must be None, 'std', or 'sem'."
             )
 
-        stats = self.get_delta_orbit_stats(plane=plane, normalized=normalized)
+        gap = round(float(gap), 3)
 
-        n_configs = len(stats['mean'])
+        stats = self.get_delta_orbit_stats(
+            plane=plane,
+            normalized=normalized,
+        )
 
-        if cfgs is None:
-            cfgs = range(n_configs)
-        elif _np.isscalar(cfgs):
-            cfgs = [int(cfgs)]
+        gap_values = self.config_table[
+            'gap'
+        ].to_numpy(dtype=float)
+
+        y0_values = self.config_table[
+            'y0'
+        ].to_numpy(dtype=float)
+
+        gap_cfgs = _np.flatnonzero(
+            _np.isclose(
+                gap_values,
+                gap,
+                rtol=0.0,
+                atol=self._GAP_ATOL,
+            )
+        )
+
+        if len(gap_cfgs) == 0:
+            raise ValueError(
+                f'No configurations were found at gap '
+                f'{gap:.3f} mm.'
+            )
+
+        if bumps is None:
+            # Plot every configuration at this gap, ordered by bump.
+            cfgs = gap_cfgs[
+                _np.argsort(y0_values[gap_cfgs])
+            ]
         else:
-            cfgs = list(cfgs)
+            if _np.isscalar(bumps):
+                bumps = [float(bumps)]
+            else:
+                bumps = list(bumps)
 
-        invalid_cfgs = [i for i in cfgs if not 0 <= i < n_configs]
+            cfgs = [
+                self._get_config_index(
+                    gap=gap,
+                    bump=bump,
+                    bump_atol=bump_atol,
+                )
+                for bump in bumps
+            ]
 
-        if invalid_cfgs:
-            raise IndexError(
-                'Configuration indices outside the valid range: '
-                f'{invalid_cfgs}.'
-            )
-
-        if ref_cfg is not None and not 0 <= ref_cfg < n_configs:
-            raise IndexError(
-                f'Reference configuration index {ref_cfg} is outside '
-                'the valid range.'
+        if ref_bump is None:
+            ref_cfg = None
+        else:
+            ref_cfg = self._get_config_index(
+                gap=gap,
+                bump=ref_bump,
+                bump_atol=bump_atol,
             )
 
         if ax is None:
-            fig, ax = _plt.subplots(figsize=(10, 5))
+            fig, ax = _plt.subplots(
+                figsize=(10, 5),
+            )
         else:
             fig = ax.figure
 
         if ref_cfg is not None:
-            ref_bpm_indcs = _np.asarray(
-                self.data[ref_cfg]['data'][0]['bpm_indcs'], dtype=int
-            )
-
-            ref_bpm_map = {
-                bpm_idx: local_idx
-                for local_idx, bpm_idx in enumerate(ref_bpm_indcs)
-            }
-
-            mean_ref_full = stats['mean'][ref_cfg]
+            mean_ref = stats['mean'][ref_cfg]
 
             if error is not None:
-                error_ref_full = stats[error][ref_cfg]
+                error_ref = stats[error][ref_cfg]
 
-        spos_bpms = _np.asarray(self.spos_bpms)
-
-        for i in cfgs:
-            bpm_indcs = _np.asarray(
-                self.data[i]['data'][0]['bpm_indcs'], dtype=int
-            )
-            spos_i = spos_bpms[bpm_indcs]
-
-            mean_i = stats['mean'][i]
+        for cfg in cfgs:
+            mean_i = stats['mean'][cfg]
 
             if error is not None:
-                error_i = stats[error][i]
+                error_i = stats[error][cfg]
 
-            if ref_cfg is not None:
-                missing_bpms = [
-                    int(bpm_idx)
-                    for bpm_idx in bpm_indcs
-                    if bpm_idx not in ref_bpm_map
-                ]
-
-                if missing_bpms:
-                    raise ValueError(
-                        f'Reference configuration {ref_cfg} does not '
-                        f'contain BPM indices required by configuration '
-                        f'{i}: {missing_bpms}.'
-                    )
-
-                ref_local_indcs = _np.asarray([
-                    ref_bpm_map[bpm_idx] for bpm_idx in bpm_indcs
-                ])
-
-                mean_ref = mean_ref_full[ref_local_indcs]
-                mean_plot = mean_i - mean_ref
-
-                if error is not None:
-                    error_ref = error_ref_full[ref_local_indcs]
-
-                    if i == ref_cfg:
-                        error_plot = _np.zeros_like(error_i)
-                    else:
-                        error_plot = _np.sqrt(error_i**2 + error_ref**2)
-            else:
+            if ref_cfg is None:
                 mean_plot = mean_i
 
                 if error is not None:
                     error_plot = error_i
 
-            row = self.config_table.iloc[i]
+            else:
+                mean_plot = mean_i - mean_ref
+
+                if error is not None:
+                    if cfg == ref_cfg:
+                        error_plot = _np.zeros_like(
+                            error_i
+                        )
+                    else:
+                        error_plot = _np.sqrt(
+                            error_i**2
+                            + error_ref**2
+                        )
+
+            measured_bump = y0_values[cfg]
 
             label = (
-                f'Configuration {i}: '
-                f'gap = {row["gap"]:.2f} mm, '
-                rf'$y_0$ = {row["y0"]:.2f} mm'
+                rf'$y_0$ = {measured_bump:.3f} mm'
             )
 
             if error is None:
-                ax.plot(spos_i, mean_plot, '.-', alpha=0.7, label=label)
+                ax.plot(
+                    self.spos_bpms,
+                    mean_plot,
+                    '.-',
+                    alpha=0.7,
+                    label=label,
+                )
             else:
                 ax.errorbar(
-                    spos_i,
+                    self.spos_bpms,
                     mean_plot,
                     yerr=error_plot,
                     marker='.',
@@ -2051,35 +2204,60 @@ class ImpedanceIVUAnalysis:
                     label=label,
                 )
 
-        plane_name = {'x': 'Horizontal', 'y': 'Vertical'}[plane]
+        plane_name = {
+            'x': 'Horizontal',
+            'y': 'Vertical',
+        }[plane]
 
-        if normalized:
-            unit = r'$\mu$m/nC'
-        else:
-            unit = r'$\mu$m'
+        unit = (
+            r'$\mu$m/nC'
+            if normalized
+            else r'$\mu$m'
+        )
 
         if ref_cfg is None:
-            title = f'{plane_name} mean orbit difference between bunches'
+            title = (
+                f'{plane_name} mean orbit difference between bunches\n'
+                f'Gap = {gap:.3f} mm'
+            )
+
             ylabel = (
                 rf'$\langle\Delta {plane}\rangle_'
                 rf'{{\rm acqs,turns}}$ [{unit}]'
             )
+
         else:
+            measured_ref_bump = y0_values[ref_cfg]
+
             title = (
-                f'{plane_name} mean orbit shift between bunches relative to '
-                f'Configuration {ref_cfg}\n'
+                f'{plane_name} reference-subtracted orbit difference\n'
+                f'Gap = {gap:.3f} mm, '
+                rf'$y_{{0,\mathrm{{ref}}}}$ = '
+                f'{measured_ref_bump:.3f} mm'
             )
+
             ylabel = (
                 rf'$\langle\Delta {plane}\rangle'
-                rf'-\langle\Delta {plane}\rangle_{{\rm ref}}$ '
-                f'[{unit}]'
+                rf'-\langle\Delta {plane}\rangle_'
+                rf'{{\rm ref}}$ [{unit}]'
             )
 
         ax.set_title(title)
-        ax.set_xlabel('BPM longitudinal position [m]')
+
+        ax.set_xlabel(
+            'BPM longitudinal position [m]'
+        )
+
         ax.set_ylabel(ylabel)
+
         ax.grid(True)
-        ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1), borderaxespad=0)
+
+        ax.legend(
+            loc='upper left',
+            bbox_to_anchor=(1.02, 1),
+            borderaxespad=0,
+        )
+
         fig.tight_layout()
 
         return fig, ax
@@ -2244,56 +2422,6 @@ class ImpedanceIVUAnalysis:
 
         orbit_error = _np.stack([stats[error][cfg] for cfg in config_indices])
 
-        # All configurations use the same BPMs and therefore the same
-        # IVU response vector. We can take it from the first selected
-        # configuration.
-        first_cfg = config_indices[0]
-
-        response = _np.asarray(self.M_ivu[plane][first_cfg], dtype=float)
-
-        bpm_indices = _np.asarray(
-            self.data[first_cfg]['data'][0]['bpm_indcs'], dtype=int
-        )
-
-        # np.stack already guarantees that all selected orbit arrays
-        # have the same shape. We only need to confirm compatibility
-        # between the orbit and response dimensions.
-        if orbit.shape[1] != len(response):
-            raise ValueError(
-                'The orbit data and IVU response contain different '
-                'numbers of BPMs.'
-            )
-
-        if len(bpm_indices) != len(response):
-            raise ValueError(
-                'The BPM-index array and IVU response contain different '
-                'numbers of BPMs.'
-            )
-
-        # -------------------------------------------------------------
-        # Validate numerical values.
-        # -------------------------------------------------------------
-        if not _np.all(_np.isfinite(orbit)):
-            raise ValueError('Orbit means must contain only finite values.')
-
-        if not _np.all(_np.isfinite(orbit_error)) or _np.any(
-            orbit_error <= 0.0
-        ):
-            raise ValueError(
-                'Orbit uncertainties must be finite and positive.'
-            )
-
-        if not _np.all(_np.isfinite(response)):
-            raise ValueError(
-                'The IVU response must contain only finite values.'
-            )
-
-        if _np.allclose(response, 0.0):
-            raise ValueError('The IVU response cannot be identically zero.')
-
-        # -------------------------------------------------------------
-        # Configuration-level quantities.
-        # -------------------------------------------------------------
         selected_rows = self.config_table.iloc[config_indices]
 
         y0 = selected_rows['y0'].to_numpy(dtype=float)
@@ -2343,9 +2471,6 @@ class ImpedanceIVUAnalysis:
             kick_fit (dict): Relative kicks, background, covariances, residuals
                 and goodness-of-fit quantities.
         """
-        if gap_atol is None:
-            gap_atol = self._GAP_ATOL
-
         fit_data = self._prepare_gap_fit_data(
             gap=gap,
             plane=plane,
@@ -2578,9 +2703,6 @@ class ImpedanceIVUAnalysis:
         Returns:
             kperp_fit (dict): Direct slope and transverse kick-factor results.
         """
-        if gap_atol is None:
-            gap_atol = self._GAP_ATOL
-
         fit_data = self._prepare_gap_fit_data(
             gap=gap,
             plane=plane,
