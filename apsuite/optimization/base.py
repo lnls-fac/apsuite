@@ -84,8 +84,8 @@ class OptimizeParams(_Params):
     def __str__(self):
         """."""
         stg = ''
-        stg += self._TMPD('max_number_iters', self.max_number_iters, '')
-        stg += self._TMPD('max_number_evals', self.max_number_evals, '')
+        stg += self._TMPF('max_number_iters', self.max_number_iters, '')
+        stg += self._TMPF('max_number_evals', self.max_number_evals, '')
         stg += self._TMPS(
             'boundary_policy',
             self.BoundaryPolicy._fields[self.boundary_policy], '')
