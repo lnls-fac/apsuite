@@ -333,7 +333,11 @@ class Optimize(_Base):
             self._optimize()
         except OptimizationAborted:
             _log.info('Exiting: stop event was set.')
-        self._finalization()
+        except Exception:
+            _log.exception('Exiting: unexpected error during optimization.')
+            raise
+        finally:
+            self._finalization()
 
     def plot_history():
         """Implement visualization of the optimzation history."""
