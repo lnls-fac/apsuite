@@ -90,11 +90,26 @@ class OptimizePosAng(_BayesianOptimizerGPy):
                 'Cannot start optimization offline. Set self.isonline to True'
             )
 
-        if not self.params.nr_points_warm_start_data:
+        if not self.params.initial_position.size:
+            _log.warning(
+                'Initial position not specified. '
+                + 'Using current TS pos, ang and NLK kicks.'
+            )
+            self.params.initial_position = self.get_positions()
+
+        if (
+            not self.params.nr_points_warm_start_data
+            and self.params.initial_sampling_mode
+            == self.params.InitialSamplingMode.ProvidedData
+        ):
             raise ValueError(
-                'nr_points_warm_start_data is zero. '
-                + 'No baseline surrogate model for optimization!'
-            )  # TODO: if no data, proceed w/ initial sampling
+                'self.params.nr_points_warm_start_data is zero. '
+                + 'No baseline surrogate model for optimization! '
+                + 'If you want this routine to randomly sample points for '
+                + 'initial Gaussian Process model training, set '
+                + 'self.params.initial_sampling_mode to '
+                + 'self.InitialSamplingMode.RandomSampling'
+            )
 
         self.pulse_interval = (
             self.devices['injctrl'].topup_period * 60
@@ -102,15 +117,12 @@ class OptimizePosAng(_BayesianOptimizerGPy):
             else 3  # hard-coded accumulation period
         )
 
-        _log.debug('Collecting data for model warm-start')
-        self._collect_warm_start_data()
-
-        if not self.params.initial_position.size:
-            _log.warning(
-                'Initial position not specified. '
-                + 'Using current TS pos, ang and NLK kicks.'
-            )
-            self.params.initial_position = self.get_positions()
+        if (
+            self.params.initial_sampling_mode
+            == self.params.InitialSamplingMode.ProvidedData
+        ):
+            _log.debug('Collecting data for model warm-start')
+            self._collect_warm_start_data()
 
         _log.debug('Acquiring machine initial state...')
         self.initial_state = self._get_state()
@@ -121,7 +133,6 @@ class OptimizePosAng(_BayesianOptimizerGPy):
         else:
             self._monitor_pv.add_callback(self._monitor_pv_update)
 
-
         # _log.info('Updating PosAng reference...')
         # self.devices['posang'].cmd_update_reference()
         # warm start will not work if reference is update
@@ -131,6 +142,9 @@ class OptimizePosAng(_BayesianOptimizerGPy):
         return True
 
     def _collect_warm_start_data(self):
+        # TODO: archived data may not be temporally aligned
+        # SP for knobs vs MON pv for efficiency. Different
+        # update freuquencies. Implement forward-fill to align data.
         currinfo_devname = self.devices['currinfo'].devname
         posang_devname = self.devices['posang'].devname
         nlk_devname = self.devices['nlk'].devname
@@ -198,6 +212,9 @@ class OptimizePosAng(_BayesianOptimizerGPy):
         if pos is None:
             pos = self.get_positions()
         self.set_positions(pos)
+        if not self.params.trigger_injection:
+            self.news.clear()  # clear out previous pulse flag
+            # that may have been set during set_positions()
         injeff = self._inject()
         return -injeff
 
