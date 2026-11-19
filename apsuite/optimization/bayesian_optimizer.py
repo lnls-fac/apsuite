@@ -200,9 +200,10 @@ class BayesianOptimizerGPy(_Optimize):
         if self.params.trust_region_mode == TRM.AdaptiveTrustRegion:
             self._init_trust_region(dim)
 
-        n_bo_iters = self.params.max_number_iters - len(self.positions_best)
-        for _ in range(max(n_bo_iters, 0)):
+        while len(self.positions_best) < self.params.max_number_iters:
             if self.num_objective_evals >= self.params.max_number_evals:
+                return
+            if self._stopevt.is_set():
                 return
             self._fit_gp()
             pos_normalized = self._propose_next(dim)
