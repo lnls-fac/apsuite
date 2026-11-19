@@ -84,8 +84,8 @@ class OptimizeParams(_Params):
     def __str__(self):
         """."""
         stg = ''
-        stg += self._TMPD('max_number_iters', self.max_number_iters, '')
-        stg += self._TMPD('max_number_evals', self.max_number_evals, '')
+        stg += self._TMPF('max_number_iters', self.max_number_iters, '')
+        stg += self._TMPF('max_number_evals', self.max_number_evals, '')
         stg += self._TMPS(
             'boundary_policy',
             self.BoundaryPolicy._fields[self.boundary_policy], '')
@@ -283,7 +283,7 @@ class Optimize(_Base):
         """Implement here optimization algorithm."""
         raise NotImplementedError()
 
-    def _initialization():
+    def _initialization(self):
         """To be called before optimization starts.
 
         If the return value is False, optimization will not run.
@@ -333,7 +333,11 @@ class Optimize(_Base):
             self._optimize()
         except OptimizationAborted:
             _log.info('Exiting: stop event was set.')
-        self._finalization()
+        except Exception:
+            _log.exception('Exiting: unexpected error during optimization.')
+            raise
+        finally:
+            self._finalization()
 
     def plot_history():
         """Implement visualization of the optimzation history."""
