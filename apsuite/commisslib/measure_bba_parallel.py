@@ -771,7 +771,9 @@ class DoParallelBBA(_BaseClass):
             self._log('Adjust quad strength or change dKL first.')
             return
 
-        self.data['jacobians'] = self.calc_ios_jacobians()
+        if not self.data['jacobians']:
+            self.data['jacobians'] = self.calc_ios_jacobians()
+            # raise ValueError('Please calculate and set jacobians first.')
         self.data['measure'] = list()
 
         sofb = self.devices['sofb']
