@@ -3,6 +3,7 @@
 import datetime as _datetime
 import time as _time
 from copy import deepcopy as _dcopy
+from collections.abc import Iterable as _Iterable
 
 import numpy as _np
 import pyaccel as _pyacc
@@ -378,14 +379,22 @@ class DoParallelBBA(_BaseClass):
 
     # #### pbba utils #####
 
-    def set_quad_strengths(self, group_id, strengths, wait_refmon=True):
+    def set_quad_strengths(
+            self, group_id=None, strengths=None, wait_refmon=True
+        ):
         """."""
+        if strengths is None or not isinstance(strengths, _Iterable):
+            msg = 'Invalid strengths!'
+            raise ValueError(msg)
+
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
 
-        bpms = bpm_names
-        if group_id is not None and group_id != 'All':
-            bpms = self.data['groups2dopbba'][group_id]
+        bpms = (
+            self.data['groups2dopbba'][group_id]
+            if group_id is not None
+            else bpm_names
+        )
 
         if len(bpms) != len(strengths):
             msg = 'Size mismatch between the group and strengths: '
@@ -415,13 +424,13 @@ class DoParallelBBA(_BaseClass):
                 return DoParallelBBA.STATUS.Fail
         return DoParallelBBA.STATUS.Success
 
-    def get_quad_strengths(self, group_id):
+    def get_quad_strengths(self, group_id=None):
         """."""
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
 
         bpms = bpm_names
-        if group_id is not None and group_id != 'All':
+        if group_id is not None:
             bpms = self.data['groups2dopbba'][group_id]
 
         strengths = []
@@ -432,13 +441,13 @@ class DoParallelBBA(_BaseClass):
 
         return _np.array(strengths, dtype=float)
 
-    def get_quad_strength_limits(self, group_id):
+    def get_quad_strength_limits(self, group_id=None):
         """."""
         quad_names = self.data['quadnames']
         bpm_names = self.data['bpmnames']
 
         bpms = bpm_names
-        if group_id is not None and group_id != 'All':
+        if group_id is not None:
             bpms = self.data['groups2dopbba'][group_id]
 
         limits = []
@@ -457,9 +466,9 @@ class DoParallelBBA(_BaseClass):
 
     def check_isvalid_dkl(
         self,
-        group_id,
-        init_strengths=None,
-        strength_limits=None,
+        group_id=None,
+        strengths=None,
+        limits=None,
         margin=0.00025,  # 5% of the default dKL/2
         return_valid=False,
     ):
@@ -472,21 +481,23 @@ class DoParallelBBA(_BaseClass):
         bpm_names = self.data['bpmnames']
 
         bpms = (
-            bpm_names
-            if group_id is None or group_id == 'All'
-            else self.data['groups2dopbba'][group_id]
+            self.data['groups2dopbba'][group_id]
+            if group_id is not None
+            else bpm_names
         )
 
         strengths = _np.asarray(
             self.get_quad_strengths(group_id)
-            if init_strengths is None
-            else init_strengths
+            if strengths is None
+            else strengths,
+            dtype=float
         )
 
         lims = _np.asarray(
             self.get_quad_strength_limits(group_id)
-            if strength_limits is None
-            else strength_limits
+            if limits is None
+            else limits,
+            dtype=float
         )
 
         if len(bpms) != len(strengths):
@@ -537,9 +548,12 @@ class DoParallelBBA(_BaseClass):
         """."""
         delta_strens = self.data['delta_kl'][group_id]
 
-        strens_orig = init_strengths
-        if init_strengths is None:
-            strens_orig = self.get_quad_strengths(group_id)
+        strens_orig = _np.asarray(
+            self.get_quad_strengths(group_id)
+            if init_strengths is None
+            else init_strengths,
+            dtype=float
+        )
 
         if not self.set_quad_strengths(
             group_id, strens_orig + delta_strens / 2
