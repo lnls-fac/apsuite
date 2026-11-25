@@ -848,6 +848,13 @@ class DoParallelBBA(_BaseClass):
         Raises:
             IndexError: If a requested group has no measurement record.
         """
+        nbpms = len(self.params.BPMNAMES)
+
+        self.analysis['orbx'] = _np.zeros(nbpms)
+        self.analysis['orby'] = self.analysis['orbx'].copy()
+        self.analysis['stdx'] = self.analysis['orbx'].copy()
+        self.analysis['stdy'] = self.analysis['orbx'].copy()
+
         if group_ids is None:
             group_ids = range(len(self.data['groups2dopbba']))
         elif isinstance(group_ids, (int, float)):
@@ -863,14 +870,6 @@ class DoParallelBBA(_BaseClass):
         orbit = meas_data['orbit_end']
 
         idcs = _np.array([bpmnames.index(b) for b in meas_data['bpms']])
-
-        if 'orbx' not in self.analysis:
-            self.analysis['orbx'] = _np.zeros(nbpms)
-            self.analysis['orby'] = self.analysis['orbx'].copy()
-
-        if 'stdx' not in self.analysis:
-            self.analysis['stdx'] = _np.zeros(nbpms)
-            self.analysis['stdy'] = self.analysis['stdx'].copy()
 
         self.analysis['orbx'][idcs] = orbit[idcs]
         self.analysis['orby'][idcs] = orbit[idcs + nbpms]
