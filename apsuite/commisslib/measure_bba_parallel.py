@@ -54,18 +54,19 @@ class ParallelBBAParams(_ParamsBaseClass):
 
     def __str__(self):
         """."""
-        stg = ''
-        stg += f'quad_deltakl       = {self.quad_deltakl:.3f}\n'
-        stg += f'wait_correctors    = {self.wait_correctors:.3f}\n'
-        stg += f'wait_quadrupole    = {self.wait_quadrupole:.3f}\n'
-        stg += f'timeout_wait_orbit = {self.timeout_wait_orbit:.3f}\n'
-        stg += f'corr_max_nr_iters  = {self.corr_max_nr_iters:d}\n'
-        stg += f'ios_conv_tol       = {self.ios_conv_tol:.2e}\n'
-        stg += f'conv_method        = {self.conv_method_str:s} (rms or ptp)\n'
-        stg += f'sofb_nrpoints      = {self.sofb_nrpoints:d}\n'
-        stg += f'sofb_maxcorriter   = {self.sofb_maxcorriter:d}\n'
-        stg += f'sofb_maxorberr     = {self.sofb_maxorberr:.3f}\n'
-        stg += f'cycling_nr_steps   = {self.cycling_nr_steps:d}\n'
+        stg = 'PBBA Parameters\n' + '='*45 + '\n'
+        stg += f'quad_deltakl        = {self.quad_deltakl:.3f}\n'
+        stg += f'wait_correctors     = {self.wait_correctors:.3f}\n'
+        stg += f'wait_quadrupole     = {self.wait_quadrupole:.3f}\n'
+        stg += f'timeout_wait_orbit  = {self.timeout_wait_orbit:.3f}\n'
+        stg += f'corr_max_nr_iters   = {self.corr_max_nr_iters:d}\n'
+        stg += f'ios_conv_tol        = {self.ios_conv_tol:.2e}\n'
+        stg += f'conv_method         = {self.conv_method_str:s} (rms | ptp)\n'
+        stg += f'ios_raise_cnt_limit = {self.ios_raise_cnt_limit:d}\n'
+        stg += f'sofb_nrpoints       = {self.sofb_nrpoints:d}\n'
+        stg += f'sofb_maxcorriter    = {self.sofb_maxcorriter:d}\n'
+        stg += f'sofb_maxorberr      = {self.sofb_maxorberr:.3f}\n'
+        stg += f'cycling_nr_steps    = {self.cycling_nr_steps:d}\n'
         return stg
 
     @property
@@ -258,27 +259,44 @@ class DoParallelBBA(_BaseClass):
 
     def __str__(self):
         """."""
-        stn = 'Params\n'
-        stp = self.params.__str__()
-        stp = '    ' + stp.replace('\n', '\n    ')
-        stn += stp + '\n'
+        st = 'Parallel Beam-Based Alignment\n' + '='*55 + '\n'
+        stparams = 'Parameters\n' + '-'*55 + '\n    '
+        stparams += '\n    '.join(self.params.__str__().rsplit('\n')[2:])
         connected = str(self.connected and len(self.devices.keys()) > 0)
-        stn += 'Connected?  ' + connected + '\n\n'
-        stn += '     {:^20s} {:^20s} {:^7s}\n'.format('BPM', 'Quad', 'dKL')
-        tmplt = '{:03d}: {:^20s} {:^20s} {:+.3f}\n'
+        stconn = 'Connected ? ' + connected + '\n' + '-'*55 + '\n'
+        stgpcfg = 'Group configuration\n' + '-'*55 + '\n'
+        stgpdtl = 'Group details\n' + '-'*55 + '\n'
+        stgpdtl += f'     {"BPM":^20s} {"Quad":^20s} {"dKL":^7s}\n'
+        tmplt = '{:3d}: {:^20s} {:^20s} {:+.3f}\n'
+
         dta = self.data
         for group_id, group in enumerate(self.data['groups2dopbba']):
-            stn += f'> Group {group_id:03d}\n'
+            stgpcfg += f'    > Group {group_id:d}'
+            stgpdtl += f'> Group {group_id:d}\n'
+
+            sec = []
+            quads = []
             for j, bpm in enumerate(group):
                 idx = dta['bpmnames'].index(bpm)
-                stn += tmplt.format(
+                stgpdtl += tmplt.format(
                     idx,
                     dta['bpmnames'][idx],
                     dta['quadnames'][idx],
                     dta['delta_kl'][group_id][j],
                 )
-            stn += '\n'
-        return stn
+                sec_ = dta['bpmnames'][idx].sub[-2:]
+                i_ = dta['bpmnames'][idx].idx
+                sec_ = sec_ + (('-' + i_) if i_ else '')
+                sec.append(sec_)
+                quads.append(dta['quadnames'][idx].dev)
+            stgpcfg += ': ' + ', '.join(list(set(sec)))
+            stgpcfg += ' (' + ', '.join(list(set(quads))) + ')\n'
+            stgpdtl += '\n'
+        st += '\n' + stconn
+        st += '\n' + stparams
+        st += '\n' + stgpcfg
+        st += '\n' + stgpdtl
+        return st
 
     @property
     def havebeam(self):
