@@ -39,8 +39,7 @@ setup(
     packages=find_packages(),
     install_requires=_requirements,
     package_data={
-        'apsuite': ['VERSION'],
-        'apsuite.loco': ['*.jpg', ],
+        'apsuite': ['VERSION', 'resources/*.jpg'],
     },
     zip_safe=False
 )

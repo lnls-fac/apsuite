@@ -276,7 +276,7 @@ class TurnOffCorr(_ThreadBaseClass):
         """
         tune, tunecorr = self.devices['tune'], self.devices['tunecorr']
         sofb, prms = self.devices['sofb'], self.params
-        excx0, excy0 = tune.enablex, tune.enabley
+        excx0, excy0 = tune.excitation_enabledx, tune.excitation_enabledy
         if not excx0:
             tune.cmd_enablex()
             _time.sleep(prms.wait_tunecorr)
