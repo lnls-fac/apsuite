@@ -35,26 +35,26 @@ class ParallelBBAParams(_ParamsBaseClass):
         """."""
         super().__init__()
 
-        self.quad_deltakl : float = 0.01  # [1/m]
+        self.quad_deltakl: float = 0.01  # [1/m]
 
-        self.wait_correctors : float = 1.0  # [s]
-        self.wait_quadrupole : float = 2.0  # [s]
+        self.wait_correctors: float = 1.0  # [s]
+        self.wait_quadrupole: float = 2.0  # [s]
 
-        self.corr_max_nr_iters : int = 8
-        self.ios_conv_tol : float = 0.5  # [um]
-        self._conv_method : int = self.METHODS.rms
-        self.ios_raise_cnt_limit : int = 2
+        self.corr_max_nr_iters: int = 8
+        self.ios_conv_tol: float = 0.5  # [um]
+        self._conv_method: int = self.METHODS.rms
+        self.ios_raise_cnt_limit: int = 2
 
-        self.sofb_nrpoints : int = 80
-        self.sofb_maxcorriter : int = 5
-        self.sofb_maxorberr : float = 5  # [um]
-        self.timeout_wait_orbit : float = 12  # [s]
+        self.sofb_nrpoints: int = 80
+        self.sofb_maxcorriter: int = 5
+        self.sofb_maxorberr: float = 5  # [um]
+        self.timeout_wait_orbit: float = 12  # [s]
 
-        self.cycling_nr_steps : int = 2
+        self.cycling_nr_steps: int = 2
 
     def __str__(self):
         """."""
-        stg = 'PBBA Parameters\n' + '='*45 + '\n'
+        stg = 'PBBA Parameters\n' + '=' * 45 + '\n'
         stg += f'quad_deltakl        = {self.quad_deltakl:.3f}\n'
         stg += f'wait_correctors     = {self.wait_correctors:.3f}\n'
         stg += f'wait_quadrupole     = {self.wait_quadrupole:.3f}\n'
@@ -259,13 +259,13 @@ class DoParallelBBA(_BaseClass):
 
     def __str__(self):
         """."""
-        st = 'Parallel Beam-Based Alignment\n' + '='*55 + '\n'
-        stparams = 'Parameters\n' + '-'*55 + '\n    '
+        st = 'Parallel Beam-Based Alignment\n' + '=' * 55 + '\n'
+        stparams = 'Parameters\n' + '-' * 55 + '\n    '
         stparams += '\n    '.join(self.params.__str__().rsplit('\n')[2:])
         connected = str(self.connected and len(self.devices.keys()) > 0)
-        stconn = 'Connected ? ' + connected + '\n' + '-'*55 + '\n'
-        stgpcfg = 'Group configuration\n' + '-'*55 + '\n'
-        stgpdtl = 'Group details\n' + '-'*55 + '\n'
+        stconn = 'Connected ? ' + connected + '\n' + '-' * 55 + '\n'
+        stgpcfg = 'Group configuration\n' + '-' * 55 + '\n'
+        stgpdtl = 'Group details\n' + '-' * 55 + '\n'
         stgpdtl += f'     {"BPM":^20s} {"Quad":^20s} {"dKL":^7s}\n'
         tmplt = '{:3d}: {:^20s} {:^20s} {:+.3f}\n'
 
@@ -461,8 +461,8 @@ class DoParallelBBA(_BaseClass):
     # #### pbba utils #####
 
     def set_quad_strengths(
-            self, group_id=None, strengths=None, wait_refmon=True
-        ):
+        self, group_id=None, strengths=None, wait_refmon=True
+    ):
         """."""
         if strengths is None or not isinstance(strengths, _Iterable):
             msg = 'Invalid strengths!'
@@ -598,14 +598,14 @@ class DoParallelBBA(_BaseClass):
             self.get_quad_strengths(group_id)
             if strengths is None
             else strengths,
-            dtype=float
+            dtype=float,
         )
 
         lims = _np.asarray(
             self.get_quad_strength_limits(group_id)
             if limits is None
             else limits,
-            dtype=float
+            dtype=float,
         )
 
         if len(bpms) != len(strengths):
@@ -671,7 +671,7 @@ class DoParallelBBA(_BaseClass):
             self.get_quad_strengths(group_id)
             if init_strengths is None
             else init_strengths,
-            dtype=float
+            dtype=float,
         )
 
         if not self.set_quad_strengths(
