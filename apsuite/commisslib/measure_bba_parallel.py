@@ -41,14 +41,14 @@ class ParallelBBAParams(_ParamsBaseClass):
         self.wait_quadrupole: float = 2.0  # [s]
 
         self.corr_max_nr_iters: int = 8
-        self.ios_conv_tol: float = 0.5  # [um]
+        self.ios_conv_tol: float = 0.35  # [um]
         self._conv_method: int = self.METHODS.rms
         self.ios_raise_cnt_limit: int = 2
 
         self.sofb_nrpoints: int = 80
-        self.sofb_maxcorriter: int = 5
-        self.sofb_maxorberr: float = 5  # [um]
-        self.timeout_wait_orbit: float = 12  # [s]
+        self.sofb_maxcorriter: int = 8
+        self.sofb_maxorberr: float = 2.0  # [um]
+        self.timeout_wait_orbit: float = 12.0  # [s]
 
         self.cycling_nr_steps: int = 2
 
