@@ -312,7 +312,7 @@ class DoParallelBBA(_BaseClass):
             mesured.extend(group['bpms'])
         return sorted(mesured)
 
-    # #### pbba groups and deltas #####
+    # #### groups and deltas #####
     @property
     def groups2dopbba(self):
         """Groups of BPM names."""
@@ -384,16 +384,183 @@ class DoParallelBBA(_BaseClass):
         """Dictionary of the SIRIUS Storage Ring families data."""
         return self._fam_data
 
-    # ### quadrupole connection #####
-    def connect_to_quadrupoles(self):
+    def _get_quads_indices_in_model(self, quadnames):
         """."""
-        for qname in self.data['quadnames']:
-            if qname in self.devices:
-                continue
-            self.devices[qname] = _PowerSupply(
-                qname,
-                props2init=('PwrState-Sts', 'KL-SP', 'KL-RB', 'KLRef-Mon'),
-            )
+        fam_data = self.fam_data
+        quadindices = []
+        for qname in quadnames:
+            key = qname.dev
+            idx = fam_data[key]['devnames'].index(qname)
+            qindex = fam_data[key]['index'][idx]
+            qindex = qindex[0] if len(qindex) == 1 else qindex
+            quadindices.append(qindex)
+        return quadindices
+
+    def calc_ios_jacobians(self, group_ids=None):  # noqa: C901
+        """Calculate model-based IOS response matrices for selected groups.
+
+        Args:
+            group_ids (iterable[int], optional): Group indices in the
+                desired return order. Defaults to all groups.
+
+        Returns:
+            list[numpy.ndarray]: One IOS response matrix per group. Rows are
+                horizontal BPM coordinates followed by vertical BPM
+                coordinates, each in model BPM order. Columns correspond to CH
+                and CV correctors followed by the RF line.
+        """
+        model = self.model
+        _orbcorr = _OrbitCorr(
+            model=model, acc='SI', corr_system='SOFB', use6dtrack=True
+        )
+        quadindices = self._get_quads_indices_in_model(self.data['quadnames'])
+
+        def _get_or_set_kl(bname, value=None):
+            _do = getattr if value is None else setattr
+            bidx = self.data['bpmnames'].index(bname)
+            qname = self.data['quadnames'][bidx]
+            qidx = quadindices[bidx]
+            att = 'KsL' if 'QS' in qname else 'KL'
+            return _do(model[qidx], att, value)
+
+        def _get_quad_strengths(group):
+            strens = []
+            for bname in group:
+                strens.append(_get_or_set_kl(bname))
+            return _np.array(strens)
+
+        def _set_quad_strengths(group, strengths):
+            for strength, bname in zip(strengths, group):  # noqa: B905
+                _get_or_set_kl(bname, strength)
+
+        jacobians = []
+        if group_ids is None:
+            group_ids = _np.arange(len(self.data['groups2dopbba']))
+        for group_id in group_ids:
+            group = self.data['groups2dopbba'][group_id]
+            delta_strens = self.data['delta_kl'][group_id]
+            strens_orig = _get_quad_strengths(group)
+
+            _set_quad_strengths(group, strens_orig + delta_strens / 2)
+            try:
+                jac_pos = _orbcorr.get_jacobian_matrix()
+            except Exception as err:
+                _set_quad_strengths(group, strens_orig)
+                raise err
+
+            _set_quad_strengths(group, strens_orig - delta_strens / 2)
+            try:
+                jac_neg = _orbcorr.get_jacobian_matrix()
+            except Exception as err:
+                _set_quad_strengths(group, strens_orig)
+                raise err
+
+            _set_quad_strengths(group, strens_orig)
+            jac = jac_pos - jac_neg
+            jac[:, -1] *= 1e6  # rescale: [m/Hz] -> [um/Hz]
+            jacobians.append(jac)
+        return jacobians
+
+    def _calc_inverse_jacobian(self, jacobian, group_id):
+        u, s, vt = _np.linalg.svd(jacobian, full_matrices=False)
+        nr_svals = 2 * len(self.groups2dopbba[group_id])
+        i_s = _np.zeros_like(s)
+        i_s[:nr_svals] = 1.0 / s[:nr_svals]
+
+        return vt.T @ _np.diag(i_s) @ u.T
+
+    def analyze_groups(self, group_ids=None, analyze_coupling=False):
+        """Analyze the model optics during quadrupoles strength modulation.
+
+        Compute the singular value decomposition (SVD) of the stored IOS
+        Jacobian for each group. Sample the fractional tunes before modulation
+        and after each individual quadrupole strength change from the initial
+        strengths to `KL + delta_kl / 2`, then `KL - delta_kl / 2`, and back.
+
+        Args:
+            group_ids (int or iterable[int], optional): Group indices to
+                analyze. Defaults to all groups.
+            analyze_coupling (bool): Include Edwards-Teng estimates of the
+                minimum tune separation and ring-averaged emittance ratio.
+                Defaults to False.
+
+        Returns:
+            list[dict]: One result per group. `u_matrix` holds the
+                left singular vectors, `svals` holds the singular values,
+                and `vt_matrix` holds the transposed right singular vectors.
+                `tune_variation` holds the two transverse fractional tunes
+                at each step. If requested, `min_tunesep_variation` and
+                `emit_ratio_variation` contain the coupling estimates at the
+                same steps.
+
+        Raises:
+            ValueError: If no Jacobians have been stored.
+        """
+        if not self.data['jacobians']:
+            raise ValueError('Please calculate and set jacobians first.')
+
+        if group_ids is None:
+            group_ids = range(len(self.data['groups2dopbba']))
+        elif isinstance(group_ids, (int, float)):
+            group_ids = [group_ids]
+
+        anl = []
+        for group_id in group_ids:
+            print(f'Analyzing group: {group_id:d}')
+            anl.append(self._analyze_group(group_id, analyze_coupling))
+        return anl
+
+    def _analyze_group(self, group_id, analyze_coupling=False):
+        jacobian = self.data['jacobians'][group_id]
+        u_mat, svals, vt_mat = _np.linalg.svd(jacobian, full_matrices=False)
+
+        model = self.model
+        quadindices = self._get_quads_indices_in_model(self.data['quadnames'])
+        delta_strens = self.data['delta_kl'][group_id]
+        group = self.data['groups2dopbba'][group_id]
+
+        tune_variation = [_pyacc.optics.get_frac_tunes(model)[:2]]
+
+        if analyze_coupling:
+
+            def _get_coupling_parameters():
+                rad_on, cav_on = model.radiation_on, model.cavity_on
+                model.radiation_on = 0
+                model.cavity_on = False
+                ed = _pyacc.optics.calc_edwards_teng(model)[0]
+                mtsp, ratio = _pyacc.optics.estimate_coupling_parameters(ed)
+                model.radiation_on = rad_on
+                model.cavity_on = cav_on
+                return mtsp, _np.mean(ratio)
+
+            min_tunesep, emit_ratio = _get_coupling_parameters()
+            min_tunesep_variation = [min_tunesep]
+            emit_ratio_variation = [emit_ratio]
+
+        for fac in [1, -2, 1]:
+            for dkl, bpm in zip(delta_strens, group):  # noqa: B905
+                _id = self.data['bpmnames'].index(bpm)
+                qname = self.data['quadnames'][_id]
+                qidx = quadindices[_id]
+                att = 'KsL' if 'QS' in qname else 'KL'
+                ele = model[qidx]
+                setattr(ele, att, getattr(ele, att) + fac * dkl / 2)
+                tune_variation.append(_pyacc.optics.get_frac_tunes(model)[:2])
+                if analyze_coupling:
+                    min_tunesep, emit_ratio = _get_coupling_parameters()
+                    min_tunesep_variation.append(min_tunesep)
+                    emit_ratio_variation.append(emit_ratio)
+
+        ret = {
+            'u_matrix': u_mat,
+            'vt_matrix': vt_mat,
+            'svals': svals,
+            'tune_variation': _np.array(tune_variation),
+        }
+        if analyze_coupling:
+            ret['min_tunesep_variation'] = _np.array(min_tunesep_variation)
+            ret['emit_ratio_variation'] = _np.array(emit_ratio_variation)
+        return ret
 
     # #### sofb utils #####
     def get_orbit(self):
@@ -458,7 +625,16 @@ class DoParallelBBA(_BaseClass):
         sofb.bpmxenbl = value[:nbpms]
         sofb.bpmyenbl = value[nbpms:]
 
-    # #### pbba utils #####
+    # #### quadrupole utils #####
+    def connect_to_quadrupoles(self):
+        """."""
+        for qname in self.data['quadnames']:
+            if qname in self.devices:
+                continue
+            self.devices[qname] = _PowerSupply(
+                qname,
+                props2init=('PwrState-Sts', 'KL-SP', 'KL-RB', 'KLRef-Mon'),
+            )
 
     def set_quad_strengths(
         self, group_id=None, strengths=None, wait_refmon=True
@@ -652,205 +828,7 @@ class DoParallelBBA(_BaseClass):
             return all(ok), valid
         return all(ok)
 
-    def meas_ios(self, group_id, init_strengths=None):
-        """Measure the induced orbit shift (IOS) for a group.
-
-        Args:
-            group_id (int): Group index in `groups2dopbba`.
-            init_strengths (array_like, optional): Initial quadrupole
-                strengths. Defaults to the current strengths.
-
-        Returns:
-            tuple[numpy.ndarray or None, int]:
-                `(IOS, STATUS.Success)` If the measurement fails,
-                return `(None, STATUS.Fail)`.
-        """
-        delta_strens = self.data['delta_kl'][group_id]
-
-        strens_orig = _np.asarray(
-            self.get_quad_strengths(group_id)
-            if init_strengths is None
-            else init_strengths,
-            dtype=float,
-        )
-
-        if not self.set_quad_strengths(
-            group_id, strens_orig + delta_strens / 2
-        ):
-            return None, DoParallelBBA.STATUS.Fail
-
-        orb_pos = self.get_orbit()
-
-        if not self.set_quad_strengths(
-            group_id, strens_orig - delta_strens / 2
-        ):
-            return None, DoParallelBBA.STATUS.Fail
-
-        orb_neg = self.get_orbit()
-
-        if not self.set_quad_strengths(group_id, strens_orig):
-            return None, DoParallelBBA.STATUS.Fail
-
-        return orb_pos - orb_neg, DoParallelBBA.STATUS.Success
-
-    def calc_ios_jacobians(self, group_ids=None):  # noqa: C901
-        """Calculate model-based IOS response matrices for selected groups.
-
-        Args:
-            group_ids (iterable[int], optional): Group indices in the
-                desired return order. Defaults to all groups.
-
-        Returns:
-            list[numpy.ndarray]: One IOS response matrix per group. Rows are
-                horizontal BPM coordinates followed by vertical BPM
-                coordinates, each in model BPM order. Columns correspond to CH
-                and CV correctors followed by the RF line.
-        """
-        model = self.model
-        _orbcorr = _OrbitCorr(
-            model=model, acc='SI', corr_system='SOFB', use6dtrack=True
-        )
-        quadindices = self._get_quads_indices_in_model(self.data['quadnames'])
-
-        def _get_or_set_kl(bname, value=None):
-            _do = getattr if value is None else setattr
-            bidx = self.data['bpmnames'].index(bname)
-            qname = self.data['quadnames'][bidx]
-            qidx = quadindices[bidx]
-            att = 'KsL' if 'QS' in qname else 'KL'
-            return _do(model[qidx], att, value)
-
-        def _get_quad_strengths(group):
-            strens = []
-            for bname in group:
-                strens.append(_get_or_set_kl(bname))
-            return _np.array(strens)
-
-        def _set_quad_strengths(group, strengths):
-            for strength, bname in zip(strengths, group):  # noqa: B905
-                _get_or_set_kl(bname, strength)
-
-        jacobians = []
-        if group_ids is None:
-            group_ids = _np.arange(len(self.data['groups2dopbba']))
-        for group_id in group_ids:
-            group = self.data['groups2dopbba'][group_id]
-            delta_strens = self.data['delta_kl'][group_id]
-            strens_orig = _get_quad_strengths(group)
-
-            _set_quad_strengths(group, strens_orig + delta_strens / 2)
-            try:
-                jac_pos = _orbcorr.get_jacobian_matrix()
-            except Exception as err:
-                _set_quad_strengths(group, strens_orig)
-                raise err
-
-            _set_quad_strengths(group, strens_orig - delta_strens / 2)
-            try:
-                jac_neg = _orbcorr.get_jacobian_matrix()
-            except Exception as err:
-                _set_quad_strengths(group, strens_orig)
-                raise err
-
-            _set_quad_strengths(group, strens_orig)
-            jac = jac_pos - jac_neg
-            jac[:, -1] *= 1e6  # rescale: [m/Hz] -> [um/Hz]
-            jacobians.append(jac)
-        return jacobians
-
-    def analyze_groups(self, group_ids=None, analyze_coupling=False):
-        """Analyze the model optics during quadrupoles strength modulation.
-
-        Compute the singular value decomposition (SVD) of the stored IOS
-        Jacobian for each group. Sample the fractional tunes before modulation
-        and after each individual quadrupole strength change from the initial
-        strengths to `KL + delta_kl / 2`, then `KL - delta_kl / 2`, and back.
-
-        Args:
-            group_ids (int or iterable[int], optional): Group indices to
-                analyze. Defaults to all groups.
-            analyze_coupling (bool): Include Edwards-Teng estimates of the
-                minimum tune separation and ring-averaged emittance ratio.
-                Defaults to False.
-
-        Returns:
-            list[dict]: One result per group. `u_matrix` holds the
-                left singular vectors, `svals` holds the singular values,
-                and `vt_matrix` holds the transposed right singular vectors.
-                `tune_variation` holds the two transverse fractional tunes
-                at each step. If requested, `min_tunesep_variation` and
-                `emit_ratio_variation` contain the coupling estimates at the
-                same steps.
-
-        Raises:
-            ValueError: If no Jacobians have been stored.
-        """
-        if not self.data['jacobians']:
-            raise ValueError('Please calculate and set jacobians first.')
-
-        if group_ids is None:
-            group_ids = range(len(self.data['groups2dopbba']))
-        elif isinstance(group_ids, (int, float)):
-            group_ids = [group_ids]
-
-        anl = []
-        for group_id in group_ids:
-            print(f'Analyzing group: {group_id:d}')
-            anl.append(self._analyze_group(group_id, analyze_coupling))
-        return anl
-
-    def _analyze_group(self, group_id, analyze_coupling=False):
-        jacobian = self.data['jacobians'][group_id]
-        u_mat, svals, vt_mat = _np.linalg.svd(jacobian, full_matrices=False)
-
-        model = self.model
-        quadindices = self._get_quads_indices_in_model(self.data['quadnames'])
-        delta_strens = self.data['delta_kl'][group_id]
-        group = self.data['groups2dopbba'][group_id]
-
-        tune_variation = [_pyacc.optics.get_frac_tunes(model)[:2]]
-
-        if analyze_coupling:
-
-            def _get_coupling_parameters():
-                rad_on, cav_on = model.radiation_on, model.cavity_on
-                model.radiation_on = 0
-                model.cavity_on = False
-                ed = _pyacc.optics.calc_edwards_teng(model)[0]
-                mtsp, ratio = _pyacc.optics.estimate_coupling_parameters(ed)
-                model.radiation_on = rad_on
-                model.cavity_on = cav_on
-                return mtsp, _np.mean(ratio)
-
-            min_tunesep, emit_ratio = _get_coupling_parameters()
-            min_tunesep_variation = [min_tunesep]
-            emit_ratio_variation = [emit_ratio]
-
-        for fac in [1, -2, 1]:
-            for dkl, bpm in zip(delta_strens, group):  # noqa: B905
-                _id = self.data['bpmnames'].index(bpm)
-                qname = self.data['quadnames'][_id]
-                qidx = quadindices[_id]
-                att = 'KsL' if 'QS' in qname else 'KL'
-                ele = model[qidx]
-                setattr(ele, att, getattr(ele, att) + fac * dkl / 2)
-                tune_variation.append(_pyacc.optics.get_frac_tunes(model)[:2])
-                if analyze_coupling:
-                    min_tunesep, emit_ratio = _get_coupling_parameters()
-                    min_tunesep_variation.append(min_tunesep)
-                    emit_ratio_variation.append(emit_ratio)
-
-        ret = {
-            'u_matrix': u_mat,
-            'vt_matrix': vt_mat,
-            'svals': svals,
-            'tune_variation': _np.array(tune_variation),
-        }
-        if analyze_coupling:
-            ret['min_tunesep_variation'] = _np.array(min_tunesep_variation)
-            ret['emit_ratio_variation'] = _np.array(emit_ratio_variation)
-        return ret
-
+    # #### data processing ####
     def process_data(self, group_ids=None):
         """Update BPM offset estimates for each group.
 
@@ -921,18 +899,47 @@ class DoParallelBBA(_BaseClass):
             return orbx, orby, stdx, stdy
         return orbx, orby
 
-    # #### private methods ####
-    def _get_quads_indices_in_model(self, quadnames):
-        """."""
-        fam_data = self.fam_data
-        quadindices = []
-        for qname in quadnames:
-            key = qname.dev
-            idx = fam_data[key]['devnames'].index(qname)
-            qindex = fam_data[key]['index'][idx]
-            qindex = qindex[0] if len(qindex) == 1 else qindex
-            quadindices.append(qindex)
-        return quadindices
+    # #### pbba utils ####
+    def meas_ios(self, group_id, init_strengths=None):
+        """Measure the induced orbit shift (IOS) for a group.
+
+        Args:
+            group_id (int): Group index in `groups2dopbba`.
+            init_strengths (array_like, optional): Initial quadrupole
+                strengths. Defaults to the current strengths.
+
+        Returns:
+            tuple[numpy.ndarray or None, int]:
+                `(IOS, STATUS.Success)` If the measurement fails,
+                return `(None, STATUS.Fail)`.
+        """
+        delta_strens = self.data['delta_kl'][group_id]
+
+        strens_orig = _np.asarray(
+            self.get_quad_strengths(group_id)
+            if init_strengths is None
+            else init_strengths,
+            dtype=float,
+        )
+
+        if not self.set_quad_strengths(
+            group_id, strens_orig + delta_strens / 2
+        ):
+            return None, DoParallelBBA.STATUS.Fail
+
+        orb_pos = self.get_orbit()
+
+        if not self.set_quad_strengths(
+            group_id, strens_orig - delta_strens / 2
+        ):
+            return None, DoParallelBBA.STATUS.Fail
+
+        orb_neg = self.get_orbit()
+
+        if not self.set_quad_strengths(group_id, strens_orig):
+            return None, DoParallelBBA.STATUS.Fail
+
+        return orb_pos - orb_neg, DoParallelBBA.STATUS.Success
 
     def _do_pbba(self):
         tini = _datetime.datetime.fromtimestamp(_time.time())
@@ -1110,14 +1117,6 @@ class DoParallelBBA(_BaseClass):
             self._log('Finished. Status: Fail! ET: ' + dtime)
         return sts
 
-    def _calc_inverse_jacobian(self, jacobian, group_id):
-        u, s, vt = _np.linalg.svd(jacobian, full_matrices=False)
-        nr_svals = 2 * len(self.groups2dopbba[group_id])
-        i_s = _np.zeros_like(s)
-        i_s[:nr_svals] = 1.0 / s[:nr_svals]
-
-        return vt.T @ _np.diag(i_s) @ u.T
-
     def _do_cycling(self, group_id, init_strengths):
         self._log('Cycling:', tab=1)
         kl = init_strengths
@@ -1175,6 +1174,7 @@ class DoParallelBBA(_BaseClass):
         if correct_orbit:
             self.correct_orbit()
 
+    # #### logging ####
     def _log(self, msg, *args, **kwargs):
         end = kwargs.pop('end', '\n')
         tab = kwargs.pop('tab', 0)
