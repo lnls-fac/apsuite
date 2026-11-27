@@ -194,6 +194,7 @@ class AcqBPMsSignals(_BaseClass):
         """."""
         if not self.params.do_pulse_evg:
             return
+        print('Sending Timing Trigger.')
         evt = self._get_event(self.params.timing_event)
         if evt is not None and evt.mode_str == "External":
             evt.cmd_external_trigger()
@@ -223,6 +224,8 @@ class AcqBPMsSignals(_BaseClass):
             print(tag + " is not ready for acquisition.")
 
         fambpms.reset_mturn_initial_state()
+        if not ret:
+            print('BPMs are ready for timing signal.')
         self.trigger_timing_signal()
 
         time0 = _time.time()
